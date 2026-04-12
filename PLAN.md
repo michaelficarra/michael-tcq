@@ -2,7 +2,7 @@
 
 This plan is ordered so that the application is runnable and testable as early as possible. Each step builds on the previous one. Infrastructure setup steps are called out with detailed instructions where they occur.
 
-## Step 0: Project Scaffolding
+## Step 0: Project Scaffolding ✅
 
 Set up the monorepo structure, tooling, and dev scripts so that subsequent steps have a working foundation to build on.
 
@@ -17,21 +17,19 @@ Set up the monorepo structure, tooling, and dev scripts so that subsequent steps
 
 **Checkpoint:** `npm install && npm run dev` starts both servers. Visiting the Vite dev server URL shows the React welcome page. Visiting `/api` through the proxy returns "ok" from Express.
 
-## Step 1: Shared Types
+## Step 1: Shared Types ✅
 
-Define the core data types in `packages/shared` that both client and server will use. These types are derived directly from the PRD.
+Completed as part of Step 0. The queue entry type `poo` was renamed to `point-of-order`.
 
-- `types.ts` — `User`, `AgendaItem`, `QueueEntry` (with `type: 'topic' | 'reply' | 'question' | 'poo'`), `Reaction`, `MeetingState` (containing `id`, `chairs`, `agenda`, `currentAgendaItem`, `currentSpeaker`, `currentTopic`, `queuedSpeakers`, `reactions`, `trackTemperature`).
-- `messages.ts` — TypeScript type definitions for Socket.IO events. Define `ClientToServerEvents` (actions the client sends) and `ServerToClientEvents` (state updates the server broadcasts). Start with a minimal set: `join`, `state`.
+- `types.ts` — `User`, `AgendaItem`, `QueueEntry` (with `type: 'topic' | 'reply' | 'question' | 'point-of-order'`), `Reaction`, `MeetingState`.
+- `messages.ts` — `ClientToServerEvents` (`join`) and `ServerToClientEvents` (`state`).
 - `constants.ts` — Queue entry type priority ordering, reaction type list.
 
-**Checkpoint:** Both server and client packages can `import { MeetingState } from '@tcq/shared'` and compile without errors.
+## Step 2: Meeting Creation and Joining (Server) ✅
 
-## Step 2: Meeting Creation and Joining (Server)
+Built the server-side meeting lifecycle with mock auth. Meeting IDs use the `human-id` library (three lowercase hyphenated words, e.g. `plain-cobras-rule`).
 
-Build the server-side meeting lifecycle without authentication. Use a hardcoded mock user for now so the feature can be tested without OAuth.
-
-- Implement `meetingId.ts` — the curated adjective-noun word list and ID generation function.
+- Implement `meetingId.ts` — uses the `human-id` library with lowercase words and `-` separator.
 - Implement the `MeetingStore` interface and `FileMeetingStore` (writes JSON files to `.data/meetings/`).
 - Implement in-memory meeting state management: a `Map<string, MeetingState>`, the `POST /api/meetings` endpoint (accepts `{ chairs: string[] }`, returns the created meeting with its ID), and the `GET /api/meetings/:id` endpoint (returns meeting state or 404).
 - Add session middleware (`express-session` with a simple in-memory store for now — the file-backed session store is not needed until persistence is wired up).
@@ -39,9 +37,9 @@ Build the server-side meeting lifecycle without authentication. Use a hardcoded 
 
 **Checkpoint:** `curl -X POST http://localhost:3000/api/meetings -H 'Content-Type: application/json' -d '{"chairs":["testuser"]}'` returns a meeting with a word-based ID. `curl http://localhost:3000/api/meetings/<id>` returns the meeting state.
 
-## Step 3: Real-Time Connection (Socket.IO)
+## Step 3: Real-Time Connection (Socket.IO) ✅
 
-Wire up Socket.IO for real-time communication so clients can join a meeting room and receive state.
+Wired up Socket.IO with shared Express session middleware, room-based meeting join, full state broadcast, and client count tracking with delayed cleanup.
 
 - Set up Socket.IO on the server, sharing the Express session middleware so sockets are authenticated.
 - Implement the `join` event handler: client sends a meeting ID, server adds the socket to that meeting's room, and emits the full `MeetingState` back via a `state` event.

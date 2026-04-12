@@ -75,8 +75,7 @@ tcq/
 │           ├── meeting.ts       # MeetingState class and mutations
 │           ├── socket.ts        # Socket.IO event handlers
 │           └── meetingId.ts     # Word-based ID generation
-├── Dockerfile
-└── fly.toml
+└── Dockerfile
 ```
 
 **Why a monorepo?** The primary motivation is the `shared` package. The type definitions for meeting state, queue entries, and Socket.IO event payloads must be identical on client and server. With npm workspaces, both sides import from `@tcq/shared` and get compile-time type checking across the boundary.
