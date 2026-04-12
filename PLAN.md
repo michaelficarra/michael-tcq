@@ -92,15 +92,11 @@ Implemented the full speaker queue: entering, displaying, removing, and advancin
 - **Client:** Entry type buttons (New Topic, Discuss Current Topic, Clarifying Question, Point of Order — Reply hidden when no current topic). Inline form with Enter Queue / Cancel. Queue list with delete buttons (own entries + all for chairs). Next Speaker button for chairs.
 - **Deferred to Step 9:** Move Up / Move Down buttons for chairs (queue reordering).
 
-## Step 9: Queue Reordering
+## Step 9: Queue Reordering ✅
 
-Implement chair-only queue reordering with type changes on boundary crossing.
+Implemented chair-only queue reordering with UUID-based targeting (`{ id, afterId }`) to avoid index-based race conditions (same approach as agenda reordering). When an entry crosses a type boundary, its type changes to match its neighbour at the new position.
 
-- **Shared:** Add event type for `queue:reorder`.
-- **Server:** Implement `queue:reorder` — accepts `{ id, newIndex }`. When an entry moves across a type boundary, its type changes to match the entries at its new position. Chair-only.
-- **Client:** Wire the move up / move down buttons to emit `queue:reorder`. Update the queue display to reflect the reordered state.
-
-**Checkpoint:** Chair moves a "New Topic" entry above a "Clarifying Question" entry; the moved entry's type changes to "Clarifying Question". Changes are broadcast to all clients.
+- **Client:** Move Up / Move Down buttons for chairs on each queue entry. Buttons resolve adjacent entry UUIDs before emitting. Hidden at list boundaries (no Move Up on first, no Move Down on last). Hidden for non-chairs.
 
 ## Step 10: GitHub OAuth
 

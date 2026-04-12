@@ -335,6 +335,66 @@ export class MeetingManager {
   }
 
   /**
+   * Reorder a queue entry by moving it to the position after another entry.
+   *
+   * Uses item UUIDs rather than indices to avoid race conditions (same
+   * approach as agenda reordering). If `afterId` is null, the entry is
+   * moved to the beginning of the queue.
+   *
+   * When an entry crosses a type priority boundary, its type is changed
+   * to match its neighbours at the new position. The new type is
+   * determined by looking at the entry immediately after the new position
+   * (or immediately before if inserted at the end). This allows chairs
+   * to override the automatic priority ordering.
+   *
+   * Returns true if the reorder was valid and applied.
+   */
+  reorderQueueEntry(meetingId: string, entryId: string, afterId: string | null): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    // Find and remove the entry being moved
+    const entryIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    if (entryIndex === -1) return false;
+
+    const [entry] = meeting.queuedSpeakers.splice(entryIndex, 1);
+
+    if (afterId === null) {
+      // Move to the beginning of the queue
+      meeting.queuedSpeakers.unshift(entry);
+    } else {
+      // Find the "after" entry in the (now shorter) array
+      const afterIndex = meeting.queuedSpeakers.findIndex((e) => e.id === afterId);
+      if (afterIndex === -1) {
+        // afterId not found — put the entry back and report failure
+        meeting.queuedSpeakers.splice(entryIndex, 0, entry);
+        return false;
+      }
+      // Insert immediately after the "after" entry
+      meeting.queuedSpeakers.splice(afterIndex + 1, 0, entry);
+    }
+
+    // Determine the new position of the moved entry
+    const newIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+
+    // Change the entry's type to match its new neighbours when it
+    // crosses a type boundary. Look at the adjacent entry to determine
+    // what type it should become:
+    // - If there's an entry after it, use that entry's type
+    // - If there's an entry before it, use that entry's type
+    // - If it's the only entry, keep its original type
+    const neighbour =
+      meeting.queuedSpeakers[newIndex + 1] ??
+      meeting.queuedSpeakers[newIndex - 1];
+    if (neighbour) {
+      entry.type = neighbour.type;
+    }
+
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /**
    * Write all dirty meetings to the persistent store.
    * Called periodically and after significant events.
    */

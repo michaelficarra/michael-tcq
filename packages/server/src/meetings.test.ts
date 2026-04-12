@@ -503,6 +503,89 @@ describe('MeetingManager', () => {
     });
   });
 
+  describe('reorderQueueEntry', () => {
+    it('moves an entry to the beginning when afterId is null', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
+      const b = manager.addQueueEntry(meeting.id, 'topic', 'B', testUser)!;
+      const c = manager.addQueueEntry(meeting.id, 'topic', 'C', testUser)!;
+
+      // Move C to the beginning
+      const result = manager.reorderQueueEntry(meeting.id, c.id, null);
+      expect(result).toBe(true);
+      expect(meeting.queuedSpeakers.map((e) => e.topic)).toEqual(['C', 'A', 'B']);
+    });
+
+    it('moves an entry after another entry', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
+      const b = manager.addQueueEntry(meeting.id, 'topic', 'B', testUser)!;
+      const c = manager.addQueueEntry(meeting.id, 'topic', 'C', testUser)!;
+
+      // Move A to after C (to the end)
+      const result = manager.reorderQueueEntry(meeting.id, a.id, c.id);
+      expect(result).toBe(true);
+      expect(meeting.queuedSpeakers.map((e) => e.topic)).toEqual(['B', 'C', 'A']);
+    });
+
+    it('changes entry type when crossing a type boundary (moving up)', () => {
+      const meeting = manager.create([testUser]);
+      // Create a queue with a question, then a topic
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+
+      // Move the topic before the question (to the beginning)
+      manager.reorderQueueEntry(meeting.id, t.id, null);
+
+      // T should now have the type of its neighbour (the question)
+      expect(meeting.queuedSpeakers[0].id).toBe(t.id);
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('changes entry type when crossing a type boundary (moving down)', () => {
+      const meeting = manager.create([testUser]);
+      // Create a queue: point-of-order, question, topic
+      const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+
+      // Move the point-of-order after the topic (to the end)
+      manager.reorderQueueEntry(meeting.id, poo.id, t.id);
+
+      // POO should now have the type of its neighbour (the topic)
+      expect(meeting.queuedSpeakers[2].id).toBe(poo.id);
+      expect(meeting.queuedSpeakers[2].type).toBe('topic');
+    });
+
+    it('keeps original type when entry is alone in the queue', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'question', 'Solo', testUser)!;
+
+      // Moving the only entry to the beginning is a no-op but should succeed
+      const result = manager.reorderQueueEntry(meeting.id, entry.id, null);
+      expect(result).toBe(true);
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('returns false for non-existent entry', () => {
+      const meeting = manager.create([testUser]);
+      manager.addQueueEntry(meeting.id, 'topic', 'A', testUser);
+      expect(manager.reorderQueueEntry(meeting.id, 'no-such-id', null)).toBe(false);
+    });
+
+    it('returns false for non-existent afterId', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
+      expect(manager.reorderQueueEntry(meeting.id, a.id, 'no-such-id')).toBe(false);
+      // Entry should be back in its original position
+      expect(meeting.queuedSpeakers[0].id).toBe(a.id);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.reorderQueueEntry('no-such-meeting', 'any', null)).toBe(false);
+    });
+  });
+
   it('creates meetings with unique IDs', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 50; i++) {

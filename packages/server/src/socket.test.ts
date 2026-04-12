@@ -374,6 +374,59 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  describe('queue:reorder', () => {
+    it('reorders queue entries and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', owner);
+      const c = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Move C to the beginning
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:reorder', { id: c.id, afterId: null });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers.map((e) => e.topic)).toEqual(['C', 'A', 'B']);
+    });
+
+    it('changes entry type when crossing a type boundary', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'question', 'Q', owner);
+      const t = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'T', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Move topic before question — should change to question type
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:reorder', { id: t.id, afterId: null });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers[0].id).toBe(t.id);
+      expect(state.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:reorder', { id: entry.id, afterId: null });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+  });
+
   describe('queue:next', () => {
     it('advances to the next speaker and broadcasts', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };

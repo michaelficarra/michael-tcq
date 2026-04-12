@@ -218,6 +218,30 @@ export function registerSocketHandlers(
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
+    // --- queue:reorder ---
+    // Chair moves a queue entry to a new position. Uses UUIDs to avoid
+    // index-based race conditions. The entry's type changes to match
+    // its neighbours when it crosses a type boundary.
+    socket.on('queue:reorder', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can reorder the queue');
+        return;
+      }
+
+      const reordered = meetingManager.reorderQueueEntry(
+        joinedMeetingId,
+        payload.id,
+        payload.afterId,
+      );
+      if (!reordered) {
+        socket.emit('error', 'Invalid queue reorder');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
     // --- queue:next ---
     // Chair advances to the next speaker. Includes a version check to
     // prevent double-advancement from concurrent chair clicks. Uses an

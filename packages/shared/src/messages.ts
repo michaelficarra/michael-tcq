@@ -39,6 +39,24 @@ export interface QueueRemovePayload {
 }
 
 /**
+ * Payload for reordering a queue entry. Chair only.
+ *
+ * Uses UUIDs rather than indices to avoid race conditions (same approach
+ * as agenda reordering). The entry identified by `id` is moved to the
+ * position immediately after `afterId`. If `afterId` is null, the entry
+ * is moved to the beginning of the queue.
+ *
+ * When an entry crosses a type priority boundary, its type is changed
+ * to match the entries at its new position. For example, moving a
+ * "New Topic" above a "Clarifying Question" changes it to "Clarifying
+ * Question".
+ */
+export interface QueueReorderPayload {
+  id: string;
+  afterId: string | null;
+}
+
+/**
  * Payload for events that advance meeting state (queue:next,
  * meeting:nextAgendaItem). Includes the meeting version the client
  * last saw, so the server can reject stale requests and prevent
@@ -108,6 +126,13 @@ export interface ClientToServerEvents {
    * entry; a chair can remove any entry.
    */
   'queue:remove': (payload: QueueRemovePayload) => void;
+
+  /**
+   * Reorder a queue entry to a new position. Chair only. When the entry
+   * crosses a type priority boundary, its type changes to match its
+   * neighbours at the new position.
+   */
+  'queue:reorder': (payload: QueueReorderPayload) => void;
 
   /**
    * Advance to the next speaker. Chair only. Pops the first entry from

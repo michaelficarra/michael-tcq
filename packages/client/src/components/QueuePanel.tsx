@@ -29,6 +29,32 @@ export function QueuePanel() {
     socket?.emit('queue:remove', { id: entryId });
   }
 
+  /**
+   * Move a queue entry up one position. Resolves the adjacent entry's
+   * UUID so the server receives a UUID-based reorder (not index-based),
+   * avoiding race conditions.
+   */
+  function handleMoveUp(index: number) {
+    if (!meeting || index <= 0) return;
+    const entry = meeting.queuedSpeakers[index];
+    // To move up, place after the entry two positions above (or at
+    // the beginning if moving to position 0)
+    const afterId = index >= 2 ? meeting.queuedSpeakers[index - 2].id : null;
+    socket?.emit('queue:reorder', { id: entry.id, afterId });
+  }
+
+  /**
+   * Move a queue entry down one position. Resolves the adjacent entry's
+   * UUID so the server receives a UUID-based reorder (not index-based).
+   */
+  function handleMoveDown(index: number) {
+    if (!meeting || index >= meeting.queuedSpeakers.length - 1) return;
+    const entry = meeting.queuedSpeakers[index];
+    // To move down, place after the entry currently below
+    const afterId = meeting.queuedSpeakers[index + 1].id;
+    socket?.emit('queue:reorder', { id: entry.id, afterId });
+  }
+
   // Determine whether there are more agenda items after the current one
   const hasMoreAgendaItems = (() => {
     if (!meeting.currentAgendaItem) {
@@ -194,7 +220,37 @@ export function QueuePanel() {
               const canDelete = isOwnEntry || isChair;
 
               return (
-                <li key={entry.id} className="flex items-baseline gap-3 border-b border-stone-100 pb-2">
+                <li key={entry.id} className="flex items-center gap-2 border-b border-stone-100 pb-2">
+                  {/* Reorder arrows — chair only, to the left of the number */}
+                  {isChair && (
+                    <div className="flex flex-col items-center w-4">
+                      {index > 0 ? (
+                        <button
+                          onClick={() => handleMoveUp(index)}
+                          className="text-stone-300 hover:text-stone-700 transition-colors
+                                     cursor-pointer leading-none"
+                          aria-label={`Move up: ${entry.topic}`}
+                        >
+                          ▲
+                        </button>
+                      ) : (
+                        <span className="invisible">▲</span>
+                      )}
+                      {index < meeting.queuedSpeakers.length - 1 ? (
+                        <button
+                          onClick={() => handleMoveDown(index)}
+                          className="text-stone-300 hover:text-stone-700 transition-colors
+                                     cursor-pointer leading-none"
+                          aria-label={`Move down: ${entry.topic}`}
+                        >
+                          ▼
+                        </button>
+                      ) : (
+                        <span className="invisible">▼</span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Position number */}
                   <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
                     {index + 1}
@@ -214,7 +270,7 @@ export function QueuePanel() {
                         <> ({entry.user.organisation})</>
                       )}
 
-                      {/* Delete button */}
+                      {/* Delete button — own entries or chair */}
                       {canDelete && (
                         <button
                           onClick={() => handleRemoveEntry(entry.id)}
