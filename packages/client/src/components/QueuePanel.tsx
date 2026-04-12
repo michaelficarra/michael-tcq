@@ -2,16 +2,37 @@
  * Queue tab panel — displays the current agenda item, current speaker,
  * speaker controls, and the speaker queue.
  *
- * For now this is a read-only shell showing placeholder states.
- * Interactive features will be added in Steps 6–8.
+ * The agenda item section shows Start Meeting / Next Agenda Item buttons
+ * for chairs. The speaker section shows the current speaker or a
+ * placeholder message.
  */
 
-import { useMeetingState } from '../contexts/MeetingContext.js';
+import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
+import { useSocket } from '../contexts/SocketContext.js';
 
 export function QueuePanel() {
   const { meeting } = useMeetingState();
+  const isChair = useIsChair();
+  const socket = useSocket();
 
   if (!meeting) return null;
+
+  /** Chair starts the meeting or advances to the next agenda item. */
+  function handleNextAgendaItem() {
+    socket?.emit('meeting:nextAgendaItem');
+  }
+
+  // Determine whether there are more agenda items after the current one
+  const hasMoreAgendaItems = (() => {
+    if (!meeting.currentAgendaItem) {
+      // Meeting hasn't started — there are items if the agenda is non-empty
+      return meeting.agenda.length > 0;
+    }
+    const currentIndex = meeting.agenda.findIndex(
+      (item) => item.id === meeting.currentAgendaItem!.id,
+    );
+    return currentIndex < meeting.agenda.length - 1;
+  })();
 
   return (
     <div id="panel-queue" role="tabpanel" aria-label="Queue" className="p-6 space-y-6">
@@ -40,12 +61,35 @@ export function QueuePanel() {
                   {meeting.currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
                 </span>
               )}
+
+              {/* Next Agenda Item button — chair only, shown inline */}
+              {isChair && hasMoreAgendaItems && (
+                <button
+                  onClick={handleNextAgendaItem}
+                  className="ml-3 border border-stone-300 rounded px-2 py-0.5 text-xs
+                             text-stone-600 hover:bg-stone-100 transition-colors"
+                >
+                  Next Agenda Item
+                </button>
+              )}
             </p>
           </div>
         ) : (
-          <p className="text-stone-500">
-            Waiting for the meeting to start&hellip;
-          </p>
+          <div>
+            <p className="text-stone-500">
+              Waiting for the meeting to start&hellip;
+            </p>
+            {/* Start Meeting button — chair only, shown when no current item */}
+            {isChair && meeting.agenda.length > 0 && (
+              <button
+                onClick={handleNextAgendaItem}
+                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
+                           text-stone-700 hover:bg-stone-100 transition-colors"
+              >
+                Start Meeting
+              </button>
+            )}
+          </div>
         )}
       </section>
 
@@ -110,7 +154,7 @@ export function QueuePanel() {
         {meeting.queuedSpeakers.length === 0 ? (
           <p className="text-stone-400 italic text-sm">The queue is empty.</p>
         ) : (
-          <ol className="space-y-3">
+          <ol className="space-y-3" aria-label="Queued speakers">
             {meeting.queuedSpeakers.map((entry, index) => (
               <li key={entry.id} className="flex items-baseline gap-3">
                 {/* Position number */}
@@ -143,7 +187,7 @@ export function QueuePanel() {
 }
 
 /** Map a queue entry type to its display label. */
-function entryTypeLabel(type: string): string {
+export function entryTypeLabel(type: string): string {
   switch (type) {
     case 'topic': return 'New Topic';
     case 'reply': return 'Reply';
@@ -154,7 +198,7 @@ function entryTypeLabel(type: string): string {
 }
 
 /** Map a queue entry type to a Tailwind text colour class. */
-function entryTypeColor(type: string): string {
+export function entryTypeColor(type: string): string {
   switch (type) {
     case 'topic': return 'text-blue-600';
     case 'reply': return 'text-cyan-600';

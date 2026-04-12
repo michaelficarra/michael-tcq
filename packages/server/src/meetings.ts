@@ -167,6 +167,61 @@ export class MeetingManager {
     return true;
   }
 
+  // -- Meeting flow mutations --
+
+  /**
+   * Advance to the next agenda item. If no current agenda item is set,
+   * this starts the meeting by setting the first item. Otherwise it
+   * advances to the next item in the list.
+   *
+   * When advancing, the agenda item's owner becomes the current speaker
+   * with a topic of "Introducing: <item name>". The current topic and
+   * queue are cleared since we're starting a new agenda item.
+   *
+   * Returns the new current agenda item, or null if there's nothing to
+   * advance to (e.g. we're past the last item, or agenda is empty).
+   */
+  nextAgendaItem(meetingId: string): AgendaItem | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    if (meeting.agenda.length === 0) return null;
+
+    let nextIndex: number;
+
+    if (!meeting.currentAgendaItem) {
+      // No current item — start with the first one
+      nextIndex = 0;
+    } else {
+      // Find the current item's position and advance to the next
+      const currentIndex = meeting.agenda.findIndex(
+        (item) => item.id === meeting.currentAgendaItem!.id,
+      );
+      nextIndex = currentIndex + 1;
+    }
+
+    // Check if we've gone past the end of the agenda
+    if (nextIndex >= meeting.agenda.length) return null;
+
+    const nextItem = meeting.agenda[nextIndex];
+    meeting.currentAgendaItem = nextItem;
+
+    // The item owner becomes the current speaker
+    meeting.currentSpeaker = {
+      id: randomUUID(),
+      type: 'topic',
+      topic: `Introducing: ${nextItem.name}`,
+      user: nextItem.owner,
+    };
+
+    // Clear the current topic and queue for the new agenda item
+    meeting.currentTopic = undefined;
+    meeting.queuedSpeakers = [];
+
+    this.markDirty(meetingId);
+    return nextItem;
+  }
+
   /**
    * Write all dirty meetings to the persistent store.
    * Called periodically and after significant events.

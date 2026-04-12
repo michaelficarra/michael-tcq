@@ -255,6 +255,89 @@ describe('MeetingManager', () => {
     });
   });
 
+  // -- Meeting flow --
+
+  describe('nextAgendaItem', () => {
+    it('starts the meeting by setting the first agenda item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', testUser);
+      manager.addAgendaItem(meeting.id, 'Second', testUser);
+
+      const result = manager.nextAgendaItem(meeting.id);
+      expect(result).not.toBeNull();
+      expect(result!.name).toBe('First');
+      expect(meeting.currentAgendaItem?.name).toBe('First');
+    });
+
+    it('sets the item owner as the current speaker', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Proposal', otherUser);
+
+      manager.nextAgendaItem(meeting.id);
+
+      expect(meeting.currentSpeaker).toBeDefined();
+      expect(meeting.currentSpeaker!.user.ghid).toBe(otherUser.ghid);
+      expect(meeting.currentSpeaker!.topic).toBe('Introducing: Proposal');
+      expect(meeting.currentSpeaker!.type).toBe('topic');
+    });
+
+    it('advances to the next agenda item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', testUser);
+      manager.addAgendaItem(meeting.id, 'Second', otherUser);
+
+      // Start meeting (first item)
+      manager.nextAgendaItem(meeting.id);
+      expect(meeting.currentAgendaItem?.name).toBe('First');
+
+      // Advance to second item
+      const result = manager.nextAgendaItem(meeting.id);
+      expect(result?.name).toBe('Second');
+      expect(meeting.currentAgendaItem?.name).toBe('Second');
+      expect(meeting.currentSpeaker!.user.ghid).toBe(otherUser.ghid);
+    });
+
+    it('returns null when advancing past the last item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Only item', testUser);
+
+      manager.nextAgendaItem(meeting.id); // first
+      const result = manager.nextAgendaItem(meeting.id); // past the end
+      expect(result).toBeNull();
+    });
+
+    it('returns null for an empty agenda', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+    });
+
+    it('returns null for non-existent meeting', () => {
+      expect(manager.nextAgendaItem('no-such-meeting')).toBeNull();
+    });
+
+    it('clears the queue and current topic when advancing', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', testUser);
+      manager.addAgendaItem(meeting.id, 'Second', testUser);
+
+      // Start, then simulate some queue state
+      manager.nextAgendaItem(meeting.id);
+      meeting.queuedSpeakers = [{
+        id: 'q1', type: 'topic', topic: 'old topic',
+        user: otherUser,
+      }];
+      meeting.currentTopic = {
+        id: 'ct1', type: 'topic', topic: 'old topic',
+        user: otherUser,
+      };
+
+      // Advance — queue and topic should be cleared
+      manager.nextAgendaItem(meeting.id);
+      expect(meeting.queuedSpeakers).toHaveLength(0);
+      expect(meeting.currentTopic).toBeUndefined();
+    });
+  });
+
   it('creates meetings with unique IDs', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 50; i++) {

@@ -51,4 +51,11 @@ export interface ClientToServerEvents {
 
   /** Reorder an agenda item to a new position (chair only). */
   'agenda:reorder': (payload: AgendaReorderPayload) => void;
+
+  /**
+   * Start the meeting by advancing to the first agenda item, or advance
+   * to the next agenda item if the meeting is already in progress.
+   * Chair only. The agenda item's owner becomes the current speaker.
+   */
+  'meeting:nextAgendaItem': () => void;
 }

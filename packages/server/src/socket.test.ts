@@ -294,6 +294,84 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  // -- Meeting flow events --
+
+  describe('meeting:nextAgendaItem', () => {
+    it('starts the meeting and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First topic', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem');
+      const state = await statePromise;
+
+      expect(state.currentAgendaItem?.name).toBe('First topic');
+      expect(state.currentSpeaker?.user.ghUsername).toBe('testuser');
+      expect(state.currentSpeaker?.topic).toBe('Introducing: First topic');
+    });
+
+    it('advances to the next agenda item', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem');
+      await statePromise;
+
+      // Advance to second
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem');
+      const state = await statePromise;
+
+      expect(state.currentAgendaItem?.name).toBe('Second');
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      });
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('meeting:nextAgendaItem');
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+
+    it('returns error when no more agenda items', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Only item', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start (first item)
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem');
+      await statePromise;
+
+      // Try to advance past end
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('meeting:nextAgendaItem');
+      const error = await errorPromise;
+
+      expect(error).toMatch(/no more agenda items/i);
+    });
+  });
+
   it('client can switch meetings by joining a different one', async () => {
     const meeting1 = ctx.meetingManager.create([{
       ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',

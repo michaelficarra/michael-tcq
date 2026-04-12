@@ -169,6 +169,30 @@ export function registerSocketHandlers(
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
+    // --- meeting:nextAgendaItem ---
+    // Chair starts the meeting (first agenda item) or advances to the next one.
+    // This is a high-value mutation, so we persist immediately.
+    socket.on('meeting:nextAgendaItem', () => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can advance the agenda');
+        return;
+      }
+
+      const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
+      if (!nextItem) {
+        socket.emit('error', 'No more agenda items');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+
+      // Persist immediately — agenda advancement is a high-value event
+      meetingManager.syncOne(joinedMeetingId).catch((err) => {
+        console.error('Failed to sync after agenda advancement:', err);
+      });
+    });
+
     // --- disconnect ---
     socket.on('disconnect', () => {
       if (joinedMeetingId) {

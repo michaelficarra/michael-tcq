@@ -69,19 +69,11 @@ Implemented the full agenda feature. The reorder event uses UUID-based targeting
 - **Server:** Agenda mutation methods on MeetingManager with chair-only validation. Socket handlers broadcast updated state after each mutation.
 - **Client:** Interactive `AgendaPanel` with `AgendaForm`, drag-and-drop via `@dnd-kit`, delete buttons. Chair vs participant view logic via `useIsChair()`. `SocketContext` added for components to emit events.
 
-## Step 6: Meeting Flow — Start Meeting and Agenda Advancement
+## Step 6: Meeting Flow — Start Meeting and Agenda Advancement ✅
 
-Implement starting the meeting and advancing through agenda items.
+Implemented with a single `meeting:nextAgendaItem` event that handles both starting the meeting and advancing. The agenda item's owner becomes the current speaker with "Introducing: <item name>". Queue and current topic are cleared on advancement. Agenda advancement is persisted immediately via `syncOne`.
 
-- **Shared:** Add event types for `meeting:start` and `meeting:nextAgendaItem`.
-- **Server:** Implement `meeting:start` — sets the first agenda item as `currentAgendaItem` and its owner as `currentSpeaker`. Implement `meeting:nextAgendaItem` — advances to the next item in the agenda, sets its owner as current speaker. Both are chair-only actions.
-- **Client (Queue tab):**
-  - Show "Waiting for the meeting to start..." with a **Start Meeting** button when there is no current agenda item (button visible to chairs only).
-  - Once started, display the current agenda item's name, owner, and timebox.
-  - Show a **Next Agenda Item** button (chair only).
-  - Display the current speaker section: speaker name, organisation, and topic.
-
-**Checkpoint:** Chair clicks Start Meeting, the first agenda item becomes active, and its owner is shown as the current speaker. Chair clicks Next Agenda Item to advance. All participants see the changes in real time.
+- **Client:** Start Meeting button (before meeting starts) and Next Agenda Item button (inline, after current item info). Both hidden for non-chairs. Next Agenda Item hidden on last item.
 
 ## Step 7: Speaker Queue — Core
 
