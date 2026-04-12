@@ -1,13 +1,15 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HomePage } from './pages/HomePage.js';
+import { MeetingPage } from './pages/MeetingPage.js';
+
 function App() {
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
-      <header className="bg-teal-600 text-white px-4 py-3">
-        <h1 className="text-xl font-semibold">TCQ</h1>
-      </header>
-      <main className="p-6">
-        <p>Welcome to TCQ.</p>
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/meeting/:id" element={<MeetingPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

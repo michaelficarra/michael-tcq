@@ -48,9 +48,9 @@ Wired up Socket.IO with shared Express session middleware, room-based meeting jo
 
 **Checkpoint:** Two browser tabs can connect to the same meeting via Socket.IO and both receive the meeting state. Server logs show join/disconnect events.
 
-## Step 4: Meeting UI Shell (Client)
+## Step 4: Meeting UI Shell (Client) ✅
 
-Build the client-side meeting page with navigation, Socket.IO connection, and state management — but no interactive features yet.
+Built the client-side meeting page with routing, Socket.IO connection, MeetingContext state management, and the Agenda/Queue tab layout. All read-only for now.
 
 - Add client-side routing: a home/landing page at `/` and a meeting page at `/meeting/:id`.
 - Implement `MeetingContext` with `useReducer`. The reducer accepts a `state` action (full state replacement from the server).
