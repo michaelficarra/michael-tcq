@@ -3,15 +3,17 @@
  * speaker controls, and the speaker queue.
  *
  * The agenda item section shows Start Meeting / Next Agenda Item buttons
- * for chairs. The speaker section shows the current speaker or a
- * placeholder message.
+ * for chairs. The speaker section shows the current speaker with a
+ * Next Speaker button for chairs. Below that are the entry type buttons
+ * and the queue list with per-entry controls.
  */
 
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
+import { SpeakerControls } from './SpeakerControls.js';
 
 export function QueuePanel() {
-  const { meeting } = useMeetingState();
+  const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
 
@@ -22,10 +24,21 @@ export function QueuePanel() {
     socket?.emit('meeting:nextAgendaItem');
   }
 
+  /** Chair advances to the next speaker in the queue. */
+  function handleNextSpeaker() {
+    socket?.emit('queue:next', {
+      currentTopicId: meeting!.currentTopic?.id ?? null,
+    });
+  }
+
+  /** Remove a queue entry (own entry, or any entry if chair). */
+  function handleRemoveEntry(entryId: string) {
+    socket?.emit('queue:remove', { id: entryId });
+  }
+
   // Determine whether there are more agenda items after the current one
   const hasMoreAgendaItems = (() => {
     if (!meeting.currentAgendaItem) {
-      // Meeting hasn't started — there are items if the agenda is non-empty
       return meeting.agenda.length > 0;
     }
     const currentIndex = meeting.agenda.findIndex(
@@ -62,12 +75,12 @@ export function QueuePanel() {
                 </span>
               )}
 
-              {/* Next Agenda Item button — chair only, shown inline */}
+              {/* Next Agenda Item button — chair only */}
               {isChair && hasMoreAgendaItems && (
                 <button
                   onClick={handleNextAgendaItem}
                   className="ml-3 border border-stone-300 rounded px-2 py-0.5 text-xs
-                             text-stone-600 hover:bg-stone-100 transition-colors"
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
                 >
                   Next Agenda Item
                 </button>
@@ -79,12 +92,12 @@ export function QueuePanel() {
             <p className="text-stone-500">
               Waiting for the meeting to start&hellip;
             </p>
-            {/* Start Meeting button — chair only, shown when no current item */}
+            {/* Start Meeting button — chair only */}
             {isChair && meeting.agenda.length > 0 && (
               <button
                 onClick={handleNextAgendaItem}
                 className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                           text-stone-700 hover:bg-stone-100 transition-colors"
+                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
               >
                 Start Meeting
               </button>
@@ -134,13 +147,40 @@ export function QueuePanel() {
             <p className="text-sm text-stone-500">
               {meeting.currentSpeaker.topic}
             </p>
+
+            {/* Next Speaker button — chair only */}
+            {isChair && (
+              <button
+                onClick={handleNextSpeaker}
+                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
+                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                Next Speaker
+              </button>
+            )}
           </div>
         ) : (
-          <p className="text-stone-500">
-            Nobody speaking yet&hellip; enter the queue to get started
-          </p>
+          <div>
+            <p className="text-stone-500">
+              Nobody speaking yet&hellip; enter the queue to get started
+            </p>
+
+            {/* Next Speaker button when nobody is speaking — starts from queue */}
+            {isChair && meeting.queuedSpeakers.length > 0 && (
+              <button
+                onClick={handleNextSpeaker}
+                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
+                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                Next Speaker
+              </button>
+            )}
+          </div>
         )}
       </section>
+
+      {/* --- Speaker Entry Controls --- */}
+      <SpeakerControls />
 
       {/* --- Speaker Queue Section --- */}
       <section aria-labelledby="queue-heading">
@@ -155,30 +195,48 @@ export function QueuePanel() {
           <p className="text-stone-400 italic text-sm">The queue is empty.</p>
         ) : (
           <ol className="space-y-3" aria-label="Queued speakers">
-            {meeting.queuedSpeakers.map((entry, index) => (
-              <li key={entry.id} className="flex items-baseline gap-3">
-                {/* Position number */}
-                <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
-                  {index + 1}
-                </span>
+            {meeting.queuedSpeakers.map((entry, index) => {
+              // Show delete for own entries or if chair
+              const isOwnEntry = user && entry.user.ghid === user.ghid;
+              const canDelete = isOwnEntry || isChair;
 
-                <div>
-                  {/* Type badge and topic */}
-                  <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
-                    {entryTypeLabel(entry.type)}:
+              return (
+                <li key={entry.id} className="flex items-baseline gap-3 border-b border-stone-100 pb-2">
+                  {/* Position number */}
+                  <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
+                    {index + 1}
                   </span>
-                  <span className="ml-1 text-stone-800">{entry.topic}</span>
 
-                  {/* Speaker info */}
-                  <p className="text-sm text-stone-500">
-                    {entry.user.name}
-                    {entry.user.organisation && (
-                      <> ({entry.user.organisation})</>
-                    )}
-                  </p>
-                </div>
-              </li>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    {/* Type badge and topic */}
+                    <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
+                      {entryTypeLabel(entry.type)}:
+                    </span>
+                    <span className="ml-1 text-stone-800">{entry.topic}</span>
+
+                    {/* Speaker info and action buttons */}
+                    <p className="text-sm text-stone-500">
+                      {entry.user.name}
+                      {entry.user.organisation && (
+                        <> ({entry.user.organisation})</>
+                      )}
+
+                      {/* Delete button */}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleRemoveEntry(entry.id)}
+                          className="ml-3 text-xs text-stone-400 hover:text-red-600
+                                     transition-colors cursor-pointer"
+                          aria-label={`Delete entry: ${entry.topic}`}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         )}
       </section>

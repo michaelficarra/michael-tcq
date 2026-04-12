@@ -221,6 +221,99 @@ describe('QueuePanel', () => {
     expect(screen.getByText('Alternative approach')).toBeInTheDocument();
   });
 
+  // -- Next Speaker button --
+
+  it('shows "Next Speaker" button for chairs when there is a current speaker', () => {
+    const meeting = makeMeeting({
+      chairs: [chairUser],
+      currentSpeaker: { id: 's1', type: 'topic', topic: 'Topic', user: otherUser },
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
+  });
+
+  it('shows "Next Speaker" for chairs when nobody is speaking but queue has entries', () => {
+    const meeting = makeMeeting({
+      chairs: [chairUser],
+      queuedSpeakers: [{ id: 'q1', type: 'topic', topic: 'Waiting', user: otherUser }],
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
+  });
+
+  it('hides "Next Speaker" for non-chairs', () => {
+    const meeting = makeMeeting({
+      chairs: [otherUser],
+      currentSpeaker: { id: 's1', type: 'topic', topic: 'Topic', user: otherUser },
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.queryByRole('button', { name: 'Next Speaker' })).not.toBeInTheDocument();
+  });
+
+  it('emits queue:next with currentTopicId when Next Speaker is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      chairs: [chairUser],
+      currentSpeaker: { id: 's1', type: 'topic', topic: 'Topic', user: otherUser },
+      currentTopic: { id: 'topic-123', type: 'topic', topic: 'Topic', user: otherUser },
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Speaker' }));
+    expect(emit).toHaveBeenCalledWith('queue:next', { currentTopicId: 'topic-123' });
+  });
+
+  // -- Delete buttons on queue entries --
+
+  it('shows delete button on own queue entries', () => {
+    const meeting = makeMeeting({
+      queuedSpeakers: [
+        { id: 'q1', type: 'topic', topic: 'My entry', user: chairUser },
+      ],
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.getByRole('button', { name: /delete entry: my entry/i })).toBeInTheDocument();
+  });
+
+  it('shows delete button on all entries for chairs', () => {
+    const meeting = makeMeeting({
+      chairs: [chairUser],
+      queuedSpeakers: [
+        { id: 'q1', type: 'topic', topic: 'Other entry', user: otherUser },
+      ],
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.getByRole('button', { name: /delete entry/i })).toBeInTheDocument();
+  });
+
+  it('hides delete button on other users entries for non-chairs', () => {
+    const meeting = makeMeeting({
+      chairs: [otherUser],
+      queuedSpeakers: [
+        { id: 'q1', type: 'topic', topic: 'Not mine', user: otherUser },
+      ],
+    });
+    renderQueue(meeting, chairUser);
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+  });
+
+  it('emits queue:remove when delete button is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      queuedSpeakers: [
+        { id: 'entry-42', type: 'topic', topic: 'Remove me', user: chairUser },
+      ],
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete entry: remove me/i }));
+    expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'entry-42' });
+  });
+
   // -- Accessibility --
 
   it('has accessible section headings', () => {

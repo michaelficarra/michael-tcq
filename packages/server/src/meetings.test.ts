@@ -338,6 +338,171 @@ describe('MeetingManager', () => {
     });
   });
 
+  // -- Queue mutations --
+
+  describe('addQueueEntry', () => {
+    it('adds an entry to an empty queue', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', otherUser);
+
+      expect(entry).not.toBeNull();
+      expect(entry!.type).toBe('topic');
+      expect(entry!.topic).toBe('My topic');
+      expect(entry!.user).toEqual(otherUser);
+      expect(meeting.queuedSpeakers).toHaveLength(1);
+    });
+
+    it('inserts entries in priority order (point-of-order first)', () => {
+      const meeting = manager.create([testUser]);
+
+      manager.addQueueEntry(meeting.id, 'topic', 'Low priority', otherUser);
+      manager.addQueueEntry(meeting.id, 'point-of-order', 'Urgent', testUser);
+
+      expect(meeting.queuedSpeakers[0].type).toBe('point-of-order');
+      expect(meeting.queuedSpeakers[1].type).toBe('topic');
+    });
+
+    it('maintains FIFO within the same type', () => {
+      const meeting = manager.create([testUser]);
+
+      manager.addQueueEntry(meeting.id, 'topic', 'First topic', testUser);
+      manager.addQueueEntry(meeting.id, 'topic', 'Second topic', otherUser);
+
+      expect(meeting.queuedSpeakers[0].topic).toBe('First topic');
+      expect(meeting.queuedSpeakers[1].topic).toBe('Second topic');
+    });
+
+    it('respects full priority ordering', () => {
+      const meeting = manager.create([testUser]);
+
+      // Add in reverse priority order
+      manager.addQueueEntry(meeting.id, 'topic', 'D', testUser);
+      manager.addQueueEntry(meeting.id, 'reply', 'C', testUser);
+      manager.addQueueEntry(meeting.id, 'question', 'B', testUser);
+      manager.addQueueEntry(meeting.id, 'point-of-order', 'A', testUser);
+
+      const types = meeting.queuedSpeakers.map((e) => e.type);
+      expect(types).toEqual(['point-of-order', 'question', 'reply', 'topic']);
+    });
+
+    it('inserts between existing types correctly', () => {
+      const meeting = manager.create([testUser]);
+
+      manager.addQueueEntry(meeting.id, 'point-of-order', 'First', testUser);
+      manager.addQueueEntry(meeting.id, 'topic', 'Last', testUser);
+      // Question should go between point-of-order and topic
+      manager.addQueueEntry(meeting.id, 'question', 'Middle', otherUser);
+
+      const types = meeting.queuedSpeakers.map((e) => e.type);
+      expect(types).toEqual(['point-of-order', 'question', 'topic']);
+    });
+
+    it('returns null for non-existent meeting', () => {
+      expect(manager.addQueueEntry('no-such-meeting', 'topic', 'X', testUser)).toBeNull();
+    });
+  });
+
+  describe('removeQueueEntry', () => {
+    it('removes an entry from the queue', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'Remove me', testUser)!;
+
+      expect(manager.removeQueueEntry(meeting.id, entry.id)).toBe(true);
+      expect(meeting.queuedSpeakers).toHaveLength(0);
+    });
+
+    it('preserves other entries when removing one', () => {
+      const meeting = manager.create([testUser]);
+      manager.addQueueEntry(meeting.id, 'topic', 'Keep', testUser);
+      const toRemove = manager.addQueueEntry(meeting.id, 'topic', 'Remove', otherUser)!;
+      manager.addQueueEntry(meeting.id, 'topic', 'Also keep', testUser);
+
+      manager.removeQueueEntry(meeting.id, toRemove.id);
+      expect(meeting.queuedSpeakers).toHaveLength(2);
+      expect(meeting.queuedSpeakers[0].topic).toBe('Keep');
+      expect(meeting.queuedSpeakers[1].topic).toBe('Also keep');
+    });
+
+    it('returns false for non-existent entry', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.removeQueueEntry(meeting.id, 'no-such-id')).toBe(false);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.removeQueueEntry('no-such-meeting', 'any')).toBe(false);
+    });
+  });
+
+  describe('getQueueEntry', () => {
+    it('finds an entry by ID', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'Find me', testUser)!;
+
+      expect(manager.getQueueEntry(meeting.id, entry.id)).toBe(entry);
+    });
+
+    it('returns undefined for non-existent entry', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.getQueueEntry(meeting.id, 'no-such-id')).toBeUndefined();
+    });
+  });
+
+  describe('nextSpeaker', () => {
+    it('pops the first entry and makes them the current speaker', () => {
+      const meeting = manager.create([testUser]);
+      manager.addQueueEntry(meeting.id, 'topic', 'First', testUser);
+      manager.addQueueEntry(meeting.id, 'topic', 'Second', otherUser);
+
+      const speaker = manager.nextSpeaker(meeting.id);
+
+      expect(speaker).not.toBeNull();
+      expect(speaker!.topic).toBe('First');
+      expect(meeting.currentSpeaker?.topic).toBe('First');
+      expect(meeting.queuedSpeakers).toHaveLength(1);
+      expect(meeting.queuedSpeakers[0].topic).toBe('Second');
+    });
+
+    it('sets currentTopic when the entry type is "topic"', () => {
+      const meeting = manager.create([testUser]);
+      manager.addQueueEntry(meeting.id, 'topic', 'New discussion', testUser);
+
+      manager.nextSpeaker(meeting.id);
+
+      expect(meeting.currentTopic?.topic).toBe('New discussion');
+    });
+
+    it('does not change currentTopic for non-topic types', () => {
+      const meeting = manager.create([testUser]);
+
+      // Set an existing topic
+      meeting.currentTopic = {
+        id: 'old', type: 'topic', topic: 'Previous topic', user: testUser,
+      };
+
+      manager.addQueueEntry(meeting.id, 'question', 'A question', otherUser);
+      manager.nextSpeaker(meeting.id);
+
+      // currentTopic should remain unchanged
+      expect(meeting.currentTopic?.topic).toBe('Previous topic');
+    });
+
+    it('clears the current speaker when queue is empty', () => {
+      const meeting = manager.create([testUser]);
+      meeting.currentSpeaker = {
+        id: 'old', type: 'topic', topic: 'Done', user: testUser,
+      };
+
+      const result = manager.nextSpeaker(meeting.id);
+
+      expect(result).toBeNull();
+      expect(meeting.currentSpeaker).toBeUndefined();
+    });
+
+    it('returns null for non-existent meeting', () => {
+      expect(manager.nextSpeaker('no-such-meeting')).toBeNull();
+    });
+  });
+
   it('creates meetings with unique IDs', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 50; i++) {

@@ -8,6 +8,7 @@
     "packages/client"
   ],
   "scripts": {
+    "predev": "npm run build",
     "dev": "concurrently -n server,client -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
     "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
     "test": "npm run test -w packages/server -w packages/client",

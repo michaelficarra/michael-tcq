@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { MeetingState, AgendaItem, User } from '@tcq/shared';
+import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, User } from '@tcq/shared';
+import { QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 
@@ -220,6 +221,108 @@ export class MeetingManager {
 
     this.markDirty(meetingId);
     return nextItem;
+  }
+
+  // -- Queue mutations --
+
+  /**
+   * Add a new entry to the speaker queue. The entry is inserted at the
+   * correct position based on type priority (point-of-order > question >
+   * reply > topic). Within the same type, entries are ordered FIFO.
+   *
+   * Returns the created entry, or null if the meeting doesn't exist.
+   */
+  addQueueEntry(
+    meetingId: string,
+    type: QueueEntryType,
+    topic: string,
+    user: User,
+  ): QueueEntry | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    const entry: QueueEntry = {
+      id: randomUUID(),
+      type,
+      topic,
+      user,
+    };
+
+    // Find the correct insertion position: after all entries of the same
+    // or higher priority type, maintaining FIFO within each type.
+    const entryPriority = QUEUE_ENTRY_PRIORITY[type];
+    let insertIndex = meeting.queuedSpeakers.length; // default: end
+    for (let i = 0; i < meeting.queuedSpeakers.length; i++) {
+      const existingPriority = QUEUE_ENTRY_PRIORITY[meeting.queuedSpeakers[i].type];
+      if (existingPriority > entryPriority) {
+        // Found an entry with lower priority — insert before it
+        insertIndex = i;
+        break;
+      }
+    }
+
+    meeting.queuedSpeakers.splice(insertIndex, 0, entry);
+    this.markDirty(meetingId);
+    return entry;
+  }
+
+  /**
+   * Remove an entry from the speaker queue.
+   * Returns true if the entry was found and removed.
+   */
+  removeQueueEntry(meetingId: string, entryId: string): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const index = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    if (index === -1) return false;
+
+    meeting.queuedSpeakers.splice(index, 1);
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /**
+   * Find a queue entry by ID.
+   * Returns the entry, or undefined if not found.
+   */
+  getQueueEntry(meetingId: string, entryId: string): QueueEntry | undefined {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return undefined;
+    return meeting.queuedSpeakers.find((e) => e.id === entryId);
+  }
+
+  /**
+   * Advance to the next speaker. Pops the first entry from the queue
+   * and makes that person the current speaker.
+   *
+   * - If the entry type is "topic", it also becomes the currentTopic.
+   * - If the queue is empty, clears the current speaker (returns null).
+   *
+   * Returns the new current speaker entry, or null if queue was empty.
+   */
+  nextSpeaker(meetingId: string): QueueEntry | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    if (meeting.queuedSpeakers.length === 0) {
+      // Queue is empty — clear the current speaker
+      meeting.currentSpeaker = undefined;
+      this.markDirty(meetingId);
+      return null;
+    }
+
+    // Pop the first entry from the queue
+    const [entry] = meeting.queuedSpeakers.splice(0, 1);
+    meeting.currentSpeaker = entry;
+
+    // If this is a new topic, update the current topic
+    if (entry.type === 'topic') {
+      meeting.currentTopic = entry;
+    }
+
+    this.markDirty(meetingId);
+    return entry;
   }
 
   /**

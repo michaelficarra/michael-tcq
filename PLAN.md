@@ -83,25 +83,14 @@ The home page now has two cards: Join Meeting (enter a meeting ID, validates it 
 - Pre-populate the Chairs field with the current user's GitHub username.
 - Server-side validation of chair usernames against the GitHub API when creating a meeting (resolve each username to a full User object with ghid, name, and organisation). Return an error if any username is invalid.
 
-## Step 8: Speaker Queue — Core
+## Step 8: Speaker Queue — Core ✅
 
-Implement the speaker queue: entering the queue, displaying it, and advancing through speakers.
+Implemented the full speaker queue: entering, displaying, removing, and advancing through speakers.
 
-- **Shared:** Add event types for `queue:add`, `queue:remove`, `queue:next`.
-- **Server:**
-  - `queue:add` — accepts `{ type, topic }`. Inserts the entry at the correct position based on type priority (Point of Order > Clarifying Question > Reply > New Topic), FIFO within the same type. Any authenticated user can do this.
-  - `queue:remove` — accepts `{ id }`. A user can remove their own entry; a chair can remove any entry.
-  - `queue:next` — chair-only. Pops the first entry from the queue and makes that person the current speaker. If the entry type is "topic", it also becomes the `currentTopic`. If the queue is empty, clears the current speaker.
-  - Broadcast updated state after each mutation.
-- **Client (Queue tab):**
-  - Show four entry type buttons: New Topic, Discuss Current Topic (Reply), Clarifying Question, Point of Order. The Reply button is only visible when there is a current topic.
-  - Clicking a button opens an inline form with a text input for the topic description and Enter Queue / Cancel buttons.
-  - Display the speaker queue as a numbered list with type badge, topic, speaker name, and organisation.
-  - Show a delete button on the user's own entries. Show delete, move up, and move down buttons for chairs.
-  - Show **Next Speaker** button (chair only) in the current speaker section.
-  - Display the current topic section when a topic is active.
-
-**Checkpoint:** Participants can enter the queue with different entry types. Entries appear in priority order. Chair can advance to the next speaker. The current topic updates when a new topic speaker begins. All changes visible in real time across tabs.
+- **Shared:** Added `queue:add`, `queue:remove`, `queue:next` events. `queue:next` includes `currentTopicId` for stale-state prevention (avoids double-advancement from concurrent chair clicks).
+- **Server:** Priority-ordered insertion (point-of-order > question > reply > topic, FIFO within type). Removal with owner/chair permission check. `nextSpeaker` pops from queue, sets currentTopic on topic-type entries.
+- **Client:** Entry type buttons (New Topic, Discuss Current Topic, Clarifying Question, Point of Order — Reply hidden when no current topic). Inline form with Enter Queue / Cancel. Queue list with delete buttons (own entries + all for chairs). Next Speaker button for chairs.
+- **Deferred to Step 9:** Move Up / Move Down buttons for chairs (queue reordering).
 
 ## Step 9: Queue Reordering
 

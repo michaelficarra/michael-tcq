@@ -1,4 +1,4 @@
-import type { MeetingState } from './types.js';
+import type { MeetingState, QueueEntryType } from './types.js';
 
 // -- Payloads for client-to-server events --
 
@@ -25,6 +25,28 @@ export interface AgendaDeletePayload {
 export interface AgendaReorderPayload {
   id: string;
   afterId: string | null;
+}
+
+/** Payload for adding a queue entry. */
+export interface QueueAddPayload {
+  type: QueueEntryType;
+  topic: string;
+}
+
+/** Payload for removing a queue entry. */
+export interface QueueRemovePayload {
+  id: string;
+}
+
+/**
+ * Payload for advancing to the next speaker.
+ * Includes the current topic ID to prevent double-advancement from
+ * concurrent chair actions. A single speaker can have multiple topics
+ * in a row, so tracking the topic (which changes on each advancement
+ * of a topic-type entry) is the correct staleness check.
+ */
+export interface QueueNextPayload {
+  currentTopicId: string | null;
 }
 
 // -- Event interfaces --
@@ -58,4 +80,31 @@ export interface ClientToServerEvents {
    * Chair only. The agenda item's owner becomes the current speaker.
    */
   'meeting:nextAgendaItem': () => void;
+
+  /**
+   * Add the current user to the speaker queue. The entry is automatically
+   * inserted at the correct position based on type priority. Any
+   * authenticated user can do this.
+   */
+  'queue:add': (payload: QueueAddPayload) => void;
+
+  /**
+   * Remove an entry from the speaker queue. A user can remove their own
+   * entry; a chair can remove any entry.
+   */
+  'queue:remove': (payload: QueueRemovePayload) => void;
+
+  /**
+   * Advance to the next speaker. Chair only. Pops the first entry from
+   * the queue and makes that person the current speaker. If the entry
+   * type is "topic", it also becomes the current topic. If the queue is
+   * empty, clears the current speaker.
+   *
+   * The `currentTopicId` field is the UUID of the topic the client
+   * believes is current. The server rejects the request if this doesn't
+   * match, preventing double-advancement from concurrent clicks. The
+   * topic (not the speaker) is used because a single speaker can have
+   * multiple topics in a row.
+   */
+  'queue:next': (payload: QueueNextPayload) => void;
 }

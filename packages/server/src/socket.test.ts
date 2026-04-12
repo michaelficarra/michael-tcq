@@ -294,6 +294,170 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  // -- Queue events --
+
+  describe('queue:add', () => {
+    it('adds an entry and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'My topic' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers).toHaveLength(1);
+      expect(state.queuedSpeakers[0].type).toBe('topic');
+      expect(state.queuedSpeakers[0].topic).toBe('My topic');
+      expect(state.queuedSpeakers[0].user.ghUsername).toBe('testuser');
+    });
+
+    it('inserts entries in priority order', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Add a topic first, then a point-of-order
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Low priority' });
+      await statePromise;
+
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'point-of-order', topic: 'Urgent' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers[0].type).toBe('point-of-order');
+      expect(state.queuedSpeakers[1].type).toBe('topic');
+    });
+  });
+
+  describe('queue:remove', () => {
+    it('removes own entry from the queue', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Add an entry
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Remove me' });
+      const stateAfterAdd = await statePromise;
+      const entryId = stateAfterAdd.queuedSpeakers[0].id;
+
+      // Remove it
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:remove', { id: entryId });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers).toHaveLength(0);
+    });
+
+    it('rejects removal of another user\'s entry by non-chair', async () => {
+      // Meeting where chair is someone else
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      // Add an entry by a different user
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Not yours', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:remove', { id: entry.id });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/your own/i);
+    });
+  });
+
+  describe('queue:next', () => {
+    it('advances to the next speaker and broadcasts', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { currentTopicId: null });
+      const state = await statePromise;
+
+      expect(state.currentSpeaker?.topic).toBe('First');
+      expect(state.queuedSpeakers).toHaveLength(1);
+      expect(state.queuedSpeakers[0].topic).toBe('Second');
+    });
+
+    it('sets currentTopic when advancing a topic-type entry', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'New discussion', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { currentTopicId: null });
+      const state = await statePromise;
+
+      expect(state.currentTopic?.topic).toBe('New discussion');
+    });
+
+    it('clears the speaker when queue is empty', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Set a current speaker and topic but leave queue empty
+      meeting.currentSpeaker = {
+        id: 'old-speaker', type: 'topic', topic: 'Done', user: owner,
+      };
+      meeting.currentTopic = {
+        id: 'old-topic', type: 'topic', topic: 'Done', user: owner,
+      };
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { currentTopicId: 'old-topic' });
+      const state = await statePromise;
+
+      expect(state.currentSpeaker).toBeUndefined();
+    });
+
+    it('rejects stale currentSpeakerId (prevents double-advancement)', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Only entry', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Send queue:next with a wrong currentTopicId
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { currentTopicId: 'wrong-id' });
+      const state = await statePromise;
+
+      // Should receive current state back without advancing
+      expect(state.queuedSpeakers).toHaveLength(1);
+      expect(state.currentSpeaker).toBeUndefined();
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:next', { currentTopicId: null });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+  });
+
   // -- Meeting flow events --
 
   describe('meeting:nextAgendaItem', () => {

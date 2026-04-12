@@ -169,6 +169,87 @@ export function registerSocketHandlers(
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
+    // --- queue:add ---
+    // Any authenticated user can add themselves to the speaker queue.
+    // The entry is automatically inserted at the correct position based
+    // on type priority (point-of-order > question > reply > topic).
+    socket.on('queue:add', (payload) => {
+      if (!joinedMeetingId) return;
+
+      const topic = payload.topic?.trim();
+      if (!topic) {
+        socket.emit('error', 'Topic is required');
+        return;
+      }
+      if (!payload.type) {
+        socket.emit('error', 'Entry type is required');
+        return;
+      }
+
+      const entry = meetingManager.addQueueEntry(joinedMeetingId, payload.type, topic, user);
+      if (!entry) {
+        socket.emit('error', 'Failed to add queue entry');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- queue:remove ---
+    // A user can remove their own queue entry; a chair can remove any entry.
+    socket.on('queue:remove', (payload) => {
+      if (!joinedMeetingId) return;
+
+      // Check permissions: user can remove their own entry, chairs can remove any
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      if (!entry) {
+        socket.emit('error', 'Queue entry not found');
+        return;
+      }
+
+      const isOwner = entry.user.ghid === user.ghid;
+      const isChairUser = meetingManager.isChair(joinedMeetingId, user);
+      if (!isOwner && !isChairUser) {
+        socket.emit('error', 'You can only remove your own queue entries');
+        return;
+      }
+
+      meetingManager.removeQueueEntry(joinedMeetingId, payload.id);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- queue:next ---
+    // Chair advances to the next speaker. Includes a stale-state check:
+    // the client sends the current speaker's ID, and the server rejects
+    // the request if it doesn't match (prevents double-advancement).
+    socket.on('queue:next', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can advance the speaker');
+        return;
+      }
+
+      // Stale-state check: verify the client's view of the current topic
+      // matches the server's. This prevents double-advancement when two
+      // chairs click "Next Speaker" at the same time.
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      const actualTopicId = meeting.currentTopic?.id ?? null;
+      if (payload.currentTopicId !== actualTopicId) {
+        // Client has a stale view — broadcast current state so it catches up
+        socket.emit('state', meeting);
+        return;
+      }
+
+      meetingManager.nextSpeaker(joinedMeetingId);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+
+      // Persist immediately — speaker changes are high-value events
+      meetingManager.syncOne(joinedMeetingId).catch((err) => {
+        console.error('Failed to sync after speaker advancement:', err);
+      });
+    });
+
     // --- meeting:nextAgendaItem ---
     // Chair starts the meeting (first agenda item) or advances to the next one.
     // This is a high-value mutation, so we persist immediately.
