@@ -24,7 +24,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     currentTopic: undefined,
     queuedSpeakers: [],
     reactions: [],
-    trackTemperature: false,
+    trackTemperature: false, version: 0,
     ...overrides,
   };
 }
@@ -97,7 +97,7 @@ describe('QueuePanel', () => {
     expect(screen.queryByRole('button', { name: 'Start Meeting' })).not.toBeInTheDocument();
   });
 
-  it('emits meeting:nextAgendaItem when Start Meeting is clicked', () => {
+  it('emits meeting:nextAgendaItem with version and ack when Start Meeting is clicked', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
@@ -108,7 +108,7 @@ describe('QueuePanel', () => {
     renderQueue(meeting, chairUser, mockSocket);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Meeting' }));
-    expect(emit).toHaveBeenCalledWith('meeting:nextAgendaItem');
+    expect(emit).toHaveBeenCalledWith('meeting:nextAgendaItem', { version: 0 }, expect.any(Function));
   });
 
   // -- Next Agenda Item button --
@@ -250,7 +250,7 @@ describe('QueuePanel', () => {
     expect(screen.queryByRole('button', { name: 'Next Speaker' })).not.toBeInTheDocument();
   });
 
-  it('emits queue:next with currentTopicId when Next Speaker is clicked', () => {
+  it('emits queue:next with version and ack when Next Speaker is clicked', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
@@ -262,7 +262,7 @@ describe('QueuePanel', () => {
     renderQueue(meeting, chairUser, mockSocket);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next Speaker' }));
-    expect(emit).toHaveBeenCalledWith('queue:next', { currentTopicId: 'topic-123' });
+    expect(emit).toHaveBeenCalledWith('queue:next', { version: 0 }, expect.any(Function));
   });
 
   // -- Delete buttons on queue entries --

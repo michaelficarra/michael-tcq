@@ -39,14 +39,27 @@ export interface QueueRemovePayload {
 }
 
 /**
- * Payload for advancing to the next speaker.
- * Includes the current topic ID to prevent double-advancement from
- * concurrent chair actions. A single speaker can have multiple topics
- * in a row, so tracking the topic (which changes on each advancement
- * of a topic-type entry) is the correct staleness check.
+ * Payload for events that advance meeting state (queue:next,
+ * meeting:nextAgendaItem). Includes the meeting version the client
+ * last saw, so the server can reject stale requests and prevent
+ * double-advancement from concurrent chair clicks.
  */
-export interface QueueNextPayload {
-  currentTopicId: string | null;
+export interface AdvancePayload {
+  version: number;
+}
+
+/**
+ * Response sent back via Socket.IO acknowledgement callback for
+ * advancement events. On success, `ok` is true. On rejection (stale
+ * version or error), `ok` is false and `version` contains the current
+ * server-side version so the client can retry immediately.
+ */
+export interface AdvanceResponse {
+  ok: boolean;
+  /** Current server-side version — present when ok is false. */
+  version?: number;
+  /** Error message — present when ok is false due to a non-version error. */
+  error?: string;
 }
 
 // -- Event interfaces --
@@ -78,8 +91,10 @@ export interface ClientToServerEvents {
    * Start the meeting by advancing to the first agenda item, or advance
    * to the next agenda item if the meeting is already in progress.
    * Chair only. The agenda item's owner becomes the current speaker.
+   * Includes version for stale-state prevention; responds via ack callback
+   * so the client can retry on stale version.
    */
-  'meeting:nextAgendaItem': () => void;
+  'meeting:nextAgendaItem': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
 
   /**
    * Add the current user to the speaker queue. The entry is automatically
@@ -99,12 +114,8 @@ export interface ClientToServerEvents {
    * the queue and makes that person the current speaker. If the entry
    * type is "topic", it also becomes the current topic. If the queue is
    * empty, clears the current speaker.
-   *
-   * The `currentTopicId` field is the UUID of the topic the client
-   * believes is current. The server rejects the request if this doesn't
-   * match, preventing double-advancement from concurrent clicks. The
-   * topic (not the speaker) is used because a single speaker can have
-   * multiple topics in a row.
+   * Includes version for stale-state prevention; responds via ack callback
+   * so the client can retry on stale version.
    */
-  'queue:next': (payload: QueueNextPayload) => void;
+  'queue:next': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
 }

@@ -38,4 +38,12 @@ export interface MeetingState {
   queuedSpeakers: QueueEntry[];
   reactions: Reaction[];
   trackTemperature: boolean;
+
+  /**
+   * Monotonically increasing version counter. Bumped on every mutation.
+   * Used by advancement events (queue:next, meeting:nextAgendaItem) to
+   * prevent double-advancement from concurrent chair clicks — the client
+   * sends the version it saw, and the server rejects if it's stale.
+   */
+  version: number;
 }

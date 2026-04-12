@@ -10,6 +10,7 @@
 
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
+import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { SpeakerControls } from './SpeakerControls.js';
 
 export function QueuePanel() {
@@ -17,19 +18,11 @@ export function QueuePanel() {
   const isChair = useIsChair();
   const socket = useSocket();
 
+  // Advancement actions with automatic retry on stale version
+  const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
+  const handleNextSpeaker = useAdvanceAction('queue:next');
+
   if (!meeting) return null;
-
-  /** Chair starts the meeting or advances to the next agenda item. */
-  function handleNextAgendaItem() {
-    socket?.emit('meeting:nextAgendaItem');
-  }
-
-  /** Chair advances to the next speaker in the queue. */
-  function handleNextSpeaker() {
-    socket?.emit('queue:next', {
-      currentTopicId: meeting!.currentTopic?.id ?? null,
-    });
-  }
 
   /** Remove a queue entry (own entry, or any entry if chair). */
   function handleRemoveEntry(entryId: string) {

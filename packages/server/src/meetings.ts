@@ -53,6 +53,7 @@ export class MeetingManager {
       queuedSpeakers: [],
       reactions: [],
       trackTemperature: false,
+      version: 0,
     };
 
     this.meetings.set(id, meeting);
@@ -77,9 +78,17 @@ export class MeetingManager {
     await this.store.remove(id);
   }
 
-  /** Mark a meeting as having unsaved changes. */
+  /**
+   * Mark a meeting as having unsaved changes and bump its version.
+   * Every mutation calls this, so the version counter tracks all changes.
+   * Used by advancement events to detect stale concurrent requests.
+   */
   markDirty(id: string): void {
     this.dirty.add(id);
+    const meeting = this.meetings.get(id);
+    if (meeting) {
+      meeting.version++;
+    }
   }
 
   /**

@@ -16,7 +16,7 @@ function makeMeeting(id: string): MeetingState {
     currentTopic: undefined,
     queuedSpeakers: [],
     reactions: [],
-    trackTemperature: false,
+    trackTemperature: false, version: 0,
   };
 }
 

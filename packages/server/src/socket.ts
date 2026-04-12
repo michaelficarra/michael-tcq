@@ -219,30 +219,33 @@ export function registerSocketHandlers(
     });
 
     // --- queue:next ---
-    // Chair advances to the next speaker. Includes a stale-state check:
-    // the client sends the current speaker's ID, and the server rejects
-    // the request if it doesn't match (prevents double-advancement).
-    socket.on('queue:next', (payload) => {
+    // Chair advances to the next speaker. Includes a version check to
+    // prevent double-advancement from concurrent chair clicks. Uses an
+    // ack callback so the client can retry on stale version.
+    socket.on('queue:next', (payload, ack?) => {
+      // ack is optional — clients may emit without a callback
+      const respond = typeof ack === 'function' ? ack : () => {};
+
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can advance the speaker');
+        respond({ ok: false, error: 'Only chairs can advance the speaker' });
         return;
       }
 
-      // Stale-state check: verify the client's view of the current topic
-      // matches the server's. This prevents double-advancement when two
-      // chairs click "Next Speaker" at the same time.
+      // Version check: reject if the client's state is stale
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
-      const actualTopicId = meeting.currentTopic?.id ?? null;
-      if (payload.currentTopicId !== actualTopicId) {
-        // Client has a stale view — broadcast current state so it catches up
+      if (payload.version !== meeting.version) {
+        // Client has a stale view — send current state and the new version
+        // so the client can retry immediately
         socket.emit('state', meeting);
+        respond({ ok: false, version: meeting.version });
         return;
       }
 
       meetingManager.nextSpeaker(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      respond({ ok: true });
 
       // Persist immediately — speaker changes are high-value events
       meetingManager.syncOne(joinedMeetingId).catch((err) => {
@@ -252,21 +255,36 @@ export function registerSocketHandlers(
 
     // --- meeting:nextAgendaItem ---
     // Chair starts the meeting (first agenda item) or advances to the next one.
-    // This is a high-value mutation, so we persist immediately.
-    socket.on('meeting:nextAgendaItem', () => {
+    // Includes a version check to prevent double-advancement, and persists
+    // immediately as a high-value mutation. Uses an ack callback so the
+    // client can retry on stale version.
+    socket.on('meeting:nextAgendaItem', (payload, ack?) => {
+      // ack is optional — clients may emit without a callback
+      const respond = typeof ack === 'function' ? ack : () => {};
+
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can advance the agenda');
+        respond({ ok: false, error: 'Only chairs can advance the agenda' });
+        return;
+      }
+
+      // Version check: reject if the client's state is stale
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      if (payload.version !== meeting.version) {
+        socket.emit('state', meeting);
+        respond({ ok: false, version: meeting.version });
         return;
       }
 
       const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
       if (!nextItem) {
-        socket.emit('error', 'No more agenda items');
+        respond({ ok: false, error: 'No more agenda items' });
         return;
       }
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      respond({ ok: true });
 
       // Persist immediately — agenda advancement is a high-value event
       meetingManager.syncOne(joinedMeetingId).catch((err) => {

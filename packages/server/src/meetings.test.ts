@@ -113,7 +113,7 @@ describe('MeetingManager', () => {
       currentTopic: undefined,
       queuedSpeakers: [],
       reactions: [],
-      trackTemperature: false,
+      trackTemperature: false, version: 0,
     });
 
     // Create a new manager and restore from the store
