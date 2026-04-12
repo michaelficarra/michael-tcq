@@ -124,6 +124,137 @@ describe('MeetingManager', () => {
     expect(mgr.get('test-meeting')?.chairs).toEqual([testUser]);
   });
 
+  // -- Agenda mutations --
+
+  describe('addAgendaItem', () => {
+    it('adds an item to the agenda', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item One', testUser, 20);
+
+      expect(item).not.toBeNull();
+      expect(item!.name).toBe('Item One');
+      expect(item!.owner).toEqual(testUser);
+      expect(item!.timebox).toBe(20);
+      expect(meeting.agenda).toHaveLength(1);
+      expect(meeting.agenda[0].id).toBe(item!.id);
+    });
+
+    it('adds items in order', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', testUser);
+      manager.addAgendaItem(meeting.id, 'Second', testUser);
+
+      expect(meeting.agenda[0].name).toBe('First');
+      expect(meeting.agenda[1].name).toBe('Second');
+    });
+
+    it('returns null for non-existent meeting', () => {
+      const item = manager.addAgendaItem('no-such-meeting', 'Item', testUser);
+      expect(item).toBeNull();
+    });
+
+    it('assigns a unique ID to each item', () => {
+      const meeting = manager.create([testUser]);
+      const item1 = manager.addAgendaItem(meeting.id, 'A', testUser);
+      const item2 = manager.addAgendaItem(meeting.id, 'B', testUser);
+      expect(item1!.id).not.toBe(item2!.id);
+    });
+
+    it('allows omitting timebox', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'No timebox', testUser);
+      expect(item!.timebox).toBeUndefined();
+    });
+  });
+
+  describe('deleteAgendaItem', () => {
+    it('removes an item from the agenda', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'To delete', testUser)!;
+
+      const deleted = manager.deleteAgendaItem(meeting.id, item.id);
+      expect(deleted).toBe(true);
+      expect(meeting.agenda).toHaveLength(0);
+    });
+
+    it('returns false for non-existent item', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.deleteAgendaItem(meeting.id, 'no-such-id')).toBe(false);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.deleteAgendaItem('no-such-meeting', 'any-id')).toBe(false);
+    });
+
+    it('preserves other items when deleting one', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Keep', testUser);
+      const toDelete = manager.addAgendaItem(meeting.id, 'Delete', testUser)!;
+      manager.addAgendaItem(meeting.id, 'Also keep', testUser);
+
+      manager.deleteAgendaItem(meeting.id, toDelete.id);
+      expect(meeting.agenda).toHaveLength(2);
+      expect(meeting.agenda[0].name).toBe('Keep');
+      expect(meeting.agenda[1].name).toBe('Also keep');
+    });
+  });
+
+  describe('reorderAgendaItem', () => {
+    it('moves an item to the beginning when afterId is null', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      manager.addAgendaItem(meeting.id, 'B', testUser);
+      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+
+      // Move C to the beginning
+      const result = manager.reorderAgendaItem(meeting.id, c.id, null);
+      expect(result).toBe(true);
+      expect(meeting.agenda.map((i) => i.name)).toEqual(['C', 'A', 'B']);
+    });
+
+    it('moves an item after another item', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      const b = manager.addAgendaItem(meeting.id, 'B', testUser)!;
+      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+
+      // Move A to after C (i.e. to the end)
+      const result = manager.reorderAgendaItem(meeting.id, a.id, c.id);
+      expect(result).toBe(true);
+      expect(meeting.agenda.map((i) => i.name)).toEqual(['B', 'C', 'A']);
+    });
+
+    it('moves an item to the middle', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      const b = manager.addAgendaItem(meeting.id, 'B', testUser)!;
+      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+
+      // Move C after A (between A and B)
+      const result = manager.reorderAgendaItem(meeting.id, c.id, a.id);
+      expect(result).toBe(true);
+      expect(meeting.agenda.map((i) => i.name)).toEqual(['A', 'C', 'B']);
+    });
+
+    it('returns false for non-existent item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'A', testUser);
+      expect(manager.reorderAgendaItem(meeting.id, 'no-such-id', null)).toBe(false);
+    });
+
+    it('returns false for non-existent afterId', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      expect(manager.reorderAgendaItem(meeting.id, a.id, 'no-such-id')).toBe(false);
+      // Item should be back in its original position
+      expect(meeting.agenda[0].id).toBe(a.id);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.reorderAgendaItem('no-such-meeting', 'any', null)).toBe(false);
+    });
+  });
+
   it('creates meetings with unique IDs', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 50; i++) {

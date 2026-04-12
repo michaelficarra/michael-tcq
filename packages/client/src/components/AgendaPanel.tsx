@@ -1,58 +1,212 @@
 /**
- * Agenda tab panel — displays the ordered list of agenda items.
+ * Agenda tab panel — displays the ordered list of agenda items with
+ * management controls for chairs.
  *
- * For now this is a read-only shell. Interactive features (add, delete,
- * reorder) will be added in Step 5.
+ * Chairs can:
+ * - Add new agenda items via a form
+ * - Delete existing items
+ * - Reorder items via drag-and-drop
+ *
+ * Participants see a read-only numbered list.
  */
 
-import { useMeetingState } from '../contexts/MeetingContext.js';
+import { useState } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { AgendaItem } from '@tcq/shared';
+import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
+import { useSocket } from '../contexts/SocketContext.js';
+import { AgendaForm } from './AgendaForm.js';
 
 export function AgendaPanel() {
   const { meeting } = useMeetingState();
+  const isChair = useIsChair();
+  const socket = useSocket();
+  const [showForm, setShowForm] = useState(false);
+
+  // Drag-and-drop sensors with keyboard support for accessibility
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   if (!meeting) return null;
 
+  /** Handle the end of a drag-and-drop reorder. */
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !meeting) return;
+
+    // Find the item that was dragged and the item it was dropped on
+    const items = meeting.agenda;
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Determine what item the dragged item should come after.
+    // If it was dropped at position 0, afterId is null (move to beginning).
+    // Otherwise, afterId is the item just before the new position.
+    let afterId: string | null;
+    if (newIndex === 0) {
+      // Moving to the beginning — but we need to check if the item moved up or down.
+      // If oldIndex > newIndex, the item is being moved to before the item at newIndex.
+      afterId = null;
+    } else if (oldIndex < newIndex) {
+      // Moving down: place after the item at newIndex
+      afterId = items[newIndex].id;
+    } else {
+      // Moving up: place after the item just before newIndex
+      afterId = items[newIndex - 1]?.id ?? null;
+    }
+
+    socket?.emit('agenda:reorder', { id: active.id as string, afterId });
+  }
+
+  /** Handle deleting an agenda item. */
+  function handleDelete(itemId: string) {
+    socket?.emit('agenda:delete', { id: itemId });
+  }
+
   return (
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
-      {meeting.agenda.length === 0 ? (
-        <p className="text-stone-400 italic">No agenda items yet.</p>
+      {/* Agenda item list */}
+      {meeting.agenda.length === 0 && !showForm ? (
+        <p className="text-stone-400 italic mb-4">No agenda items yet.</p>
       ) : (
-        <ol className="space-y-4">
-          {meeting.agenda.map((item, index) => (
-            <li
-              key={item.id}
-              className="flex items-baseline gap-3 border-b border-stone-100 pb-3"
-            >
-              {/* Item number */}
-              <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
-                {index + 1}
-              </span>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={meeting.agenda.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+            disabled={!isChair}
+          >
+            <ol className="space-y-1 mb-4" aria-label="Agenda items">
+              {meeting.agenda.map((item, index) => (
+                <SortableAgendaItem
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isChair={isChair}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ol>
+          </SortableContext>
+        </DndContext>
+      )}
 
-              <div>
-                {/* Item name */}
-                <span className="font-medium text-stone-800">
-                  {item.name}
-                </span>
-
-                {/* Owner */}
-                <span className="ml-2 text-sm text-stone-500">
-                  {item.owner.name}
-                  {item.owner.organisation && (
-                    <> ({item.owner.organisation})</>
-                  )}
-                </span>
-
-                {/* Timebox */}
-                {item.timebox != null && item.timebox > 0 && (
-                  <span className="ml-2 text-sm text-stone-400">
-                    {item.timebox} {item.timebox === 1 ? 'minute' : 'minutes'}
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
+      {/* Add agenda item — chairs only */}
+      {isChair && (
+        showForm ? (
+          <AgendaForm
+            onCancel={() => setShowForm(false)}
+            onSubmit={() => setShowForm(false)}
+          />
+        ) : (
+          <button
+            onClick={() => setShowForm(true)}
+            className="text-blue-600 hover:text-blue-800 transition-colors font-medium"
+          >
+            + New Agenda Item
+          </button>
+        )
       )}
     </div>
+  );
+}
+
+// -- Sortable agenda item component --
+
+interface SortableAgendaItemProps {
+  item: AgendaItem;
+  index: number;
+  isChair: boolean;
+  onDelete: (id: string) => void;
+}
+
+function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id, disabled: !isChair });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-baseline gap-3 border-b border-stone-100 pb-2 pt-1 ${
+        isDragging ? 'opacity-50 bg-stone-100 rounded' : ''
+      }`}
+    >
+      {/* Drag handle + item number */}
+      <span
+        className={`text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none ${
+          isChair ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
+        {...(isChair ? { ...attributes, ...listeners } : {})}
+        aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
+      >
+        {index + 1}
+      </span>
+
+      <div className="flex-1 min-w-0">
+        {/* Item name */}
+        <span className="font-medium text-stone-800">{item.name}</span>
+
+        {/* Owner info */}
+        <span className="ml-2 text-sm text-stone-500">
+          {item.owner.name}
+          {item.owner.organisation && (
+            <> ({item.owner.organisation})</>
+          )}
+        </span>
+
+        {/* Timebox */}
+        {item.timebox != null && item.timebox > 0 && (
+          <span className="ml-2 text-sm text-stone-400">
+            {item.timebox} {item.timebox === 1 ? 'minute' : 'minutes'}
+          </span>
+        )}
+      </div>
+
+      {/* Delete button — chairs only */}
+      {isChair && (
+        <button
+          onClick={() => onDelete(item.id)}
+          className="text-xs text-stone-400 hover:text-red-600 transition-colors"
+          aria-label={`Delete ${item.name}`}
+        >
+          delete
+        </button>
+      )}
+    </li>
   );
 }

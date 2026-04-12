@@ -8,7 +8,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { MeetingProvider, useMeetingState, useMeetingDispatch } from '../contexts/MeetingContext.js';
-import { useSocket } from '../hooks/useSocket.js';
+import { SocketContext } from '../contexts/SocketContext.js';
+import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { NavBar } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
@@ -34,8 +35,8 @@ function MeetingPageInner() {
       });
   }, [dispatch]);
 
-  // Connect to the meeting via Socket.IO
-  useSocket(meetingId ?? '');
+  // Connect to the meeting via Socket.IO and provide the socket to children
+  const socket = useSocketConnection(meetingId ?? '');
 
   // Loading state — haven't received meeting data yet
   if (!meeting) {
@@ -54,12 +55,14 @@ function MeetingPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
-      <main>
-        {activeTab === 'agenda' ? <AgendaPanel /> : <QueuePanel />}
-      </main>
-    </div>
+    <SocketContext value={socket}>
+      <div className="min-h-screen bg-stone-50">
+        <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
+        <main>
+          {activeTab === 'agenda' ? <AgendaPanel /> : <QueuePanel />}
+        </main>
+      </div>
+    </SocketContext>
   );
 }
 

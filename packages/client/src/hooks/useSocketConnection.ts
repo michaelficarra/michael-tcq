@@ -1,19 +1,19 @@
 import { useEffect, useRef } from 'react';
-import { io, type Socket } from 'socket.io-client';
-import type { ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import { io } from 'socket.io-client';
+import type { TypedSocket } from '../contexts/SocketContext.js';
 import { useMeetingDispatch } from '../contexts/MeetingContext.js';
-
-/** A typed Socket.IO client socket. */
-type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 /**
  * Connect to the server via Socket.IO, join a meeting room, and dispatch
  * state updates into MeetingContext.
  *
+ * Returns the socket instance (or null before connection) so it can be
+ * provided to SocketContext for use by other components.
+ *
  * The socket connects on mount and disconnects on unmount. When the server
  * emits a `state` event, the full meeting state is dispatched to the reducer.
  */
-export function useSocket(meetingId: string): TypedSocket | null {
+export function useSocketConnection(meetingId: string): TypedSocket | null {
   const dispatch = useMeetingDispatch();
   const socketRef = useRef<TypedSocket | null>(null);
 
@@ -21,7 +21,6 @@ export function useSocket(meetingId: string): TypedSocket | null {
     // Connect to the server. In development, the Vite proxy forwards
     // /socket.io requests to the Express server, so no explicit URL is needed.
     const socket: TypedSocket = io({
-      // Let Socket.IO auto-detect the URL from the current page
       transports: ['websocket', 'polling'],
     });
 

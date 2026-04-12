@@ -1,4 +1,5 @@
-import type { MeetingState, User } from '@tcq/shared';
+import { randomUUID } from 'node:crypto';
+import type { MeetingState, AgendaItem, User } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 
@@ -88,6 +89,82 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
     return meeting.chairs.some((chair) => chair.ghid === user.ghid);
+  }
+
+  // -- Agenda mutations --
+
+  /**
+   * Add a new agenda item to a meeting.
+   * Returns the created item, or null if the meeting doesn't exist.
+   */
+  addAgendaItem(meetingId: string, name: string, owner: User, timebox?: number): AgendaItem | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    const item: AgendaItem = {
+      id: randomUUID(),
+      name,
+      owner,
+      timebox,
+    };
+
+    meeting.agenda.push(item);
+    this.markDirty(meetingId);
+    return item;
+  }
+
+  /**
+   * Delete an agenda item by ID from a meeting.
+   * Returns true if the item was found and removed.
+   */
+  deleteAgendaItem(meetingId: string, itemId: string): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const index = meeting.agenda.findIndex((item) => item.id === itemId);
+    if (index === -1) return false;
+
+    meeting.agenda.splice(index, 1);
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /**
+   * Reorder an agenda item by moving it to the position after another item.
+   *
+   * Uses item UUIDs rather than indices to avoid race conditions when
+   * two chairs reorder simultaneously. If `afterId` is null, the item
+   * is moved to the beginning of the agenda.
+   *
+   * Returns true if the reorder was valid and applied.
+   */
+  reorderAgendaItem(meetingId: string, itemId: string, afterId: string | null): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    // Find and remove the item being moved
+    const itemIndex = meeting.agenda.findIndex((i) => i.id === itemId);
+    if (itemIndex === -1) return false;
+
+    const [item] = meeting.agenda.splice(itemIndex, 1);
+
+    if (afterId === null) {
+      // Move to the beginning
+      meeting.agenda.unshift(item);
+    } else {
+      // Find the "after" item in the (now shorter) array
+      const afterIndex = meeting.agenda.findIndex((i) => i.id === afterId);
+      if (afterIndex === -1) {
+        // afterId not found — put the item back and report failure
+        meeting.agenda.splice(itemIndex, 0, item);
+        return false;
+      }
+      // Insert immediately after the "after" item
+      meeting.agenda.splice(afterIndex + 1, 0, item);
+    }
+
+    this.markDirty(meetingId);
+    return true;
   }
 
   /**

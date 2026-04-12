@@ -61,20 +61,13 @@ Built the client-side meeting page with routing, Socket.IO connection, MeetingCo
 
 **Checkpoint:** Navigating to `/meeting/<id>` connects via Socket.IO, receives the meeting state, and renders the shell UI with both tabs. Multiple browser tabs show the same state.
 
-## Step 5: Agenda Management
+## Step 5: Agenda Management ✅
 
-Implement the full agenda feature: adding, deleting, and reordering agenda items.
+Implemented the full agenda feature. The reorder event uses UUID-based targeting (`id` + `afterId`) rather than indices to avoid race conditions with concurrent chairs.
 
-- **Shared:** Add Socket.IO event types for `agenda:add`, `agenda:delete`, `agenda:reorder` (client-to-server) and corresponding server-to-client state broadcasts.
-- **Server:** Implement handlers for each agenda action. Validate that the acting user is a chair. For `agenda:add`, validate the GitHub username by calling the GitHub API (requires the user's access token — skip this validation for now while using mock auth; add a TODO). Broadcast updated state to the room after each mutation.
-- **Client (Agenda tab):**
-  - Display agenda items as a numbered list showing name, owner (display name and organisation), and timebox if set.
-  - Chair view: show a "New Agenda Item" button that opens a form with fields for name, owner (GitHub username), and timebox (minutes). Show a delete button on each item.
-  - Implement drag-and-drop reordering for chairs (using a library such as `@dnd-kit/core`).
-  - Participant view: read-only list, no controls.
-- Since we don't have real auth yet, the mock user should be treated as a chair for testing.
-
-**Checkpoint:** A chair can add agenda items via the form, see them appear in the list, reorder them via drag-and-drop, and delete them. A second browser tab sees all changes in real time.
+- **Shared:** Added `agenda:add`, `agenda:delete`, `agenda:reorder` events with typed payloads. Added `error` server-to-client event.
+- **Server:** Agenda mutation methods on MeetingManager with chair-only validation. Socket handlers broadcast updated state after each mutation.
+- **Client:** Interactive `AgendaPanel` with `AgendaForm`, drag-and-drop via `@dnd-kit`, delete buttons. Chair vs participant view logic via `useIsChair()`. `SocketContext` added for components to emit events.
 
 ## Step 6: Meeting Flow — Start Meeting and Agenda Advancement
 

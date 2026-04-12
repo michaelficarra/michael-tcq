@@ -186,6 +186,114 @@ describe('Socket.IO integration', () => {
     expect(received).toBe(false);
   });
 
+  // -- Agenda events --
+
+  /** Helper: connect a client, join a meeting, and wait for initial state. */
+  async function joinMeeting(meetingId: string): Promise<TypedClientSocket> {
+    const client = makeClient();
+    const statePromise = waitForEvent<MeetingState>(client, 'state');
+    await new Promise<void>((r) => client.on('connect', r));
+    client.emit('join', meetingId);
+    await statePromise;
+    return client;
+  }
+
+  describe('agenda:add', () => {
+    it('adds an agenda item and broadcasts updated state', async () => {
+      // Mock user (ghid: 1, ghUsername: testuser) is a chair
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Listen for the state update after adding
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:add', { name: 'First item', ownerUsername: 'testuser', timebox: 15 });
+      const state = await statePromise;
+
+      expect(state.agenda).toHaveLength(1);
+      expect(state.agenda[0].name).toBe('First item');
+      expect(state.agenda[0].owner.ghUsername).toBe('testuser');
+      expect(state.agenda[0].timebox).toBe(15);
+    });
+
+    it('broadcasts to all clients in the meeting', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',
+      }]);
+
+      const client1 = await joinMeeting(meeting.id);
+      const client2 = await joinMeeting(meeting.id);
+
+      // Client 2 waits for the broadcast
+      const state2Promise = waitForEvent<MeetingState>(client2, 'state');
+      client1.emit('agenda:add', { name: 'Broadcast test', ownerUsername: 'testuser' });
+      const state2 = await state2Promise;
+
+      expect(state2.agenda).toHaveLength(1);
+      expect(state2.agenda[0].name).toBe('Broadcast test');
+    });
+
+    it('rejects add from non-chair', async () => {
+      // Create meeting where chair is someone else (ghid: 99)
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Listen for error
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('agenda:add', { name: 'Should fail', ownerUsername: 'testuser' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      // Agenda should still be empty
+      expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(0);
+    });
+  });
+
+  describe('agenda:delete', () => {
+    it('deletes an agenda item and broadcasts updated state', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',
+      }]);
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'To delete', {
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:delete', { id: item.id });
+      const state = await statePromise;
+
+      expect(state.agenda).toHaveLength(0);
+    });
+  });
+
+  describe('agenda:reorder', () => {
+    it('reorders agenda items and broadcasts updated state', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',
+      }]);
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      ctx.meetingManager.addAgendaItem(meeting.id, 'A', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'B', owner);
+      const itemC = ctx.meetingManager.addAgendaItem(meeting.id, 'C', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Move C to the beginning (afterId: null)
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:reorder', { id: itemC.id, afterId: null });
+      const state = await statePromise;
+
+      expect(state.agenda.map((i) => i.name)).toEqual(['C', 'A', 'B']);
+    });
+  });
+
   it('client can switch meetings by joining a different one', async () => {
     const meeting1 = ctx.meetingManager.create([{
       ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org',

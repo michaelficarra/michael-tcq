@@ -68,7 +68,7 @@ export function registerSocketHandlers(
     socket.on('join', (meetingId: string) => {
       const meeting = meetingManager.get(meetingId);
       if (!meeting) {
-        // TODO: send an error event to the client once we have error handling
+        socket.emit('error', 'Meeting not found');
         return;
       }
 
@@ -85,6 +85,88 @@ export function registerSocketHandlers(
 
       // Send the full current state to this socket only
       socket.emit('state', meeting);
+    });
+
+    // --- agenda:add ---
+    // Chair adds a new agenda item. The owner is specified by GitHub username;
+    // for now we create a placeholder User object. GitHub API validation will
+    // be added when real OAuth is implemented.
+    socket.on('agenda:add', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can add agenda items');
+        return;
+      }
+
+      // Validate the payload
+      const name = payload.name?.trim();
+      if (!name) {
+        socket.emit('error', 'Agenda item name is required');
+        return;
+      }
+      const ownerUsername = payload.ownerUsername?.trim();
+      if (!ownerUsername) {
+        socket.emit('error', 'Owner username is required');
+        return;
+      }
+
+      // Build the owner User object. If the owner is one of the meeting's
+      // chairs, use their full profile; otherwise create a placeholder.
+      // TODO: validate username against the GitHub API (Step 9/10).
+      const meeting = meetingManager.get(joinedMeetingId);
+      const existingUser = meeting?.chairs.find((c) => c.ghUsername === ownerUsername);
+      const owner = existingUser ?? {
+        ghid: 0,
+        ghUsername: ownerUsername,
+        name: ownerUsername,
+        organisation: '',
+      };
+
+      // Parse timebox: treat 0, negative, and NaN as "no timebox"
+      const timebox = payload.timebox && payload.timebox > 0 ? payload.timebox : undefined;
+
+      meetingManager.addAgendaItem(joinedMeetingId, name, owner, timebox);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- agenda:delete ---
+    // Chair removes an agenda item by ID.
+    socket.on('agenda:delete', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can delete agenda items');
+        return;
+      }
+
+      const deleted = meetingManager.deleteAgendaItem(joinedMeetingId, payload.id);
+      if (!deleted) {
+        socket.emit('error', 'Agenda item not found');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- agenda:reorder ---
+    // Chair reorders agenda items by moving one from oldIndex to newIndex.
+    socket.on('agenda:reorder', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can reorder agenda items');
+        return;
+      }
+
+      const reordered = meetingManager.reorderAgendaItem(
+        joinedMeetingId,
+        payload.id,
+        payload.afterId,
+      );
+      if (!reordered) {
+        socket.emit('error', 'Invalid reorder indices');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
     // --- disconnect ---
