@@ -162,18 +162,14 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-baseline gap-3 border-b border-stone-100 pb-2 pt-1 ${
-        isDragging ? 'opacity-50 bg-stone-100 rounded' : ''
-      }`}
+      className={`flex items-baseline gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
+        isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
+      {...(isChair ? { ...attributes, ...listeners } : {})}
     >
-      {/* Drag handle + item number */}
-      <span
-        className={`text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none ${
-          isChair ? 'cursor-grab active:cursor-grabbing' : ''
-        }`}
-        {...(isChair ? { ...attributes, ...listeners } : {})}
-        aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
-      >
+      {/* Item number */}
+      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none">
         {index + 1}
       </span>
 

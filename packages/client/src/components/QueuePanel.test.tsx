@@ -314,100 +314,33 @@ describe('QueuePanel', () => {
     expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'entry-42' });
   });
 
-  // -- Move Up / Move Down buttons --
+  // -- Drag-and-drop reorder handles --
 
-  it('shows Move Up / Move Down buttons for chairs', () => {
+  it('shows drag handles for chairs', () => {
     const meeting = makeMeeting({
       chairs: [chairUser],
       queuedSpeakers: [
         { id: 'q1', type: 'topic', topic: 'First', user: otherUser },
         { id: 'q2', type: 'topic', topic: 'Second', user: otherUser },
-        { id: 'q3', type: 'topic', topic: 'Third', user: otherUser },
       ],
     });
     renderQueue(meeting, chairUser);
 
-    // First entry: no Move Up, has Move Down
-    expect(screen.queryByRole('button', { name: /move up: first/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /move down: first/i })).toBeInTheDocument();
-
-    // Middle entry: has both
-    expect(screen.getByRole('button', { name: /move up: second/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /move down: second/i })).toBeInTheDocument();
-
-    // Last entry: has Move Up, no Move Down
-    expect(screen.getByRole('button', { name: /move up: third/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /move down: third/i })).not.toBeInTheDocument();
+    // Each entry should have a drag handle with an accessible label
+    expect(screen.getByLabelText(/drag to reorder: first/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/drag to reorder: second/i)).toBeInTheDocument();
   });
 
-  it('hides Move Up / Move Down buttons for non-chairs', () => {
+  it('hides drag handles for non-chairs', () => {
     const meeting = makeMeeting({
       chairs: [otherUser],
       queuedSpeakers: [
         { id: 'q1', type: 'topic', topic: 'First', user: otherUser },
-        { id: 'q2', type: 'topic', topic: 'Second', user: otherUser },
       ],
     });
     renderQueue(meeting, chairUser);
 
-    expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument();
-  });
-
-  it('emits queue:reorder with correct afterId when Move Up is clicked', () => {
-    const emit = vi.fn();
-    const mockSocket = { emit } as unknown as TypedSocket;
-
-    const meeting = makeMeeting({
-      chairs: [chairUser],
-      queuedSpeakers: [
-        { id: 'q1', type: 'topic', topic: 'First', user: otherUser },
-        { id: 'q2', type: 'topic', topic: 'Second', user: otherUser },
-        { id: 'q3', type: 'topic', topic: 'Third', user: otherUser },
-      ],
-    });
-    renderQueue(meeting, chairUser, mockSocket);
-
-    // Move Second up (should go before First, i.e. afterId: null)
-    fireEvent.click(screen.getByRole('button', { name: /move up: second/i }));
-    expect(emit).toHaveBeenCalledWith('queue:reorder', { id: 'q2', afterId: null });
-  });
-
-  it('emits queue:reorder with correct afterId when Move Up from third position', () => {
-    const emit = vi.fn();
-    const mockSocket = { emit } as unknown as TypedSocket;
-
-    const meeting = makeMeeting({
-      chairs: [chairUser],
-      queuedSpeakers: [
-        { id: 'q1', type: 'topic', topic: 'First', user: otherUser },
-        { id: 'q2', type: 'topic', topic: 'Second', user: otherUser },
-        { id: 'q3', type: 'topic', topic: 'Third', user: otherUser },
-      ],
-    });
-    renderQueue(meeting, chairUser, mockSocket);
-
-    // Move Third up (should go after First, i.e. afterId: q1)
-    fireEvent.click(screen.getByRole('button', { name: /move up: third/i }));
-    expect(emit).toHaveBeenCalledWith('queue:reorder', { id: 'q3', afterId: 'q1' });
-  });
-
-  it('emits queue:reorder with correct afterId when Move Down is clicked', () => {
-    const emit = vi.fn();
-    const mockSocket = { emit } as unknown as TypedSocket;
-
-    const meeting = makeMeeting({
-      chairs: [chairUser],
-      queuedSpeakers: [
-        { id: 'q1', type: 'topic', topic: 'First', user: otherUser },
-        { id: 'q2', type: 'topic', topic: 'Second', user: otherUser },
-      ],
-    });
-    renderQueue(meeting, chairUser, mockSocket);
-
-    // Move First down (should go after Second, i.e. afterId: q2)
-    fireEvent.click(screen.getByRole('button', { name: /move down: first/i }));
-    expect(emit).toHaveBeenCalledWith('queue:reorder', { id: 'q1', afterId: 'q2' });
+    expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
   });
 
   // -- Accessibility --

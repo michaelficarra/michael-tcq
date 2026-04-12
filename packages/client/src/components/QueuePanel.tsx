@@ -5,9 +5,26 @@
  * The agenda item section shows Start Meeting / Next Agenda Item buttons
  * for chairs. The speaker section shows the current speaker with a
  * Next Speaker button for chairs. Below that are the entry type buttons
- * and the queue list with per-entry controls.
+ * and the queue list with drag-and-drop reordering for chairs.
  */
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { QueueEntry } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -22,6 +39,14 @@ export function QueuePanel() {
   const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
   const handleNextSpeaker = useAdvanceAction('queue:next');
 
+  // Drag-and-drop sensors with keyboard support for accessibility
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   if (!meeting) return null;
 
   /** Remove a queue entry (own entry, or any entry if chair). */
@@ -30,29 +55,33 @@ export function QueuePanel() {
   }
 
   /**
-   * Move a queue entry up one position. Resolves the adjacent entry's
-   * UUID so the server receives a UUID-based reorder (not index-based),
-   * avoiding race conditions.
+   * Handle the end of a drag-and-drop reorder on the queue.
+   * Resolves the drop position to a UUID-based afterId so the server
+   * receives race-condition-safe reorder commands.
    */
-  function handleMoveUp(index: number) {
-    if (!meeting || index <= 0) return;
-    const entry = meeting.queuedSpeakers[index];
-    // To move up, place after the entry two positions above (or at
-    // the beginning if moving to position 0)
-    const afterId = index >= 2 ? meeting.queuedSpeakers[index - 2].id : null;
-    socket?.emit('queue:reorder', { id: entry.id, afterId });
-  }
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !meeting) return;
 
-  /**
-   * Move a queue entry down one position. Resolves the adjacent entry's
-   * UUID so the server receives a UUID-based reorder (not index-based).
-   */
-  function handleMoveDown(index: number) {
-    if (!meeting || index >= meeting.queuedSpeakers.length - 1) return;
-    const entry = meeting.queuedSpeakers[index];
-    // To move down, place after the entry currently below
-    const afterId = meeting.queuedSpeakers[index + 1].id;
-    socket?.emit('queue:reorder', { id: entry.id, afterId });
+    const items = meeting.queuedSpeakers;
+    const oldIndex = items.findIndex((e) => e.id === active.id);
+    const newIndex = items.findIndex((e) => e.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Determine what entry the dragged item should come after.
+    // If dropped at position 0, afterId is null (move to beginning).
+    let afterId: string | null;
+    if (newIndex === 0) {
+      afterId = null;
+    } else if (oldIndex < newIndex) {
+      // Moving down: place after the entry at newIndex
+      afterId = items[newIndex].id;
+    } else {
+      // Moving up: place after the entry just before newIndex
+      afterId = items[newIndex - 1]?.id ?? null;
+    }
+
+    socket?.emit('queue:reorder', { id: active.id as string, afterId });
   }
 
   // Determine whether there are more agenda items after the current one
@@ -213,83 +242,117 @@ export function QueuePanel() {
         {meeting.queuedSpeakers.length === 0 ? (
           <p className="text-stone-400 italic text-sm">The queue is empty.</p>
         ) : (
-          <ol className="space-y-3" aria-label="Queued speakers">
-            {meeting.queuedSpeakers.map((entry, index) => {
-              // Show delete for own entries or if chair
-              const isOwnEntry = user && entry.user.ghid === user.ghid;
-              const canDelete = isOwnEntry || isChair;
-
-              return (
-                <li key={entry.id} className="flex items-center gap-2 border-b border-stone-100 pb-2">
-                  {/* Reorder arrows — chair only, to the left of the number */}
-                  {isChair && (
-                    <div className="flex flex-col items-center w-4">
-                      {index > 0 ? (
-                        <button
-                          onClick={() => handleMoveUp(index)}
-                          className="text-stone-300 hover:text-stone-700 transition-colors
-                                     cursor-pointer leading-none"
-                          aria-label={`Move up: ${entry.topic}`}
-                        >
-                          ▲
-                        </button>
-                      ) : (
-                        <span className="invisible">▲</span>
-                      )}
-                      {index < meeting.queuedSpeakers.length - 1 ? (
-                        <button
-                          onClick={() => handleMoveDown(index)}
-                          className="text-stone-300 hover:text-stone-700 transition-colors
-                                     cursor-pointer leading-none"
-                          aria-label={`Move down: ${entry.topic}`}
-                        >
-                          ▼
-                        </button>
-                      ) : (
-                        <span className="invisible">▼</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Position number */}
-                  <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
-                    {index + 1}
-                  </span>
-
-                  <div className="flex-1 min-w-0">
-                    {/* Type badge and topic */}
-                    <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
-                      {entryTypeLabel(entry.type)}:
-                    </span>
-                    <span className="ml-1 text-stone-800">{entry.topic}</span>
-
-                    {/* Speaker info and action buttons */}
-                    <p className="text-sm text-stone-500">
-                      {entry.user.name}
-                      {entry.user.organisation && (
-                        <> ({entry.user.organisation})</>
-                      )}
-
-                      {/* Delete button — own entries or chair */}
-                      {canDelete && (
-                        <button
-                          onClick={() => handleRemoveEntry(entry.id)}
-                          className="ml-3 text-xs text-stone-400 hover:text-red-600
-                                     transition-colors cursor-pointer"
-                          aria-label={`Delete entry: ${entry.topic}`}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={meeting.queuedSpeakers.map((e) => e.id)}
+              strategy={verticalListSortingStrategy}
+              disabled={!isChair}
+            >
+              <ol className="space-y-3" aria-label="Queued speakers">
+                {meeting.queuedSpeakers.map((entry, index) => (
+                  <SortableQueueEntry
+                    key={entry.id}
+                    entry={entry}
+                    index={index}
+                    isChair={isChair}
+                    isOwnEntry={!!user && entry.user.ghid === user.ghid}
+                    onDelete={handleRemoveEntry}
+                  />
+                ))}
+              </ol>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
     </div>
+  );
+}
+
+// -- Sortable queue entry component --
+
+interface SortableQueueEntryProps {
+  entry: QueueEntry;
+  index: number;
+  isChair: boolean;
+  isOwnEntry: boolean;
+  onDelete: (id: string) => void;
+}
+
+function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: SortableQueueEntryProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: entry.id, disabled: !isChair });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const canDelete = isOwnEntry || isChair;
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
+        isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+      }`}
+    >
+      {/* Drag handle — chair only, to the left of the position number */}
+      {isChair && (
+        <span
+          className="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing
+                     select-none text-sm leading-none"
+          aria-label={`Drag to reorder: ${entry.topic}`}
+          {...attributes}
+          {...listeners}
+        >
+          ⠿
+        </span>
+      )}
+
+      {/* Position number */}
+      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
+        {index + 1}
+      </span>
+
+      <div className="flex-1 min-w-0">
+        {/* Type badge and topic */}
+        <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
+          {entryTypeLabel(entry.type)}:
+        </span>
+        <span className="ml-1 text-stone-800">{entry.topic}</span>
+
+        {/* Speaker info and action buttons */}
+        <p className="text-sm text-stone-500">
+          {entry.user.name}
+          {entry.user.organisation && (
+            <> ({entry.user.organisation})</>
+          )}
+
+          {/* Delete button — own entries or chair */}
+          {canDelete && (
+            <button
+              onClick={() => onDelete(entry.id)}
+              className="ml-3 text-xs text-stone-400 hover:text-red-600
+                         transition-colors cursor-pointer"
+              aria-label={`Delete entry: ${entry.topic}`}
+            >
+              Delete
+            </button>
+          )}
+        </p>
+      </div>
+    </li>
   );
 }
 
