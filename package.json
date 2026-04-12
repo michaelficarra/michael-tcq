@@ -1,0 +1,20 @@
+{
+  "name": "tcq",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
+    "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
+    "test": "npm run test -w packages/server -w packages/client",
+    "lint": "npm run lint -w packages/server -w packages/client",
+    "typecheck": "npm run typecheck -w packages/shared -w packages/server -w packages/client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

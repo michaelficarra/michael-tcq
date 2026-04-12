@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.data/
+*.swp
+*.swo
+*~
+.DS_Store
+service-account.json
+screenshots
