@@ -21,16 +21,16 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
         TCQ
       </span>
 
-      {/* Tab toggles */}
+      {/* Tab toggles — active tab has a bold underline for clear indication */}
       <div className="flex gap-4" role="tablist" aria-label="Meeting views">
         <button
           role="tab"
           aria-selected={activeTab === 'agenda'}
           aria-controls="panel-agenda"
-          className={`text-base font-medium transition-colors ${
+          className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
             activeTab === 'agenda'
-              ? 'text-stone-900'
-              : 'text-stone-400 hover:text-stone-600'
+              ? 'text-stone-900 border-teal-500'
+              : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
           }`}
           onClick={() => onTabChange('agenda')}
         >
@@ -40,10 +40,10 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
           role="tab"
           aria-selected={activeTab === 'queue'}
           aria-controls="panel-queue"
-          className={`text-base font-medium transition-colors ${
+          className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
             activeTab === 'queue'
-              ? 'text-stone-900'
-              : 'text-stone-400 hover:text-stone-600'
+              ? 'text-stone-900 border-teal-500'
+              : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
           }`}
           onClick={() => onTabChange('queue')}
         >
