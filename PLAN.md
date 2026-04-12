@@ -75,7 +75,15 @@ Implemented with a single `meeting:nextAgendaItem` event that handles both start
 
 - **Client:** Start Meeting button (before meeting starts) and Next Agenda Item button (inline, after current item info). Both hidden for non-chairs. Next Agenda Item hidden on last item.
 
-## Step 7: Speaker Queue — Core
+## Step 7: Home Page — Create and Join Meeting ✅
+
+The home page now has two cards: Join Meeting (enter a meeting ID, validates it exists before navigating) and New Meeting (comma-separated chair usernames, creates via API and redirects). Works with mock auth.
+
+**Deferred to Step 10 (GitHub OAuth):**
+- Pre-populate the Chairs field with the current user's GitHub username.
+- Server-side validation of chair usernames against the GitHub API when creating a meeting (resolve each username to a full User object with ghid, name, and organisation). Return an error if any username is invalid.
+
+## Step 8: Speaker Queue — Core
 
 Implement the speaker queue: entering the queue, displaying it, and advancing through speakers.
 
@@ -95,7 +103,7 @@ Implement the speaker queue: entering the queue, displaying it, and advancing th
 
 **Checkpoint:** Participants can enter the queue with different entry types. Entries appear in priority order. Chair can advance to the next speaker. The current topic updates when a new topic speaker begins. All changes visible in real time across tabs.
 
-## Step 8: Queue Reordering
+## Step 9: Queue Reordering
 
 Implement chair-only queue reordering with type changes on boundary crossing.
 
@@ -105,7 +113,7 @@ Implement chair-only queue reordering with type changes on boundary crossing.
 
 **Checkpoint:** Chair moves a "New Topic" entry above a "Clarifying Question" entry; the moved entry's type changes to "Clarifying Question". Changes are broadcast to all clients.
 
-## Step 9: GitHub OAuth
+## Step 10: GitHub OAuth
 
 Replace the mock auth with real GitHub OAuth.
 
@@ -141,17 +149,6 @@ Register a GitHub OAuth App for local development:
 - Remove the mock auth middleware.
 
 **Checkpoint:** Clicking "Log in with GitHub" redirects to GitHub, authenticates, and returns to the app with the user's real identity. The user's name and organisation appear in queue entries and as agenda item owners.
-
-## Step 10: Home Page — Create and Join Meeting
-
-Build the landing page for authenticated users.
-
-- **Client:**
-  - **Create Meeting** section: a form with a text input for chair GitHub usernames (comma-separated), pre-populated with the current user's username. A "Start a New Meeting" button. On submit, `POST /api/meetings` and redirect to `/meeting/:id`.
-  - **Join Meeting** section: a text input for the meeting ID and a "Join" button. On submit, navigate to `/meeting/:id`. Show an error if the meeting does not exist.
-- **Server:** The `POST /api/meetings` endpoint should look up each chair username via the GitHub API to resolve them to user objects (ghid, name, organisation). Return an error if any username is invalid.
-
-**Checkpoint:** An authenticated user can create a meeting (specifying chairs) and is redirected to it. Another user can join by entering the meeting ID. Users can also join via the permalink `/meeting/:id` directly.
 
 ## Step 11: Temperature Checks
 
