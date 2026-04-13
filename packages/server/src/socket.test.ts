@@ -294,6 +294,42 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  describe('agenda:edit', () => {
+    it('edits an agenda item and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Old name', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:edit', { id: item.id, name: 'New name' });
+      const state = await statePromise;
+
+      expect(state.agenda[0].name).toBe('New name');
+    });
+
+    it('rejects edit from non-chair', async () => {
+      // Meeting where chair is someone else (ghid: 99)
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('agenda:edit', { id: item.id, name: 'Hacked' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      // Item should be unchanged
+      expect(ctx.meetingManager.get(meeting.id)!.agenda[0].name).toBe('Item');
+    });
+  });
+
   // -- Queue events --
 
   describe('queue:add', () => {
@@ -424,6 +460,60 @@ describe('Socket.IO integration', () => {
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
+    });
+  });
+
+  describe('queue:edit', () => {
+    it('edits a queue entry topic and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Old topic', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:edit', { id: entry.id, topic: 'New topic' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers[0].topic).toBe('New topic');
+    });
+
+    it('rejects edit from non-owner non-chair', async () => {
+      // Meeting where chair is someone else (ghid: 99)
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      // Queue entry created by the chair, not the mock test user
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Not yours', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:edit', { id: entry.id, topic: 'Hacked' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/your own/i);
+      // Entry should be unchanged
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakers[0].topic).toBe('Not yours');
+    });
+
+    it('allows chair to edit any entry', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Entry created by someone else
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Other topic', {
+        ghid: 99, ghUsername: 'other', name: 'Other', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:edit', { id: entry.id, topic: 'Chair edited' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers[0].topic).toBe('Chair edited');
     });
   });
 

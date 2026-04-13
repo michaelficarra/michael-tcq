@@ -129,6 +129,60 @@ export function registerSocketHandlers(
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
+    // --- agenda:edit ---
+    // Chair edits an existing agenda item's name, owner, or timebox.
+    socket.on('agenda:edit', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can edit agenda items');
+        return;
+      }
+
+      // Build the updates object, resolving owner username if provided
+      const updates: { name?: string; owner?: import('@tcq/shared').User; timebox?: number | null } = {};
+
+      if (payload.name !== undefined) {
+        const trimmed = payload.name.trim();
+        if (!trimmed) {
+          socket.emit('error', 'Agenda item name cannot be empty');
+          return;
+        }
+        updates.name = trimmed;
+      }
+
+      if (payload.ownerUsername !== undefined) {
+        const ownerUsername = payload.ownerUsername.trim();
+        if (!ownerUsername) {
+          socket.emit('error', 'Owner username cannot be empty');
+          return;
+        }
+        // Resolve owner the same way as agenda:add
+        const meeting = meetingManager.get(joinedMeetingId);
+        const existingUser = meeting?.chairs.find((c) => c.ghUsername === ownerUsername);
+        updates.owner = existingUser ?? {
+          ghid: 0,
+          ghUsername: ownerUsername,
+          name: ownerUsername,
+          organisation: '',
+        };
+      }
+
+      if (payload.timebox !== undefined) {
+        // null clears the timebox; 0 or negative also clears it
+        updates.timebox = payload.timebox === null || payload.timebox <= 0
+          ? null
+          : payload.timebox;
+      }
+
+      const edited = meetingManager.editAgendaItem(joinedMeetingId, payload.id, updates);
+      if (!edited) {
+        socket.emit('error', 'Agenda item not found');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
     // --- agenda:delete ---
     // Chair removes an agenda item by ID.
     socket.on('agenda:delete', (payload) => {
@@ -189,6 +243,49 @@ export function registerSocketHandlers(
       const entry = meetingManager.addQueueEntry(joinedMeetingId, payload.type, topic, user);
       if (!entry) {
         socket.emit('error', 'Failed to add queue entry');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- queue:edit ---
+    // Edit an existing queue entry's topic or type. The entry owner
+    // can edit their own entry; chairs can edit any entry.
+    socket.on('queue:edit', (payload) => {
+      if (!joinedMeetingId) return;
+
+      // Check permissions: owner can edit their own, chairs can edit any
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      if (!entry) {
+        socket.emit('error', 'Queue entry not found');
+        return;
+      }
+
+      const isOwner = entry.user.ghid === user.ghid;
+      const isChairUser = meetingManager.isChair(joinedMeetingId, user);
+      if (!isOwner && !isChairUser) {
+        socket.emit('error', 'You can only edit your own queue entries');
+        return;
+      }
+
+      // Build the updates, validating topic if provided
+      const updates: { topic?: string; type?: import('@tcq/shared').QueueEntryType } = {};
+      if (payload.topic !== undefined) {
+        const trimmed = payload.topic.trim();
+        if (!trimmed) {
+          socket.emit('error', 'Topic cannot be empty');
+          return;
+        }
+        updates.topic = trimmed;
+      }
+      if (payload.type !== undefined) {
+        updates.type = payload.type;
+      }
+
+      const edited = meetingManager.editQueueEntry(joinedMeetingId, payload.id, updates);
+      if (!edited) {
+        socket.emit('error', 'Queue entry not found');
         return;
       }
 

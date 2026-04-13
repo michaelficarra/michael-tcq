@@ -167,6 +167,70 @@ describe('MeetingManager', () => {
     });
   });
 
+  describe('editAgendaItem', () => {
+    it('updates the name', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Old name', testUser)!;
+
+      const result = manager.editAgendaItem(meeting.id, item.id, { name: 'New name' });
+      expect(result).toBe(true);
+      expect(meeting.agenda[0].name).toBe('New name');
+    });
+
+    it('updates the owner', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', testUser)!;
+
+      manager.editAgendaItem(meeting.id, item.id, { owner: otherUser });
+      expect(meeting.agenda[0].owner).toEqual(otherUser);
+    });
+
+    it('updates the timebox', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', testUser, 10)!;
+
+      manager.editAgendaItem(meeting.id, item.id, { timebox: 30 });
+      expect(meeting.agenda[0].timebox).toBe(30);
+    });
+
+    it('clears the timebox when set to null', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', testUser, 10)!;
+
+      manager.editAgendaItem(meeting.id, item.id, { timebox: null });
+      expect(meeting.agenda[0].timebox).toBeUndefined();
+    });
+
+    it('leaves unchanged fields alone', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Keep me', testUser, 15)!;
+
+      manager.editAgendaItem(meeting.id, item.id, { name: 'Changed' });
+      expect(meeting.agenda[0].name).toBe('Changed');
+      expect(meeting.agenda[0].owner).toEqual(testUser);
+      expect(meeting.agenda[0].timebox).toBe(15);
+    });
+
+    it('updates currentAgendaItem if editing the current item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Current', testUser);
+      manager.nextAgendaItem(meeting.id);
+
+      const itemId = meeting.currentAgendaItem!.id;
+      manager.editAgendaItem(meeting.id, itemId, { name: 'Updated' });
+      expect(meeting.currentAgendaItem!.name).toBe('Updated');
+    });
+
+    it('returns false for non-existent item', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.editAgendaItem(meeting.id, 'no-such-id', { name: 'X' })).toBe(false);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.editAgendaItem('no-such-meeting', 'any', { name: 'X' })).toBe(false);
+    });
+  });
+
   describe('deleteAgendaItem', () => {
     it('removes an item from the agenda', () => {
       const meeting = manager.create([testUser]);
@@ -399,6 +463,43 @@ describe('MeetingManager', () => {
 
     it('returns null for non-existent meeting', () => {
       expect(manager.addQueueEntry('no-such-meeting', 'topic', 'X', testUser)).toBeNull();
+    });
+  });
+
+  describe('editQueueEntry', () => {
+    it('updates the topic', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'Old topic', testUser)!;
+
+      const result = manager.editQueueEntry(meeting.id, entry.id, { topic: 'New topic' });
+      expect(result).toBe(true);
+      expect(meeting.queuedSpeakers[0].topic).toBe('New topic');
+    });
+
+    it('updates the type', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', testUser)!;
+
+      manager.editQueueEntry(meeting.id, entry.id, { type: 'question' });
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('leaves unchanged fields alone', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'Keep me', testUser)!;
+
+      manager.editQueueEntry(meeting.id, entry.id, { type: 'question' });
+      expect(meeting.queuedSpeakers[0].topic).toBe('Keep me');
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('returns false for non-existent entry', () => {
+      const meeting = manager.create([testUser]);
+      expect(manager.editQueueEntry(meeting.id, 'no-such-id', { topic: 'X' })).toBe(false);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.editQueueEntry('no-such-meeting', 'any', { topic: 'X' })).toBe(false);
     });
   });
 

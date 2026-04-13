@@ -128,6 +128,39 @@ export class MeetingManager {
   }
 
   /**
+   * Edit an existing agenda item. Only the provided fields are updated;
+   * omitted fields are left unchanged. Pass `timebox: null` to clear
+   * the timebox. Returns true if the item was found and updated.
+   */
+  editAgendaItem(
+    meetingId: string,
+    itemId: string,
+    updates: { name?: string; owner?: User; timebox?: number | null },
+  ): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const item = meeting.agenda.find((i) => i.id === itemId);
+    if (!item) return false;
+
+    if (updates.name !== undefined) item.name = updates.name;
+    if (updates.owner !== undefined) item.owner = updates.owner;
+    if (updates.timebox === null) {
+      item.timebox = undefined;
+    } else if (updates.timebox !== undefined) {
+      item.timebox = updates.timebox;
+    }
+
+    // If this item is the current agenda item, update that reference too
+    if (meeting.currentAgendaItem?.id === itemId) {
+      meeting.currentAgendaItem = item;
+    }
+
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /**
    * Delete an agenda item by ID from a meeting.
    * Returns true if the item was found and removed.
    */
@@ -277,6 +310,29 @@ export class MeetingManager {
     meeting.queuedSpeakers.splice(insertIndex, 0, entry);
     this.markDirty(meetingId);
     return entry;
+  }
+
+  /**
+   * Edit an existing queue entry. Only the provided fields are updated;
+   * omitted fields are left unchanged. Returns true if the entry was
+   * found and updated.
+   */
+  editQueueEntry(
+    meetingId: string,
+    entryId: string,
+    updates: { topic?: string; type?: QueueEntryType },
+  ): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const entry = meeting.queuedSpeakers.find((e) => e.id === entryId);
+    if (!entry) return false;
+
+    if (updates.topic !== undefined) entry.topic = updates.topic;
+    if (updates.type !== undefined) entry.type = updates.type;
+
+    this.markDirty(meetingId);
+    return true;
   }
 
   /**

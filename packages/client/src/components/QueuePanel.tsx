@@ -8,6 +8,7 @@
  * and the queue list with drag-and-drop reordering for chairs.
  */
 
+import { useState, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -273,6 +274,10 @@ interface SortableQueueEntryProps {
 }
 
 function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: SortableQueueEntryProps) {
+  const socket = useSocket();
+  const [editing, setEditing] = useState(false);
+  const [editTopic, setEditTopic] = useState('');
+
   const {
     attributes,
     listeners,
@@ -280,15 +285,83 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: entry.id, disabled: !isChair });
+  } = useSortable({ id: entry.id, disabled: !isChair || editing });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
+  const canEdit = isOwnEntry || isChair;
   const canDelete = isOwnEntry || isChair;
 
+  /** Open the inline edit form, pre-populated with current topic. */
+  function startEditing() {
+    setEditTopic(entry.topic);
+    setEditing(true);
+  }
+
+  /** Submit the edit and close the form. */
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = editTopic.trim();
+    if (!trimmed) return;
+
+    socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
+    setEditing(false);
+  }
+
+  // --- Editing mode: inline form ---
+  if (editing) {
+    return (
+      <li
+        ref={setNodeRef}
+        style={style}
+        className={`flex items-center gap-2 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
+          index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+        }`}
+      >
+        {/* Placeholder for drag handle column */}
+        {isChair && <span className="w-4" />}
+
+        <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-center">
+          {index + 1}
+        </span>
+
+        <form onSubmit={handleEditSubmit} className="flex-1 flex items-center gap-2">
+          {/* Show the type badge (not editable inline) */}
+          <span className={`text-sm font-semibold shrink-0 ${entryTypeColor(entry.type)}`}>
+            {entryTypeLabel(entry.type)}:
+          </span>
+          <input
+            type="text"
+            value={editTopic}
+            onChange={(e) => setEditTopic(e.target.value)}
+            required
+            autoFocus
+            aria-label="Topic description"
+            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <button
+            type="submit"
+            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+          >
+            Cancel
+          </button>
+        </form>
+      </li>
+    );
+  }
+
+  // --- Display mode ---
   return (
     <li
       ref={setNodeRef}
@@ -328,16 +401,30 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
         </div>
       </div>
 
-      {/* Delete button — own entries or chair, right-aligned */}
-      {canDelete && (
-        <button
-          onClick={() => onDelete(entry.id)}
-          className="text-xs text-stone-400 hover:text-red-600
-                     transition-colors cursor-pointer shrink-0"
-          aria-label={`Delete entry: ${entry.topic}`}
-        >
-          Delete
-        </button>
+      {/* Edit and delete buttons — right-aligned */}
+      {(canEdit || canDelete) && (
+        <div className="flex gap-3 shrink-0">
+          {canEdit && (
+            <button
+              onClick={startEditing}
+              className="text-xs text-stone-400 hover:text-teal-600
+                         transition-colors cursor-pointer"
+              aria-label={`Edit entry: ${entry.topic}`}
+            >
+              Edit
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => onDelete(entry.id)}
+              className="text-xs text-stone-400 hover:text-red-600
+                         transition-colors cursor-pointer"
+              aria-label={`Delete entry: ${entry.topic}`}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       )}
     </li>
   );

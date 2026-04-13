@@ -10,7 +10,7 @@
  * Participants see a read-only numbered list.
  */
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -161,6 +161,12 @@ interface SortableAgendaItemProps {
 }
 
 function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaItemProps) {
+  const socket = useSocket();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editOwner, setEditOwner] = useState('');
+  const [editTimebox, setEditTimebox] = useState('');
+
   const {
     attributes,
     listeners,
@@ -168,13 +174,103 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id, disabled: !isChair });
+  } = useSortable({ id: item.id, disabled: !isChair || editing });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
+  /** Open the inline edit form, pre-populated with current values. */
+  function startEditing() {
+    setEditName(item.name);
+    setEditOwner(item.owner.ghUsername);
+    setEditTimebox(item.timebox != null && item.timebox > 0 ? String(item.timebox) : '');
+    setEditing(true);
+  }
+
+  /** Submit the edit and close the form. */
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmedName = editName.trim();
+    const trimmedOwner = editOwner.trim();
+    if (!trimmedName || !trimmedOwner) return;
+
+    const timeboxMinutes = parseInt(editTimebox, 10);
+
+    socket?.emit('agenda:edit', {
+      id: item.id,
+      name: trimmedName,
+      ownerUsername: trimmedOwner,
+      timebox: timeboxMinutes > 0 ? timeboxMinutes : null,
+    });
+    setEditing(false);
+  }
+
+  // --- Editing mode: inline form ---
+  if (editing) {
+    return (
+      <li
+        ref={setNodeRef}
+        style={style}
+        className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
+          index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+        }`}
+      >
+        <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none">
+          {index + 1}
+        </span>
+
+        <form onSubmit={handleEditSubmit} className="flex-1 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            required
+            autoFocus
+            aria-label="Agenda item name"
+            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <input
+            type="text"
+            value={editOwner}
+            onChange={(e) => setEditOwner(e.target.value)}
+            required
+            aria-label="Owner username"
+            className="border border-stone-300 rounded px-2 py-0.5 text-sm w-28
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <input
+            type="number"
+            value={editTimebox}
+            onChange={(e) => setEditTimebox(e.target.value)}
+            min="0"
+            max="999"
+            placeholder="min"
+            aria-label="Timebox in minutes"
+            className="border border-stone-300 rounded px-2 py-0.5 text-sm w-16
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <button
+            type="submit"
+            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+          >
+            Cancel
+          </button>
+        </form>
+      </li>
+    );
+  }
+
+  // --- Display mode ---
   return (
     <li
       ref={setNodeRef}
@@ -205,15 +301,24 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
         )}
       </div>
 
-      {/* Delete button — chairs only */}
+      {/* Edit and delete buttons — chairs only */}
       {isChair && (
-        <button
-          onClick={() => onDelete(item.id)}
-          className="text-xs text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
-          aria-label={`Delete ${item.name}`}
-        >
-          delete
-        </button>
+        <div className="flex gap-3 shrink-0">
+          <button
+            onClick={startEditing}
+            className="text-xs text-stone-400 hover:text-teal-600 transition-colors cursor-pointer"
+            aria-label={`Edit ${item.name}`}
+          >
+            edit
+          </button>
+          <button
+            onClick={() => onDelete(item.id)}
+            className="text-xs text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
+            aria-label={`Delete ${item.name}`}
+          >
+            delete
+          </button>
+        </div>
       )}
     </li>
   );

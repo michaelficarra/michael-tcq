@@ -27,6 +27,21 @@ export interface AgendaReorderPayload {
   afterId: string | null;
 }
 
+/** Payload for editing an existing agenda item (chair only). */
+export interface AgendaEditPayload {
+  id: string;
+  name?: string;
+  ownerUsername?: string;
+  timebox?: number | null; // null to clear the timebox
+}
+
+/** Payload for editing an existing queue entry. */
+export interface QueueEditPayload {
+  id: string;
+  topic?: string;
+  type?: QueueEntryType;
+}
+
 /** Payload for adding a queue entry. */
 export interface QueueAddPayload {
   type: QueueEntryType;
@@ -95,6 +110,12 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   /** Join a meeting room by ID. */
   join: (meetingId: string) => void;
+
+  /** Edit an existing agenda item (chair only). */
+  'agenda:edit': (payload: AgendaEditPayload) => void;
+
+  /** Edit an existing queue entry (owner or chair). */
+  'queue:edit': (payload: QueueEditPayload) => void;
 
   /** Add a new agenda item (chair only). */
   'agenda:add': (payload: AgendaAddPayload) => void;
