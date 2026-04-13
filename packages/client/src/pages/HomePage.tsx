@@ -137,7 +137,7 @@ function JoinMeetingCard() {
         <button
           type="submit"
           className="mt-2 bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                     hover:bg-teal-600 transition-colors
+                     hover:bg-teal-600 transition-colors cursor-pointer
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
         >
           Join
@@ -201,7 +201,7 @@ function NewMeetingCard() {
         onClick={handleCreate}
         disabled={loading || !user}
         className="bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                   hover:bg-teal-600 transition-colors disabled:opacity-50
+                   hover:bg-teal-600 transition-colors cursor-pointer disabled:opacity-50
                    focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
       >
         {loading ? 'Creating…' : 'Start a New Meeting'}

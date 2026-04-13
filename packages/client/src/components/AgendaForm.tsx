@@ -113,7 +113,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
           <button
             type="submit"
             className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                       hover:bg-teal-600 transition-colors
+                       hover:bg-teal-600 transition-colors cursor-pointer
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
           >
             Create
@@ -122,7 +122,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             type="button"
             onClick={onCancel}
             className="bg-rose-400 text-white px-4 py-1.5 rounded text-sm font-medium
-                       hover:bg-rose-500 transition-colors
+                       hover:bg-rose-500 transition-colors cursor-pointer
                        focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-2"
           >
             Cancel
