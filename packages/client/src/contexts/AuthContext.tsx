@@ -23,6 +23,9 @@ interface AuthState {
   /** True when the server is using mock auth (no GitHub OAuth configured). */
   mockAuth: boolean;
 
+  /** True when the current user has admin privileges. */
+  isAdmin: boolean;
+
   /** Switch to a different mock user (dev only). Reloads auth state. */
   switchUser: (username: string) => Promise<void>;
 }
@@ -31,6 +34,7 @@ const AuthContext = createContext<AuthState>({
   user: null,
   loading: true,
   mockAuth: false,
+  isAdmin: false,
   switchUser: async () => {},
 });
 
@@ -44,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [mockAuth, setMockAuth] = useState(false);
+  const [adminFlag, setAdminFlag] = useState(false);
 
   // Fetch the current user from the server
   const fetchMe = useCallback(async () => {
@@ -55,8 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const data = await res.json();
       setMockAuth(!!data.mockAuth);
-      // Remove the mockAuth flag before storing as User
-      const { mockAuth: _, ...userData } = data;
+      setAdminFlag(!!data.isAdmin);
+      // Remove the extra flags before storing as User
+      const { mockAuth: _, isAdmin: _a, ...userData } = data;
       setUser(userData as User);
     } catch {
       setUser(null);
@@ -84,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchMe]);
 
   return (
-    <AuthContext value={{ user, loading, mockAuth, switchUser }}>
+    <AuthContext value={{ user, loading, mockAuth, isAdmin: adminFlag, switchUser }}>
       {children}
     </AuthContext>
   );

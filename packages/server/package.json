@@ -16,6 +16,7 @@
   "dependencies": {
     "@google-cloud/firestore": "^8.3.0",
     "@tcq/shared": "*",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-session": "^1.18.0",
     "firestore-store": "^2.0.2",

@@ -3,6 +3,7 @@ import type { ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shar
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
+import { isAdmin } from './admin.js';
 
 /** A Socket with our typed events and session user attached. */
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -21,6 +22,39 @@ const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** How long to wait (ms) after the last client disconnects before cleaning up. */
 const CLEANUP_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Per-meeting connection statistics for the admin dashboard. */
+export interface MeetingStats {
+  /** Maximum number of concurrent non-admin connections observed. */
+  maxConcurrent: number;
+  /** ISO timestamp of the most recent non-admin connection, or 'now' if connected. */
+  lastConnection: string;
+  /** Current number of non-admin connections. */
+  currentConnections: number;
+}
+
+/** Tracks connection stats per meeting for admin reporting. */
+const meetingStats = new Map<string, MeetingStats>();
+
+/** Get the stats for a meeting, creating a default entry if needed. */
+function getStats(meetingId: string): MeetingStats {
+  let stats = meetingStats.get(meetingId);
+  if (!stats) {
+    stats = { maxConcurrent: 0, lastConnection: '', currentConnections: 0 };
+    meetingStats.set(meetingId, stats);
+  }
+  return stats;
+}
+
+/** Get stats for all meetings. */
+export function getAllMeetingStats(): Map<string, MeetingStats> {
+  return meetingStats;
+}
+
+/** Remove stats for a meeting (called on cleanup). */
+export function removeMeetingStats(meetingId: string): void {
+  meetingStats.delete(meetingId);
+}
 
 /**
  * Broadcast the full meeting state to all sockets in a meeting's room.
@@ -76,6 +110,13 @@ export function registerSocketHandlers(
 
       // Leave any previously joined meeting room
       if (joinedMeetingId) {
+        if (!isAdmin(user)) {
+          const prevStats = getStats(joinedMeetingId);
+          prevStats.currentConnections = Math.max(0, prevStats.currentConnections - 1);
+          if (prevStats.currentConnections === 0) {
+            prevStats.lastConnection = new Date().toISOString();
+          }
+        }
         socket.leave(joinedMeetingId);
         decrementClientCount(joinedMeetingId, meetingManager);
       }
@@ -84,6 +125,16 @@ export function registerSocketHandlers(
       joinedMeetingId = meetingId;
       socket.join(meetingId);
       incrementClientCount(meetingId);
+
+      // Track connection stats for admin dashboard (non-admin only)
+      if (!isAdmin(user)) {
+        const stats = getStats(meetingId);
+        stats.currentConnections++;
+        stats.lastConnection = 'now';
+        if (stats.currentConnections > stats.maxConcurrent) {
+          stats.maxConcurrent = stats.currentConnections;
+        }
+      }
 
       // Send the full current state to this socket only
       socket.emit('state', meeting);
@@ -605,6 +656,15 @@ export function registerSocketHandlers(
     // --- disconnect ---
     socket.on('disconnect', () => {
       if (joinedMeetingId) {
+        // Update connection stats for admin dashboard (non-admin only)
+        if (!isAdmin(user)) {
+          const stats = getStats(joinedMeetingId);
+          stats.currentConnections = Math.max(0, stats.currentConnections - 1);
+          if (stats.currentConnections === 0) {
+            stats.lastConnection = new Date().toISOString();
+          }
+        }
+
         decrementClientCount(joinedMeetingId, meetingManager);
       }
     });

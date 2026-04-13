@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { UserMenu } from '../components/UserMenu.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
+import { AdminPanel } from '../components/AdminPanel.js';
 
 type HomeTab = 'join' | 'help';
 
@@ -60,16 +61,27 @@ export function HomePage() {
       </nav>
 
       <main>
-        {activeTab === 'join' && (
-          <div className="p-6 max-w-3xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <JoinMeetingCard />
-              <NewMeetingCard />
-            </div>
-          </div>
-        )}
+        {activeTab === 'join' && <JoinTab />}
         {activeTab === 'help' && <HelpPanel />}
       </main>
+    </div>
+  );
+}
+
+// -- Join tab (cards + admin panel) --
+
+function JoinTab() {
+  const { isAdmin } = useAuth();
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <JoinMeetingCard />
+        <NewMeetingCard />
+      </div>
+
+      {/* Admin panel — only shown for admin users */}
+      {isAdmin && <AdminPanel />}
     </div>
   );
 }

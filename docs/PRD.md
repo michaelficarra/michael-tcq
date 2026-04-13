@@ -28,6 +28,15 @@ The meeting creator is the initial chair. In addition to all participant capabil
 - Initiate, configure, and stop temperature checks
 - Copy temperature check results to the clipboard
 
+### Admins
+
+Admins are designated by GitHub username via the `ADMIN_USERNAMES` environment variable. In addition to all participant capabilities, admins can:
+
+- View a list of all active meetings on the home page, showing each meeting's ID, chair count, agenda item count, queued speaker count, maximum concurrent connections, and time of last non-admin connection.
+- Delete any meeting (with a confirmation dialogue).
+
+Admin connections are excluded from connection statistics.
+
 ## Authentication
 
 Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application.

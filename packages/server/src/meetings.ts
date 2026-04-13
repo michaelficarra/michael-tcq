@@ -67,6 +67,11 @@ export class MeetingManager {
     return this.meetings.get(id);
   }
 
+  /** List all active meetings. Used by the admin dashboard. */
+  listAll(): MeetingState[] {
+    return [...this.meetings.values()];
+  }
+
   /** Check whether a meeting exists. */
   has(id: string): boolean {
     return this.meetings.has(id);

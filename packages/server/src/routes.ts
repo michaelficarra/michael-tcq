@@ -3,6 +3,8 @@ import type { User } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
+import { isAdmin } from './admin.js';
+import { getAllMeetingStats, removeMeetingStats } from './socket.js';
 import './session.js';
 
 /**
@@ -24,7 +26,7 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    res.json({ ...user, mockAuth: !isOAuthConfigured() });
+    res.json({ ...user, mockAuth: !isOAuthConfigured(), isAdmin: isAdmin(user) });
   });
 
   // --- Dev-only: switch the mock user ---
@@ -126,6 +128,64 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
       return;
     }
     res.json(meeting);
+  });
+
+  // --- Admin endpoints ---
+
+  // List all active meetings with connection statistics.
+  router.get('/admin/meetings', (req, res) => {
+    const user = req.session.user;
+    if (!user || !isAdmin(user)) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const stats = getAllMeetingStats();
+    const meetings: {
+      id: string;
+      chairCount: number;
+      agendaItemCount: number;
+      queuedSpeakerCount: number;
+      maxConcurrent: number;
+      lastConnection: string;
+    }[] = [];
+
+    // Iterate all meetings in the manager
+    // (we need access to the meeting data, not just stats)
+    for (const meeting of meetingManager.listAll()) {
+      const s = stats.get(meeting.id);
+      meetings.push({
+        id: meeting.id,
+        chairCount: meeting.chairs.length,
+        agendaItemCount: meeting.agenda.length,
+        queuedSpeakerCount: meeting.queuedSpeakers.length,
+        maxConcurrent: s?.maxConcurrent ?? 0,
+        lastConnection: s?.currentConnections
+          ? 'now'
+          : s?.lastConnection ?? '',
+      });
+    }
+
+    res.json(meetings);
+  });
+
+  // Delete a meeting (admin only).
+  router.delete('/admin/meetings/:id', async (req, res) => {
+    const user = req.session.user;
+    if (!user || !isAdmin(user)) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const meetingId = req.params.id;
+    if (!meetingManager.has(meetingId)) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    await meetingManager.remove(meetingId);
+    removeMeetingStats(meetingId);
+    res.json({ ok: true });
   });
 
   return router;

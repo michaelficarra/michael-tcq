@@ -1,7 +1,13 @@
+// Load .env from the project root before anything else.
+// When run via `npm run dev -w packages/server`, cwd is packages/server,
+// so we resolve relative to this file's location (src/) → up to project root.
+import { join } from 'node:path';
+import dotenv from 'dotenv';
+dotenv.config({ path: join(import.meta.dirname, '../../../.env') });
+
 import express from 'express';
 import session from 'express-session';
 import { createServer } from 'node:http';
-import { join } from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
 import './session.js'; // session type augmentation
@@ -67,16 +73,16 @@ const sessionMiddleware = session({
   saveUninitialized: false,
   store: sessionStore,
   cookie: {
-    // In production behind Cloud Run's HTTPS termination, we need
-    // secure cookies. Detect via the "trust proxy" setting.
-    secure: STORE_TYPE === 'firestore',
+    // Only use secure cookies in production (behind HTTPS).
+    // NODE_ENV is set to 'production' in the Dockerfile.
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   },
 });
 
 // Trust the Cloud Run reverse proxy so secure cookies work
-if (STORE_TYPE === 'firestore') {
+if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
