@@ -124,20 +124,16 @@ Register a GitHub OAuth App at https://github.com/settings/developers:
 
 Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`.
 
-## Step 11: Temperature Checks
+## Step 11: Temperature Checks ✅
 
-Implement the temperature check feature.
+Implemented with fully customisable options. Chairs configure the response options (emoji + label) before starting a check, with the six standard options as defaults. Minimum 2 options required.
 
-- **Shared:** Add event types for `temperature:start`, `temperature:stop`, `temperature:react`.
-- **Server:**
-  - `temperature:start` — chair-only. Sets `trackTemperature` to true, clears any existing reactions. Broadcasts.
-  - `temperature:stop` — chair-only. Sets `trackTemperature` to false, clears reactions. Broadcasts.
-  - `temperature:react` — accepts `{ reaction }`. Toggles the reaction for the acting user (adds if not present, removes if present). Each user can have at most one of each reaction type. Broadcasts.
-- **Client (Queue tab):**
-  - Show a **Check Temperature** button (chair only) in the agenda item section. When a temperature check is active, replace it with a **Stop Temperature** button.
-  - When `trackTemperature` is true, display the reaction panel: six buttons with emoji and label, each showing a count. Clicking a reaction emits `temperature:react`. Hovering shows a tooltip with the names of users who reacted.
-
-**Checkpoint:** Chair starts a temperature check. All participants see the reaction panel. Participants click reactions; counts update in real time. Chair stops the check; reactions are cleared.
+- **Shared:** `TemperatureOption` type (id, emoji, label). `Reaction` references `optionId` instead of a fixed type. `MeetingState` gains `temperatureOptions[]`. `temperature:start` accepts custom options. `DEFAULT_TEMPERATURE_OPTIONS` constant provides the six defaults.
+- **Server:** `startTemperature` assigns UUIDs to each option. `toggleReaction` validates option IDs. `stopTemperature` clears options and reactions.
+- **Client:**
+  - `TemperatureSetup` — configuration form with add/remove option rows, emoji input (use OS emoji picker), label input. Minimum 2 options enforced. Defaults pre-populated.
+  - `TemperatureCheck` — reaction panel with buttons for each custom option, count, highlight for own reactions, tooltip with names. "Copy Results" button for chairs (copies emoji + label + count, sorted by count descending).
+  - Chair flow: Check Temperature → setup form → Start Temperature Check → reaction panel + Stop Temperature button.
 
 ## Step 12: Persistence — Periodic Firestore Sync
 

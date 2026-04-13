@@ -21,10 +21,24 @@ export interface QueueEntry {
   user: User;
 }
 
-export type ReactionType = '❤️' | '👍' | '👀' | '❓' | '🤷' | '😕';
+/**
+ * A single option in a temperature check. Each check can have a
+ * custom set of options (minimum 2). The emoji is the visual
+ * identifier; the label is the human-readable description.
+ */
+export interface TemperatureOption {
+  id: string;
+  emoji: string;
+  label: string;
+}
 
+/**
+ * A user's reaction to a temperature check option.
+ * Each user can select at most one of each option (toggle behaviour).
+ */
 export interface Reaction {
-  reaction: ReactionType;
+  /** The ID of the TemperatureOption this reaction is for. */
+  optionId: string;
   user: User;
 }
 
@@ -36,8 +50,19 @@ export interface MeetingState {
   currentSpeaker?: QueueEntry;
   currentTopic?: QueueEntry;
   queuedSpeakers: QueueEntry[];
-  reactions: Reaction[];
+
+  /** Whether a temperature check is currently active. */
   trackTemperature: boolean;
+
+  /**
+   * The options for the current temperature check. Set when the check
+   * is started; cleared when it's stopped. Each option has an emoji,
+   * a label, and a unique ID.
+   */
+  temperatureOptions: TemperatureOption[];
+
+  /** Reactions to the current temperature check options. */
+  reactions: Reaction[];
 
   /**
    * Monotonically increasing version counter. Bumped on every mutation.

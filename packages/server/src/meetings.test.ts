@@ -113,7 +113,7 @@ describe('MeetingManager', () => {
       currentTopic: undefined,
       queuedSpeakers: [],
       reactions: [],
-      trackTemperature: false, version: 0,
+      trackTemperature: false, temperatureOptions: [], version: 0,
     });
 
     // Create a new manager and restore from the store
@@ -689,32 +689,51 @@ describe('MeetingManager', () => {
 
   // -- Temperature check mutations --
 
-  describe('startTemperature', () => {
-    it('enables temperature tracking and clears reactions', () => {
-      const meeting = manager.create([testUser]);
-      // Simulate an existing reaction
-      meeting.reactions = [{ reaction: '❤️', user: testUser }];
+  /** Helper: options for temperature check tests. */
+  const tempOptions = [
+    { emoji: '❤️', label: 'Love' },
+    { emoji: '👍', label: 'Like' },
+    { emoji: '👀', label: 'Watching' },
+  ];
 
-      const result = manager.startTemperature(meeting.id);
+  describe('startTemperature', () => {
+    it('enables temperature tracking with custom options', () => {
+      const meeting = manager.create([testUser]);
+
+      const result = manager.startTemperature(meeting.id, tempOptions);
       expect(result).toBe(true);
       expect(meeting.trackTemperature).toBe(true);
+      expect(meeting.temperatureOptions).toHaveLength(3);
+      expect(meeting.temperatureOptions[0].emoji).toBe('❤️');
+      expect(meeting.temperatureOptions[0].label).toBe('Love');
+      // Each option gets a unique ID
+      expect(meeting.temperatureOptions[0].id).toBeDefined();
+      expect(meeting.temperatureOptions[0].id).not.toBe(meeting.temperatureOptions[1].id);
+    });
+
+    it('clears existing reactions when starting', () => {
+      const meeting = manager.create([testUser]);
+      meeting.reactions = [{ optionId: 'old', user: testUser }];
+
+      manager.startTemperature(meeting.id, tempOptions);
       expect(meeting.reactions).toHaveLength(0);
     });
 
     it('returns false for non-existent meeting', () => {
-      expect(manager.startTemperature('no-such-meeting')).toBe(false);
+      expect(manager.startTemperature('no-such-meeting', tempOptions)).toBe(false);
     });
   });
 
   describe('stopTemperature', () => {
-    it('disables temperature tracking and clears reactions', () => {
+    it('disables temperature tracking and clears reactions and options', () => {
       const meeting = manager.create([testUser]);
-      meeting.trackTemperature = true;
-      meeting.reactions = [{ reaction: '👍', user: testUser }];
+      manager.startTemperature(meeting.id, tempOptions);
+      meeting.reactions = [{ optionId: meeting.temperatureOptions[0].id, user: testUser }];
 
       const result = manager.stopTemperature(meeting.id);
       expect(result).toBe(true);
       expect(meeting.trackTemperature).toBe(false);
+      expect(meeting.temperatureOptions).toHaveLength(0);
       expect(meeting.reactions).toHaveLength(0);
     });
 
@@ -724,53 +743,60 @@ describe('MeetingManager', () => {
   });
 
   describe('toggleReaction', () => {
-    it('adds a reaction when the user has not reacted', () => {
+    it('adds a reaction when the user has not reacted to this option', () => {
       const meeting = manager.create([testUser]);
-      meeting.trackTemperature = true;
+      manager.startTemperature(meeting.id, tempOptions);
+      const optionId = meeting.temperatureOptions[0].id;
 
-      const result = manager.toggleReaction(meeting.id, '❤️', testUser);
+      const result = manager.toggleReaction(meeting.id, optionId, testUser);
       expect(result).toBe(true);
       expect(meeting.reactions).toHaveLength(1);
-      expect(meeting.reactions[0].reaction).toBe('❤️');
+      expect(meeting.reactions[0].optionId).toBe(optionId);
       expect(meeting.reactions[0].user.ghUsername).toBe('alice');
     });
 
     it('removes a reaction when the user already has it (toggle off)', () => {
       const meeting = manager.create([testUser]);
-      meeting.trackTemperature = true;
+      manager.startTemperature(meeting.id, tempOptions);
+      const optionId = meeting.temperatureOptions[0].id;
 
-      // Add then toggle off
-      manager.toggleReaction(meeting.id, '👍', testUser);
-      manager.toggleReaction(meeting.id, '👍', testUser);
+      manager.toggleReaction(meeting.id, optionId, testUser);
+      manager.toggleReaction(meeting.id, optionId, testUser);
       expect(meeting.reactions).toHaveLength(0);
     });
 
-    it('allows multiple different reactions from the same user', () => {
+    it('allows multiple different options from the same user', () => {
       const meeting = manager.create([testUser]);
-      meeting.trackTemperature = true;
+      manager.startTemperature(meeting.id, tempOptions);
 
-      manager.toggleReaction(meeting.id, '❤️', testUser);
-      manager.toggleReaction(meeting.id, '👀', testUser);
+      manager.toggleReaction(meeting.id, meeting.temperatureOptions[0].id, testUser);
+      manager.toggleReaction(meeting.id, meeting.temperatureOptions[1].id, testUser);
       expect(meeting.reactions).toHaveLength(2);
     });
 
-    it('allows different users to have the same reaction', () => {
+    it('allows different users to react to the same option', () => {
       const meeting = manager.create([testUser]);
-      meeting.trackTemperature = true;
+      manager.startTemperature(meeting.id, tempOptions);
+      const optionId = meeting.temperatureOptions[0].id;
 
-      manager.toggleReaction(meeting.id, '❤️', testUser);
-      manager.toggleReaction(meeting.id, '❤️', otherUser);
+      manager.toggleReaction(meeting.id, optionId, testUser);
+      manager.toggleReaction(meeting.id, optionId, otherUser);
       expect(meeting.reactions).toHaveLength(2);
     });
 
     it('returns false when temperature tracking is not active', () => {
       const meeting = manager.create([testUser]);
-      // trackTemperature is false by default
-      expect(manager.toggleReaction(meeting.id, '❤️', testUser)).toBe(false);
+      expect(manager.toggleReaction(meeting.id, 'any-id', testUser)).toBe(false);
+    });
+
+    it('returns false for an invalid option ID', () => {
+      const meeting = manager.create([testUser]);
+      manager.startTemperature(meeting.id, tempOptions);
+      expect(manager.toggleReaction(meeting.id, 'invalid-option', testUser)).toBe(false);
     });
 
     it('returns false for non-existent meeting', () => {
-      expect(manager.toggleReaction('no-such-meeting', '❤️', testUser)).toBe(false);
+      expect(manager.toggleReaction('no-such-meeting', 'any', testUser)).toBe(false);
     });
   });
 

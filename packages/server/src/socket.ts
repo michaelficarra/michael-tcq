@@ -375,15 +375,31 @@ export function registerSocketHandlers(
     });
 
     // --- temperature:start ---
-    // Chair starts a temperature check. Clears existing reactions.
-    socket.on('temperature:start', () => {
+    // Chair starts a temperature check with custom options.
+    // Minimum 2 options required; each must have emoji and label.
+    socket.on('temperature:start', (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
         socket.emit('error', 'Only chairs can start a temperature check');
         return;
       }
 
-      meetingManager.startTemperature(joinedMeetingId);
+      // Validate options
+      if (!Array.isArray(payload.options) || payload.options.length < 2) {
+        socket.emit('error', 'At least 2 temperature check options are required');
+        return;
+      }
+      for (const opt of payload.options) {
+        if (!opt.emoji?.trim() || !opt.label?.trim()) {
+          socket.emit('error', 'Each option must have an emoji and a label');
+          return;
+        }
+      }
+
+      meetingManager.startTemperature(
+        joinedMeetingId,
+        payload.options.map((o) => ({ emoji: o.emoji.trim(), label: o.label.trim() })),
+      );
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
@@ -401,14 +417,14 @@ export function registerSocketHandlers(
     });
 
     // --- temperature:react ---
-    // Any authenticated user can toggle a reaction during an active
-    // temperature check. Sending the same reaction again removes it.
+    // Any authenticated user can toggle a reaction on a temperature
+    // check option. Sending the same option ID again removes it.
     socket.on('temperature:react', (payload) => {
       if (!joinedMeetingId) return;
 
-      const toggled = meetingManager.toggleReaction(joinedMeetingId, payload.reaction, user);
+      const toggled = meetingManager.toggleReaction(joinedMeetingId, payload.optionId, user);
       if (!toggled) {
-        socket.emit('error', 'Temperature check is not active');
+        socket.emit('error', 'Temperature check is not active or option is invalid');
         return;
       }
 

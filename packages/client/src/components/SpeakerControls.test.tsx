@@ -14,7 +14,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     id: 'test-meeting', chairs: [], agenda: [],
     currentAgendaItem: undefined, currentSpeaker: undefined,
     currentTopic: undefined, queuedSpeakers: [],
-    reactions: [], trackTemperature: false, version: 0,
+    reactions: [], trackTemperature: false, temperatureOptions: [], version: 0,
     ...overrides,
   };
 }

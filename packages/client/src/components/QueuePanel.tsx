@@ -32,11 +32,15 @@ import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
 import { TemperatureCheck } from './TemperatureCheck.js';
+import { TemperatureSetup } from './TemperatureSetup.js';
 
 export function QueuePanel() {
   const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
+
+  // Whether the temperature check setup form is open
+  const [showTempSetup, setShowTempSetup] = useState(false);
 
   // Advancement actions with automatic retry on stale version
   const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
@@ -147,11 +151,16 @@ export function QueuePanel() {
                   className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
                              text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
                 >
-                  Stop Temperature
+                  Stop Temperature Check
                 </button>
+              ) : showTempSetup ? (
+                <TemperatureSetup
+                  onCancel={() => setShowTempSetup(false)}
+                  onStarted={() => setShowTempSetup(false)}
+                />
               ) : (
                 <button
-                  onClick={() => socket?.emit('temperature:start')}
+                  onClick={() => setShowTempSetup(true)}
                   className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
                              text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
                 >

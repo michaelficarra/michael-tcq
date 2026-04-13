@@ -67,12 +67,21 @@ export interface QueueRemovePayload {
  * Question".
  */
 /**
+ * Payload for starting a temperature check with custom options.
+ * Each option has an emoji and a human-readable label. The server
+ * assigns unique IDs. Minimum 2 options required.
+ */
+export interface TemperatureStartPayload {
+  options: { emoji: string; label: string }[];
+}
+
+/**
  * Payload for toggling a temperature check reaction.
- * Each user can have at most one of each reaction type.
- * Sending the same reaction again removes it (toggle).
+ * References the option by its ID. Each user can have at most one
+ * reaction per option. Sending the same option again removes it (toggle).
  */
 export interface TemperatureReactPayload {
-  reaction: import('./types.js').ReactionType;
+  optionId: string;
 }
 
 export interface QueueReorderPayload {
@@ -174,8 +183,11 @@ export interface ClientToServerEvents {
    */
   'queue:next': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
 
-  /** Start a temperature check (chair only). Clears any existing reactions. */
-  'temperature:start': () => void;
+  /**
+   * Start a temperature check with custom options (chair only).
+   * Clears any existing reactions. Minimum 2 options required.
+   */
+  'temperature:start': (payload: TemperatureStartPayload) => void;
 
   /** Stop a temperature check (chair only). Clears all reactions. */
   'temperature:stop': () => void;

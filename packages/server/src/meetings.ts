@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, ReactionType, User } from '@tcq/shared';
+import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, TemperatureOption, User } from '@tcq/shared';
 import { QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
@@ -53,6 +53,7 @@ export class MeetingManager {
       queuedSpeakers: [],
       reactions: [],
       trackTemperature: false,
+      temperatureOptions: [],
       version: 0,
     };
 
@@ -457,13 +458,20 @@ export class MeetingManager {
   // -- Temperature check mutations --
 
   /**
-   * Start a temperature check. Sets trackTemperature to true and clears
-   * any existing reactions so we start fresh.
+   * Start a temperature check with custom options. Sets trackTemperature
+   * to true, stores the options, and clears any existing reactions.
+   * Each option gets a unique UUID assigned by the server.
    */
-  startTemperature(meetingId: string): boolean {
+  startTemperature(meetingId: string, options: { emoji: string; label: string }[]): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
+    // Assign unique IDs to each option
+    meeting.temperatureOptions = options.map((opt) => ({
+      id: randomUUID(),
+      emoji: opt.emoji,
+      label: opt.label,
+    }));
     meeting.trackTemperature = true;
     meeting.reactions = [];
     this.markDirty(meetingId);
@@ -472,34 +480,40 @@ export class MeetingManager {
 
   /**
    * Stop a temperature check. Sets trackTemperature to false and clears
-   * all reactions.
+   * all reactions and options.
    */
   stopTemperature(meetingId: string): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
     meeting.trackTemperature = false;
+    meeting.temperatureOptions = [];
     meeting.reactions = [];
     this.markDirty(meetingId);
     return true;
   }
 
   /**
-   * Toggle a reaction for a user. If the user already has this reaction
-   * type, it's removed. If they don't, it's added. Each user can have
-   * at most one of each reaction type.
+   * Toggle a reaction for a user on a specific temperature option.
+   * If the user already reacted to this option, the reaction is removed.
+   * If they haven't, a reaction is added. Each user can react to each
+   * option at most once.
    *
-   * Returns false if the meeting doesn't exist or temperature tracking
-   * is not active.
+   * Returns false if the meeting doesn't exist, temperature tracking
+   * is not active, or the option ID is invalid.
    */
-  toggleReaction(meetingId: string, reactionType: ReactionType, user: User): boolean {
+  toggleReaction(meetingId: string, optionId: string, user: User): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
     if (!meeting.trackTemperature) return false;
 
-    // Check if the user already has this reaction
+    // Validate that the option exists
+    const optionExists = meeting.temperatureOptions.some((o) => o.id === optionId);
+    if (!optionExists) return false;
+
+    // Check if the user already reacted to this option
     const existingIndex = meeting.reactions.findIndex(
-      (r) => r.reaction === reactionType && r.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
+      (r) => r.optionId === optionId && r.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
     );
 
     if (existingIndex !== -1) {
@@ -507,7 +521,7 @@ export class MeetingManager {
       meeting.reactions.splice(existingIndex, 1);
     } else {
       // Add it (toggle on)
-      meeting.reactions.push({ reaction: reactionType, user });
+      meeting.reactions.push({ optionId, user });
     }
 
     this.markDirty(meetingId);

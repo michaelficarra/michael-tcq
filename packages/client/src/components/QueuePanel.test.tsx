@@ -24,7 +24,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     currentTopic: undefined,
     queuedSpeakers: [],
     reactions: [],
-    trackTemperature: false, version: 0,
+    trackTemperature: false, temperatureOptions: [], version: 0,
     ...overrides,
   };
 }
