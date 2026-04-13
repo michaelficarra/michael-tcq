@@ -49,33 +49,36 @@ A single repository using npm workspaces with three packages:
 ```
 tcq/
 ├── package.json                 # Workspace root
+├── Dockerfile
 ├── packages/
 │   ├── shared/                  # Shared TypeScript types and constants
 │   │   └── src/
-│   │       ├── types.ts         # MeetingState, User, QueueEntry, AgendaItem, etc.
+│   │       ├── types.ts         # MeetingState, User, QueueEntry, TemperatureOption, etc.
 │   │       ├── messages.ts      # Socket.IO event type definitions
-│   │       └── constants.ts     # Queue entry types, reaction types, word list
+│   │       └── constants.ts     # Queue entry types, default temperature options
 │   ├── client/                  # React + Vite frontend
-│   │   ├── index.html
 │   │   └── src/
-│   │       ├── main.tsx
 │   │       ├── App.tsx
-│   │       ├── contexts/
-│   │       │   └── MeetingContext.tsx
-│   │       ├── components/
-│   │       │   ├── Agenda/
-│   │       │   ├── Queue/
-│   │       │   └── TemperatureCheck/
-│   │       └── hooks/
-│   │           └── useSocket.ts
+│   │       ├── contexts/        # MeetingContext, AuthContext, SocketContext
+│   │       ├── components/      # NavBar, AgendaPanel, QueuePanel, HelpPanel, etc.
+│   │       ├── hooks/           # useSocketConnection, useAdvanceAction
+│   │       └── pages/           # HomePage, MeetingPage, LoginPage
 │   └── server/                  # Express + Socket.IO backend
 │       └── src/
-│           ├── index.ts         # Server entry point
+│           ├── index.ts         # Server entry point, store selection
 │           ├── auth.ts          # GitHub OAuth routes
-│           ├── meeting.ts       # MeetingState class and mutations
+│           ├── meetings.ts      # MeetingManager class and mutations
 │           ├── socket.ts        # Socket.IO event handlers
-│           └── meetingId.ts     # Word-based ID generation
-└── Dockerfile
+│           ├── meetingId.ts     # Word-based ID generation (human-id)
+│           ├── store.ts         # MeetingStore interface
+│           ├── fileStore.ts     # File-backed store (local dev)
+│           ├── firestoreStore.ts # Firestore-backed store (production)
+│           ├── mockAuth.ts      # Mock auth for development
+│           └── requireAuth.ts   # Auth middleware for API routes
+├── scripts/
+│   ├── seed-meeting.sh          # Populate a meeting with sample data
+│   └── deploy.sh               # Build, push, and deploy to Cloud Run
+└── docs/                        # PRD, Architecture, Contributing, Deployment
 ```
 
 **Why a monorepo?** The primary motivation is the `shared` package. The type definitions for meeting state, queue entries, and Socket.IO event payloads must be identical on client and server. With npm workspaces, both sides import from `@tcq/shared` and get compile-time type checking across the boundary.
@@ -132,11 +135,13 @@ The server exposes a small number of REST endpoints:
 | `/auth/github` | GET | Redirect to GitHub OAuth |
 | `/auth/github/callback` | GET | Handle OAuth callback, create session |
 | `/auth/logout` | GET | Destroy session |
-| `/api/me` | GET | Return current authenticated user |
+| `/api/health` | GET | Health check |
+| `/api/me` | GET | Return current authenticated user (includes `mockAuth` flag) |
 | `/api/meetings` | POST | Create a new meeting |
-| `/meeting/:id` | GET | Serve the SPA (client-side routing handles the rest) |
+| `/api/meetings/:id` | GET | Get a meeting's current state |
+| `/api/dev/switch-user` | POST | Switch mock auth identity (dev mode only) |
 
-All other interaction happens over Socket.IO.
+All other interaction happens over Socket.IO. The server also serves the Vite-built client assets in production and has a catch-all for client-side routing.
 
 ## Real-Time Communication: Socket.IO
 
@@ -197,7 +202,7 @@ When the last client disconnects from a meeting, a cleanup timer starts (e.g. 5 
 
 User sessions are also stored in Firestore, using a Firestore-backed session store for `express-session`. This keeps the persistence layer unified (one backing store rather than two) and means sessions survive container restarts, so users do not need to re-authenticate after a redeployment.
 
-For local development, sessions use the same filesystem-backed persistence as meeting state. See the [Local Development](#local-development) section for details.
+For local development, sessions use the default in-memory session store (express-session's `MemoryStore`). This means sessions are lost on server restart, which is acceptable for development.
 
 ### Socket.IO Session Sharing
 
@@ -221,13 +226,7 @@ The flow:
 
 ## Meeting ID Generation
 
-Meeting IDs are generated as a short sequence of common, easily-spelled English words joined by hyphens (e.g. `bright-pine`, `calm-wave`).
-
-The approach:
-
-- A curated list of ~200 short (3-6 letter), unambiguous, common English words. Words that are easily confused when spoken aloud, offensive, or culturally sensitive are excluded.
-- Two words are selected at random, giving ~40,000 combinations. Since only a handful of meetings are active at any time, collisions are vanishingly unlikely. If a collision does occur, a new pair is generated.
-- The format is `adjective-noun` for natural-sounding, easy-to-dictate IDs.
+Meeting IDs are generated using the `human-id` library, which produces three lowercase words joined by hyphens (e.g. `bright-pine-lake`, `calm-wave-fox`). With over 15 million combinations, collisions are vanishingly unlikely. If a collision does occur with an active meeting, a new ID is generated.
 
 ## Deployment
 
@@ -271,8 +270,9 @@ Local development requires only Node.js and npm. No Docker, no cloud services, n
 **Setup:**
 
 1. `npm install` at the repository root (installs all workspace dependencies).
-2. Copy `.env.example` to `.env` and fill in the GitHub OAuth client ID and secret.
-3. `npm run dev` starts the application in development mode.
+2. `npm run dev` starts the application in development mode.
+
+GitHub OAuth is optional for local development — when `GITHUB_CLIENT_ID` is not set, the server runs in mock auth mode with a fake user and a dev user-switcher in the navigation bar. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on optionally configuring OAuth.
 
 **How local differs from production:**
 
@@ -300,6 +300,4 @@ Two implementations are provided:
 - **`FileMeetingStore`** — Writes each meeting as a JSON file in a local directory (e.g. `.data/meetings/`). Used in development. Simple, inspectable, no dependencies.
 - **`FirestoreMeetingStore`** — Reads and writes meeting documents in a Firestore collection. Used in production.
 
-The same interface is used for the session store adapter. The active implementation is selected by an environment variable (e.g. `STORE=file` or `STORE=firestore`), defaulting to `file` when not set.
-
-**GitHub OAuth in development:** A separate GitHub OAuth App is needed for local development because GitHub requires the callback URL to match exactly. The `.env.example` file documents the required variables (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`). Creating a GitHub OAuth App is free and takes under a minute.
+The active implementation is selected by the `STORE` environment variable (`file` or `firestore`), defaulting to `file` when not set.
