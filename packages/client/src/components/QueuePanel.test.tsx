@@ -38,7 +38,11 @@ function renderQueue(
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
       <SocketContext value={socket}>
-        <QueuePanel />
+        <QueuePanel
+          autoEditEntryId={null}
+          onAddEntry={() => {}}
+          onAutoEditConsumed={() => {}}
+        />
       </SocketContext>
     </TestMeetingProvider>,
   );

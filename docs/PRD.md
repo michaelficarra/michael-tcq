@@ -211,12 +211,28 @@ Wherever a user's name is shown (agenda item owners, queue entry speakers, curre
 
 ## Navigation
 
-The meeting view has two tabs:
+The meeting view has three tabs:
 
 - **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
 - **Queue** — displays the current agenda item (with temperature check controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
+- **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
-The active tab is indicated with a teal underline. A top navigation bar shows the TCQ branding, the Agenda/Queue tab toggle, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode).
+The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode). The Help tab is also available on the home page.
+
+## Keyboard Shortcuts
+
+Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes a toggle button to enable or disable shortcuts; this preference is persisted to `localStorage` and defaults to enabled. Shortcuts are always disabled when the user is typing in a text field. The `?` and `Escape` keys work even when shortcuts are globally disabled. Available shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `n` | New Topic |
+| `r` | Reply to current topic |
+| `c` | Clarifying Question |
+| `p` | Point of Order |
+| `s` | Next Speaker (chair only) |
+| `a` | Switch to Agenda tab |
+| `q` | Switch to Queue tab |
+| `?` | Show keyboard shortcuts |
 
 ## Persistence
 

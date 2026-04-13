@@ -3,7 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const testUser: User = {
   ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME',
@@ -22,15 +21,13 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
 
 function renderControls(
   meeting: MeetingState,
-  socket: TypedSocket | null = null,
+  onAddEntry = vi.fn(),
 ) {
-  return render(
+  return { onAddEntry, ...render(
     <TestMeetingProvider meeting={meeting} user={testUser}>
-      <SocketContext value={socket}>
-        <SpeakerControls onEntryAdded={() => {}} />
-      </SocketContext>
+      <SpeakerControls onAddEntry={onAddEntry} />
     </TestMeetingProvider>,
-  );
+  ) };
 }
 
 describe('SpeakerControls', () => {
@@ -57,30 +54,18 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();
   });
 
-  it('emits queue:add with placeholder topic immediately on click', () => {
-    const emit = vi.fn();
-    const mockSocket = { emit, once: vi.fn() } as unknown as TypedSocket;
-
-    renderControls(makeMeeting(), mockSocket);
+  it('calls onAddEntry with type and placeholder on click', () => {
+    const { onAddEntry } = renderControls(makeMeeting());
 
     fireEvent.click(screen.getByRole('button', { name: 'Clarifying Question' }));
-    expect(emit).toHaveBeenCalledWith('queue:add', {
-      type: 'question',
-      topic: 'Clarifying question',
-    });
+    expect(onAddEntry).toHaveBeenCalledWith('question', 'Clarifying question');
   });
 
-  it('emits queue:add with placeholder for New Topic', () => {
-    const emit = vi.fn();
-    const mockSocket = { emit, once: vi.fn() } as unknown as TypedSocket;
-
-    renderControls(makeMeeting(), mockSocket);
+  it('calls onAddEntry with topic type and placeholder for New Topic', () => {
+    const { onAddEntry } = renderControls(makeMeeting());
 
     fireEvent.click(screen.getByRole('button', { name: 'New Topic' }));
-    expect(emit).toHaveBeenCalledWith('queue:add', {
-      type: 'topic',
-      topic: 'New topic',
-    });
+    expect(onAddEntry).toHaveBeenCalledWith('topic', 'New topic');
   });
 
   it('has an accessible group label', () => {

@@ -181,6 +181,29 @@ export function HelpPanel() {
         </ol>
       </section>
 
+      {/* --- Keyboard Shortcuts --- */}
+      <section className="mb-8">
+        <h3 className="text-base font-semibold text-stone-800 mb-3 border-b border-stone-200 pb-1">
+          Keyboard Shortcuts
+        </h3>
+        <p className="text-sm text-stone-600 mb-3">
+          Press <kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5
+          font-mono text-xs">?</kbd> at any time to see all keyboard shortcuts.
+          Shortcuts are disabled when typing in a text field.
+        </p>
+        <table className="text-sm text-stone-600">
+          <tbody>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">n</kbd></td><td>New Topic</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">r</kbd></td><td>Reply to current topic</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">c</kbd></td><td>Clarifying Question</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">p</kbd></td><td>Point of Order</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">s</kbd></td><td>Next Speaker (chair only)</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">a</kbd></td><td>Switch to Agenda tab</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">q</kbd></td><td>Switch to Queue tab</td></tr>
+          </tbody>
+        </table>
+      </section>
+
       {/* --- Tips --- */}
       <section>
         <h3 className="text-base font-semibold text-stone-800 mb-3 border-b border-stone-200 pb-1">

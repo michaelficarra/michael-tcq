@@ -3,27 +3,33 @@
  *
  * Connects to the server via Socket.IO, receives meeting state, and
  * renders the nav bar with Agenda/Queue tab panels. Shows error
- * messages from the server (e.g. "Meeting not found").
+ * messages from the server (e.g. "Meeting not found"). Registers
+ * keyboard shortcuts for common actions.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { MeetingProvider, useMeetingState, useMeetingDispatch } from '../contexts/MeetingContext.js';
+import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
+import { useKeyboardShortcuts, getShortcutsEnabled, setShortcutsEnabled, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
+import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
 function MeetingPageInner() {
   const { id: meetingId } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<Tab>('queue');
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [shortcutsEnabled, setShortcutsEnabledState] = useState(getShortcutsEnabled);
   const { meeting, connected, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
+  const socket = useSocketConnection(meetingId ?? '');
 
   // Push the authenticated user from AuthContext into MeetingContext
   // so that components like useIsChair() can check permissions.
@@ -33,8 +39,65 @@ function MeetingPageInner() {
     }
   }, [user, dispatch]);
 
-  // Connect to the meeting via Socket.IO and provide the socket to children
-  const socket = useSocketConnection(meetingId ?? '');
+  // --- Auto-edit state (shared between keyboard shortcuts and SpeakerControls) ---
+
+  const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
+
+  /**
+   * Add a queue entry with placeholder text, then trigger auto-edit on
+   * the new entry. Used by both keyboard shortcuts and the SpeakerControls
+   * buttons. Listens for the next state broadcast to identify the new entry.
+   */
+  const addQueueEntry = useCallback((type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
+    if (!socket || !meeting) return;
+    setActiveTab('queue');
+
+    // Capture current entry IDs so we can identify the new one
+    const currentIds = new Set(meeting.queuedSpeakers.map((e) => e.id));
+    socket.once('state', (newState) => {
+      const newEntry = newState.queuedSpeakers.find((e: { id: string }) => !currentIds.has(e.id));
+      if (newEntry) {
+        setAutoEditEntryId(newEntry.id);
+      }
+    });
+
+    socket.emit('queue:add', { type, topic: placeholder });
+  }, [socket, meeting]);
+
+  // --- Keyboard shortcuts ---
+
+  const isChair = useIsChair();
+
+  /** Advance to the next speaker (chair only). */
+  const advanceNextSpeaker = useCallback(() => {
+    if (!socket || !meeting || !isChair) return;
+    setActiveTab('queue');
+    socket.emit('queue:next', { version: meeting.version }, () => {});
+  }, [socket, meeting, isChair]);
+
+  const shortcuts = useMemo<Shortcut[]>(() => [
+    { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic') },
+    { key: 'r', description: 'Reply to current topic', action: () => addQueueEntry('reply', 'Reply') },
+    { key: 'c', description: 'Clarifying Question', action: () => addQueueEntry('question', 'Clarifying question') },
+    { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
+    { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
+    { key: 'a', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
+    { key: 'q', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
+    { key: '?', description: 'Show keyboard shortcuts', action: () => setShowShortcuts(true), alwaysActive: true },
+    { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
+  ], [addQueueEntry, advanceNextSpeaker]);
+
+  useKeyboardShortcuts(shortcuts, shortcutsEnabled);
+
+  /** Toggle shortcuts on/off and persist to localStorage. */
+  function handleToggleShortcuts() {
+    const next = !shortcutsEnabled;
+    setShortcutsEnabledState(next);
+    setShortcutsEnabled(next);
+  }
+
+  // Filter Escape from the displayed shortcuts list
+  const displayedShortcuts = shortcuts.filter((s) => s.key !== 'Escape');
 
   // Error state — show error message with a link back to the home page
   if (error && !meeting) {
@@ -100,9 +163,25 @@ function MeetingPageInner() {
 
         <main>
           {activeTab === 'agenda' && <AgendaPanel />}
-          {activeTab === 'queue' && <QueuePanel />}
+          {activeTab === 'queue' && (
+            <QueuePanel
+              autoEditEntryId={autoEditEntryId}
+              onAddEntry={addQueueEntry}
+              onAutoEditConsumed={() => setAutoEditEntryId(null)}
+            />
+          )}
           {activeTab === 'help' && <HelpPanel />}
         </main>
+
+        {/* Keyboard shortcuts dialog */}
+        {showShortcuts && (
+          <KeyboardShortcutsDialog
+            shortcuts={displayedShortcuts}
+            enabled={shortcutsEnabled}
+            onToggleEnabled={handleToggleShortcuts}
+            onClose={() => setShowShortcuts(false)}
+          />
+        )}
       </div>
     </SocketContext>
   );

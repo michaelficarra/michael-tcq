@@ -1,9 +1,8 @@
 /**
  * Speaker entry controls — the row of buttons for entering the speaker queue.
  *
- * Clicking a button immediately adds the user to the queue with a
- * placeholder topic, then calls onEntryAdded with the new entry's ID
- * so the parent can trigger inline editing.
+ * Clicking a button calls onAddEntry with the type and placeholder text.
+ * The parent handles emitting the socket event and triggering auto-edit.
  *
  * Four entry types are shown as coloured buttons:
  * - New Topic (blue)
@@ -14,7 +13,6 @@
 
 import type { QueueEntryType } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
-import { useSocket } from '../contexts/SocketContext.js';
 
 /** Configuration for each entry type button. */
 const ENTRY_TYPES: {
@@ -58,35 +56,14 @@ const ENTRY_TYPES: {
 ];
 
 interface SpeakerControlsProps {
-  /** Called with the new entry's ID after it's been added to the queue. */
-  onEntryAdded: (entryId: string) => void;
+  /** Called to add an entry to the queue with a placeholder topic. */
+  onAddEntry: (type: QueueEntryType, placeholder: string) => void;
 }
 
-export function SpeakerControls({ onEntryAdded }: SpeakerControlsProps) {
+export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
   const { meeting } = useMeetingState();
-  const socket = useSocket();
 
   if (!meeting) return null;
-
-  /**
-   * Immediately add the user to the queue with placeholder text.
-   * Listen for the next state broadcast to find the new entry's ID
-   * and pass it to the parent so it can trigger inline editing.
-   */
-  function handleTypeClick(type: QueueEntryType, placeholder: string) {
-    if (!socket) return;
-
-    // Capture current entry IDs so we can identify the new one
-    const currentIds = new Set(meeting!.queuedSpeakers.map((e) => e.id));
-    socket.once('state', (newState) => {
-      const newEntry = newState.queuedSpeakers.find((e) => !currentIds.has(e.id));
-      if (newEntry) {
-        onEntryAdded(newEntry.id);
-      }
-    });
-
-    socket.emit('queue:add', { type, topic: placeholder });
-  }
 
   return (
     <div>
@@ -99,7 +76,7 @@ export function SpeakerControls({ onEntryAdded }: SpeakerControlsProps) {
           return (
             <button
               key={config.type}
-              onClick={() => handleTypeClick(config.type, config.placeholder)}
+              onClick={() => onAddEntry(config.type, config.placeholder)}
               className={`text-white text-sm font-medium px-3 py-1.5 rounded
                          transition-colors cursor-pointer
                          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500

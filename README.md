@@ -12,6 +12,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Participant queue self-management** — participants can drag their own entries downward to defer, edit their own topics inline, and click the type badge to cycle through legal types at their position.
 - **Type cycling** — chairs (and entry owners) can click the type badge on a queue entry to cycle through the types that are legal at that position without moving the entry.
 - **Directional type changes** — when dragging entries, the type adjusts based on direction: moving down adopts the lowest priority of items above, moving up adopts the highest priority of items below.
+- **Keyboard shortcuts** — press `?` to see all shortcuts. Quick keys for entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`a`, `q`), and more.
 - **In-app help page** — a Help tab explains how the tool works for both chairs and participants, with guidance on when to use each queue entry type.
 - **Inline editing** — agenda items and queue entries can be edited in place without needing to delete and re-create.
 - **GitHub avatars** — user avatars are shown alongside names throughout the application.

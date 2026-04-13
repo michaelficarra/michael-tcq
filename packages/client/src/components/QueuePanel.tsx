@@ -37,17 +37,22 @@ import { UserBadge } from './UserBadge.js';
 import { TemperatureCheck } from './TemperatureCheck.js';
 import { TemperatureSetup } from './TemperatureSetup.js';
 
-export function QueuePanel() {
+interface QueuePanelProps {
+  /** ID of a newly added queue entry that should open in edit mode. */
+  autoEditEntryId: string | null;
+  /** Add a queue entry with placeholder text and trigger auto-edit. */
+  onAddEntry: (type: import('@tcq/shared').QueueEntryType, placeholder: string) => void;
+  /** Called when the auto-edit has been consumed by the entry component. */
+  onAutoEditConsumed: () => void;
+}
+
+export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: QueuePanelProps) {
   const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
 
   // Whether the temperature check setup form is open
   const [showTempSetup, setShowTempSetup] = useState(false);
-
-  // ID of a newly added queue entry that should open in edit mode.
-  // Set by SpeakerControls after adding an entry with placeholder text.
-  const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
 
   // Advancement actions with automatic retry on stale version
   const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
@@ -345,7 +350,7 @@ export function QueuePanel() {
       </section>
 
       {/* --- Speaker Entry Controls --- */}
-      <SpeakerControls onEntryAdded={setAutoEditEntryId} />
+      <SpeakerControls onAddEntry={onAddEntry} />
 
       {/* --- Speaker Queue Section --- */}
       <section aria-labelledby="queue-heading">
@@ -434,7 +439,7 @@ export function QueuePanel() {
                     isOwnEntry={!!user && entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
                     onDelete={handleRemoveEntry}
                     initialEditing={autoEditEntryId === entry.id}
-                    onEditingStarted={() => setAutoEditEntryId(null)}
+                    onEditingStarted={onAutoEditConsumed}
                   />
                 ))}
               </ol>
