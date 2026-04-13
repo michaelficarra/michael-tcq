@@ -521,9 +521,11 @@ function SortableQueueEntry({
       if (p < maxPriority) maxPriority = p;
     }
 
-    return QUEUE_ENTRY_TYPES.filter(
-      (t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority,
-    );
+    // Build the list in low-to-high priority order (topic first) so
+    // clicking cycles toward higher priority naturally.
+    return QUEUE_ENTRY_TYPES
+      .filter((t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority)
+      .reverse();
   })();
 
   /** Cycle to the next legal type when the type badge is clicked. */
