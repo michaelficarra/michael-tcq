@@ -41,7 +41,7 @@ To use real GitHub authentication instead of mock auth:
 4. Click **Register application**.
 5. Note the **Client ID** displayed on the app's page.
 6. Click **Generate a new client secret** and note it immediately (it is shown only once).
-7. Copy `.env.example` to `.env` and fill in:
+7. Add the credentials to `.env.development`:
    ```
    GITHUB_CLIENT_ID=your_client_id
    GITHUB_CLIENT_SECRET=your_client_secret

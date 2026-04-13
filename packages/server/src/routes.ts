@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import type { User } from '@tcq/shared';
+import type { Server } from 'socket.io';
+import type { User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { isAdmin } from './admin.js';
-import { getAllMeetingStats, removeMeetingStats } from './socket.js';
+import { getAllMeetingStats, removeMeetingStats, broadcastMeetingState } from './socket.js';
+import { parseAgendaMarkdown } from './parseAgenda.js';
 import './session.js';
 
 /**
@@ -13,8 +15,12 @@ import './session.js';
  * POST /api/meetings    — Create a new meeting
  * GET  /api/meetings/:id — Get a meeting's current state
  * GET  /api/me          — Get the current authenticated user
+ * POST /api/meetings/:id/import-agenda — Import agenda from a markdown URL
  */
-export function createMeetingRoutes(meetingManager: MeetingManager): Router {
+export function createMeetingRoutes(
+  meetingManager: MeetingManager,
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+): Router {
   const router = Router();
 
   // Return the currently authenticated user from the session.
@@ -129,6 +135,99 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
       return;
     }
     res.json(meeting);
+  });
+
+  // --- Import agenda from a markdown URL ---
+
+  router.post('/meetings/:id/import-agenda', async (req, res) => {
+    const user = req.session.user;
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const meetingId = req.params.id;
+    const meeting = meetingManager.get(meetingId);
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    // Only chairs (and admins) can import an agenda
+    if (!meetingManager.isChair(meetingId, user) && !isAdmin(user)) {
+      res.status(403).json({
+        error: 'Only chairs can import an agenda',
+        user: user.ghUsername,
+        chairs: meeting.chairs.map((c) => c.ghUsername),
+      });
+      return;
+    }
+
+    let { url } = req.body as { url?: string };
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'URL is required' });
+      return;
+    }
+
+    // Transform GitHub blob URLs to raw.githubusercontent.com URLs
+    // e.g. https://github.com/tc39/agendas/blob/main/2026/03.md
+    //   → https://raw.githubusercontent.com/tc39/agendas/refs/heads/main/2026/03.md
+    const blobMatch = url.match(
+      /^https:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/([^/]+)\/(.+)$/,
+    );
+    if (blobMatch) {
+      url = `https://raw.githubusercontent.com/${blobMatch[1]}/refs/heads/${blobMatch[2]}/${blobMatch[3]}`;
+    }
+
+    // Validate URL
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      res.status(400).json({ error: 'Invalid URL' });
+      return;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      res.status(400).json({ error: 'URL must use HTTP or HTTPS' });
+      return;
+    }
+
+    // Fetch the markdown
+    let markdown: string;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        res.status(502).json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` });
+        return;
+      }
+      markdown = await response.text();
+    } catch (err) {
+      res.status(502).json({ error: `Failed to fetch URL: ${(err as Error).message}` });
+      return;
+    }
+
+    // Parse agenda items from the markdown
+    const items = parseAgendaMarkdown(markdown);
+    if (items.length === 0) {
+      res.status(422).json({ error: 'No agenda items found in the document' });
+      return;
+    }
+
+    // Add each item to the meeting, bypassing GitHub username validation
+    for (const item of items) {
+      const owner: User = {
+        ghid: 0,
+        ghUsername: item.presenter || user.ghUsername,
+        name: item.presenter || user.name,
+        organisation: '',
+      };
+      meetingManager.addAgendaItem(meetingId, item.name, owner, item.timebox);
+    }
+
+    // Broadcast the updated state to all connected clients
+    broadcastMeetingState(io, meetingManager, meetingId);
+
+    res.json({ imported: items.length });
   });
 
   // --- Admin endpoints ---

@@ -84,13 +84,18 @@ The agenda is an ordered list of items. Each agenda item has:
 ### Agenda Management (Chair Only)
 
 - **Add** — Create a new agenda item by specifying a name, owner (GitHub username, validated against GitHub when OAuth is configured), and optional timebox. The form fields are: Agenda Item Name (flexible width), Owner (pre-populated with current user), and Timebox in minutes.
+- **Import** — When the agenda is empty, chairs can import an agenda from a URL pointing to a markdown document (e.g. a TC39 meeting agenda on GitHub). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. Markdown formatting in item names is preserved.
 - **Edit** — Inline edit of an existing agenda item's name, owner, and timebox.
 - **Delete** — Remove an agenda item.
 - **Reorder** — Drag-and-drop to rearrange agenda items. The entire agenda item row is the drag target.
 
+### Markdown in Item Names and Queue Topics
+
+Agenda item names and queue entry topics support a limited subset of inline markdown: **bold**, *italic*, ~~strikethrough~~, `code`, and [links](). This formatting is preserved when importing agendas and rendered in the UI. Other markdown syntax is displayed as plain text.
+
 ### Agenda Display
 
-The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name, owner (with GitHub avatar, display name, and organisation), and timebox duration if set.
+The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), owner (with GitHub avatar, display name, and organisation), and timebox duration if set.
 ## Queue
 
 The queue is the core of the application. It determines who speaks next.

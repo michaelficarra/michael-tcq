@@ -32,6 +32,7 @@ import type { AgendaItem } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { AgendaForm } from './AgendaForm.js';
+import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
 
 export function AgendaPanel() {
@@ -39,6 +40,10 @@ export function AgendaPanel() {
   const isChair = useIsChair();
   const socket = useSocket();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Drag-and-drop sensors with keyboard support for accessibility
   const sensors = useSensors(
@@ -96,7 +101,82 @@ export function AgendaPanel() {
 
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm ? (
-        <p className="text-stone-400 italic mb-4">No agenda items yet.</p>
+        <div className="mb-4">
+          <p className="text-stone-400 italic mb-2">No agenda items yet.</p>
+          {isChair && !showImport && (
+            <button
+              onClick={() => { setShowImport(true); setImportError(null); }}
+              className="border border-stone-300 rounded px-3 py-1 text-sm font-medium
+                         text-stone-600 hover:bg-stone-100 transition-colors
+                         cursor-pointer presentation-hidden"
+            >
+              Import Agenda from URL
+            </button>
+          )}
+          {isChair && showImport && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const trimmed = importUrl.trim();
+                if (!trimmed || importing) return;
+                setImporting(true);
+                setImportError(null);
+                try {
+                  const res = await fetch(`/api/meetings/${meeting.id}/import-agenda`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: trimmed }),
+                  });
+                  const body = await res.json();
+                  if (!res.ok) {
+                    setImportError(body.error || 'Import failed');
+                  } else {
+                    setShowImport(false);
+                    setImportUrl('');
+                  }
+                } catch {
+                  setImportError('Network error');
+                } finally {
+                  setImporting(false);
+                }
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input
+                type="url"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder="https://github.com/tc39/agendas/blob/main/YYYY/MM.md"
+                pattern="https://(github\.com/tc39/agendas/blob/main|raw\.githubusercontent\.com/tc39/agendas/refs/heads/main)/\d{4}/\d{2}\.md"
+                title="URL must point to a TC39 agenda markdown file, e.g. https://github.com/tc39/agendas/blob/main/2026/03.md"
+                required
+                autoFocus
+                aria-label="Agenda markdown URL"
+                className="border border-stone-300 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
+                           focus:outline-none focus:ring-1 focus:ring-teal-500"
+              />
+              <button
+                type="submit"
+                disabled={importing}
+                className="bg-teal-500 text-white px-3 py-1 rounded text-sm font-medium
+                           hover:bg-teal-600 transition-colors cursor-pointer
+                           disabled:opacity-50"
+              >
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowImport(false); setImportUrl(''); setImportError(null); }}
+                className="text-sm text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {importError && (
+                <p className="text-red-600 text-sm w-full" role="alert">{importError}</p>
+              )}
+            </form>
+          )}
+        </div>
       ) : (
         <DndContext
           sensors={sensors}
@@ -285,7 +365,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
 
       <div className="flex-1 min-w-0">
         {/* Item name */}
-        <span className="font-medium text-stone-800 align-middle">{item.name}</span>
+        <InlineMarkdown className="font-medium text-stone-800 align-middle">{item.name}</InlineMarkdown>
 
         {/* Owner info */}
         <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500" />

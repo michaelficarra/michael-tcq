@@ -32,6 +32,7 @@ import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
+import { InlineMarkdown } from './InlineMarkdown.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
@@ -250,7 +251,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         {meeting.currentAgendaItem ? (
           <div className="pl-3">
             <p className="text-stone-800 font-medium">
-              {meeting.currentAgendaItem.name}
+              <InlineMarkdown>{meeting.currentAgendaItem.name}</InlineMarkdown>
             </p>
             <div className="text-sm text-stone-500 flex flex-wrap items-center gap-x-2">
               <UserBadge user={meeting.currentAgendaItem.owner} size={18} />
@@ -292,7 +293,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             Topic
           </h2>
           <div className="pl-3">
-            <p className="text-stone-800">{meeting.currentTopic.topic}</p>
+            <p className="text-stone-800"><InlineMarkdown>{meeting.currentTopic.topic}</InlineMarkdown></p>
             <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500" />
           </div>
         </section>
@@ -322,7 +323,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
         {meeting.currentSpeaker ? (
           <div className="pl-3">
-            <p className="text-stone-800">{meeting.currentSpeaker.topic}</p>
+            <p className="text-stone-800"><InlineMarkdown>{meeting.currentSpeaker.topic}</InlineMarkdown></p>
             <UserBadge user={meeting.currentSpeaker.user} size={18} className="text-sm text-stone-500" />
           </div>
         ) : (
@@ -746,7 +747,7 @@ function SortableQueueEntry({
             {entryTypeLabel(entry.type)}:
           </span>
         )}
-        <span className="ml-1 text-stone-800">{entry.topic}</span>
+        <InlineMarkdown className="ml-1 text-stone-800">{entry.topic}</InlineMarkdown>
 
         {/* Speaker info */}
         <div className="text-sm text-stone-500">

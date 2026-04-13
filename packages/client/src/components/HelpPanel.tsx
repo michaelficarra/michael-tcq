@@ -31,7 +31,11 @@ export function HelpPanel() {
           to join the speaker queue. You'll be added immediately with a
           placeholder topic, and the topic field will open for editing so you
           can type a more specific description. Your entry appears in the queue
-          for everyone to see in real time.
+          for everyone to see in real time. Queue topics and agenda item names
+          support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,
+          {' '}<code className="bg-stone-100 text-stone-800 px-1 rounded text-[0.9em]">~~strikethrough~~</code>,
+          {' '}<code className="bg-stone-100 text-stone-800 px-1 rounded text-[0.9em]">`code`</code>,
+          {' '}and <code className="bg-stone-100 text-stone-800 px-1 rounded text-[0.9em]">[links](url)</code>.
         </p>
         <p className="text-sm text-stone-600 mb-2">
           There are four entry types, listed from highest to lowest priority:

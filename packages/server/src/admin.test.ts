@@ -23,7 +23,7 @@ function createTestApp(meetingManager: MeetingManager) {
   app.use(express.json());
   app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
   app.use(mockAuth);
-  app.use('/api', createMeetingRoutes(meetingManager));
+  app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));
   return app;
 }
 
