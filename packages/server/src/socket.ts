@@ -237,30 +237,14 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Build the owner User object. If the owner is one of the meeting's
-      // chairs or the current user, use their full profile. Otherwise,
-      // validate the username against the GitHub API (when OAuth is
-      // configured) or create a placeholder (mock auth mode).
+      // Build the owner User object. If the owner is a known user in the
+      // meeting (chair, current user), use their full profile. Otherwise,
+      // create a placeholder with the username.
       const meeting = meetingManager.get(joinedMeetingId);
-      const existingUser =
+      const owner: User =
         meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === ownerUsername.toLowerCase()) ??
-        (user.ghUsername.toLowerCase() === ownerUsername.toLowerCase() ? user : undefined);
-
-      let owner: User;
-      if (existingUser) {
-        owner = existingUser;
-      } else if (isOAuthConfigured()) {
-        // Validate against the GitHub API
-        const ghUser = await fetchGitHubUser(ownerUsername);
-        if (!ghUser) {
-          socket.emit('error', `GitHub user "${ownerUsername}" not found`);
-          return;
-        }
-        owner = ghUser;
-      } else {
-        // Mock auth mode — create a placeholder
-        owner = { ghid: 0, ghUsername: ownerUsername, name: ownerUsername, organisation: '' };
-      }
+        (user.ghUsername.toLowerCase() === ownerUsername.toLowerCase() ? user : undefined) ??
+        { ghid: 0, ghUsername: ownerUsername, name: ownerUsername, organisation: '' };
 
       // Parse timebox: treat 0, negative, and NaN as "no timebox"
       const timebox = payload.timebox && payload.timebox > 0 ? payload.timebox : undefined;
