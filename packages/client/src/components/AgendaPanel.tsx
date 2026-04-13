@@ -34,7 +34,7 @@ import { AgendaForm } from './AgendaForm.js';
 import { UserBadge } from './UserBadge.js';
 
 export function AgendaPanel() {
-  const { meeting } = useMeetingState();
+  const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
   const [showForm, setShowForm] = useState(false);
@@ -123,6 +123,7 @@ export function AgendaPanel() {
                   item={item}
                   index={index}
                   isChair={isChair}
+                  isOwnItem={!!user && item.owner.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
                   onDelete={handleDelete}
                 />
               ))}
@@ -157,10 +158,12 @@ interface SortableAgendaItemProps {
   item: AgendaItem;
   index: number;
   isChair: boolean;
+  /** Whether the current user is the owner of this agenda item. */
+  isOwnItem: boolean;
   onDelete: (id: string) => void;
 }
 
-function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaItemProps) {
+function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: SortableAgendaItemProps) {
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -215,7 +218,7 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
         style={style}
         className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
           index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
-        }`}
+        } ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
       >
         <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none">
           {index + 1}
@@ -277,7 +280,7 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
-      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
