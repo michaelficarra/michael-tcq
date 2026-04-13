@@ -331,20 +331,54 @@ export function registerSocketHandlers(
     });
 
     // --- queue:reorder ---
-    // Chair moves a queue entry to a new position. Uses UUIDs to avoid
-    // index-based race conditions. The entry's type changes to match
-    // its neighbours when it crosses a type boundary.
+    // Reorder a queue entry. Chairs can move any entry anywhere.
+    // Participants can move their own entries, but only downward
+    // (to a later position) — they can defer but not jump ahead.
     socket.on('queue:reorder', (payload) => {
       if (!joinedMeetingId) return;
-      if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can reorder the queue');
+
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      if (!entry) {
+        socket.emit('error', 'Queue entry not found');
         return;
       }
 
+      const isOwner = entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase();
+      const isChairUser = meetingManager.isChair(joinedMeetingId, user);
+
+      if (!isOwner && !isChairUser) {
+        socket.emit('error', 'You can only reorder your own queue entries');
+        return;
+      }
+
+      // Non-chair owners can only move their entry downward (defer).
+      // Validate that the target position (afterId) is at or after
+      // the entry's current position.
+      if (isOwner && !isChairUser) {
+        const meeting = meetingManager.get(joinedMeetingId);
+        if (meeting) {
+          const currentIndex = meeting.queuedSpeakers.findIndex((e) => e.id === payload.id);
+          if (payload.afterId === null) {
+            // Moving to the beginning — that's moving up, not allowed
+            socket.emit('error', 'You can only move your entry to a later position');
+            return;
+          }
+          const afterIndex = meeting.queuedSpeakers.findIndex((e) => e.id === payload.afterId);
+          if (afterIndex < currentIndex) {
+            // Target is above current position — moving up, not allowed
+            socket.emit('error', 'You can only move your entry to a later position');
+            return;
+          }
+        }
+      }
+
+      // Chairs get type changes on boundary crossing; participants don't
+      const changeType = isChairUser;
       const reordered = meetingManager.reorderQueueEntry(
         joinedMeetingId,
         payload.id,
         payload.afterId,
+        changeType,
       );
       if (!reordered) {
         socket.emit('error', 'Invalid queue reorder');

@@ -410,7 +410,7 @@ export class MeetingManager {
    *
    * Returns true if the reorder was valid and applied.
    */
-  reorderQueueEntry(meetingId: string, entryId: string, afterId: string | null): boolean {
+  reorderQueueEntry(meetingId: string, entryId: string, afterId: string | null, changeType = true): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
@@ -438,17 +438,16 @@ export class MeetingManager {
     // Determine the new position of the moved entry
     const newIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
 
-    // Change the entry's type to match its new neighbours when it
-    // crosses a type boundary. Look at the adjacent entry to determine
-    // what type it should become:
-    // - If there's an entry after it, use that entry's type
-    // - If there's an entry before it, use that entry's type
-    // - If it's the only entry, keep its original type
-    const neighbour =
-      meeting.queuedSpeakers[newIndex + 1] ??
-      meeting.queuedSpeakers[newIndex - 1];
-    if (neighbour) {
-      entry.type = neighbour.type;
+    // When changeType is true (chair reordering), change the entry's
+    // type to match its new neighbours when it crosses a type boundary.
+    // When false (participant self-deferral), keep the original type.
+    if (changeType) {
+      const neighbour =
+        meeting.queuedSpeakers[newIndex + 1] ??
+        meeting.queuedSpeakers[newIndex - 1];
+      if (neighbour) {
+        entry.type = neighbour.type;
+      }
     }
 
     this.markDirty(meetingId);

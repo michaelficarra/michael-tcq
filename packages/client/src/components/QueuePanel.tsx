@@ -8,7 +8,7 @@
  * and the queue list with drag-and-drop reordering for chairs.
  */
 
-import { useState, useEffect, useCallback, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -17,6 +17,8 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
+  type Modifier,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -61,6 +63,33 @@ export function QueuePanel() {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  // Track whether the current drag is a non-chair self-drag (downward only).
+  // When true, the drag modifier clamps upward movement.
+  const restrictUpwardRef = useRef(false);
+
+  /** Called when a drag starts — determine if we need to restrict direction. */
+  function handleDragStart(event: DragStartEvent) {
+    if (!meeting || !user) return;
+    const entry = meeting.queuedSpeakers.find((e) => e.id === event.active.id);
+    if (!entry) return;
+    const isOwner = entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase();
+    // Restrict upward movement for non-chair owners
+    restrictUpwardRef.current = isOwner && !isChair;
+  }
+
+  /**
+   * Custom dnd-kit modifier that prevents dragging above the starting
+   * position. Used for non-chair participants who can only defer (move
+   * down), not jump ahead.
+   */
+  const restrictDownwardOnly: Modifier = useCallback(({ transform }) => {
+    if (restrictUpwardRef.current && transform.y < 0) {
+      // Clamp upward movement to zero
+      return { ...transform, y: 0 };
+    }
+    return transform;
+  }, []);
 
   if (!meeting) return null;
 
@@ -274,12 +303,13 @@ export function QueuePanel() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            modifiers={[restrictDownwardOnly]}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
               items={meeting.queuedSpeakers.map((e) => e.id)}
               strategy={verticalListSortingStrategy}
-              disabled={!isChair}
             >
               <ol aria-label="Queued speakers">
                 {meeting.queuedSpeakers.map((entry, index) => (
@@ -346,6 +376,9 @@ function SortableQueueEntry({
     }
   }, [initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Chairs can drag any entry; participants can drag their own entries
+  const canDrag = isChair || isOwnEntry;
+
   const {
     attributes,
     listeners,
@@ -353,7 +386,7 @@ function SortableQueueEntry({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: entry.id, disabled: !isChair || editing });
+  } = useSortable({ id: entry.id, disabled: !canDrag || editing });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -390,7 +423,7 @@ function SortableQueueEntry({
         }`}
       >
         {/* Placeholder for drag handle column */}
-        {isChair && <span className="w-4" />}
+        {canDrag && <span className="w-4" />}
 
         <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-center">
           {index + 1}
@@ -441,8 +474,8 @@ function SortableQueueEntry({
         isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
       }`}
     >
-      {/* Drag handle — chair only, to the left of the position number */}
-      {isChair && (
+      {/* Drag handle — chairs can drag any entry, participants their own */}
+      {canDrag && (
         <span
           className="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing
                      select-none text-sm leading-none"

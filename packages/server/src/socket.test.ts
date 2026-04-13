@@ -445,10 +445,11 @@ describe('Socket.IO integration', () => {
       expect(state.queuedSpeakers[0].type).toBe('question');
     });
 
-    it('rejects from non-chair', async () => {
+    it('rejects non-owner non-chair from reordering', async () => {
       const meeting = ctx.meetingManager.create([{
         ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
       }]);
+      // Entry owned by the chair, not the mock test user
       const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', {
         ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
       })!;
@@ -459,7 +460,49 @@ describe('Socket.IO integration', () => {
       client.emit('queue:reorder', { id: entry.id, afterId: null });
       const error = await errorPromise;
 
-      expect(error).toMatch(/only chairs/i);
+      expect(error).toMatch(/your own/i);
+    });
+
+    it('allows owner to move their entry down but not up', async () => {
+      // Meeting where testuser is NOT a chair
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner)!;
+      const b = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Moving own entry (A) after B (down) should succeed
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:reorder', { id: a.id, afterId: b.id });
+      const state = await statePromise;
+      expect(state.queuedSpeakers[0].id).toBe(b.id);
+      expect(state.queuedSpeakers[1].id).toBe(a.id);
+    });
+
+    it('rejects owner moving their entry up', async () => {
+      // Meeting where testuser is NOT a chair
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', {
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      });
+      const b = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Moving own entry (B) to the beginning (up) should be rejected
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:reorder', { id: b.id, afterId: null });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/later position/i);
     });
   });
 
