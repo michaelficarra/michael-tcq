@@ -294,8 +294,8 @@ export function QueuePanel() {
         )}
       </section>
 
-      {/* --- Current Topic Section --- */}
-      {meeting.currentTopic && (
+      {/* --- Current Topic Section (hidden when same as current speaker) --- */}
+      {meeting.currentTopic && meeting.currentTopic.id !== meeting.currentSpeaker?.id && (
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
@@ -334,10 +334,8 @@ export function QueuePanel() {
 
         {meeting.currentSpeaker ? (
           <div className="pl-3">
-            <UserBadge user={meeting.currentSpeaker.user} size={22} className="text-stone-800 font-medium" />
-            <p className="text-sm text-stone-500">
-              {meeting.currentSpeaker.topic}
-            </p>
+            <p className="text-stone-800">{meeting.currentSpeaker.topic}</p>
+            <UserBadge user={meeting.currentSpeaker.user} size={18} className="text-sm text-stone-500" />
           </div>
         ) : (
           <p className="text-stone-500 pl-3">
