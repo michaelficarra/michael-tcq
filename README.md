@@ -45,6 +45,9 @@ The speaker queue with priority-ordered entries from a particpant's perspective.
 ![Queue tab with chair controls](screenshots/queue-chair.png)
 The speaker queue with chair controls.
 
+![Dark mode](screenshots/dark-mode.png)
+Dark mode follows the system colour scheme automatically.
+
 ![Agenda tab](screenshots/agenda.png)
 The agenda tab with chairs, numbered items, and drag-to-reorder.
 
