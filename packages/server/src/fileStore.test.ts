@@ -16,7 +16,7 @@ function makeMeeting(id: string): MeetingState {
     currentTopic: undefined,
     queuedSpeakers: [],
     reactions: [],
-    trackTemperature: false, temperatureOptions: [], version: 0,
+    trackPoll: false, pollOptions: [], version: 0,
   };
 }
 
@@ -82,10 +82,10 @@ describe('FileMeetingStore', () => {
     await store.save(meeting);
 
     // Modify and re-save
-    meeting.trackTemperature = true;
+    meeting.trackPoll = true;
     await store.save(meeting);
 
     const loaded = await store.load('bright-pine');
-    expect(loaded?.trackTemperature).toBe(true);
+    expect(loaded?.trackPoll).toBe(true);
   });
 });

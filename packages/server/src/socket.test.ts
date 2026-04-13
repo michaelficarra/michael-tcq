@@ -870,29 +870,29 @@ describe('Socket.IO integration', () => {
     });
   });
 
-  // -- Temperature check events --
+  // -- Poll events --
 
-  /** Helper: sample temperature check options for tests. */
-  const tempOptions = [
+  /** Helper: sample poll options for tests. */
+  const samplePollOptions = [
     { emoji: '❤️', label: 'Love' },
     { emoji: '👍', label: 'Like' },
   ];
 
-  describe('temperature:start', () => {
-    it('starts a temperature check with custom options and broadcasts', async () => {
+  describe('poll:start', () => {
+    it('starts a poll with custom options and broadcasts', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('temperature:start', { options: tempOptions });
+      client.emit('poll:start', { options: samplePollOptions });
       const state = await statePromise;
 
-      expect(state.trackTemperature).toBe(true);
-      expect(state.temperatureOptions).toHaveLength(2);
-      expect(state.temperatureOptions[0].emoji).toBe('❤️');
-      expect(state.temperatureOptions[0].label).toBe('Love');
+      expect(state.trackPoll).toBe(true);
+      expect(state.pollOptions).toHaveLength(2);
+      expect(state.pollOptions[0].emoji).toBe('❤️');
+      expect(state.pollOptions[0].label).toBe('Love');
       expect(state.reactions).toHaveLength(0);
     });
 
@@ -903,7 +903,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('temperature:start', { options: [{ emoji: '👍', label: 'Only one' }] });
+      client.emit('poll:start', { options: [{ emoji: '👍', label: 'Only one' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/at least 2/i);
@@ -917,42 +917,42 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('temperature:start', { options: tempOptions });
+      client.emit('poll:start', { options: samplePollOptions });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
     });
   });
 
-  describe('temperature:stop', () => {
-    it('stops a temperature check and clears reactions and options', async () => {
+  describe('poll:stop', () => {
+    it('stops a poll and clears reactions and options', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startTemperature(meeting.id, tempOptions);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('temperature:stop');
+      client.emit('poll:stop');
       const state = await statePromise;
 
-      expect(state.trackTemperature).toBe(false);
-      expect(state.temperatureOptions).toHaveLength(0);
+      expect(state.trackPoll).toBe(false);
+      expect(state.pollOptions).toHaveLength(0);
       expect(state.reactions).toHaveLength(0);
     });
   });
 
-  describe('temperature:react', () => {
+  describe('poll:react', () => {
     it('adds a reaction and broadcasts', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startTemperature(meeting.id, tempOptions);
-      const optionId = meeting.temperatureOptions[0].id;
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
+      const optionId = meeting.pollOptions[0].id;
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('temperature:react', { optionId });
+      client.emit('poll:react', { optionId });
       const state = await statePromise;
 
       expect(state.reactions).toHaveLength(1);
@@ -963,32 +963,32 @@ describe('Socket.IO integration', () => {
     it('toggles off an existing reaction', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startTemperature(meeting.id, tempOptions);
-      const optionId = meeting.temperatureOptions[0].id;
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
+      const optionId = meeting.pollOptions[0].id;
 
       const client = await joinMeeting(meeting.id);
 
       // Add
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('temperature:react', { optionId });
+      client.emit('poll:react', { optionId });
       await statePromise;
 
       // Toggle off
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('temperature:react', { optionId });
+      client.emit('poll:react', { optionId });
       const state = await statePromise;
 
       expect(state.reactions).toHaveLength(0);
     });
 
-    it('rejects when temperature check is not active', async () => {
+    it('rejects when poll is not active', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('temperature:react', { optionId: 'any' });
+      client.emit('poll:react', { optionId: 'any' });
       const error = await errorPromise;
 
       expect(error).toMatch(/not active/i);

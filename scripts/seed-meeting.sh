@@ -186,7 +186,7 @@ const queuePool = [
   { type: 'reply', topic: 'Our team has been using a polyfill with no issues' },
   { type: 'point-of-order', topic: 'We need to timebox this discussion' },
   { type: 'point-of-order', topic: 'Can we table this until tomorrow?' },
-  { type: 'point-of-order', topic: 'We should take a temperature check on this' },
+  { type: 'point-of-order', topic: 'We should take a poll on this' },
   { type: 'point-of-order', topic: 'The presenter should share their screen' },
   { type: 'point-of-order', topic: 'Let the current speaker finish please' },
 ];

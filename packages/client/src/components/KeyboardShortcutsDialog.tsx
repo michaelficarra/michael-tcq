@@ -19,7 +19,7 @@ export function KeyboardShortcutsDialog({
   return (
     // Backdrop
     <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
       onClick={onClose}
       role="dialog"
       aria-label="Keyboard shortcuts"

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
-import { DEFAULT_TEMPERATURE_OPTIONS } from '@tcq/shared';
-import { TemperatureSetup } from './TemperatureSetup.js';
+import { DEFAULT_POLL_OPTIONS } from '@tcq/shared';
+import { PollSetup } from './PollSetup.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
@@ -12,7 +12,7 @@ const baseMeeting: MeetingState = {
   id: 'test', chairs: [chairUser], agenda: [],
   currentAgendaItem: undefined, currentSpeaker: undefined,
   currentTopic: undefined, queuedSpeakers: [],
-  reactions: [], trackTemperature: false, temperatureOptions: [],
+  reactions: [], trackPoll: false, pollOptions: [],
   version: 0,
 };
 
@@ -24,19 +24,19 @@ function renderSetup(
   return render(
     <TestMeetingProvider meeting={baseMeeting} user={chairUser}>
       <SocketContext value={socket}>
-        <TemperatureSetup onCancel={onCancel} onStarted={onStarted} />
+        <PollSetup onCancel={onCancel} onStarted={onStarted} />
       </SocketContext>
     </TestMeetingProvider>,
   );
 }
 
-describe('TemperatureSetup', () => {
+describe('PollSetup', () => {
   it('renders the default options', () => {
     renderSetup();
 
     // Should show all default options
     const emojiInputs = screen.getAllByLabelText('Option emoji');
-    expect(emojiInputs.length).toBe(DEFAULT_TEMPERATURE_OPTIONS.length);
+    expect(emojiInputs.length).toBe(DEFAULT_POLL_OPTIONS.length);
 
     // First option should be the heart emoji
     expect((emojiInputs[0] as HTMLInputElement).value).toBe('❤️');
@@ -46,7 +46,7 @@ describe('TemperatureSetup', () => {
     renderSetup();
 
     const labelInputs = screen.getAllByLabelText('Option label');
-    expect(labelInputs.length).toBe(DEFAULT_TEMPERATURE_OPTIONS.length);
+    expect(labelInputs.length).toBe(DEFAULT_POLL_OPTIONS.length);
     expect((labelInputs[0] as HTMLInputElement).value).toBe('Strong Positive');
   });
 
@@ -88,7 +88,7 @@ describe('TemperatureSetup', () => {
     });
   });
 
-  it('emits temperature:start with the configured options', () => {
+  it('emits poll:start with the configured options', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
     const onStarted = vi.fn();
@@ -96,10 +96,10 @@ describe('TemperatureSetup', () => {
     renderSetup(mockSocket, () => {}, onStarted);
 
     // Click start with the default options
-    fireEvent.click(screen.getByText('Start Temperature Check'));
+    fireEvent.click(screen.getByText('Start Poll'));
 
-    expect(emit).toHaveBeenCalledWith('temperature:start', {
-      options: DEFAULT_TEMPERATURE_OPTIONS.map((o) => ({
+    expect(emit).toHaveBeenCalledWith('poll:start', {
+      options: DEFAULT_POLL_OPTIONS.map((o) => ({
         emoji: o.emoji,
         label: o.label,
       })),
@@ -133,6 +133,6 @@ describe('TemperatureSetup', () => {
       fireEvent.change(input, { target: { value: '' } });
     });
 
-    expect(screen.getByText('Start Temperature Check')).toBeDisabled();
+    expect(screen.getByText('Start Poll')).toBeDisabled();
   });
 });

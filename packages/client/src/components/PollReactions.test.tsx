@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { MeetingState, User, TemperatureOption } from '@tcq/shared';
-import { TemperatureCheck } from './TemperatureCheck.js';
+import type { MeetingState, User, PollOption } from '@tcq/shared';
+import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
@@ -9,7 +9,7 @@ const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation:
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 
 /** Sample options for testing. */
-const sampleOptions: TemperatureOption[] = [
+const sampleOptions: PollOption[] = [
   { id: 'opt-1', emoji: '❤️', label: 'Strong Positive' },
   { id: 'opt-2', emoji: '👍', label: 'Positive' },
   { id: 'opt-3', emoji: '👀', label: 'Following' },
@@ -21,13 +21,13 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     id: 'test', chairs: [], agenda: [],
     currentAgendaItem: undefined, currentSpeaker: undefined,
     currentTopic: undefined, queuedSpeakers: [],
-    reactions: [], trackTemperature: false, temperatureOptions: [],
+    reactions: [], trackPoll: false, pollOptions: [],
     version: 0,
     ...overrides,
   };
 }
 
-function renderTemp(
+function renderPoll(
   meeting: MeetingState,
   user: User | null = alice,
   socket: TypedSocket | null = null,
@@ -35,22 +35,22 @@ function renderTemp(
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
       <SocketContext value={socket}>
-        <TemperatureCheck />
+        <PollReactions />
       </SocketContext>
     </TestMeetingProvider>,
   );
 }
 
-describe('TemperatureCheck', () => {
-  it('renders nothing when trackTemperature is false', () => {
-    const { container } = renderTemp(makeMeeting());
+describe('PollReactions', () => {
+  it('renders nothing when trackPoll is false', () => {
+    const { container } = renderPoll(makeMeeting());
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders a button for each temperature option', () => {
-    renderTemp(makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+  it('renders a button for each poll option', () => {
+    renderPoll(makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
     }));
 
     expect(screen.getByLabelText(/strong positive/i)).toBeInTheDocument();
@@ -61,15 +61,15 @@ describe('TemperatureCheck', () => {
 
   it('shows the count for each option', () => {
     const meeting = makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+      trackPoll: true,
+      pollOptions: sampleOptions,
       reactions: [
         { optionId: 'opt-1', user: alice },
         { optionId: 'opt-1', user: bob },
         { optionId: 'opt-2', user: alice },
       ],
     });
-    renderTemp(meeting);
+    renderPoll(meeting);
 
     expect(screen.getByLabelText(/strong positive: 2/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^positive: 1/i)).toBeInTheDocument();
@@ -78,11 +78,11 @@ describe('TemperatureCheck', () => {
 
   it('highlights the current user\'s selected reactions', () => {
     const meeting = makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+      trackPoll: true,
+      pollOptions: sampleOptions,
       reactions: [{ optionId: 'opt-2', user: alice }],
     });
-    renderTemp(meeting, alice);
+    renderPoll(meeting, alice);
 
     const positiveBtn = screen.getByLabelText(/^positive: 1/i);
     expect(positiveBtn).toHaveAttribute('aria-pressed', 'true');
@@ -91,39 +91,39 @@ describe('TemperatureCheck', () => {
     expect(followingBtn).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('emits temperature:react with optionId when clicked', () => {
+  it('emits poll:react with optionId when clicked', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
-    renderTemp(makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+    renderPoll(makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
     }), alice, mockSocket);
 
     fireEvent.click(screen.getByLabelText(/confused/i));
-    expect(emit).toHaveBeenCalledWith('temperature:react', { optionId: 'opt-4' });
+    expect(emit).toHaveBeenCalledWith('poll:react', { optionId: 'opt-4' });
   });
 
   it('shows user names in the tooltip', () => {
     const meeting = makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+      trackPoll: true,
+      pollOptions: sampleOptions,
       reactions: [
         { optionId: 'opt-1', user: alice },
         { optionId: 'opt-1', user: bob },
       ],
     });
-    renderTemp(meeting);
+    renderPoll(meeting);
 
     const btn = screen.getByLabelText(/strong positive: 2/i);
     expect(btn).toHaveAttribute('title', 'Alice, Bob');
   });
 
   it('has an accessible group label', () => {
-    renderTemp(makeMeeting({
-      trackTemperature: true,
-      temperatureOptions: sampleOptions,
+    renderPoll(makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
     }));
-    expect(screen.getByRole('group', { name: /temperature check reactions/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /poll reactions/i })).toBeInTheDocument();
   });
 });

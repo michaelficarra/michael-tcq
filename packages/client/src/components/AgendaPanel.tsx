@@ -438,7 +438,7 @@ function ChairsSection() {
       {/* Remove chair confirmation modal */}
       {removeConfirm && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
           onClick={() => setRemoveConfirm(null)}
           role="dialog"
           aria-label="Confirm chair removal"

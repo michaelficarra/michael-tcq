@@ -13,7 +13,7 @@ All authenticated users are participants. They can:
 - Add themselves to the speaker queue with a topic description and entry type
 - Edit their own queue entries
 - Remove their own entries from the queue
-- React during a temperature check
+- React during a poll
 
 ### Chairs
 
@@ -25,8 +25,8 @@ The meeting creator is the initial chair. In addition to all participant capabil
 - Start the meeting / advance to the next agenda item
 - Advance to the next speaker
 - Edit, reorder, and remove any entry in the speaker queue
-- Initiate, configure, and stop temperature checks
-- Copy temperature check results to the clipboard
+- Initiate, configure, and stop polls
+- Copy poll results to the clipboard
 
 ### Admins
 
@@ -177,13 +177,13 @@ When a speaker introduces a new topic, that topic becomes the "current topic" an
 
 Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
 
-## Temperature Checks
+## Polls
 
-A temperature check is a lightweight, real-time poll that allows the chair to gauge participant sentiment on the current topic.
+A poll is a lightweight, real-time sentiment check that allows the chair to gauge participant opinion on the current topic.
 
 ### Configuration (Chair Only)
 
-When a chair clicks **Check Temperature**, a setup form appears with a list of response options. Each option has an emoji and a label. The six default options are:
+When a chair clicks **Poll**, a setup form appears with a list of response options. Each option has an emoji and a label. The six default options are:
 
 | Emoji | Label |
 |-------|-------|
@@ -194,11 +194,11 @@ When a chair clicks **Check Temperature**, a setup form appears with a list of r
 | 🤷 | Indifferent |
 | 😕 | Unconvinced |
 
-Chairs can add, remove, and edit options before starting the check. Each option's emoji is entered via a text input (the OS emoji picker can be used). A minimum of 2 options is required. The chair clicks **Start Temperature Check** to begin.
+Chairs can add, remove, and edit options before starting the poll. Each option's emoji is entered via a text input (the OS emoji picker can be used). A minimum of 2 options is required. The chair clicks **Start Poll** to begin.
 
 ### Reactions
 
-During an active temperature check, all participants see a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
+During an active poll, all participants see a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
 
 ### Results
 
@@ -206,7 +206,7 @@ Chairs see a **Copy Results** button that copies a summary to the clipboard: eac
 
 ### Termination (Chair Only)
 
-**Stop Temperature Check** ends the temperature check, clears all reactions and options.
+**Stop Poll** ends the poll, clears all reactions and options.
 
 ## Real-Time Updates
 
@@ -216,7 +216,7 @@ All meeting state changes are broadcast to all connected participants in real ti
 - Queue additions, edits, deletions, and reordering
 - Current speaker and current topic changes
 - Agenda item advancement
-- Temperature check state, options, and reactions
+- Poll state, options, and reactions
 
 The server is the single source of truth. Clients send actions and wait for the server to broadcast the updated state — no optimistic updates.
 
@@ -228,14 +228,14 @@ The server is the single source of truth. Clients send actions and wait for the 
 
 ## User Identity Display
 
-Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, temperature check tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from `https://github.com/{username}.png` and hidden gracefully if the image fails to load.
+Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from `https://github.com/{username}.png` and hidden gracefully if the image fails to load.
 
 ## Navigation
 
 The meeting view has three tabs:
 
 - **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
-- **Queue** — displays the current agenda item (with temperature check controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
+- **Queue** — displays the current agenda item (with poll controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
 - **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode). The Help tab is also available on the home page.
@@ -263,7 +263,7 @@ Pressing `f` toggles presentation mode. In presentation mode:
 - The browser enters fullscreen.
 - The navigation bar is hidden.
 - All interactive controls are hidden: forms, entry type buttons, drag handles, edit/delete buttons, and chair action buttons.
-- The queue content, current speaker, current topic, agenda items, and temperature check reactions remain visible.
+- The queue content, current speaker, current topic, agenda items, and poll reactions remain visible.
 
 Pressing `f` again (or exiting fullscreen via the browser) returns to normal mode.
 

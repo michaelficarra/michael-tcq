@@ -53,9 +53,9 @@ tcq/
 ├── packages/
 │   ├── shared/                  # Shared TypeScript types and constants
 │   │   └── src/
-│   │       ├── types.ts         # MeetingState, User, QueueEntry, TemperatureOption, etc.
+│   │       ├── types.ts         # MeetingState, User, QueueEntry, PollOption, etc.
 │   │       ├── messages.ts      # Socket.IO event type definitions
-│   │       └── constants.ts     # Queue entry types, default temperature options
+│   │       └── constants.ts     # Queue entry types, default poll options
 │   ├── client/                  # React + Vite frontend
 │   │   └── src/
 │   │       ├── App.tsx

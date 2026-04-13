@@ -1,5 +1,5 @@
 /**
- * Temperature check panel — displays during an active temperature check.
+ * Poll reactions panel — displays during an active poll.
  *
  * Shows a button for each custom option with its emoji, label, and
  * reaction count. Clicking a button toggles the user's reaction.
@@ -12,22 +12,22 @@
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 
-export function TemperatureCheck() {
+export function PollReactions() {
   const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
 
-  if (!meeting || !meeting.trackTemperature || meeting.temperatureOptions.length === 0) {
+  if (!meeting || !meeting.trackPoll || meeting.pollOptions.length === 0) {
     return null;
   }
 
   /** Toggle a reaction for the current user on the given option. */
   function handleReact(optionId: string) {
-    socket?.emit('temperature:react', { optionId });
+    socket?.emit('poll:react', { optionId });
   }
 
   /**
-   * Copy the temperature check results to the clipboard.
+   * Copy the poll results to the clipboard.
    * Each option is listed on a separate line with its emoji, label,
    * and count, sorted by count descending.
    */
@@ -35,7 +35,7 @@ export function TemperatureCheck() {
     if (!meeting) return;
 
     // Build a sorted summary: count reactions per option, sort descending
-    const results = meeting.temperatureOptions.map((option) => {
+    const results = meeting.pollOptions.map((option) => {
       const count = meeting.reactions.filter((r) => r.optionId === option.id).length;
       return { emoji: option.emoji, label: option.label, count };
     }).sort((a, b) => b.count - a.count);
@@ -50,14 +50,14 @@ export function TemperatureCheck() {
   }
 
   return (
-    <div className="mt-3">
+    <div>
       {/* Reaction buttons */}
       <div
         className="flex flex-wrap gap-3"
         role="group"
-        aria-label="Temperature check reactions"
+        aria-label="Poll reactions"
       >
-        {meeting.temperatureOptions.map((option) => {
+        {meeting.pollOptions.map((option) => {
           // Count how many users reacted to this option
           const reactionsForOption = meeting.reactions.filter(
             (r) => r.optionId === option.id,
@@ -102,15 +102,24 @@ export function TemperatureCheck() {
         })}
       </div>
 
-      {/* Copy Results button — chairs only */}
+      {/* Chair actions — Copy Results and Stop Poll */}
       {isChair && (
-        <button
-          onClick={handleCopyResults}
-          className="mt-3 border border-stone-300 rounded px-3 py-1 text-sm
-                     text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
-        >
-          Copy Results
-        </button>
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={handleCopyResults}
+            className="border border-stone-300 rounded px-3 py-1 text-sm
+                       text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+          >
+            Copy Results
+          </button>
+          <button
+            onClick={() => socket?.emit('poll:stop')}
+            className="border border-stone-300 rounded px-3 py-1 text-sm
+                       text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+          >
+            Stop Poll
+          </button>
+        </div>
       )}
     </div>
   );

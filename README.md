@@ -8,7 +8,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 - **Instant queue entry** — clicking a queue type button immediately adds you to the queue with a placeholder topic, then opens inline editing. No modal form to fill out before joining.
 - **Queue copy and restore** — chairs can copy the entire queue as text and paste it back later, preserving the original authors. Useful for saving and restoring queue state across breaks.
-- **Customisable temperature checks** — temperature check options are fully configurable per check. Chairs can add, remove, and customise the emoji and label for each option, rather than being limited to a fixed set. Results can be copied to the clipboard.
+- **Customisable polls** — poll options (also known as temperature checks) are fully configurable per poll. Chairs can add, remove, and customise the emoji and label for each option, rather than being limited to a fixed set. Results can be copied to the clipboard.
 - **Participant queue self-management** — participants can drag their own entries downward to defer, edit their own topics inline, and click the type badge to cycle through legal types at their position.
 - **Type cycling** — chairs (and entry owners) can click the type badge on a queue entry to cycle through the types that are legal at that position without moving the entry.
 - **Directional type changes** — when dragging entries, the type adjusts based on direction: moving down adopts the lowest priority of items above, moving up adopts the highest priority of items below.

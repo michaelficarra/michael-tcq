@@ -71,9 +71,9 @@ export function HelpPanel() {
           upward — only chairs can promote entries.
         </p>
 
-        <h4 className="font-medium text-stone-700 mt-4 mb-1">Temperature Checks</h4>
+        <h4 className="font-medium text-stone-700 mt-4 mb-1">Polls</h4>
         <p className="text-sm text-stone-600 mb-3">
-          When a chair starts a temperature check, a panel of reaction buttons
+          When a chair starts a poll, a panel of reaction buttons
           appears. Click any button to indicate your sentiment — click it again
           to remove your reaction. You can select multiple options. Hover over a
           button to see who else has reacted.
@@ -155,20 +155,20 @@ export function HelpPanel() {
           </li>
         </ul>
 
-        <h4 className="font-medium text-stone-700 mt-4 mb-1">Temperature Checks</h4>
+        <h4 className="font-medium text-stone-700 mt-4 mb-1">Polls</h4>
         <p className="text-sm text-stone-600 mb-2">
           To gauge the room's sentiment on a topic:
         </p>
         <ol className="text-sm text-stone-600 ml-4 mb-3 space-y-1 list-decimal">
           <li>
-            Click <strong>Check Temperature</strong> in the agenda item section.
+            Click <strong>Poll</strong> in the agenda item section.
           </li>
           <li>
             A setup form appears with default response options. You can add,
             remove, or customise the options (each has an emoji and a label).
           </li>
           <li>
-            Click <strong>Start Temperature Check</strong>. All participants see
+            Click <strong>Start Poll</strong>. All participants see
             the reaction buttons and can respond.
           </li>
           <li>
@@ -176,7 +176,7 @@ export function HelpPanel() {
             clipboard.
           </li>
           <li>
-            Click <strong>Stop Temperature Check</strong> when done.
+            Click <strong>Stop Poll</strong> when done.
           </li>
         </ol>
       </section>

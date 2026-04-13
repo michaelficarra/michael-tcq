@@ -72,20 +72,20 @@ export interface QueueRemovePayload {
  * Question".
  */
 /**
- * Payload for starting a temperature check with custom options.
+ * Payload for starting a poll with custom options.
  * Each option has an emoji and a human-readable label. The server
  * assigns unique IDs. Minimum 2 options required.
  */
-export interface TemperatureStartPayload {
+export interface PollStartPayload {
   options: { emoji: string; label: string }[];
 }
 
 /**
- * Payload for toggling a temperature check reaction.
+ * Payload for toggling a poll reaction.
  * References the option by its ID. Each user can have at most one
  * reaction per option. Sending the same option again removes it (toggle).
  */
-export interface TemperatureReactPayload {
+export interface PollReactPayload {
   optionId: string;
 }
 
@@ -200,17 +200,17 @@ export interface ClientToServerEvents {
   'queue:next': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
 
   /**
-   * Start a temperature check with custom options (chair only).
+   * Start a poll with custom options (chair only).
    * Clears any existing reactions. Minimum 2 options required.
    */
-  'temperature:start': (payload: TemperatureStartPayload) => void;
+  'poll:start': (payload: PollStartPayload) => void;
 
-  /** Stop a temperature check (chair only). Clears all reactions. */
-  'temperature:stop': () => void;
+  /** Stop a poll (chair only). Clears all reactions. */
+  'poll:stop': () => void;
 
   /**
-   * Toggle a reaction during an active temperature check. Any authenticated
+   * Toggle a reaction during an active poll. Any authenticated
    * user can react. Sending the same reaction again removes it.
    */
-  'temperature:react': (payload: TemperatureReactPayload) => void;
+  'poll:react': (payload: PollReactPayload) => void;
 }

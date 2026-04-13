@@ -569,19 +569,19 @@ export function registerSocketHandlers(
       });
     });
 
-    // --- temperature:start ---
-    // Chair starts a temperature check with custom options.
+    // --- poll:start ---
+    // Chair starts a poll with custom options.
     // Minimum 2 options required; each must have emoji and label.
-    socket.on('temperature:start', (payload) => {
+    socket.on('poll:start', (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can start a temperature check');
+        socket.emit('error', 'Only chairs can start a poll');
         return;
       }
 
       // Validate options
       if (!Array.isArray(payload.options) || payload.options.length < 2) {
-        socket.emit('error', 'At least 2 temperature check options are required');
+        socket.emit('error', 'At least 2 poll options are required');
         return;
       }
       for (const opt of payload.options) {
@@ -591,35 +591,35 @@ export function registerSocketHandlers(
         }
       }
 
-      meetingManager.startTemperature(
+      meetingManager.startPoll(
         joinedMeetingId,
         payload.options.map((o) => ({ emoji: o.emoji.trim(), label: o.label.trim() })),
       );
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
-    // --- temperature:stop ---
-    // Chair stops the temperature check. Clears all reactions.
-    socket.on('temperature:stop', () => {
+    // --- poll:stop ---
+    // Chair stops the poll. Clears all reactions.
+    socket.on('poll:stop', () => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can stop a temperature check');
+        socket.emit('error', 'Only chairs can stop a poll');
         return;
       }
 
-      meetingManager.stopTemperature(joinedMeetingId);
+      meetingManager.stopPoll(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
-    // --- temperature:react ---
-    // Any authenticated user can toggle a reaction on a temperature
+    // --- poll:react ---
+    // Any authenticated user can toggle a reaction on a poll
     // check option. Sending the same option ID again removes it.
-    socket.on('temperature:react', (payload) => {
+    socket.on('poll:react', (payload) => {
       if (!joinedMeetingId) return;
 
       const toggled = meetingManager.toggleReaction(joinedMeetingId, payload.optionId, user);
       if (!toggled) {
-        socket.emit('error', 'Temperature check is not active or option is invalid');
+        socket.emit('error', 'Poll is not active or option is invalid');
         return;
       }
 

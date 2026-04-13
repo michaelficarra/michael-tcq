@@ -34,8 +34,8 @@ import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
-import { TemperatureCheck } from './TemperatureCheck.js';
-import { TemperatureSetup } from './TemperatureSetup.js';
+import { PollReactions } from './PollReactions.js';
+import { PollSetup } from './PollSetup.js';
 
 interface QueuePanelProps {
   /** ID of a newly added queue entry that should open in edit mode. */
@@ -51,8 +51,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const isChair = useIsChair();
   const socket = useSocket();
 
-  // Whether the temperature check setup form is open
-  const [showTempSetup, setShowTempSetup] = useState(false);
+  // Whether the poll setup form is open
+  const [showPollSetup, setShowPollSetup] = useState(false);
 
   // Whether the "advance agenda item" confirmation modal is open
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
@@ -234,21 +234,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                   Next Agenda Item
                 </button>
               )}
-              {meeting.trackTemperature ? (
+              {!meeting.trackPoll && (
                 <button
-                  onClick={() => socket?.emit('temperature:stop')}
+                  onClick={() => setShowPollSetup(true)}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
                              text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
                 >
-                  Stop Temperature Check
-                </button>
-              ) : !showTempSetup && (
-                <button
-                  onClick={() => setShowTempSetup(true)}
-                  className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
-                >
-                  Check Temperature
+                  Create Poll
                 </button>
               )}
             </>
@@ -270,16 +262,6 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               )}
             </div>
 
-            {/* Temperature check setup form — chair only */}
-            {isChair && showTempSetup && (
-              <TemperatureSetup
-                onCancel={() => setShowTempSetup(false)}
-                onStarted={() => setShowTempSetup(false)}
-              />
-            )}
-
-            {/* Temperature check reaction panel — visible to all when active */}
-            <TemperatureCheck />
           </div>
         ) : (
           <div className="pl-3">
@@ -450,9 +432,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       </section>
 
       {/* Advance agenda item confirmation modal */}
+      {/* Advance agenda item confirmation modal */}
       {showAdvanceConfirm && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
           onClick={() => setShowAdvanceConfirm(false)}
           role="dialog"
           aria-label="Confirm agenda advancement"
@@ -492,6 +475,44 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                 Advance
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poll setup modal — chair only */}
+      {/* Poll setup modal — chair only */}
+      {showPollSetup && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          onClick={() => setShowPollSetup(false)}
+          role="dialog"
+          aria-label="Create poll"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg border border-stone-200 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PollSetup
+              onCancel={() => setShowPollSetup(false)}
+              onStarted={() => setShowPollSetup(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Active poll modal — non-dismissable, visible to all */}
+      {meeting.trackPoll && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          role="dialog"
+          aria-label="Active poll"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg border border-stone-200 max-w-lg w-full mx-4 p-6"
+          >
+            <PollReactions />
           </div>
         </div>
       )}

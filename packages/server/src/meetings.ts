@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, TemperatureOption, User } from '@tcq/shared';
+import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, PollOption, User } from '@tcq/shared';
 import { QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
@@ -52,8 +52,8 @@ export class MeetingManager {
       currentTopic: undefined,
       queuedSpeakers: [],
       reactions: [],
-      trackTemperature: false,
-      temperatureOptions: [],
+      trackPoll: false,
+      pollOptions: [],
       version: 0,
     };
 
@@ -493,60 +493,60 @@ export class MeetingManager {
     return true;
   }
 
-  // -- Temperature check mutations --
+  // -- Poll mutations --
 
   /**
-   * Start a temperature check with custom options. Sets trackTemperature
+   * Start a poll with custom options. Sets trackPoll
    * to true, stores the options, and clears any existing reactions.
    * Each option gets a unique UUID assigned by the server.
    */
-  startTemperature(meetingId: string, options: { emoji: string; label: string }[]): boolean {
+  startPoll(meetingId: string, options: { emoji: string; label: string }[]): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
     // Assign unique IDs to each option
-    meeting.temperatureOptions = options.map((opt) => ({
+    meeting.pollOptions = options.map((opt) => ({
       id: randomUUID(),
       emoji: opt.emoji,
       label: opt.label,
     }));
-    meeting.trackTemperature = true;
+    meeting.trackPoll = true;
     meeting.reactions = [];
     this.markDirty(meetingId);
     return true;
   }
 
   /**
-   * Stop a temperature check. Sets trackTemperature to false and clears
+   * Stop a poll. Sets trackPoll to false and clears
    * all reactions and options.
    */
-  stopTemperature(meetingId: string): boolean {
+  stopPoll(meetingId: string): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    meeting.trackTemperature = false;
-    meeting.temperatureOptions = [];
+    meeting.trackPoll = false;
+    meeting.pollOptions = [];
     meeting.reactions = [];
     this.markDirty(meetingId);
     return true;
   }
 
   /**
-   * Toggle a reaction for a user on a specific temperature option.
+   * Toggle a reaction for a user on a specific poll option.
    * If the user already reacted to this option, the reaction is removed.
    * If they haven't, a reaction is added. Each user can react to each
    * option at most once.
    *
-   * Returns false if the meeting doesn't exist, temperature tracking
+   * Returns false if the meeting doesn't exist, poll
    * is not active, or the option ID is invalid.
    */
   toggleReaction(meetingId: string, optionId: string, user: User): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
-    if (!meeting.trackTemperature) return false;
+    if (!meeting.trackPoll) return false;
 
     // Validate that the option exists
-    const optionExists = meeting.temperatureOptions.some((o) => o.id === optionId);
+    const optionExists = meeting.pollOptions.some((o) => o.id === optionId);
     if (!optionExists) return false;
 
     // Check if the user already reacted to this option

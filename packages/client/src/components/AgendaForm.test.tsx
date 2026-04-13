@@ -12,7 +12,7 @@ const chairUser: User = {
 const baseMeeting: MeetingState = {
   id: 'test', chairs: [chairUser], agenda: [],
   currentAgendaItem: undefined, currentSpeaker: undefined, currentTopic: undefined,
-  queuedSpeakers: [], reactions: [], trackTemperature: false, temperatureOptions: [], version: 0,
+  queuedSpeakers: [], reactions: [], trackPoll: false, pollOptions: [], version: 0,
 };
 
 function renderForm(

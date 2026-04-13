@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { QueuePanel } from './QueuePanel.js';
 import { AgendaPanel } from './AgendaPanel.js';
-import { TemperatureCheck } from './TemperatureCheck.js';
+import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
@@ -15,7 +15,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     id: 'test', chairs: [chairUser], agenda: [],
     currentAgendaItem: undefined, currentSpeaker: undefined,
     currentTopic: undefined, queuedSpeakers: [],
-    reactions: [], trackTemperature: false, temperatureOptions: [],
+    reactions: [], trackPoll: false, pollOptions: [],
     version: 0,
     ...overrides,
   };
@@ -249,18 +249,18 @@ describe('Presentation mode', () => {
     });
   });
 
-  describe('TemperatureCheck', () => {
+  describe('PollReactions', () => {
     it('keeps reaction buttons visible (they have aria-pressed)', () => {
       const options = [
         { id: 'opt-1', emoji: '👍', label: 'Positive' },
         { id: 'opt-2', emoji: '👎', label: 'Negative' },
       ];
       const meeting = makeMeeting({
-        trackTemperature: true,
-        temperatureOptions: options,
+        trackPoll: true,
+        pollOptions: options,
       });
       renderInPresentationMode(
-        wrapWithProviders(<TemperatureCheck />, meeting),
+        wrapWithProviders(<PollReactions />, meeting),
       );
 
       // Reaction buttons should be visible
@@ -268,21 +268,22 @@ describe('Presentation mode', () => {
       expect(screen.getByLabelText(/negative/i)).toBeInTheDocument();
     });
 
-    it('hides the Copy Results button', () => {
+    it('shows chair buttons in poll modal even in presentation mode', () => {
       const options = [
         { id: 'opt-1', emoji: '👍', label: 'Positive' },
         { id: 'opt-2', emoji: '👎', label: 'Negative' },
       ];
       const meeting = makeMeeting({
-        trackTemperature: true,
-        temperatureOptions: options,
+        chairs: [chairUser],
+        trackPoll: true,
+        pollOptions: options,
       });
       renderInPresentationMode(
-        wrapWithProviders(<TemperatureCheck />, meeting),
+        wrapWithProviders(<PollReactions />, meeting, chairUser),
       );
 
-      const btn = screen.getByText('Copy Results');
-      expect(btn.className).toContain('presentation-hidden');
+      expect(screen.getByText('Copy Results')).toBeInTheDocument();
+      expect(screen.getByText('Stop Poll')).toBeInTheDocument();
     });
   });
 });

@@ -22,22 +22,22 @@ export interface QueueEntry {
 }
 
 /**
- * A single option in a temperature check. Each check can have a
- * custom set of options (minimum 2). The emoji is the visual
- * identifier; the label is the human-readable description.
+ * A single option in a poll. Each poll can have a custom set of
+ * options (minimum 2). The emoji is the visual identifier; the
+ * label is the human-readable description.
  */
-export interface TemperatureOption {
+export interface PollOption {
   id: string;
   emoji: string;
   label: string;
 }
 
 /**
- * A user's reaction to a temperature check option.
+ * A user's reaction to a poll option.
  * Each user can select at most one of each option (toggle behaviour).
  */
 export interface Reaction {
-  /** The ID of the TemperatureOption this reaction is for. */
+  /** The ID of the PollOption this reaction is for. */
   optionId: string;
   user: User;
 }
@@ -51,17 +51,17 @@ export interface MeetingState {
   currentTopic?: QueueEntry;
   queuedSpeakers: QueueEntry[];
 
-  /** Whether a temperature check is currently active. */
-  trackTemperature: boolean;
+  /** Whether a poll is currently active. */
+  trackPoll: boolean;
 
   /**
-   * The options for the current temperature check. Set when the check
-   * is started; cleared when it's stopped. Each option has an emoji,
-   * a label, and a unique ID.
+   * The options for the current poll. Set when the poll is started;
+   * cleared when it's stopped. Each option has an emoji, a label,
+   * and a unique ID.
    */
-  temperatureOptions: TemperatureOption[];
+  pollOptions: PollOption[];
 
-  /** Reactions to the current temperature check options. */
+  /** Reactions to the current poll options. */
   reactions: Reaction[];
 
   /**

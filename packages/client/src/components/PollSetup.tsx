@@ -1,7 +1,7 @@
 /**
- * Temperature check setup form — shown to chairs when they click
- * "Check Temperature". Allows adding, removing, and editing the
- * response options before starting the check.
+ * Poll setup form — shown to chairs when they click "Poll".
+ * Allows adding, removing, and editing the response options before
+ * starting the poll.
  *
  * Each option has an emoji (entered via text input — users can use
  * their OS emoji picker: Cmd+Ctrl+Space on Mac, Win+. on Windows)
@@ -11,10 +11,10 @@
  */
 
 import { useState, type FormEvent } from 'react';
-import { DEFAULT_TEMPERATURE_OPTIONS } from '@tcq/shared';
+import { DEFAULT_POLL_OPTIONS } from '@tcq/shared';
 import { useSocket } from '../contexts/SocketContext.js';
 
-/** A draft option being configured before the check starts. */
+/** A draft option being configured before the poll starts. */
 interface DraftOption {
   /** Temporary client-side key for React rendering. */
   key: number;
@@ -27,19 +27,19 @@ let nextKey = 0;
 
 /** Create the default set of draft options from the shared constants. */
 function createDefaults(): DraftOption[] {
-  return DEFAULT_TEMPERATURE_OPTIONS.map((opt) => ({
+  return DEFAULT_POLL_OPTIONS.map((opt) => ({
     key: nextKey++,
     emoji: opt.emoji,
     label: opt.label,
   }));
 }
 
-interface TemperatureSetupProps {
+interface PollSetupProps {
   onCancel: () => void;
   onStarted: () => void;
 }
 
-export function TemperatureSetup({ onCancel, onStarted }: TemperatureSetupProps) {
+export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   const socket = useSocket();
   const [options, setOptions] = useState<DraftOption[]>(createDefaults);
 
@@ -60,7 +60,7 @@ export function TemperatureSetup({ onCancel, onStarted }: TemperatureSetupProps)
     setOptions((prev) => [...prev, { key: nextKey++, emoji: '', label: '' }]);
   }
 
-  /** Start the temperature check with the configured options. */
+  /** Start the poll with the configured options. */
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -71,7 +71,7 @@ export function TemperatureSetup({ onCancel, onStarted }: TemperatureSetupProps)
 
     if (validOptions.length < 2) return;
 
-    socket?.emit('temperature:start', {
+    socket?.emit('poll:start', {
       options: validOptions.map((opt) => ({
         emoji: opt.emoji.trim(),
         label: opt.label.trim(),
@@ -87,9 +87,9 @@ export function TemperatureSetup({ onCancel, onStarted }: TemperatureSetupProps)
   ).length;
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 border border-stone-200 rounded-lg p-4 bg-white">
-      <h3 className="text-sm font-semibold text-stone-700 mb-3">
-        Temperature Check Options
+    <form onSubmit={handleSubmit} className="p-6">
+      <h3 className="text-lg font-semibold text-stone-800 mb-3">
+        Create Poll
       </h3>
 
       {/* Option list */}
@@ -152,7 +152,7 @@ export function TemperatureSetup({ onCancel, onStarted }: TemperatureSetupProps)
                      disabled:opacity-50 disabled:cursor-not-allowed
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
         >
-          Start Temperature Check
+          Start Poll
         </button>
         <button
           type="button"
