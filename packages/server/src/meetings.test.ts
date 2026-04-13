@@ -629,33 +629,151 @@ describe('MeetingManager', () => {
       expect(meeting.queuedSpeakers.map((e) => e.topic)).toEqual(['B', 'C', 'A']);
     });
 
-    it('changes entry type when crossing a type boundary (moving up)', () => {
+    // -- Type changes based on direction --
+
+    it('moving down: adopts the lowest priority of items above', () => {
       const meeting = manager.create([testUser]);
-      // Create a queue with a question, then a topic
-      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
-      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
-
-      // Move the topic before the question (to the beginning)
-      manager.reorderQueueEntry(meeting.id, t.id, null);
-
-      // T should now have the type of its neighbour (the question)
-      expect(meeting.queuedSpeakers[0].id).toBe(t.id);
-      expect(meeting.queuedSpeakers[0].type).toBe('question');
-    });
-
-    it('changes entry type when crossing a type boundary (moving down)', () => {
-      const meeting = manager.create([testUser]);
-      // Create a queue: point-of-order, question, topic
+      // Queue: POO, Question, Topic
       const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
       const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
       const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
 
-      // Move the point-of-order after the topic (to the end)
+      // Move POO after Topic (to the end, moving down)
+      // Items above new position: Q, T — lowest priority is T (topic)
       manager.reorderQueueEntry(meeting.id, poo.id, t.id);
 
-      // POO should now have the type of its neighbour (the topic)
       expect(meeting.queuedSpeakers[2].id).toBe(poo.id);
       expect(meeting.queuedSpeakers[2].type).toBe('topic');
+    });
+
+    it('moving down: adopts type of the single item above', () => {
+      const meeting = manager.create([testUser]);
+      // Queue: POO, Question
+      const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+
+      // Move POO after Question (moving down)
+      // Items above: Q — lowest priority is question
+      manager.reorderQueueEntry(meeting.id, poo.id, q.id);
+
+      expect(meeting.queuedSpeakers[1].id).toBe(poo.id);
+      expect(meeting.queuedSpeakers[1].type).toBe('question');
+    });
+
+    it('moving up: adopts the highest priority of items below', () => {
+      const meeting = manager.create([testUser]);
+      // Queue: POO, Question, Topic
+      const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+
+      // Move Topic to the beginning (moving up)
+      // Items below new position: POO, Q — highest priority is POO (point-of-order)
+      manager.reorderQueueEntry(meeting.id, t.id, null);
+
+      expect(meeting.queuedSpeakers[0].id).toBe(t.id);
+      expect(meeting.queuedSpeakers[0].type).toBe('point-of-order');
+    });
+
+    it('moving up: adopts type of the single item below', () => {
+      const meeting = manager.create([testUser]);
+      // Queue: Question, Topic
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+
+      // Move Topic before Question (moving up)
+      // Items below: Q — highest priority is question
+      manager.reorderQueueEntry(meeting.id, t.id, null);
+
+      expect(meeting.queuedSpeakers[0].id).toBe(t.id);
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('moving down past mixed types: adopts the lowest priority above', () => {
+      const meeting = manager.create([testUser]);
+      // Build a manually out-of-order queue: POO, Topic, Question
+      // (can't use addQueueEntry since it auto-sorts by priority)
+      meeting.queuedSpeakers = [
+        { id: 'poo', type: 'point-of-order', topic: 'POO', user: testUser },
+        { id: 't', type: 'topic', topic: 'T', user: testUser },
+        { id: 'q', type: 'question', topic: 'Q', user: testUser },
+      ];
+
+      // Move POO after Q (to the end, moving down)
+      // Items above: T, Q — lowest priority is T (topic, priority 3)
+      manager.reorderQueueEntry(meeting.id, 'poo', 'q');
+
+      expect(meeting.queuedSpeakers[2].id).toBe('poo');
+      expect(meeting.queuedSpeakers[2].type).toBe('topic');
+    });
+
+    it('moving up past mixed types: adopts the highest priority at or below', () => {
+      const meeting = manager.create([testUser]);
+      // Build a manually out-of-order queue: Question, Topic, POO
+      meeting.queuedSpeakers = [
+        { id: 'q', type: 'question', topic: 'Q', user: testUser },
+        { id: 't', type: 'topic', topic: 'T', user: testUser },
+        { id: 'poo', type: 'point-of-order', topic: 'POO', user: testUser },
+      ];
+
+      // Move POO to the beginning (moving up)
+      // Items at and below index 0 (including POO itself): POO, Q, T
+      // Highest priority is POO itself (point-of-order, priority 0)
+      manager.reorderQueueEntry(meeting.id, 'poo', null);
+
+      expect(meeting.queuedSpeakers[0].id).toBe('poo');
+      expect(meeting.queuedSpeakers[0].type).toBe('point-of-order');
+    });
+
+    it('moving up: topic moving above questions becomes question', () => {
+      const meeting = manager.create([testUser]);
+      // Queue: Question, Topic (auto-sorted by addQueueEntry)
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+
+      // Move Topic to the beginning (moving up)
+      // Items at and below index 0 (including T itself): T, Q
+      // Highest priority is Q (question, priority 1)
+      manager.reorderQueueEntry(meeting.id, t.id, null);
+
+      expect(meeting.queuedSpeakers[0].id).toBe(t.id);
+      expect(meeting.queuedSpeakers[0].type).toBe('question');
+    });
+
+    it('moving down: includes itself in the "above" set', () => {
+      const meeting = manager.create([testUser]);
+      // Queue: Topic, Question — topic has lower priority than question
+      const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
+      // addQueueEntry sorts by priority, so question goes before topic
+      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      // Actual queue: [Q, T]
+
+      // Move Q after T (moving down)
+      // Items at and above (including Q itself): Q, T — lowest priority is T (topic)
+      // But wait, Q is being moved, so after removal and reinsertion:
+      // Remove Q → [T], insert after T → [T, Q]
+      // Items at and above index 1: [T, Q] — lowest priority is topic
+      manager.reorderQueueEntry(meeting.id, q.id, t.id);
+
+      expect(meeting.queuedSpeakers[1].id).toBe(q.id);
+      expect(meeting.queuedSpeakers[1].type).toBe('topic');
+    });
+
+    it('moving up: includes itself in the "below" set', () => {
+      const meeting = manager.create([testUser]);
+      // Build queue: Question, Point-of-order (out of order)
+      meeting.queuedSpeakers = [
+        { id: 'q', type: 'question', topic: 'Q', user: testUser },
+        { id: 'poo', type: 'point-of-order', topic: 'POO', user: testUser },
+      ];
+
+      // Move POO to beginning (moving up)
+      // Items at and below index 0: [POO, Q]
+      // POO's own type (point-of-order, priority 0) is the highest priority
+      manager.reorderQueueEntry(meeting.id, 'poo', null);
+
+      expect(meeting.queuedSpeakers[0].id).toBe('poo');
+      expect(meeting.queuedSpeakers[0].type).toBe('point-of-order');
     });
 
     it('keeps original type when entry is alone in the queue', () => {

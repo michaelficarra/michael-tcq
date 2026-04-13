@@ -372,13 +372,10 @@ export function registerSocketHandlers(
         }
       }
 
-      // Chairs get type changes on boundary crossing; participants don't
-      const changeType = isChairUser;
       const reordered = meetingManager.reorderQueueEntry(
         joinedMeetingId,
         payload.id,
         payload.afterId,
-        changeType,
       );
       if (!reordered) {
         socket.emit('error', 'Invalid queue reorder');

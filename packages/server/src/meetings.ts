@@ -410,7 +410,7 @@ export class MeetingManager {
    *
    * Returns true if the reorder was valid and applied.
    */
-  reorderQueueEntry(meetingId: string, entryId: string, afterId: string | null, changeType = true): boolean {
+  reorderQueueEntry(meetingId: string, entryId: string, afterId: string | null): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
@@ -435,18 +435,36 @@ export class MeetingManager {
       meeting.queuedSpeakers.splice(afterIndex + 1, 0, entry);
     }
 
-    // Determine the new position of the moved entry
+    // Determine the new position and whether the entry moved up or down
     const newIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    const movedDown = newIndex > entryIndex;
 
-    // When changeType is true (chair reordering), change the entry's
-    // type to match its new neighbours when it crosses a type boundary.
-    // When false (participant self-deferral), keep the original type.
-    if (changeType) {
-      const neighbour =
-        meeting.queuedSpeakers[newIndex + 1] ??
-        meeting.queuedSpeakers[newIndex - 1];
-      if (neighbour) {
-        entry.type = neighbour.type;
+    // Change the entry's type based on its direction of movement:
+    // - Moving down: adopt the lowest priority (highest number) of the
+    //   items at or above it (including itself), so it doesn't outrank
+    //   what's before it.
+    // - Moving up: adopt the highest priority (lowest number) of the
+    //   items at or below it (including itself), so it doesn't underrank
+    //   what's after it.
+    if (meeting.queuedSpeakers.length > 1) {
+      if (movedDown) {
+        // Items at and above the new position (indices 0..newIndex)
+        const itemsAtAndAbove = meeting.queuedSpeakers.slice(0, newIndex + 1);
+        // Lowest priority = highest priority number
+        const lowestPriority = itemsAtAndAbove.reduce(
+          (lowest, e) => QUEUE_ENTRY_PRIORITY[e.type] > QUEUE_ENTRY_PRIORITY[lowest.type] ? e : lowest,
+          itemsAtAndAbove[0],
+        );
+        entry.type = lowestPriority.type;
+      } else {
+        // Items at and below the new position (indices newIndex..end)
+        const itemsAtAndBelow = meeting.queuedSpeakers.slice(newIndex);
+        // Highest priority = lowest priority number
+        const highestPriority = itemsAtAndBelow.reduce(
+          (highest, e) => QUEUE_ENTRY_PRIORITY[e.type] < QUEUE_ENTRY_PRIORITY[highest.type] ? e : highest,
+          itemsAtAndBelow[0],
+        );
+        entry.type = highestPriority.type;
       }
     }
 
