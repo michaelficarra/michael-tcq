@@ -156,6 +156,7 @@ export function AdminPanel() {
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
+                autoFocus
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"

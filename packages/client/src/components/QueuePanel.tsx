@@ -54,6 +54,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   // Whether the temperature check setup form is open
   const [showTempSetup, setShowTempSetup] = useState(false);
 
+  // Whether the "advance agenda item" confirmation modal is open
+  const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
+
   // Advancement actions with automatic retry on stale version
   const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
   const handleNextSpeaker = useAdvanceAction('queue:next');
@@ -218,12 +221,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               {hasMoreAgendaItems && (
                 <button
                   onClick={() => {
-                    // Confirm if the queue has entries that will be cleared
+                    // Show confirmation if the queue has entries that will be cleared
                     if (meeting.queuedSpeakers.length > 0) {
-                      const ok = window.confirm(
-                        `Advancing to the next agenda item will clear the speaker queue (${meeting.queuedSpeakers.length} ${meeting.queuedSpeakers.length === 1 ? 'entry' : 'entries'}). Continue?`,
-                      );
-                      if (!ok) return;
+                      setShowAdvanceConfirm(true);
+                      return;
                     }
                     handleNextAgendaItem();
                   }}
@@ -447,6 +448,53 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </DndContext>
         )}
       </section>
+
+      {/* Advance agenda item confirmation modal */}
+      {showAdvanceConfirm && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          onClick={() => setShowAdvanceConfirm(false)}
+          role="dialog"
+          aria-label="Confirm agenda advancement"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg border border-stone-200 p-6 max-w-sm w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-stone-800 mb-2">
+              Next Agenda Item
+            </h3>
+            <p className="text-sm text-stone-600 mb-4">
+              Advancing to the next agenda item will clear the speaker queue
+              ({meeting.queuedSpeakers.length}{' '}
+              {meeting.queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
+              Continue?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowAdvanceConfirm(false)}
+                className="text-sm text-stone-500 hover:text-stone-700
+                           transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                autoFocus
+                onClick={() => {
+                  setShowAdvanceConfirm(false);
+                  handleNextAgendaItem();
+                }}
+                className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
+                           hover:bg-red-600 transition-colors cursor-pointer
+                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              >
+                Advance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
