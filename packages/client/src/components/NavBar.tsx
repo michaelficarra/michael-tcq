@@ -5,6 +5,7 @@
  * and the user menu (Log Out or dev user-switcher) on the right.
  */
 
+import { Link } from 'react-router-dom';
 import { UserMenu } from './UserMenu.js';
 import { Logo } from './Logo.js';
 
@@ -52,7 +53,9 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
       aria-label="Main navigation"
     >
       {/* Branding */}
-      <Logo />
+      <Link to="/">
+        <Logo />
+      </Link>
 
       {/* Tab toggles — active tab has a teal underline */}
       <div className="flex gap-4" role="tablist" aria-label="Meeting views">
