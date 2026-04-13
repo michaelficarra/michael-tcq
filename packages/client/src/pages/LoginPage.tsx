@@ -5,11 +5,13 @@
  * redirects to /auth/github to start the OAuth flow.
  */
 
+import { Logo } from '../components/Logo.js';
+
 export function LoginPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col">
       <header className="border-b border-stone-200 bg-white px-6 py-3">
-        <span className="text-2xl font-semibold text-stone-800">TCQ</span>
+        <Logo className="text-2xl" />
       </header>
 
       <main className="flex-1 flex items-center justify-center">

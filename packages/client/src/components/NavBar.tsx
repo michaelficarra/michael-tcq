@@ -6,6 +6,7 @@
  */
 
 import { UserMenu } from './UserMenu.js';
+import { Logo } from './Logo.js';
 
 export type Tab = 'agenda' | 'queue' | 'help';
 
@@ -51,9 +52,7 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
       aria-label="Main navigation"
     >
       {/* Branding */}
-      <span className="text-xl sm:text-2xl font-semibold text-stone-800 select-none">
-        TCQ
-      </span>
+      <Logo />
 
       {/* Tab toggles — active tab has a teal underline */}
       <div className="flex gap-4" role="tablist" aria-label="Meeting views">
