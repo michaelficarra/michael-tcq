@@ -37,8 +37,11 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 ![Home page](screenshots/home-page.png)
 Join or create a meeting from the home page.
 
-![Queue tab](screenshots/queue.png)
-The speaker queue with priority-ordered entries and chair controls.
+![Queue tab](screenshots/queue-participant.png)
+The speaker queue with priority-ordered entries from a particpant's perspective.
+
+![Queue tab with chair controls](screenshots/queue-chair.png)
+The speaker queue with chair controls.
 
 ![Agenda tab](screenshots/agenda.png)
 The agenda tab with chairs, numbered items, and drag-to-reorder.
