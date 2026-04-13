@@ -134,9 +134,11 @@ export function AgendaPanel() {
         ) : (
           <button
             onClick={() => setShowForm(true)}
-            className="text-blue-600 hover:text-blue-800 transition-colors font-medium presentation-hidden"
+            className="border border-stone-300 rounded px-3 py-1 text-sm font-medium
+                       text-stone-600 hover:bg-stone-100 transition-colors
+                       cursor-pointer presentation-hidden"
           >
-            + New Agenda Item
+            New Agenda Item
           </button>
         )
       )}

@@ -68,27 +68,27 @@ describe('AgendaPanel', () => {
     expect(screen.getByText('Second item')).toBeInTheDocument();
   });
 
-  it('shows the "+ New Agenda Item" button for chairs', () => {
+  it('shows the "New Agenda Item" button for chairs', () => {
     const meeting = makeMeeting({ chairs: [chairUser] });
     renderAgenda(meeting, chairUser);
 
-    expect(screen.getByText('+ New Agenda Item')).toBeInTheDocument();
+    expect(screen.getByText('New Agenda Item')).toBeInTheDocument();
   });
 
-  it('hides the "+ New Agenda Item" button for non-chairs', () => {
+  it('hides the "New Agenda Item" button for non-chairs', () => {
     const meeting = makeMeeting({
       chairs: [{ ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }],
     });
     renderAgenda(meeting, chairUser);
 
-    expect(screen.queryByText('+ New Agenda Item')).not.toBeInTheDocument();
+    expect(screen.queryByText('New Agenda Item')).not.toBeInTheDocument();
   });
 
-  it('shows the agenda form when "+ New Agenda Item" is clicked', () => {
+  it('shows the agenda form when "New Agenda Item" is clicked', () => {
     const meeting = makeMeeting({ chairs: [chairUser] });
     renderAgenda(meeting, chairUser);
 
-    fireEvent.click(screen.getByText('+ New Agenda Item'));
+    fireEvent.click(screen.getByText('New Agenda Item'));
 
     expect(screen.getByLabelText('Agenda Item Name')).toBeInTheDocument();
     expect(screen.getByLabelText('Owner')).toBeInTheDocument();
