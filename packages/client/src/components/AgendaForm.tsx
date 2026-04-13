@@ -54,7 +54,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
     <form onSubmit={handleSubmit} className="border-t border-stone-200 pt-4">
       <h3 className="text-sm font-semibold text-stone-700 mb-3">New Agenda Item</h3>
 
-      <div className="flex flex-wrap gap-4 items-end">
+      <div className="flex flex-wrap gap-3 items-start">
         {/* Name field */}
         <div className="flex-1 min-w-[200px]">
           <label htmlFor="agenda-name" className="block text-xs font-medium text-stone-600 mb-1">
@@ -108,8 +108,8 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
           <p className="text-xs text-stone-400 mt-0.5">Minutes</p>
         </div>
 
-        {/* Buttons */}
-        <div className="flex gap-2">
+        {/* Buttons — vertically centred relative to the input row */}
+        <div className="flex gap-2 self-center">
           <button
             type="submit"
             className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium

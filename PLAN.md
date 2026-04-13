@@ -98,42 +98,31 @@ Implemented chair-only queue reordering with UUID-based targeting (`{ id, afterI
 
 - **Client:** Move Up / Move Down buttons for chairs on each queue entry. Buttons resolve adjacent entry UUIDs before emitting. Hidden at list boundaries (no Move Up on first, no Move Down on last). Hidden for non-chairs.
 
-## Step 10: GitHub OAuth
+## Step 10: GitHub OAuth ✅
 
-Replace the mock auth with real GitHub OAuth.
+Implemented GitHub OAuth with graceful fallback to mock auth when OAuth credentials are not configured.
 
----
-
-**Infrastructure: GitHub OAuth App (Development)**
-
-Register a GitHub OAuth App for local development:
-
-1. Go to https://github.com/settings/developers (or, for an organisation-owned app, the organisation's developer settings).
-2. Click **New OAuth App**.
-3. Fill in:
-   - **Application name:** TCQ (Development)
-   - **Homepage URL:** `http://localhost:3000`
-   - **Authorization callback URL:** `http://localhost:3000/auth/github/callback`
-4. Click **Register application**.
-5. On the app's settings page, note the **Client ID**.
-6. Click **Generate a new client secret** and note the **Client Secret**. This is shown only once.
-7. Copy the Client ID and Client Secret into your `.env` file as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. Set `GITHUB_CALLBACK_URL=http://localhost:3000/auth/github/callback`.
-
----
-
-- **Server:** Implement `auth.ts`:
-  - `GET /auth/github` — redirects to GitHub's OAuth authorisation URL with the client ID, callback URL, and scopes (`read:user`).
-  - `GET /auth/github/callback` — receives the authorisation `code` query parameter, exchanges it for an access token via `POST https://github.com/login/oauth/access_token`, fetches the user's profile via `GET https://api.github.com/user` (using the access token), stores the user (`ghid`, `ghUsername`, `name`, `organization`) in the session, and redirects to `/`.
-  - `GET /auth/logout` — destroys the session and redirects to `/`.
-  - `GET /api/me` — returns the current user from the session, or 401 if not authenticated.
-  - Add an auth middleware that protects `/api/*` routes and Socket.IO connections, returning 401 for unauthenticated requests.
+- **Server:**
+  - `auth.ts` — OAuth routes: `/auth/github` (redirect to GitHub), `/auth/github/callback` (code exchange, profile fetch, session creation), `/auth/logout` (session destruction).
+  - `requireAuth.ts` — middleware that returns 401 for unauthenticated `/api/*` requests.
+  - `session.ts` — shared session type augmentation (`user`, `returnTo`).
+  - `fetchGitHubUser()` — resolves GitHub usernames to User objects (used for chair validation when creating meetings).
+  - `routes.ts` — meeting creation now validates chair usernames against the GitHub API when OAuth is configured.
+  - Mock auth remains as automatic fallback when `GITHUB_CLIENT_ID` is not set.
 - **Client:**
-  - On page load, call `GET /api/me`. If 401, show the landing page with a "Log in with GitHub" button linking to `/auth/github`. If authenticated, show the meeting creation / join UI.
-  - Replace any hardcoded mock user references with the authenticated user from the session.
-  - Add a working Log Out link in the nav bar pointing to `/auth/logout`.
-- Remove the mock auth middleware.
+  - `AuthContext` — fetches `/api/me` on mount, provides user + loading state to all components.
+  - `LoginPage` — shown when not authenticated, with "Log in with GitHub" link.
+  - `HomePage` — chairs field pre-populated with the current user's GitHub username.
+  - `MeetingPage` — uses AuthContext instead of its own `/api/me` fetch.
 
-**Checkpoint:** Clicking "Log in with GitHub" redirects to GitHub, authenticates, and returns to the app with the user's real identity. The user's name and organisation appear in queue entries and as agenda item owners.
+**Infrastructure required for real OAuth (not needed for mock auth development):**
+
+Register a GitHub OAuth App at https://github.com/settings/developers:
+- **Application name:** TCQ (Development)
+- **Homepage URL:** `http://localhost:5173`
+- **Authorization callback URL:** `http://localhost:3000/auth/github/callback`
+
+Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env`.
 
 ## Step 11: Temperature Checks
 

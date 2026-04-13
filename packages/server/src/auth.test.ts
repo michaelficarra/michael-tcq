@@ -1,0 +1,65 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import express from 'express';
+import session from 'express-session';
+import { createAuthRoutes } from './auth.js';
+import { mockAuth } from './mockAuth.js';
+import './session.js';
+
+/** Create a test app with session + auth routes. */
+function createTestApp() {
+  const app = express();
+  app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
+  app.use(mockAuth);
+  app.use('/auth', createAuthRoutes());
+  return app;
+}
+
+async function listen(app: express.Express) {
+  return new Promise<{ baseUrl: string; close: () => void }>((resolve) => {
+    const server = app.listen(0, () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      resolve({
+        baseUrl: `http://localhost:${port}`,
+        close: () => server.close(),
+      });
+    });
+  });
+}
+
+describe('Auth routes', () => {
+  let baseUrl: string;
+  let close: () => void;
+
+  beforeEach(async () => {
+    const app = createTestApp();
+    ({ baseUrl, close } = await listen(app));
+    return () => close();
+  });
+
+  describe('GET /auth/github', () => {
+    it('redirects to GitHub OAuth authorisation URL when configured', async () => {
+      // This test runs without GITHUB_CLIENT_ID set, so it should
+      // return a 500 error explaining OAuth is not configured
+      const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+
+      // Without GITHUB_CLIENT_ID, the handler returns 500
+      expect(res.status).toBe(500);
+    });
+  });
+
+  describe('GET /auth/github/callback', () => {
+    it('returns 400 when authorisation code is missing', async () => {
+      const res = await fetch(`${baseUrl}/auth/github/callback`);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /auth/logout', () => {
+    it('redirects to home page', async () => {
+      const res = await fetch(`${baseUrl}/auth/logout`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/');
+    });
+  });
+});

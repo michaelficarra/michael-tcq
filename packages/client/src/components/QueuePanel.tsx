@@ -41,7 +41,11 @@ export function QueuePanel() {
 
   // Drag-and-drop sensors with keyboard support for accessibility
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      // Require a small drag distance before activating, so that clicks
+      // on buttons (e.g. delete) inside the draggable row work normally.
+      activationConstraint: { distance: 5 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),

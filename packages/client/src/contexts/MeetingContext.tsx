@@ -62,7 +62,11 @@ export function useMeetingDispatch(): Dispatch<MeetingAction> {
 export function useIsChair(): boolean {
   const { meeting, user } = useMeetingState();
   if (!meeting || !user) return false;
-  return meeting.chairs.some((chair) => chair.ghid === user.ghid);
+  // Compare by username (case-insensitive) since chairs are specified
+  // by GitHub username, and it's the stable identifier throughout the app.
+  return meeting.chairs.some(
+    (chair) => chair.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
+  );
 }
 
 /** Provider component that wraps the meeting page. */

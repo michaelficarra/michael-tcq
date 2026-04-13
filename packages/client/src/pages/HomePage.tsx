@@ -6,20 +6,17 @@
  * create a new meeting and be redirected to it.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.js';
+import { UserMenu } from '../components/UserMenu.js';
 
 export function HomePage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
         <span className="text-2xl font-semibold text-stone-800">TCQ</span>
-        <a
-          href="/auth/logout"
-          className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
-        >
-          Log Out
-        </a>
+        <UserMenu />
       </header>
 
       <main className="p-6 max-w-3xl mx-auto">
@@ -97,9 +94,20 @@ function JoinMeetingCard() {
 
 function NewMeetingCard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [chairs, setChairs] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Track whether the user has manually edited the field
+  const [userEdited, setUserEdited] = useState(false);
+
+  // Pre-populate the chairs field with the current user's GitHub username
+  // once auth loads, but only if the user hasn't already typed something.
+  useEffect(() => {
+    if (user && !userEdited) {
+      setChairs(user.ghUsername);
+    }
+  }, [user, userEdited]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -151,7 +159,7 @@ function NewMeetingCard() {
           id="chairs"
           type="text"
           value={chairs}
-          onChange={(e) => setChairs(e.target.value)}
+          onChange={(e) => { setChairs(e.target.value); setUserEdited(true); }}
           required
           className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-1
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"

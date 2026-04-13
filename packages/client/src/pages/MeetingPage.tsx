@@ -9,11 +9,11 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { MeetingProvider, useMeetingState, useMeetingDispatch } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
+import { useAuth } from '../contexts/AuthContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { NavBar } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
-import type { User } from '@tcq/shared';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
 function MeetingPageInner() {
@@ -21,19 +21,15 @@ function MeetingPageInner() {
   const [activeTab, setActiveTab] = useState<'agenda' | 'queue'>('queue');
   const { meeting, connected } = useMeetingState();
   const dispatch = useMeetingDispatch();
+  const { user } = useAuth();
 
-  // Fetch the current user from the server on mount
+  // Push the authenticated user from AuthContext into MeetingContext
+  // so that components like useIsChair() can check permissions.
   useEffect(() => {
-    fetch('/api/me')
-      .then((res) => {
-        if (!res.ok) throw new Error('Not authenticated');
-        return res.json() as Promise<User>;
-      })
-      .then((user) => dispatch({ type: 'setUser', user }))
-      .catch(() => {
-        // Not authenticated — will be handled properly when OAuth is added
-      });
-  }, [dispatch]);
+    if (user) {
+      dispatch({ type: 'setUser', user });
+    }
+  }, [user, dispatch]);
 
   // Connect to the meeting via Socket.IO and provide the socket to children
   const socket = useSocketConnection(meetingId ?? '');

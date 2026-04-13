@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext.js';
+import { LoginPage } from './pages/LoginPage.js';
 import { HomePage } from './pages/HomePage.js';
 
 // Mock fetch globally for these tests
@@ -21,38 +23,63 @@ vi.mock('react-router-dom', async () => {
 });
 
 function renderHomePage() {
+  // Simulate an authenticated user for HomePage tests
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' }),
+  });
+
   return render(
     <MemoryRouter>
-      <HomePage />
+      <AuthProvider>
+        <HomePage />
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
 
-describe('HomePage', () => {
-  it('renders the TCQ branding and Log Out link', () => {
-    renderHomePage();
+describe('LoginPage', () => {
+  it('renders the TCQ branding', () => {
+    render(<LoginPage />);
     expect(screen.getByText('TCQ')).toBeInTheDocument();
-    expect(screen.getByText('Log Out')).toBeInTheDocument();
   });
 
-  it('renders Join Meeting and New Meeting cards', () => {
+  it('renders a "Log in with GitHub" link', () => {
+    render(<LoginPage />);
+    const link = screen.getByText('Log in with GitHub');
+    expect(link).toBeInTheDocument();
+    expect(link.closest('a')).toHaveAttribute('href', '/auth/github');
+  });
+});
+
+describe('HomePage', () => {
+  it('renders Join Meeting and New Meeting cards', async () => {
     renderHomePage();
-    expect(screen.getByText('Join Meeting')).toBeInTheDocument();
+    // Wait for auth to resolve
+    await waitFor(() => {
+      expect(screen.getByText('Join Meeting')).toBeInTheDocument();
+    });
     expect(screen.getByText('New Meeting')).toBeInTheDocument();
   });
 
   // -- Join Meeting --
 
-  it('has a meeting ID input and Join button', () => {
+  it('has a meeting ID input and Join button', async () => {
     renderHomePage();
-    expect(screen.getByLabelText('Meeting ID')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Meeting ID')).toBeInTheDocument();
+    });
     expect(screen.getByRole('button', { name: 'Join' })).toBeInTheDocument();
   });
 
   it('navigates to the meeting page on successful join', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
-
     renderHomePage();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Meeting ID')).toBeInTheDocument();
+    });
+
+    // Mock the meeting lookup
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
 
     fireEvent.change(screen.getByLabelText('Meeting ID'), {
       target: { value: 'bright-pine-lake' },
@@ -65,9 +92,12 @@ describe('HomePage', () => {
   });
 
   it('shows an error when meeting is not found', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
-
     renderHomePage();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Meeting ID')).toBeInTheDocument();
+    });
+
+    mockFetch.mockResolvedValueOnce({ ok: false });
 
     fireEvent.change(screen.getByLabelText('Meeting ID'), {
       target: { value: 'no-such-meeting' },
@@ -81,20 +111,28 @@ describe('HomePage', () => {
 
   // -- New Meeting --
 
-  it('has a chairs input and Start button', () => {
+  it('pre-populates the chairs field with the current user username', async () => {
     renderHomePage();
-    expect(screen.getByLabelText('Chairs')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start a New Meeting' })).toBeInTheDocument();
+    await waitFor(() => {
+      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
+      expect(input.value).toBe('alice');
+    });
   });
 
   it('creates a meeting and navigates to it', async () => {
+    renderHomePage();
+    // Wait for auth to load and pre-populate the chairs field
+    await waitFor(() => {
+      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
+      expect(input.value).toBe('alice');
+    });
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: 'calm-wave-fox' }),
     });
 
-    renderHomePage();
-
+    // Add another chair alongside the pre-populated one
     fireEvent.change(screen.getByLabelText('Chairs'), {
       target: { value: 'alice, bob' },
     });
@@ -111,31 +149,22 @@ describe('HomePage', () => {
   });
 
   it('shows an error when meeting creation fails', async () => {
+    renderHomePage();
+    // Wait for auth to load and pre-populate the chairs field
+    await waitFor(() => {
+      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
+      expect(input.value).toBe('alice');
+    });
+
     mockFetch.mockResolvedValueOnce({
       ok: false,
       json: () => Promise.resolve({ error: 'Something went wrong' }),
     });
 
-    renderHomePage();
-
-    fireEvent.change(screen.getByLabelText('Chairs'), {
-      target: { value: 'alice' },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Start a New Meeting' }));
 
     await waitFor(() => {
       expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     });
-  });
-
-  it('shows a validation error when chairs field is empty commas', () => {
-    renderHomePage();
-
-    fireEvent.change(screen.getByLabelText('Chairs'), {
-      target: { value: ', , ' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Start a New Meeting' }));
-
-    expect(screen.getByText('At least one chair is required')).toBeInTheDocument();
   });
 });

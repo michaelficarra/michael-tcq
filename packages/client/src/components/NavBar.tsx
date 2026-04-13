@@ -2,8 +2,10 @@
  * Top navigation bar shown on the meeting page.
  *
  * Layout mirrors the original: "TCQ" branding on the left, Agenda/Queue tab
- * toggles, and a Log Out link on the right.
+ * toggles, and the user menu (Log Out or dev user-switcher) on the right.
  */
+
+import { UserMenu } from './UserMenu.js';
 
 interface NavBarProps {
   activeTab: 'agenda' | 'queue';
@@ -51,16 +53,11 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
         </button>
       </div>
 
-      {/* Spacer pushes Log Out to the right */}
+      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Log Out link — placeholder until OAuth is implemented */}
-      <a
-        href="/auth/logout"
-        className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
-      >
-        Log Out
-      </a>
+      {/* User menu: Log Out in real OAuth, user-switcher in dev mode */}
+      <UserMenu />
     </nav>
   );
 }

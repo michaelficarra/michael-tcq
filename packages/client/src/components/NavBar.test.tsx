@@ -1,6 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { NavBar } from './NavBar.js';
+
+// Mock useAuth so NavBar can render UserMenu without a real AuthProvider
+const mockUseAuth = vi.fn();
+vi.mock('../contexts/AuthContext.js', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+beforeEach(() => {
+  // Default: real OAuth mode (shows Log Out link)
+  mockUseAuth.mockReturnValue({
+    user: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' },
+    mockAuth: false,
+    switchUser: async () => {},
+  });
+});
 
 describe('NavBar', () => {
   it('renders TCQ branding', () => {
@@ -28,11 +43,23 @@ describe('NavBar', () => {
     expect(onTabChange).toHaveBeenCalledWith('agenda');
   });
 
-  it('renders a Log Out link', () => {
+  it('renders a Log Out link in OAuth mode', () => {
     render(<NavBar activeTab="queue" onTabChange={() => {}} />);
     const logOut = screen.getByText('Log Out');
     expect(logOut).toBeInTheDocument();
     expect(logOut.closest('a')).toHaveAttribute('href', '/auth/logout');
+  });
+
+  it('renders the username button in mock auth mode', () => {
+    mockUseAuth.mockReturnValue({
+      user: { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '' },
+      mockAuth: true,
+      switchUser: async () => {},
+    });
+
+    render(<NavBar activeTab="queue" onTabChange={() => {}} />);
+    expect(screen.getByText('testuser')).toBeInTheDocument();
+    expect(screen.queryByText('Log Out')).not.toBeInTheDocument();
   });
 
   it('has an accessible navigation landmark', () => {

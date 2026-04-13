@@ -40,7 +40,11 @@ export function AgendaPanel() {
 
   // Drag-and-drop sensors with keyboard support for accessibility
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      // Require a small drag distance before activating, so that clicks
+      // on buttons (e.g. delete) inside the draggable row work normally.
+      activationConstraint: { distance: 5 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -85,6 +89,24 @@ export function AgendaPanel() {
 
   return (
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
+      {/* Chairs list */}
+      <section className="mb-5" aria-label="Meeting chairs">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">
+          Chairs
+        </h2>
+        <p className="text-sm text-stone-700">
+          {meeting.chairs.map((chair, i) => (
+            <span key={chair.ghUsername}>
+              {i > 0 && ', '}
+              {chair.name}
+              {chair.organisation && (
+                <span className="text-stone-400"> ({chair.organisation})</span>
+              )}
+            </span>
+          ))}
+        </p>
+      </section>
+
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm ? (
         <p className="text-stone-400 italic mb-4">No agenda items yet.</p>
@@ -197,7 +219,7 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
       {isChair && (
         <button
           onClick={() => onDelete(item.id)}
-          className="text-xs text-stone-400 hover:text-red-600 transition-colors"
+          className="text-xs text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
           aria-label={`Delete ${item.name}`}
         >
           delete

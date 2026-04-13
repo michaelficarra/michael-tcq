@@ -4,10 +4,13 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import './session.js'; // session type augmentation
 import { MeetingManager } from './meetings.js';
 import { FileMeetingStore } from './fileStore.js';
 import { createMeetingRoutes } from './routes.js';
-import { mockAuth } from './mockAuth.js';
+import { createAuthRoutes } from './auth.js';
+import { requireAuth } from './requireAuth.js';
+import { mockAuth, isOAuthConfigured } from './mockAuth.js';
 import { registerSocketHandlers } from './socket.js';
 
 const app = express();
@@ -34,10 +37,14 @@ const sessionMiddleware = session({
 app.use(express.json());
 app.use(sessionMiddleware);
 
-// Temporary mock auth — injects a fake user into the session so that
-// features can be developed and tested without configuring GitHub OAuth.
-// This will be removed when real OAuth is implemented in Step 9.
+// Mock auth: when GitHub OAuth credentials are not configured, inject
+// a fake user so features work without an OAuth App. Does nothing when
+// GITHUB_CLIENT_ID is set.
 app.use(mockAuth);
+
+// --- Auth routes (no requireAuth — these handle the login flow) ---
+
+app.use('/auth', createAuthRoutes());
 
 // --- Persistence ---
 
@@ -45,13 +52,15 @@ const DATA_DIR = join(process.cwd(), '.data', 'meetings');
 const store = new FileMeetingStore(DATA_DIR);
 const meetingManager = new MeetingManager(store);
 
-// --- REST routes ---
+// --- Protected API routes ---
 
+// Health check doesn't require authentication
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use('/api', createMeetingRoutes(meetingManager));
+// All other /api routes require an authenticated session
+app.use('/api', requireAuth, createMeetingRoutes(meetingManager));
 
 // --- Socket.IO ---
 
@@ -68,8 +77,8 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpSe
 // are authenticated using the same session cookie.
 io.engine.use(sessionMiddleware);
 
-// Apply mock auth to socket handshake requests so the session has a user.
-// This mirrors what the Express middleware does for HTTP requests.
+// Apply mock auth to socket handshake requests (only effective when
+// OAuth is not configured — otherwise it's a no-op).
 io.engine.use(mockAuth);
 
 // Register all Socket.IO event handlers (join, disconnect, etc.)
@@ -84,6 +93,13 @@ async function start() {
 
   // Start periodic sync (writes dirty meetings to disk every 30 seconds)
   meetingManager.startPeriodicSync();
+
+  // Log which auth mode is active
+  if (isOAuthConfigured()) {
+    console.log('Authentication: GitHub OAuth');
+  } else {
+    console.log('Authentication: mock (set GITHUB_CLIENT_ID to enable OAuth)');
+  }
 
   httpServer.listen(PORT, () => {
     console.log(`TCQ server listening on http://localhost:${PORT}`);

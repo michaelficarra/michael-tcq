@@ -98,7 +98,11 @@ export class MeetingManager {
   isChair(meetingId: string, user: User): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
-    return meeting.chairs.some((chair) => chair.ghid === user.ghid);
+    // Compare by username (case-insensitive) since chairs are specified
+    // by GitHub username, and it's the stable identifier throughout the app.
+    return meeting.chairs.some(
+      (chair) => chair.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
+    );
   }
 
   // -- Agenda mutations --
