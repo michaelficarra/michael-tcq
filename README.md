@@ -9,7 +9,7 @@ TCQ is a real-time web application for managing structured discussions during ag
 - **Join a meeting** — enter a meeting ID or navigate directly to its URL.
 - **Agenda management** — chairs can add, edit, delete, and drag-and-drop reorder agenda items, each with an owner and optional timebox.
 - **Meeting flow** — chairs start the meeting and advance through agenda items. The agenda item's owner is automatically set as the current speaker.
-- **Speaker queue** — participants enter the queue as New Topic, Clarifying Question, Reply, or Point of Order. Entries are automatically sorted by priority. Chairs advance through speakers and can reorder entries via drag-and-drop (type changes when crossing priority boundaries). Participants and chairs can edit queue entries.
+- **Speaker queue** — participants enter the queue instantly by clicking an entry type button (New Topic, Clarifying Question, Reply, or Point of Order), then refine their topic description inline. Entries are automatically sorted by priority. Chairs advance through speakers and can reorder entries via drag-and-drop (type changes when crossing priority boundaries).
 - **Temperature checks** — chairs start a temperature check with customisable response options (emoji + label). Participants toggle reactions in real time. Chairs can copy a summary of results sorted by count.
 - **Real-time updates** — all changes are broadcast instantly to all connected participants.
 

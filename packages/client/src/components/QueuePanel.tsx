@@ -8,7 +8,7 @@
  * and the queue list with drag-and-drop reordering for chairs.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -41,6 +41,10 @@ export function QueuePanel() {
 
   // Whether the temperature check setup form is open
   const [showTempSetup, setShowTempSetup] = useState(false);
+
+  // ID of a newly added queue entry that should open in edit mode.
+  // Set by SpeakerControls after adding an entry with placeholder text.
+  const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
 
   // Advancement actions with automatic retry on stale version
   const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
@@ -253,7 +257,7 @@ export function QueuePanel() {
       </section>
 
       {/* --- Speaker Entry Controls --- */}
-      <SpeakerControls />
+      <SpeakerControls onEntryAdded={setAutoEditEntryId} />
 
       {/* --- Speaker Queue Section --- */}
       <section aria-labelledby="queue-heading">
@@ -284,8 +288,10 @@ export function QueuePanel() {
                     entry={entry}
                     index={index}
                     isChair={isChair}
-                    isOwnEntry={!!user && entry.user.ghid === user.ghid}
+                    isOwnEntry={!!user && entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
                     onDelete={handleRemoveEntry}
+                    initialEditing={autoEditEntryId === entry.id}
+                    onEditingStarted={() => setAutoEditEntryId(null)}
                   />
                 ))}
               </ol>
@@ -305,12 +311,40 @@ interface SortableQueueEntryProps {
   isChair: boolean;
   isOwnEntry: boolean;
   onDelete: (id: string) => void;
+  /** When true, the entry renders in edit mode immediately. */
+  initialEditing?: boolean;
+  /** Called when the initial editing state has been consumed. */
+  onEditingStarted?: () => void;
 }
 
-function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: SortableQueueEntryProps) {
+function SortableQueueEntry({
+  entry, index, isChair, isOwnEntry, onDelete,
+  initialEditing = false, onEditingStarted,
+}: SortableQueueEntryProps) {
   const socket = useSocket();
-  const [editing, setEditing] = useState(false);
-  const [editTopic, setEditTopic] = useState('');
+  const [editing, setEditing] = useState(initialEditing);
+  const [editTopic, setEditTopic] = useState(initialEditing ? entry.topic : '');
+
+  // Ref callback for the edit input — focuses and selects text only
+  // on initial mount, not on re-renders.
+  const editInputRef = useCallback((el: HTMLInputElement | null) => {
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, []);
+
+  // When initialEditing transitions to true, enter edit mode and
+  // notify the parent so it can clear the flag.
+  useEffect(() => {
+    if (initialEditing && !editing) {
+      setEditTopic(entry.topic);
+      setEditing(true);
+    }
+    if (initialEditing) {
+      onEditingStarted?.();
+    }
+  }, [initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     attributes,
@@ -372,8 +406,11 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
             value={editTopic}
             onChange={(e) => setEditTopic(e.target.value)}
             required
-            autoFocus
             aria-label="Topic description"
+            // Focus and select all text on mount so the user can
+            // immediately start typing to replace the placeholder.
+            // Uses a stable ref via useCallback to run only once.
+            ref={editInputRef}
             className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />

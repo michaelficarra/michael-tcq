@@ -14,7 +14,8 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     id: 'test-meeting', chairs: [], agenda: [],
     currentAgendaItem: undefined, currentSpeaker: undefined,
     currentTopic: undefined, queuedSpeakers: [],
-    reactions: [], trackTemperature: false, temperatureOptions: [], version: 0,
+    reactions: [], trackTemperature: false, temperatureOptions: [],
+    version: 0,
     ...overrides,
   };
 }
@@ -26,7 +27,7 @@ function renderControls(
   return render(
     <TestMeetingProvider meeting={meeting} user={testUser}>
       <SocketContext value={socket}>
-        <SpeakerControls />
+        <SpeakerControls onEntryAdded={() => {}} />
       </SocketContext>
     </TestMeetingProvider>,
   );
@@ -56,73 +57,30 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();
   });
 
-  it('opens the inline form when an entry type button is clicked', () => {
-    renderControls(makeMeeting());
-
-    fireEvent.click(screen.getByRole('button', { name: 'New Topic' }));
-
-    expect(screen.getByLabelText('New Topic')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enter Queue' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-  });
-
-  it('shows "Reply to <topic>" as the form label for replies', () => {
-    const meeting = makeMeeting({
-      currentTopic: {
-        id: 'ct-1', type: 'topic', topic: 'Async iteration', user: testUser,
-      },
-    });
-    renderControls(meeting);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Discuss Current Topic' }));
-
-    expect(screen.getByLabelText('Reply to Async iteration')).toBeInTheDocument();
-  });
-
-  it('closes the form on Cancel', () => {
-    renderControls(makeMeeting());
-
-    fireEvent.click(screen.getByRole('button', { name: 'New Topic' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    expect(screen.queryByRole('button', { name: 'Enter Queue' })).not.toBeInTheDocument();
-  });
-
-  it('emits queue:add on form submit', () => {
+  it('emits queue:add with placeholder topic immediately on click', () => {
     const emit = vi.fn();
-    const mockSocket = { emit } as unknown as TypedSocket;
+    const mockSocket = { emit, once: vi.fn() } as unknown as TypedSocket;
 
     renderControls(makeMeeting(), mockSocket);
 
-    // Open the form
     fireEvent.click(screen.getByRole('button', { name: 'Clarifying Question' }));
-
-    // Fill in and submit
-    fireEvent.change(screen.getByPlaceholderText('short topic description'), {
-      target: { value: 'How does this work?' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Enter Queue' }));
-
     expect(emit).toHaveBeenCalledWith('queue:add', {
       type: 'question',
-      topic: 'How does this work?',
+      topic: 'Clarifying question',
     });
   });
 
-  it('closes the form after successful submit', () => {
+  it('emits queue:add with placeholder for New Topic', () => {
     const emit = vi.fn();
-    const mockSocket = { emit } as unknown as TypedSocket;
+    const mockSocket = { emit, once: vi.fn() } as unknown as TypedSocket;
 
     renderControls(makeMeeting(), mockSocket);
 
     fireEvent.click(screen.getByRole('button', { name: 'New Topic' }));
-    fireEvent.change(screen.getByPlaceholderText('short topic description'), {
-      target: { value: 'My topic' },
+    expect(emit).toHaveBeenCalledWith('queue:add', {
+      type: 'topic',
+      topic: 'New topic',
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Enter Queue' }));
-
-    // Form should be closed
-    expect(screen.queryByRole('button', { name: 'Enter Queue' })).not.toBeInTheDocument();
   });
 
   it('has an accessible group label', () => {

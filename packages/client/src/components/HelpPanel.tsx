@@ -28,9 +28,10 @@ export function HelpPanel() {
         <h4 className="font-medium text-stone-700 mt-4 mb-1">Entering the Queue</h4>
         <p className="text-sm text-stone-600 mb-2">
           On the <strong>Queue</strong> tab, click one of the entry type buttons
-          to join the speaker queue. Enter a short description of what you want
-          to say, then click <strong>Enter Queue</strong>. Your entry will appear
-          in the queue for everyone to see.
+          to join the speaker queue. You'll be added immediately with a
+          placeholder topic, and the topic field will open for editing so you
+          can type a more specific description. Your entry appears in the queue
+          for everyone to see in real time.
         </p>
         <p className="text-sm text-stone-600 mb-2">
           There are four entry types, listed from highest to lowest priority:

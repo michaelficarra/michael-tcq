@@ -87,7 +87,7 @@ When a participant enters the queue, their entry is automatically inserted at th
 
 ### Entering the Queue
 
-A participant clicks one of the entry type buttons, enters a short topic description, and submits. The Reply button is only visible when there is a current topic, and its form label references the current topic by name (e.g. "Reply to [topic name]"). The entry appears in the queue for all connected users in real time.
+Clicking one of the entry type buttons immediately adds the participant to the queue with a placeholder topic description. The entry appears in the queue for all connected users in real time, and the new entry's topic field opens in inline edit mode with the placeholder text selected so the participant can immediately type a more specific description. The Reply button is only visible when there is a current topic.
 
 ### Queue Display
 
