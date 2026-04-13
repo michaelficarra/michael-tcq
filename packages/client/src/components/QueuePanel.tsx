@@ -570,9 +570,12 @@ function SortableQueueEntry({
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-2 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
-          index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
-        } ${isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
+        className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
+          entry.type === 'point-of-order' ? 'bg-red-50 border border-red-300 my-2'
+            : `border-b border-stone-100 ${index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'}`
+        } ${
+          entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
+        }`}
       >
         {/* Placeholder for drag handle column */}
         {canDrag && <span className="w-4" />}
@@ -622,9 +625,13 @@ function SortableQueueEntry({
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
-        isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
-      } ${isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
+      className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
+        isDragging ? 'opacity-50 bg-stone-200'
+          : entry.type === 'point-of-order' ? 'bg-red-50 border border-red-300 my-2'
+          : `border-b border-stone-100 ${index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'}`
+      } ${
+        entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
+      }`}
     >
       {/* Drag handle — chairs can drag any entry, participants their own */}
       {canDrag && (
