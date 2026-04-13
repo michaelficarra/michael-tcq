@@ -1,9 +1,13 @@
-// Load .env from the project root before anything else.
+// Load environment-specific .env file from the project root before anything else.
 // When run via `npm run dev -w packages/server`, cwd is packages/server,
 // so we resolve relative to this file's location (src/) → up to project root.
 import { join } from 'node:path';
 import dotenv from 'dotenv';
-dotenv.config({ path: join(import.meta.dirname, '../../../.env') });
+const projectRoot = join(import.meta.dirname, '../../..');
+const envSuffix = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+dotenv.config({ path: join(projectRoot, `.env.${envSuffix}`) });
+// Also load .env as a fallback for any values not in the environment-specific file
+dotenv.config({ path: join(projectRoot, '.env') });
 
 import express from 'express';
 import session from 'express-session';

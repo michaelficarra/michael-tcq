@@ -2,17 +2,21 @@
 #
 # Build, push, and deploy TCQ to Google Cloud Run.
 #
-# Reads configuration from .env in the project root. Required fields:
+# Reads configuration from .env.production in the project root. Required fields:
 #
 #   GCP_PROJECT_ID          — GCP project ID (e.g. mtcq-493203)
 #   GCP_REGION              — GCP region (e.g. us-central1)
 #   GCP_SERVICE_ACCOUNT     — Cloud Run service account email
 #   CLOUD_RUN_SERVICE       — Cloud Run service name (e.g. tcq)
+#   SESSION_SECRET          — Session secret for production
+#
+# Optional fields:
+#
 #   FIRESTORE_DATABASE_ID   — Firestore database ID (omit for default)
-#   PROD_SESSION_SECRET     — Session secret for production
-#   PROD_GITHUB_CLIENT_ID   — GitHub OAuth client ID (production)
-#   PROD_GITHUB_CLIENT_SECRET — GitHub OAuth client secret (production)
-#   PROD_GITHUB_CALLBACK_URL  — GitHub OAuth callback URL (production)
+#   GITHUB_CLIENT_ID        — GitHub OAuth client ID
+#   GITHUB_CLIENT_SECRET    — GitHub OAuth client secret
+#   GITHUB_CALLBACK_URL     — GitHub OAuth callback URL
+#   ADMIN_USERNAMES         — Comma-separated admin usernames
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -22,16 +26,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_ROOT/.env"
+ENV_FILE="$PROJECT_ROOT/.env.production"
 
-# --- Load .env ---
+# --- Load .env.production ---
 if [ ! -f "$ENV_FILE" ]; then
-  echo "Error: .env file not found at $ENV_FILE" >&2
-  echo "Copy .env.example to .env and fill in the deployment fields." >&2
+  echo "Error: .env.production not found at $ENV_FILE" >&2
+  echo "Create .env.production with the production deployment fields." >&2
   exit 1
 fi
 
-# Source .env, ignoring comments and empty lines
+# Source .env.production, ignoring comments and empty lines
 set -a
 while IFS= read -r line; do
   # Skip comments and blank lines
@@ -46,22 +50,21 @@ missing=()
 [ -z "${GCP_REGION:-}" ] && missing+=(GCP_REGION)
 [ -z "${GCP_SERVICE_ACCOUNT:-}" ] && missing+=(GCP_SERVICE_ACCOUNT)
 [ -z "${CLOUD_RUN_SERVICE:-}" ] && missing+=(CLOUD_RUN_SERVICE)
-[ -z "${PROD_SESSION_SECRET:-}" ] && missing+=(PROD_SESSION_SECRET)
+[ -z "${SESSION_SECRET:-}" ] && missing+=(SESSION_SECRET)
 
 if [ ${#missing[@]} -gt 0 ]; then
-  echo "Error: missing required fields in .env:" >&2
+  echo "Error: missing required fields in .env.production:" >&2
   printf '  %s\n' "${missing[@]}" >&2
   exit 1
 fi
 
 # GitHub OAuth fields are optional for the first deploy. Without them,
 # the server runs in mock auth mode. Once you have the Cloud Run URL,
-# create a GitHub OAuth App, fill in the PROD_GITHUB_* fields, and
-# redeploy.
-if [ -z "${PROD_GITHUB_CLIENT_ID:-}" ]; then
-  echo "Warning: PROD_GITHUB_CLIENT_ID is not set — deploying with mock auth."
+# create a GitHub OAuth App, fill in the GITHUB_* fields, and redeploy.
+if [ -z "${GITHUB_CLIENT_ID:-}" ]; then
+  echo "Warning: GITHUB_CLIENT_ID is not set — deploying with mock auth."
   echo "         After deploy, note the service URL, create a GitHub OAuth App,"
-  echo "         fill in PROD_GITHUB_* fields in .env, and redeploy."
+  echo "         fill in GITHUB_* fields in .env.production, and redeploy."
   echo ""
 fi
 
@@ -70,19 +73,22 @@ REGISTRY="${GCP_REGION}-docker.pkg.dev"
 IMAGE="${REGISTRY}/${GCP_PROJECT_ID}/tcq/${CLOUD_RUN_SERVICE}:latest"
 
 # Build the env vars string for Cloud Run
-ENV_VARS="STORE=firestore"
-ENV_VARS+=",SESSION_SECRET=${PROD_SESSION_SECRET}"
-if [ -n "${PROD_GITHUB_CLIENT_ID:-}" ]; then
-  ENV_VARS+=",GITHUB_CLIENT_ID=${PROD_GITHUB_CLIENT_ID}"
+ENV_VARS="STORE=${STORE:-firestore}"
+ENV_VARS+=",SESSION_SECRET=${SESSION_SECRET}"
+if [ -n "${GITHUB_CLIENT_ID:-}" ]; then
+  ENV_VARS+=",GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"
 fi
-if [ -n "${PROD_GITHUB_CLIENT_SECRET:-}" ]; then
-  ENV_VARS+=",GITHUB_CLIENT_SECRET=${PROD_GITHUB_CLIENT_SECRET}"
+if [ -n "${GITHUB_CLIENT_SECRET:-}" ]; then
+  ENV_VARS+=",GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}"
 fi
-if [ -n "${PROD_GITHUB_CALLBACK_URL:-}" ]; then
-  ENV_VARS+=",GITHUB_CALLBACK_URL=${PROD_GITHUB_CALLBACK_URL}"
+if [ -n "${GITHUB_CALLBACK_URL:-}" ]; then
+  ENV_VARS+=",GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"
 fi
 if [ -n "${FIRESTORE_DATABASE_ID:-}" ]; then
   ENV_VARS+=",FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID}"
+fi
+if [ -n "${ADMIN_USERNAMES:-}" ]; then
+  ENV_VARS+=",ADMIN_USERNAMES=${ADMIN_USERNAMES}"
 fi
 
 # --- Build ---
