@@ -19,7 +19,7 @@ export function UserMenu() {
   return (
     <a
       href="/auth/logout"
-      className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
+      className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
     >
       Log Out
     </a>
@@ -60,7 +60,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
       <span className="inline-flex items-center gap-3">
         <button
           onClick={() => setOpen(true)}
-          className="text-sm text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
+          className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
           title="Click to switch user (dev mode)"
         >
           <UserBadge user={user} size={20} />
@@ -83,13 +83,14 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
         onChange={(e) => setUsername(e.target.value)}
         placeholder="username"
         autoFocus
-        className="border border-stone-300 rounded px-2 py-0.5 text-sm w-28
+        className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
+                   dark:bg-stone-700 dark:text-stone-100
                    focus:outline-none focus:ring-1 focus:ring-teal-500"
       />
       <button
         type="submit"
         disabled={switching}
-        className="text-sm text-teal-600 hover:text-teal-800 font-medium
+        className="text-sm text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium
                    transition-colors disabled:opacity-50 cursor-pointer"
       >
         {switching ? '…' : 'Switch'}
@@ -97,7 +98,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
       <button
         type="button"
         onClick={() => { setOpen(false); setUsername(''); }}
-        className="text-sm text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
+        className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
       >
         Cancel
       </button>

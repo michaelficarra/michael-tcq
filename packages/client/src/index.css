@@ -6,6 +6,13 @@ body {
 
 #root {
   min-height: 100svh;
+  background-color: var(--color-white);
+}
+
+@media (prefers-color-scheme: dark) {
+  #root {
+    background-color: var(--color-stone-900);
+  }
 }
 
 /*

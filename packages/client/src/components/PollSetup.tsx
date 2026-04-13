@@ -88,7 +88,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
-      <h3 className="text-lg font-semibold text-stone-800 mb-3">
+      <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3">
         Create Poll
       </h3>
 
@@ -103,7 +103,8 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
               onChange={(e) => updateOption(opt.key, 'emoji', e.target.value)}
               placeholder="😀"
               aria-label="Option emoji"
-              className="border border-stone-300 rounded px-2 py-1 text-center text-lg w-12
+              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-center text-lg w-12
+                         dark:bg-stone-700 dark:text-stone-100
                          focus:outline-none focus:ring-1 focus:ring-teal-500"
             />
 
@@ -114,7 +115,8 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
               onChange={(e) => updateOption(opt.key, 'label', e.target.value)}
               placeholder="Label"
               aria-label="Option label"
-              className="border border-stone-300 rounded px-2 py-1 text-sm flex-1
+              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1
+                         dark:bg-stone-700 dark:text-stone-100
                          focus:outline-none focus:ring-1 focus:ring-teal-500"
             />
 
@@ -123,7 +125,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
               type="button"
               onClick={() => removeOption(opt.key)}
               disabled={options.length <= 2}
-              className="text-xs text-stone-400 hover:text-red-600 transition-colors
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors
                          cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Remove option"
             >
@@ -143,21 +145,21 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
       </button>
 
       {/* Submit / Cancel */}
-      <div className="flex gap-2 border-t border-stone-100 pt-3">
+      <div className="flex gap-2 border-t border-stone-100 dark:border-stone-700 pt-3">
         <button
           type="submit"
           disabled={validCount < 2}
           className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
                      hover:bg-teal-600 transition-colors cursor-pointer
                      disabled:opacity-50 disabled:cursor-not-allowed
-                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
         >
           Start Poll
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="text-sm text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
+          className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
         >
           Cancel
         </button>

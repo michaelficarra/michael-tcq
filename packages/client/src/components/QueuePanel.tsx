@@ -211,7 +211,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         <div className="flex items-center gap-3 mb-1">
           <h2
             id="agenda-item-heading"
-            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 select-none"
           >
             Agenda Item
           </h2>
@@ -229,8 +229,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                     }
                     handleNextAgendaItem();
                   }}
-                  className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
                 >
                   Next Agenda Item
                 </button>
@@ -238,8 +238,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               {!meeting.trackPoll && (
                 <button
                   onClick={() => setShowPollSetup(true)}
-                  className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
                 >
                   Create Poll
                 </button>
@@ -250,10 +250,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
         {meeting.currentAgendaItem ? (
           <div className="pl-3">
-            <p className="text-stone-800 font-medium">
+            <p className="text-stone-800 dark:text-stone-200 font-medium">
               <InlineMarkdown>{meeting.currentAgendaItem.name}</InlineMarkdown>
             </p>
-            <div className="text-sm text-stone-500 flex flex-wrap items-center gap-x-2">
+            <div className="text-sm text-stone-500 dark:text-stone-400 flex flex-wrap items-center gap-x-2">
               <UserBadge user={meeting.currentAgendaItem.owner} size={18} />
               {meeting.currentAgendaItem.timebox != null && meeting.currentAgendaItem.timebox > 0 && (
                 <span className="ml-2">
@@ -266,15 +266,15 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </div>
         ) : (
           <div className="pl-3">
-            <p className="text-stone-500">
+            <p className="text-stone-500 dark:text-stone-400">
               Waiting for the meeting to start&hellip;
             </p>
             {/* Start Meeting button — chair only */}
             {isChair && meeting.agenda.length > 0 && (
               <button
                 onClick={handleNextAgendaItem}
-                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+                className="mt-2 border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
+                           text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
               >
                 Start Meeting
               </button>
@@ -288,13 +288,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
-            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none mb-1"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 select-none mb-1"
           >
             Topic
           </h2>
           <div className="pl-3">
-            <p className="text-stone-800"><InlineMarkdown>{meeting.currentTopic.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500" />
+            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{meeting.currentTopic.topic}</InlineMarkdown></p>
+            <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
           </div>
         </section>
       )}
@@ -304,7 +304,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         <div className="flex items-center gap-3 mb-1">
           <h2
             id="speaking-heading"
-            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 select-none"
           >
             Speaking
           </h2>
@@ -313,8 +313,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           {isChair && (meeting.currentSpeaker || meeting.queuedSpeakers.length > 0) && (
             <button
               onClick={handleNextSpeaker}
-              className="text-xs border border-stone-300 rounded px-2 py-0.5
-                         text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+              className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
             >
               Next Speaker
             </button>
@@ -323,11 +323,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
         {meeting.currentSpeaker ? (
           <div className="pl-3">
-            <p className="text-stone-800"><InlineMarkdown>{meeting.currentSpeaker.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.currentSpeaker.user} size={18} className="text-sm text-stone-500" />
+            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{meeting.currentSpeaker.topic}</InlineMarkdown></p>
+            <UserBadge user={meeting.currentSpeaker.user} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
           </div>
         ) : (
-          <p className="text-stone-500 pl-3">
+          <p className="text-stone-500 dark:text-stone-400 pl-3">
             Nobody speaking yet&hellip; enter the queue to get started
           </p>
         )}
@@ -341,7 +341,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         <div className="flex items-center gap-3 mb-1">
           <h2
             id="queue-heading"
-            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 select-none"
           >
             Speaker Queue
           </h2>
@@ -352,16 +352,16 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               {meeting.queuedSpeakers.length > 0 && (
                 <button
                   onClick={handleCopyQueue}
-                  className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
                 >
                   Copy Queue
                 </button>
               )}
               <button
                 onClick={() => setShowRestore(!showRestore)}
-                className="text-xs border border-stone-300 rounded px-2 py-0.5
-                           text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
+                className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                           text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
               >
                 {showRestore ? 'Cancel' : 'Restore Queue'}
               </button>
@@ -371,8 +371,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
         {/* Restore queue textarea — chairs only */}
         {isChair && showRestore && (
-          <div className="mb-3 border border-stone-200 rounded-lg p-3 bg-white">
-            <label htmlFor="restore-queue" className="block text-xs font-medium text-stone-600 mb-1">
+          <div className="mb-3 border border-stone-200 dark:border-stone-700 rounded-lg p-3 bg-white dark:bg-stone-900">
+            <label htmlFor="restore-queue" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
               Paste queue items (one per line: "Type: topic")
             </label>
             <textarea
@@ -381,7 +381,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               onChange={(e) => setRestoreText(e.target.value)}
               placeholder={'New Topic: My discussion point\nClarifying Question: How does this work?\nReply: I agree with the previous speaker\nPoint of Order: We should timebox this'}
               rows={5}
-              className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-2
+              className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-2
+                         dark:bg-stone-700 dark:text-stone-100
                          focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500
                          font-mono"
             />
@@ -391,7 +392,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
                          hover:bg-teal-600 transition-colors cursor-pointer
                          disabled:opacity-50 disabled:cursor-not-allowed
-                         focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                         focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
             >
               Add to Queue
             </button>
@@ -399,7 +400,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         )}
 
         {meeting.queuedSpeakers.length === 0 && !showRestore ? (
-          <p className="text-stone-400 italic text-sm">The queue is empty.</p>
+          <p className="text-stone-400 dark:text-stone-500 italic text-sm">The queue is empty.</p>
         ) : (
           <DndContext
             sensors={sensors}
@@ -443,13 +444,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           aria-modal="true"
         >
           <div
-            className="bg-white rounded-lg shadow-lg border border-stone-200 p-6 max-w-sm w-full mx-4"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 mb-2">
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
               Next Agenda Item
             </h3>
-            <p className="text-sm text-stone-600 mb-4">
+            <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Advancing to the next agenda item will clear the speaker queue
               ({meeting.queuedSpeakers.length}{' '}
               {meeting.queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
@@ -458,7 +459,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowAdvanceConfirm(false)}
-                className="text-sm text-stone-500 hover:text-stone-700
+                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
                            transition-colors cursor-pointer"
               >
                 Cancel
@@ -471,7 +472,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                 }}
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer
-                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Advance
               </button>
@@ -491,7 +492,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           aria-modal="true"
         >
           <div
-            className="bg-white rounded-lg shadow-lg border border-stone-200 max-w-md w-full mx-4"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <PollSetup
@@ -511,7 +512,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           aria-modal="true"
         >
           <div
-            className="bg-white rounded-lg shadow-lg border border-stone-200 mx-4 p-6 w-fit max-w-[calc(100vw-2rem)]"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[calc(100vw-2rem)]"
           >
             <PollReactions />
           </div>
@@ -651,8 +652,8 @@ function SortableQueueEntry({
         ref={setNodeRef}
         style={style}
         className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-          entry.type === 'point-of-order' ? 'bg-red-50 border border-red-300 my-2'
-            : `border-b border-stone-100 ${index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'}`
+          entry.type === 'point-of-order' ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
+            : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
         } ${
           entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
         }`}
@@ -660,7 +661,7 @@ function SortableQueueEntry({
         {/* Placeholder for drag handle column */}
         {canDrag && <span className="w-4" />}
 
-        <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-center">
+        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center">
           {index + 1}
         </span>
 
@@ -679,19 +680,20 @@ function SortableQueueEntry({
             // immediately start typing to replace the placeholder.
             // Uses a stable ref via useCallback to run only once.
             ref={editInputRef}
-            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
           <button
             type="submit"
-            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
           >
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
           >
             Cancel
           </button>
@@ -706,9 +708,9 @@ function SortableQueueEntry({
       ref={setNodeRef}
       style={style}
       className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-        isDragging ? 'opacity-50 bg-stone-200'
-          : entry.type === 'point-of-order' ? 'bg-red-50 border border-red-300 my-2'
-          : `border-b border-stone-100 ${index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'}`
+        isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
+          : entry.type === 'point-of-order' ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
+          : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
       } ${
         entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
       }`}
@@ -716,7 +718,7 @@ function SortableQueueEntry({
       {/* Drag handle — chairs can drag any entry, participants their own */}
       {canDrag && (
         <span
-          className="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing
+          className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 cursor-grab active:cursor-grabbing
                      select-none text-sm leading-none presentation-hidden"
           aria-label={`Drag to reorder: ${entry.topic}`}
           {...attributes}
@@ -727,7 +729,7 @@ function SortableQueueEntry({
       )}
 
       {/* Position number */}
-      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-center">
+      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center">
         {index + 1}
       </span>
 
@@ -747,10 +749,10 @@ function SortableQueueEntry({
             {entryTypeLabel(entry.type)}:
           </span>
         )}
-        <InlineMarkdown className="ml-1 text-stone-800">{entry.topic}</InlineMarkdown>
+        <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
 
         {/* Speaker info */}
-        <div className="text-sm text-stone-500">
+        <div className="text-sm text-stone-500 dark:text-stone-400">
           <UserBadge user={entry.user} size={16} />
         </div>
       </div>
@@ -761,7 +763,7 @@ function SortableQueueEntry({
           {canEdit && (
             <button
               onClick={startEditing}
-              className="text-xs text-stone-400 hover:text-teal-600
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
                          transition-colors cursor-pointer"
               aria-label={`Edit entry: ${entry.topic}`}
             >
@@ -771,7 +773,7 @@ function SortableQueueEntry({
           {canDelete && (
             <button
               onClick={() => onDelete(entry.id)}
-              className="text-xs text-stone-400 hover:text-red-600
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
                          transition-colors cursor-pointer"
               aria-label={`Delete entry: ${entry.topic}`}
             >
@@ -812,7 +814,7 @@ export function entryTypeColor(type: string): string {
     case 'topic': return 'text-blue-600';
     case 'reply': return 'text-cyan-600';
     case 'question': return 'text-green-600';
-    case 'point-of-order': return 'text-red-600';
-    default: return 'text-stone-600';
+    case 'point-of-order': return 'text-red-600 dark:text-red-400';
+    default: return 'text-stone-600 dark:text-stone-400';
   }
 }

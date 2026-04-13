@@ -10,7 +10,7 @@ interface LogoProps {
 
 export function Logo({ className = 'text-xl sm:text-2xl' }: LogoProps) {
   return (
-    <span className={`${className} font-semibold text-stone-800 select-none inline-flex items-center gap-1.5`}>
+    <span className={`${className} font-semibold text-stone-800 dark:text-stone-200 select-none inline-flex items-center gap-1.5`}>
       {/* Inline SVG of the stacked speech bubbles favicon */}
       <svg
         xmlns="http://www.w3.org/2000/svg"

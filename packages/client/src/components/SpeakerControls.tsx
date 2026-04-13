@@ -79,7 +79,7 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
               onClick={() => onAddEntry(config.type, config.placeholder)}
               className={`text-white text-sm font-medium px-3 py-1.5 rounded
                          transition-colors cursor-pointer
-                         focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+                         focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-stone-900 focus:ring-blue-500
                          ${config.bgClass}`}
             >
               {config.label}

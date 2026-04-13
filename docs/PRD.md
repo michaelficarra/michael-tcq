@@ -272,6 +272,10 @@ Pressing `f` toggles presentation mode. In presentation mode:
 
 Pressing `f` again (or exiting fullscreen via the browser) returns to normal mode.
 
+## Dark Mode
+
+The application supports dark mode via `prefers-color-scheme: dark`. When the user's operating system is set to a dark colour scheme, the UI automatically switches to a dark palette. There is no manual toggle — it follows the system preference.
+
 ## Persistence
 
 Meeting state is held in memory on the server and periodically synchronised to a persistent store (every 30 seconds for changed meetings, immediately for high-value events like agenda/speaker advancement). On server startup, meetings are restored from the store. When all clients disconnect from a meeting, a cleanup timer starts (5 minutes); if no one reconnects, the meeting is deleted.

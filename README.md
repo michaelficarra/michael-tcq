@@ -26,6 +26,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Agenda import** — chairs can import an agenda from a URL to a markdown document (e.g. a TC39 meeting agenda on GitHub). The parser extracts items from both numbered lists and markdown tables, preserving markdown formatting in item names.
 - **Inline markdown** — agenda item names and queue entry topics support a limited subset of inline markdown: bold, italic, strikethrough, code, and links. Rendered in the UI wherever items are displayed.
 - **Confirmation on agenda advancement** — advancing to the next agenda item prompts for confirmation when the queue is non-empty, preventing accidental queue loss.
+- **Dark mode** — automatically follows the system colour scheme via `prefers-color-scheme`. No manual toggle needed.
 - **Sticky navigation** — the navigation bar stays fixed at the top of the page when scrolling long agendas or queues.
 - **Memorable meeting IDs** — meetings use human-readable word-based IDs (e.g. `bright-pine-lake`) instead of opaque random strings.
 - **Modern, familiar tech stack** — built with React, Vite, Tailwind CSS, Express, and Socket.IO — widely known technologies that lower the contribution barrier. TypeScript throughout with strict mode.

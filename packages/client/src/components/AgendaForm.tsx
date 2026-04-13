@@ -51,13 +51,13 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-stone-200 pt-4">
-      <h3 className="text-sm font-semibold text-stone-700 mb-3">New Agenda Item</h3>
+    <form onSubmit={handleSubmit} className="border-t border-stone-200 dark:border-stone-700 pt-4">
+      <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-3">New Agenda Item</h3>
 
       <div className="flex flex-wrap gap-3 items-start">
         {/* Name field */}
         <div className="flex-1 min-w-[200px]">
-          <label htmlFor="agenda-name" className="block text-xs font-medium text-stone-600 mb-1">
+          <label htmlFor="agenda-name" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
             Agenda Item Name
           </label>
           <input
@@ -67,14 +67,15 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="w-full border border-stone-300 rounded px-3 py-1.5 text-sm
+            className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
         </div>
 
         {/* Owner field */}
         <div className="min-w-[160px]">
-          <label htmlFor="agenda-owner" className="block text-xs font-medium text-stone-600 mb-1">
+          <label htmlFor="agenda-owner" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
             Owner
           </label>
           <input
@@ -83,15 +84,16 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             value={ownerUsername}
             onChange={(e) => setOwnerUsername(e.target.value)}
             required
-            className="w-full border border-stone-300 rounded px-3 py-1.5 text-sm
+            className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-stone-400 mt-0.5">GitHub username (omit the @)</p>
+          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">GitHub username (omit the @)</p>
         </div>
 
         {/* Timebox field */}
         <div className="w-24">
-          <label htmlFor="agenda-timebox" className="block text-xs font-medium text-stone-600 mb-1">
+          <label htmlFor="agenda-timebox" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
             Timebox
           </label>
           <input
@@ -102,10 +104,11 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             value={timebox}
             onChange={(e) => setTimebox(e.target.value)}
             placeholder=""
-            className="w-full border border-stone-300 rounded px-3 py-1.5 text-sm
+            className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-stone-400 mt-0.5">Minutes</p>
+          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">Minutes</p>
         </div>
 
         {/* Buttons — vertically centred relative to the input row */}
@@ -114,7 +117,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             type="submit"
             className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
                        hover:bg-teal-600 transition-colors cursor-pointer
-                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
           >
             Create
           </button>
@@ -123,7 +126,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             onClick={onCancel}
             className="bg-rose-400 text-white px-4 py-1.5 rounded text-sm font-medium
                        hover:bg-rose-500 transition-colors cursor-pointer
-                       focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-2"
+                       focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
           >
             Cancel
           </button>

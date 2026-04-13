@@ -1,25 +1,26 @@
 /**
- * Home page — tabbed layout with "Join Meeting" (create/join forms)
- * and "Help" (usage guide) tabs.
+ * Home page — shown when the user is not in a meeting.
+ *
+ * Two tabs:
+ * - "Join Meeting" — cards for joining or creating a meeting, plus admin panel.
+ * - "Help" — usage guide (shared HelpPanel component).
  */
 
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
-import { UserMenu } from '../components/UserMenu.js';
+import { AdminPanel } from '../components/AdminPanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
-import { AdminPanel } from '../components/AdminPanel.js';
-
-type HomeTab = 'join' | 'help';
+import { UserMenu } from '../components/UserMenu.js';
 
 export function HomePage() {
-  const [activeTab, setActiveTab] = useState<HomeTab>('join');
+  const [activeTab, setActiveTab] = useState<'join' | 'help'>('join');
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
       <nav
-        className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 bg-white px-3 sm:px-6 py-3"
+        className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 py-3"
         aria-label="Main navigation"
       >
         {/* Branding */}
@@ -32,8 +33,8 @@ export function HomePage() {
             aria-selected={activeTab === 'join'}
             className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
               activeTab === 'join'
-                ? 'text-stone-900 border-teal-500'
-                : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+                ? 'text-stone-900 dark:text-stone-100 border-teal-500'
+                : 'text-stone-400 dark:text-stone-500 border-transparent hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600'
             }`}
             onClick={() => setActiveTab('join')}
           >
@@ -44,8 +45,8 @@ export function HomePage() {
             aria-selected={activeTab === 'help'}
             className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
               activeTab === 'help'
-                ? 'text-stone-900 border-teal-500'
-                : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+                ? 'text-stone-900 dark:text-stone-100 border-teal-500'
+                : 'text-stone-400 dark:text-stone-500 border-transparent hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600'
             }`}
             onClick={() => setActiveTab('help')}
           >
@@ -111,11 +112,11 @@ function JoinMeetingCard() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
-      <h2 className="text-lg font-semibold text-stone-800 mb-4">Join Meeting</h2>
+    <div className="bg-white dark:bg-stone-800 rounded-lg shadow-sm border border-stone-200 dark:border-stone-700 p-6">
+      <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-4">Join Meeting</h2>
 
       <form onSubmit={handleSubmit}>
-        <label htmlFor="meeting-id" className="block text-sm font-medium text-stone-700 mb-1">
+        <label htmlFor="meeting-id" className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">
           Meeting ID
         </label>
         <input
@@ -125,20 +126,21 @@ function JoinMeetingCard() {
           onChange={(e) => setMeetingId(e.target.value)}
           placeholder="e.g. bright-pine-lake"
           required
-          className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-1
+          className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-1
+                     bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
         />
 
         {/* Error message */}
         {error && (
-          <p className="text-red-600 text-sm mb-2" role="alert">{error}</p>
+          <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">{error}</p>
         )}
 
         <button
           type="submit"
           className="mt-2 bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
                      hover:bg-teal-600 transition-colors cursor-pointer
-                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-800"
         >
           Join
         </button>
@@ -184,17 +186,17 @@ function NewMeetingCard() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
-      <h2 className="text-lg font-semibold text-stone-800 mb-4">New Meeting</h2>
+    <div className="bg-white dark:bg-stone-800 rounded-lg shadow-sm border border-stone-200 dark:border-stone-700 p-6">
+      <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-4">New Meeting</h2>
 
-      <p className="text-sm text-stone-500 mb-4">
+      <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
         You will be the initial chair. Additional chairs can be added
         from the Agenda tab after the meeting is created.
       </p>
 
       {/* Error message */}
       {error && (
-        <p className="text-red-600 text-sm mb-2" role="alert">{error}</p>
+        <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">{error}</p>
       )}
 
       <button
@@ -202,7 +204,7 @@ function NewMeetingCard() {
         disabled={loading || !user}
         className="bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
                    hover:bg-teal-600 transition-colors cursor-pointer disabled:opacity-50
-                   focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                   focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-800"
       >
         {loading ? 'Creating…' : 'Start a New Meeting'}
       </button>

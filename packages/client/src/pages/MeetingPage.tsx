@@ -133,18 +133,18 @@ function MeetingPageInner() {
   // Error state — show error message with a link back to the home page
   if (error && !meeting) {
     return (
-      <div className="min-h-screen bg-stone-50">
+      <div className="min-h-screen bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="p-6 max-w-xl mx-auto text-center mt-12">
-          <h1 className="text-xl font-semibold text-stone-800 mb-2">
+          <h1 className="text-xl font-semibold text-stone-800 dark:text-stone-200 mb-2">
             {error}
           </h1>
-          <p className="text-stone-500 mb-4">
+          <p className="text-stone-500 dark:text-stone-400 mb-4">
             The meeting you're looking for doesn't exist or is no longer available.
           </p>
           <Link
             to="/"
-            className="text-teal-600 hover:text-teal-800 font-medium transition-colors"
+            className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
           >
             Back to home
           </Link>
@@ -156,13 +156,13 @@ function MeetingPageInner() {
   // Loading state — haven't received meeting data yet
   if (!meeting) {
     return (
-      <div className="min-h-screen bg-stone-50">
+      <div className="min-h-screen bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="p-6">
           {!connected ? (
-            <p className="text-stone-500">Connecting&hellip;</p>
+            <p className="text-stone-500 dark:text-stone-400">Connecting&hellip;</p>
           ) : (
-            <p className="text-stone-500">Loading meeting&hellip;</p>
+            <p className="text-stone-500 dark:text-stone-400">Loading meeting&hellip;</p>
           )}
         </main>
       </div>
@@ -171,7 +171,7 @@ function MeetingPageInner() {
 
   return (
     <SocketContext value={socket}>
-      <div className={`min-h-screen bg-stone-50 ${presentationMode ? 'presentation-mode' : ''}`}>
+      <div className={`min-h-screen bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}>
         {/* Navigation and controls are hidden in presentation mode */}
         {!presentationMode && (
           <>
@@ -180,14 +180,14 @@ function MeetingPageInner() {
             {/* Dismissible error banner for non-fatal errors */}
             {error && (
               <div
-                className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-700
+                className="bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-2 text-sm text-red-700 dark:text-red-300
                            flex items-center justify-between"
                 role="alert"
               >
                 <span>{error}</span>
                 <button
                   onClick={() => dispatch({ type: 'setError', error: '' })}
-                  className="text-red-400 hover:text-red-600 ml-4 cursor-pointer"
+                  className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 ml-4 cursor-pointer"
                   aria-label="Dismiss error"
                 >
                   ✕

@@ -102,12 +102,12 @@ export function AgendaPanel() {
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm ? (
         <div className="mb-4">
-          <p className="text-stone-400 italic mb-2">No agenda items yet.</p>
+          <p className="text-stone-400 dark:text-stone-500 italic mb-2">No agenda items yet.</p>
           {isChair && !showImport && (
             <button
               onClick={() => { setShowImport(true); setImportError(null); }}
-              className="border border-stone-300 rounded px-3 py-1 text-sm font-medium
-                         text-stone-600 hover:bg-stone-100 transition-colors
+              className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
                          cursor-pointer presentation-hidden"
             >
               Import Agenda from URL
@@ -152,7 +152,8 @@ export function AgendaPanel() {
                 required
                 autoFocus
                 aria-label="Agenda markdown URL"
-                className="border border-stone-300 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
+                className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
+                           dark:bg-stone-700 dark:text-stone-100
                            focus:outline-none focus:ring-1 focus:ring-teal-500"
               />
               <button
@@ -167,12 +168,12 @@ export function AgendaPanel() {
               <button
                 type="button"
                 onClick={() => { setShowImport(false); setImportUrl(''); setImportError(null); }}
-                className="text-sm text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
+                className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               {importError && (
-                <p className="text-red-600 text-sm w-full" role="alert">{importError}</p>
+                <p className="text-red-600 dark:text-red-400 text-sm w-full" role="alert">{importError}</p>
               )}
             </form>
           )}
@@ -214,8 +215,8 @@ export function AgendaPanel() {
         ) : (
           <button
             onClick={() => setShowForm(true)}
-            className="border border-stone-300 rounded px-3 py-1 text-sm font-medium
-                       text-stone-600 hover:bg-stone-100 transition-colors
+            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                       text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
                        cursor-pointer presentation-hidden"
           >
             New Agenda Item
@@ -290,11 +291,11 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
-          index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
+          index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'
         } ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
       >
-        <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none">
+        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
           {index + 1}
         </span>
 
@@ -306,7 +307,8 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
             required
             autoFocus
             aria-label="Agenda item name"
-            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
           <input
@@ -315,7 +317,8 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
             onChange={(e) => setEditOwner(e.target.value)}
             required
             aria-label="Owner username"
-            className="border border-stone-300 rounded px-2 py-0.5 text-sm w-28
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
           <input
@@ -326,19 +329,20 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
             max="999"
             placeholder="min"
             aria-label="Timebox in minutes"
-            className="border border-stone-300 rounded px-2 py-0.5 text-sm w-16
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-16
+                       dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
           <button
             type="submit"
-            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
           >
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
           >
             Cancel
           </button>
@@ -352,27 +356,27 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
-        isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
+      className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
+        isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'
       } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
       {/* Item number */}
-      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right select-none">
+      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
         {index + 1}
       </span>
 
       <div className="flex-1 min-w-0">
         {/* Item name */}
-        <InlineMarkdown className="font-medium text-stone-800 align-middle">{item.name}</InlineMarkdown>
+        <InlineMarkdown className="font-medium text-stone-800 dark:text-stone-200 align-middle">{item.name}</InlineMarkdown>
 
         {/* Owner info */}
-        <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500" />
+        <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500 dark:text-stone-400" />
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (
-          <span className="ml-2 text-sm text-stone-400 align-middle">
+          <span className="ml-2 text-sm text-stone-400 dark:text-stone-500 align-middle">
             {item.timebox} {item.timebox === 1 ? 'minute' : 'minutes'}
           </span>
         )}
@@ -383,14 +387,14 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
         <div className="flex gap-3 shrink-0 presentation-hidden">
           <button
             onClick={startEditing}
-            className="text-xs text-stone-400 hover:text-teal-600 transition-colors cursor-pointer"
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
             aria-label={`Edit ${item.name}`}
           >
             edit
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="text-xs text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             aria-label={`Delete ${item.name}`}
           >
             delete
@@ -449,18 +453,18 @@ function ChairsSection() {
 
   return (
     <section className="mb-5" aria-label="Meeting chairs">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-stone-700">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
           Chairs
         </h2>
 
         {meeting.chairs.map((chair) => (
-          <span key={chair.ghUsername} className={`inline-flex items-center gap-1 bg-stone-200 rounded-full pl-1 py-1 select-none ${canRemove(chair.ghUsername) ? 'pr-1' : 'pr-2'}`}>
+          <span key={chair.ghUsername} className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chair.ghUsername) ? 'pr-1' : 'pr-2'}`}>
             <UserBadge user={chair} size={18} />
             {canRemove(chair.ghUsername) && (
               <button
                 onClick={() => setRemoveConfirm(chair.ghUsername)}
-                className="text-red-400 hover:text-red-600 transition-colors
+                className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors
                            cursor-pointer presentation-hidden"
                 aria-label={`Remove chair ${chair.ghUsername}`}
               >
@@ -475,7 +479,7 @@ function ChairsSection() {
         {canEditChairs && !adding && (
           <button
             onClick={() => setAdding(true)}
-            className="text-teal-500 hover:text-teal-700 transition-colors
+            className="text-teal-500 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors
                        cursor-pointer presentation-hidden"
             aria-label="Add chair"
           >
@@ -495,19 +499,20 @@ function ChairsSection() {
               required
               placeholder="username"
               aria-label="New chair username"
-              className="border border-stone-300 rounded px-2 py-0.5 text-sm w-28
+              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
+                         dark:bg-stone-700 dark:text-stone-100
                          focus:outline-none focus:ring-1 focus:ring-teal-500"
             />
             <button
               type="submit"
-              className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
             >
               Add
             </button>
             <button
               type="button"
               onClick={() => { setAdding(false); setAddValue(''); }}
-              className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
             </button>
@@ -524,19 +529,19 @@ function ChairsSection() {
           aria-label="Confirm chair removal"
         >
           <div
-            className="bg-white rounded-lg shadow-lg p-6 max-w-sm mx-4"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 p-6 max-w-sm mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 mb-2">
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
               Remove Chair
             </h3>
-            <p className="text-sm text-stone-600 mb-4">
+            <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Remove <strong>{removeConfirm}</strong> from the chair list?
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setRemoveConfirm(null)}
-                className="text-sm text-stone-500 hover:text-stone-700
+                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
                            transition-colors cursor-pointer"
               >
                 Cancel
@@ -546,7 +551,7 @@ function ChairsSection() {
                 autoFocus
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer
-                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Remove
               </button>

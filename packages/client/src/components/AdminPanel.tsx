@@ -72,48 +72,48 @@ export function AdminPanel() {
 
   return (
     <div className="mt-8">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 mb-3">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">
         Admin — Active Meetings
       </h2>
 
       {meetings.length === 0 ? (
-        <p className="text-sm text-stone-400 italic">No active meetings.</p>
+        <p className="text-sm text-stone-400 dark:text-stone-500 italic">No active meetings.</p>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-stone-200 overflow-hidden">
+        <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-stone-200 bg-stone-50 text-left">
-                <th className="px-4 py-2 font-medium text-stone-600">Meeting ID</th>
-                <th className="px-4 py-2 font-medium text-stone-600">Chairs</th>
-                <th className="px-4 py-2 font-medium text-stone-600">Agenda</th>
-                <th className="px-4 py-2 font-medium text-stone-600">Queue</th>
-                <th className="px-4 py-2 font-medium text-stone-600">Max Connections</th>
-                <th className="px-4 py-2 font-medium text-stone-600">Last Connection</th>
-                <th className="px-4 py-2 font-medium text-stone-600"></th>
+              <tr className="border-b border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-left">
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Meeting ID</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Chairs</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Agenda</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Queue</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Max Connections</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Last Connection</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400"></th>
               </tr>
             </thead>
             <tbody>
               {meetings.map((m) => (
-                <tr key={m.id} className="border-b border-stone-100 last:border-b-0">
+                <tr key={m.id} className="border-b border-stone-100 dark:border-stone-700 last:border-b-0">
                   <td className="px-4 py-2">
                     <Link
                       to={`/meeting/${m.id}`}
-                      className="text-teal-600 hover:text-teal-800 font-medium transition-colors"
+                      className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
                     >
                       {m.id}
                     </Link>
                   </td>
-                  <td className="px-4 py-2 text-stone-600">{m.chairCount}</td>
-                  <td className="px-4 py-2 text-stone-600">{m.agendaItemCount}</td>
-                  <td className="px-4 py-2 text-stone-600">{m.queuedSpeakerCount}</td>
-                  <td className="px-4 py-2 text-stone-600">{m.maxConcurrent}</td>
-                  <td className="px-4 py-2 text-stone-600">
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.chairCount}</td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.agendaItemCount}</td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.queuedSpeakerCount}</td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.maxConcurrent}</td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">
                     {formatLastConnection(m)}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => setDeleteConfirm(m.id)}
-                      className="text-xs text-stone-400 hover:text-red-600
+                      className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
                                  transition-colors cursor-pointer"
                     >
                       Delete
@@ -136,13 +136,13 @@ export function AdminPanel() {
           aria-modal="true"
         >
           <div
-            className="bg-white rounded-lg shadow-lg border border-stone-200 p-6 max-w-sm w-full mx-4"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 mb-2">
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
               Delete Meeting
             </h3>
-            <p className="text-sm text-stone-600 mb-4">
+            <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Are you sure you want to delete meeting{' '}
               <strong>{deleteConfirm}</strong>? This will disconnect all
               participants and cannot be undone.
@@ -150,7 +150,7 @@ export function AdminPanel() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="text-sm text-stone-500 hover:text-stone-700
+                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
                            transition-colors cursor-pointer"
               >
                 Cancel
@@ -160,7 +160,7 @@ export function AdminPanel() {
                 autoFocus
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer
-                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Delete
               </button>

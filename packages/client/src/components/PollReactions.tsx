@@ -82,19 +82,19 @@ export function PollReactions() {
               className={`flex flex-col items-center px-3 py-2 rounded-lg border
                          transition-colors cursor-pointer min-w-[5rem]
                          ${isSelected
-                           ? 'border-teal-400 bg-teal-50'
-                           : 'border-stone-200 bg-white hover:bg-stone-50'
+                           ? 'border-teal-400 dark:border-teal-600 bg-teal-50 dark:bg-teal-900/30'
+                           : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800'
                          }`}
             >
               {/* Label above the emoji */}
-              <span className="text-[10px] font-medium text-stone-500 mb-0.5 leading-tight">
+              <span className="text-[10px] font-medium text-stone-500 dark:text-stone-400 mb-0.5 leading-tight">
                 {option.label}
               </span>
               {/* Emoji and count */}
               <span className="text-lg leading-none">
                 {option.emoji}
               </span>
-              <span className="text-xs font-semibold text-stone-600 mt-0.5">
+              <span className="text-xs font-semibold text-stone-600 dark:text-stone-400 mt-0.5">
                 {count}
               </span>
             </button>
@@ -107,15 +107,15 @@ export function PollReactions() {
         <div className="flex gap-2 mt-3">
           <button
             onClick={handleCopyResults}
-            className="border border-stone-300 rounded px-3 py-1 text-sm
-                       text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
+                       text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
           >
             Copy Results
           </button>
           <button
             onClick={() => socket?.emit('poll:stop')}
-            className="border border-stone-300 rounded px-3 py-1 text-sm
-                       text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
+                       text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
           >
             Stop Poll
           </button>

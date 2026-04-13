@@ -56,7 +56,7 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
       <span>
         {user.name}
         {user.organisation && (
-          <span className="text-stone-400"> ({user.organisation})</span>
+          <span className="text-stone-400 dark:text-stone-500"> ({user.organisation})</span>
         )}
       </span>
     </span>

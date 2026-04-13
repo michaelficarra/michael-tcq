@@ -38,7 +38,7 @@ function markdownToHtml(text: string): string {
   const codeSpans: string[] = [];
   let processed = text.replace(/`([^`]+)`/g, (_match, code: string) => {
     const idx = codeSpans.length;
-    codeSpans.push(`<code class="bg-stone-100 text-stone-800 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`);
+    codeSpans.push(`<code class="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`);
     return `\x00CODE${idx}\x00`;
   });
 
@@ -48,7 +48,7 @@ function markdownToHtml(text: string): string {
   // Links: [text](url)
   processed = processed.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-600 hover:text-teal-800 underline">$1</a>',
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 underline">$1</a>',
   );
 
   // Bold: **text**

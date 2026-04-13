@@ -36,8 +36,8 @@ function TabButton({
       aria-controls={`panel-${tab}`}
       className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
         isActive
-          ? 'text-stone-900 border-teal-500'
-          : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+          ? 'text-stone-900 dark:text-stone-100 border-teal-500'
+          : 'text-stone-400 dark:text-stone-500 border-transparent hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600'
       }`}
       onClick={() => onTabChange(tab)}
     >
@@ -49,7 +49,7 @@ function TabButton({
 export function NavBar({ activeTab, onTabChange }: NavBarProps) {
   return (
     <nav
-      className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 bg-white px-3 sm:px-6 py-3"
+      className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 py-3"
       aria-label="Main navigation"
     >
       {/* Branding */}
