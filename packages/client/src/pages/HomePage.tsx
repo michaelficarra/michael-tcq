@@ -1,29 +1,75 @@
 /**
- * Home page — landing page with Join Meeting and New Meeting forms.
- *
- * Join Meeting: enter a meeting ID to navigate to it.
- * New Meeting: specify chairs (comma-separated GitHub usernames) to
- * create a new meeting and be redirected to it.
+ * Home page — tabbed layout with "Join Meeting" (create/join forms)
+ * and "Help" (usage guide) tabs.
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { UserMenu } from '../components/UserMenu.js';
+import { HelpPanel } from '../components/HelpPanel.js';
+
+type HomeTab = 'join' | 'help';
 
 export function HomePage() {
+  const [activeTab, setActiveTab] = useState<HomeTab>('join');
+
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
-      <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
-        <span className="text-2xl font-semibold text-stone-800">TCQ</span>
-        <UserMenu />
-      </header>
+      <nav
+        className="flex items-center gap-3 sm:gap-6 border-b border-stone-200 bg-white px-3 sm:px-6 py-3"
+        aria-label="Main navigation"
+      >
+        {/* Branding */}
+        <span className="text-xl sm:text-2xl font-semibold text-stone-800 select-none">
+          TCQ
+        </span>
 
-      <main className="p-6 max-w-3xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <JoinMeetingCard />
-          <NewMeetingCard />
+        {/* Tab toggles */}
+        <div className="flex gap-4" role="tablist" aria-label="Home views">
+          <button
+            role="tab"
+            aria-selected={activeTab === 'join'}
+            className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
+              activeTab === 'join'
+                ? 'text-stone-900 border-teal-500'
+                : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+            }`}
+            onClick={() => setActiveTab('join')}
+          >
+            Join Meeting
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'help'}
+            className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
+              activeTab === 'help'
+                ? 'text-stone-900 border-teal-500'
+                : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+            }`}
+            onClick={() => setActiveTab('help')}
+          >
+            Help
+          </button>
         </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* User menu */}
+        <UserMenu />
+      </nav>
+
+      <main>
+        {activeTab === 'join' && (
+          <div className="p-6 max-w-3xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <JoinMeetingCard />
+              <NewMeetingCard />
+            </div>
+          </div>
+        )}
+        {activeTab === 'help' && <HelpPanel />}
       </main>
     </div>
   );

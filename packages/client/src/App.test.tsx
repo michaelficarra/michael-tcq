@@ -55,11 +55,11 @@ describe('LoginPage', () => {
 describe('HomePage', () => {
   it('renders Join Meeting and New Meeting cards', async () => {
     renderHomePage();
-    // Wait for auth to resolve
+    // Wait for auth to resolve — check for the card headings (h2)
     await waitFor(() => {
-      expect(screen.getByText('Join Meeting')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Join Meeting' })).toBeInTheDocument();
     });
-    expect(screen.getByText('New Meeting')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'New Meeting' })).toBeInTheDocument();
   });
 
   // -- Join Meeting --

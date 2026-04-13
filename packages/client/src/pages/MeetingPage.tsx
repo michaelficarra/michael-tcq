@@ -12,14 +12,15 @@ import { MeetingProvider, useMeetingState, useMeetingDispatch } from '../context
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
-import { NavBar } from '../components/NavBar.js';
+import { NavBar, type Tab } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
+import { HelpPanel } from '../components/HelpPanel.js';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
 function MeetingPageInner() {
   const { id: meetingId } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<'agenda' | 'queue'>('queue');
+  const [activeTab, setActiveTab] = useState<Tab>('queue');
   const { meeting, connected, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
@@ -98,7 +99,9 @@ function MeetingPageInner() {
         )}
 
         <main>
-          {activeTab === 'agenda' ? <AgendaPanel /> : <QueuePanel />}
+          {activeTab === 'agenda' && <AgendaPanel />}
+          {activeTab === 'queue' && <QueuePanel />}
+          {activeTab === 'help' && <HelpPanel />}
         </main>
       </div>
     </SocketContext>

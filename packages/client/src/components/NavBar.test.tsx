@@ -23,16 +23,18 @@ describe('NavBar', () => {
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
-  it('renders Agenda and Queue tab buttons', () => {
+  it('renders Agenda, Queue, and Help tab buttons', () => {
     render(<NavBar activeTab="queue" onTabChange={() => {}} />);
     expect(screen.getByRole('tab', { name: 'Agenda' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Queue' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Help' })).toBeInTheDocument();
   });
 
   it('marks the active tab as selected', () => {
     render(<NavBar activeTab="agenda" onTabChange={() => {}} />);
     expect(screen.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'false');
   });
 
   it('calls onTabChange when a tab is clicked', () => {

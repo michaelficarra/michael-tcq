@@ -1,15 +1,47 @@
 /**
  * Top navigation bar shown on the meeting page.
  *
- * Layout mirrors the original: "TCQ" branding on the left, Agenda/Queue tab
- * toggles, and the user menu (Log Out or dev user-switcher) on the right.
+ * Layout: "TCQ" branding on the left, Agenda/Queue/Help tab toggles,
+ * and the user menu (Log Out or dev user-switcher) on the right.
  */
 
 import { UserMenu } from './UserMenu.js';
 
+export type Tab = 'agenda' | 'queue' | 'help';
+
 interface NavBarProps {
-  activeTab: 'agenda' | 'queue';
-  onTabChange: (tab: 'agenda' | 'queue') => void;
+  activeTab: Tab;
+  onTabChange: (tab: Tab) => void;
+}
+
+/** Shared tab button styling. */
+function TabButton({
+  tab,
+  activeTab,
+  onTabChange,
+  label,
+}: {
+  tab: Tab;
+  activeTab: Tab;
+  onTabChange: (tab: Tab) => void;
+  label: string;
+}) {
+  const isActive = activeTab === tab;
+  return (
+    <button
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={`panel-${tab}`}
+      className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
+        isActive
+          ? 'text-stone-900 border-teal-500'
+          : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
+      }`}
+      onClick={() => onTabChange(tab)}
+    >
+      {label}
+    </button>
+  );
 }
 
 export function NavBar({ activeTab, onTabChange }: NavBarProps) {
@@ -23,34 +55,11 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
         TCQ
       </span>
 
-      {/* Tab toggles — active tab has a bold underline for clear indication */}
+      {/* Tab toggles — active tab has a teal underline */}
       <div className="flex gap-4" role="tablist" aria-label="Meeting views">
-        <button
-          role="tab"
-          aria-selected={activeTab === 'agenda'}
-          aria-controls="panel-agenda"
-          className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
-            activeTab === 'agenda'
-              ? 'text-stone-900 border-teal-500'
-              : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
-          }`}
-          onClick={() => onTabChange('agenda')}
-        >
-          Agenda
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'queue'}
-          aria-controls="panel-queue"
-          className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
-            activeTab === 'queue'
-              ? 'text-stone-900 border-teal-500'
-              : 'text-stone-400 border-transparent hover:text-stone-600 hover:border-stone-300'
-          }`}
-          onClick={() => onTabChange('queue')}
-        >
-          Queue
-        </button>
+        <TabButton tab="agenda" activeTab={activeTab} onTabChange={onTabChange} label="Agenda" />
+        <TabButton tab="queue" activeTab={activeTab} onTabChange={onTabChange} label="Queue" />
+        <TabButton tab="help" activeTab={activeTab} onTabChange={onTabChange} label="Help" />
       </div>
 
       {/* Spacer */}
