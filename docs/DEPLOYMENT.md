@@ -2,7 +2,18 @@
 
 TCQ is deployed as a single Docker container on Google Cloud Run, with Firestore for persistent storage. See [ARCHITECTURE.md](ARCHITECTURE.md) for the rationale behind these choices.
 
-Deployment is done via the `scripts/deploy.sh` script, which reads configuration from `.env`.
+Deployment is done via the `scripts/deploy.sh` script, which reads configuration from `.env.production`.
+
+## Environment Files
+
+TCQ uses environment-specific `.env` files:
+
+| File | Purpose | Committed to git? |
+|------|---------|-------------------|
+| `.env.development` | Local development defaults (no secrets) | Yes |
+| `.env.production` | Production config and secrets | No (gitignored) |
+
+The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In development (`npm run dev`), `NODE_ENV` is unset so `.env.development` is used. In production (`NODE_ENV=production`), `.env.production` is used.
 
 ## Prerequisites
 
@@ -62,17 +73,27 @@ gcloud artifacts repositories create tcq --repository-format=docker --location=u
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-### 6. Configure .env
+### 6. Create `.env.production`
 
-Copy `.env.example` to `.env` (if you haven't already) and fill in the deployment fields:
+Create `.env.production` in the project root with the deployment fields:
 
 ```
+# Production environment
+ADMIN_USERNAMES=your-github-username
+
+# Persistence
+STORE=firestore
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+FIRESTORE_DATABASE_ID=<your-database-id>    # omit if using (default)
+
+# Session
+SESSION_SECRET=<random-secret>
+
+# Deployment
 GCP_PROJECT_ID=<your-project-id>
 GCP_REGION=us-central1
 GCP_SERVICE_ACCOUNT=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
 CLOUD_RUN_SERVICE=tcq
-FIRESTORE_DATABASE_ID=<your-database-id>    # omit if using (default)
-PROD_SESSION_SECRET=<random-secret>
 ```
 
 Generate a random session secret with:
@@ -81,7 +102,7 @@ Generate a random session secret with:
 head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 40
 ```
 
-Leave the `PROD_GITHUB_*` fields empty for now — they require the Cloud Run URL, which you won't have until after the first deploy.
+Leave the `GITHUB_*` fields out for now — they require the Cloud Run URL, which you won't have until after the first deploy.
 
 ### 7. First Deploy (Without OAuth)
 
@@ -108,12 +129,13 @@ Now that you have the Cloud Run URL, register an OAuth App:
 
 ### 9. Redeploy with OAuth
 
-Add the GitHub OAuth credentials to `.env`:
+Add the GitHub OAuth credentials to `.env.production`:
 
 ```
-PROD_GITHUB_CLIENT_ID=<client-id>
-PROD_GITHUB_CLIENT_SECRET=<client-secret>
-PROD_GITHUB_CALLBACK_URL=https://<your-cloud-run-url>/auth/github/callback
+# GitHub OAuth
+GITHUB_CLIENT_ID=<client-id>
+GITHUB_CLIENT_SECRET=<client-secret>
+GITHUB_CALLBACK_URL=https://<your-cloud-run-url>/auth/github/callback
 ```
 
 Then redeploy:
@@ -132,7 +154,7 @@ After the initial setup, deploying is a single command:
 ./scripts/deploy.sh
 ```
 
-The script reads all configuration from `.env`, builds the image, pushes it, and deploys.
+The script reads all configuration from `.env.production`, builds the image, pushes it, and deploys.
 
 ## Configuration Notes
 
@@ -163,7 +185,7 @@ gcloud iam service-accounts keys create service-account.json \
   --iam-account=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
 ```
 
-The key file is saved as `service-account.json` (already in `.gitignore`). Set in `.env`:
+The key file is saved as `service-account.json` (already in `.gitignore`). Add to `.env.development` or `.env`:
 
 ```
 STORE=firestore

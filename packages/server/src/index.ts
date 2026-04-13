@@ -6,8 +6,6 @@ import dotenv from 'dotenv';
 const projectRoot = join(import.meta.dirname, '../../..');
 const envSuffix = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 dotenv.config({ path: join(projectRoot, `.env.${envSuffix}`) });
-// Also load .env as a fallback for any values not in the environment-specific file
-dotenv.config({ path: join(projectRoot, '.env') });
 
 import express from 'express';
 import session from 'express-session';
@@ -27,6 +25,15 @@ import { registerSocketHandlers } from './socket.js';
 
 const app = express();
 const httpServer = createServer(app);
+
+const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+  // In development, the Vite dev server proxies Socket.IO requests to Express,
+  // so we need to allow the Vite origin for CORS.
+  cors: {
+    origin: ['http://localhost:5173'],
+    credentials: true,
+  },
+});
 
 const PORT = process.env.PORT ?? 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret-replace-me';
@@ -112,7 +119,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // All other /api routes require an authenticated session
-app.use('/api', requireAuth, createMeetingRoutes(meetingManager));
+app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io));
 
 // --- Static file serving (production) ---
 // In production, the Express server serves the Vite-built client assets.
@@ -141,15 +148,6 @@ app.use((_req, res, next) => {
 });
 
 // --- Socket.IO ---
-
-const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  // In development, the Vite dev server proxies Socket.IO requests to Express,
-  // so we need to allow the Vite origin for CORS.
-  cors: {
-    origin: ['http://localhost:5173'],
-    credentials: true,
-  },
-});
 
 // Share the Express session with Socket.IO so that WebSocket connections
 // are authenticated using the same session cookie.
