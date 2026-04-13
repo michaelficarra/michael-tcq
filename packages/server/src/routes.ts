@@ -60,6 +60,7 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
     };
 
     req.session.user = user;
+    delete req.session.mockLoggedOut;
     res.json(user);
   });
 

@@ -35,7 +35,7 @@ export function isOAuthConfigured(): boolean {
  * is not configured. Does nothing when OAuth credentials are present.
  */
 export const mockAuth: RequestHandler = (req, _res, next) => {
-  if (!isOAuthConfigured() && !req.session.user) {
+  if (!isOAuthConfigured() && !req.session.user && !req.session.mockLoggedOut) {
     req.session.user = MOCK_USER;
   }
   next();

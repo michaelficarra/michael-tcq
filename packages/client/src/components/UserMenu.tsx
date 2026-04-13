@@ -57,13 +57,21 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="text-sm text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
-        title="Click to switch user (dev mode)"
-      >
-        <UserBadge user={user} size={20} />
-      </button>
+      <span className="inline-flex items-center gap-3">
+        <button
+          onClick={() => setOpen(true)}
+          className="text-sm text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
+          title="Click to switch user (dev mode)"
+        >
+          <UserBadge user={user} size={20} />
+        </button>
+        <a
+          href="/auth/logout"
+          className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
+        >
+          Log Out
+        </a>
+      </span>
     );
   }
 

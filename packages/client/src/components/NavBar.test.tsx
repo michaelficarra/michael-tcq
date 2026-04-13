@@ -63,7 +63,8 @@ describe('NavBar', () => {
     render(<MemoryRouter><NavBar activeTab="queue" onTabChange={() => {}} /></MemoryRouter>);
     // UserBadge displays user.name, not ghUsername
     expect(screen.getByText('Test User')).toBeInTheDocument();
-    expect(screen.queryByText('Log Out')).not.toBeInTheDocument();
+    // Log Out is shown in both mock auth and OAuth modes
+    expect(screen.getByText('Log Out')).toBeInTheDocument();
   });
 
   it('has an accessible navigation landmark', () => {

@@ -18,5 +18,11 @@ declare module 'express-session' {
      * unauthenticated user tries to access a protected route.
      */
     returnTo?: string;
+
+    /**
+     * When true, mock auth will not auto-populate a user.
+     * Set by /auth/logout in mock auth mode to allow testing the logged-out state.
+     */
+    mockLoggedOut?: boolean;
   }
 }

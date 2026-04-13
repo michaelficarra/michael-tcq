@@ -56,9 +56,12 @@ export function createAuthRoutes(): Router {
   // --- GET /auth/github ---
   // Redirect to GitHub's OAuth authorisation page. The user will be
   // asked to grant our app access to their profile information.
-  router.get('/github', (_req, res) => {
+  router.get('/github', (req, res) => {
     if (!GITHUB_CLIENT_ID) {
-      res.status(500).send('GitHub OAuth is not configured. Set GITHUB_CLIENT_ID in your .env file.');
+      // In mock auth mode, just clear the logged-out flag and redirect home.
+      // The mock auth middleware will auto-populate the user on next request.
+      delete req.session.mockLoggedOut;
+      res.redirect('/');
       return;
     }
 
@@ -144,9 +147,12 @@ export function createAuthRoutes(): Router {
   });
 
   // --- GET /auth/logout ---
-  // Destroy the session and redirect to the home page.
+  // Clear the user and redirect to the home page.
+  // In mock auth mode, set a flag so the middleware doesn't auto-repopulate.
   router.get('/logout', (req, res) => {
-    req.session.destroy(() => {
+    delete req.session.user;
+    req.session.mockLoggedOut = true;
+    req.session.save(() => {
       res.redirect('/');
     });
   });

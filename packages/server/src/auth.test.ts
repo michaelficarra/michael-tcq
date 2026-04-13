@@ -38,13 +38,13 @@ describe('Auth routes', () => {
   });
 
   describe('GET /auth/github', () => {
-    it('redirects to GitHub OAuth authorisation URL when configured', async () => {
-      // This test runs without GITHUB_CLIENT_ID set, so it should
-      // return a 500 error explaining OAuth is not configured
+    it('redirects to home in mock auth mode when OAuth is not configured', async () => {
+      // Without GITHUB_CLIENT_ID, the handler redirects to home
+      // (clearing the mockLoggedOut flag so mock auth can re-populate)
       const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
 
-      // Without GITHUB_CLIENT_ID, the handler returns 500
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/');
     });
   });
 
