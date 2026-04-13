@@ -41,6 +41,12 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
       dispatch({ type: 'state', meeting });
     });
 
+    // Server-side validation errors (e.g. "Meeting not found",
+    // "Only chairs can..." etc.)
+    socket.on('error', (message) => {
+      dispatch({ type: 'setError', error: message });
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;

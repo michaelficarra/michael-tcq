@@ -1,6 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
+import { fetchGitHubUser } from './auth.js';
+import { isOAuthConfigured } from './mockAuth.js';
 
 /** A Socket with our typed events and session user attached. */
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -91,7 +93,7 @@ export function registerSocketHandlers(
     // Chair adds a new agenda item. The owner is specified by GitHub username;
     // for now we create a placeholder User object. GitHub API validation will
     // be added when real OAuth is implemented.
-    socket.on('agenda:add', (payload) => {
+    socket.on('agenda:add', async (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
         socket.emit('error', 'Only chairs can add agenda items');
@@ -111,16 +113,29 @@ export function registerSocketHandlers(
       }
 
       // Build the owner User object. If the owner is one of the meeting's
-      // chairs, use their full profile; otherwise create a placeholder.
-      // TODO: validate username against the GitHub API (Step 9/10).
+      // chairs or the current user, use their full profile. Otherwise,
+      // validate the username against the GitHub API (when OAuth is
+      // configured) or create a placeholder (mock auth mode).
       const meeting = meetingManager.get(joinedMeetingId);
-      const existingUser = meeting?.chairs.find((c) => c.ghUsername === ownerUsername);
-      const owner = existingUser ?? {
-        ghid: 0,
-        ghUsername: ownerUsername,
-        name: ownerUsername,
-        organisation: '',
-      };
+      const existingUser =
+        meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === ownerUsername.toLowerCase()) ??
+        (user.ghUsername.toLowerCase() === ownerUsername.toLowerCase() ? user : undefined);
+
+      let owner: User;
+      if (existingUser) {
+        owner = existingUser;
+      } else if (isOAuthConfigured()) {
+        // Validate against the GitHub API
+        const ghUser = await fetchGitHubUser(ownerUsername);
+        if (!ghUser) {
+          socket.emit('error', `GitHub user "${ownerUsername}" not found`);
+          return;
+        }
+        owner = ghUser;
+      } else {
+        // Mock auth mode — create a placeholder
+        owner = { ghid: 0, ghUsername: ownerUsername, name: ownerUsername, organisation: '' };
+      }
 
       // Parse timebox: treat 0, negative, and NaN as "no timebox"
       const timebox = payload.timebox && payload.timebox > 0 ? payload.timebox : undefined;

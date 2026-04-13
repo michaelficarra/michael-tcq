@@ -12,12 +12,16 @@ export interface MeetingContextState {
 
   /** Whether the socket is connected to the server. */
   connected: boolean;
+
+  /** Error message from the server (e.g. "Meeting not found"). */
+  error: string | null;
 }
 
 const initialState: MeetingContextState = {
   meeting: null,
   user: null,
   connected: false,
+  error: null,
 };
 
 // -- Actions --
@@ -25,17 +29,20 @@ const initialState: MeetingContextState = {
 export type MeetingAction =
   | { type: 'state'; meeting: MeetingState }
   | { type: 'setUser'; user: User }
-  | { type: 'setConnected'; connected: boolean };
+  | { type: 'setConnected'; connected: boolean }
+  | { type: 'setError'; error: string };
 
 function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
   switch (action.type) {
     case 'state':
-      // Full state replacement from the server
-      return { ...state, meeting: action.meeting };
+      // Full state replacement from the server — clears any previous error
+      return { ...state, meeting: action.meeting, error: null };
     case 'setUser':
       return { ...state, user: action.user };
     case 'setConnected':
       return { ...state, connected: action.connected };
+    case 'setError':
+      return { ...state, error: action.error };
   }
 }
 

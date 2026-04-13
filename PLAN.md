@@ -154,16 +154,12 @@ Implemented Dockerfile and static asset serving. The Express server serves the V
 - **`index.ts`** — Added `express.static()` for client dist and a catch-all middleware for SPA client-side routing. Compatible with Express 5.
 - **DEPLOYMENT.md** — Full instructions for Artifact Registry, Docker build/push, and Cloud Run deploy with all env vars.
 
-## Step 14: Polish and Remaining Details
+## Step 14: Polish and Remaining Details ✅
 
-Address UI polish, edge cases, and any remaining PRD requirements.
-
-- **GitHub username validation on agenda items:** When adding an agenda item, validate the owner's GitHub username by calling the GitHub API. Show an error if the username does not exist.
-- **Responsive design:** Ensure the UI works on mobile viewports (the nav bar should collapse to a hamburger menu or similar).
-- **Error handling:** Show user-facing error messages for failed actions (meeting not found, unauthorised, etc.).
-- **Meeting not found:** Show a clear error page when navigating to a non-existent meeting ID.
-- **Edge cases:**
-  - Attempting to enter the queue when not in a meeting.
-  - Attempting chair actions as a non-chair.
-  - Advancing past the last agenda item.
-  - Duplicate queue entries by the same user (decide whether to allow or prevent).
+- **Error handling:** Added `error` state to MeetingContext. `useSocketConnection` listens for server `error` events. MeetingPage shows a full-page error for fatal errors (e.g. "Meeting not found" with a back-to-home link) and a dismissible red banner for non-fatal errors (e.g. permission denied).
+- **Meeting not found:** Navigating to a non-existent meeting ID now shows a clear error page.
+- **GitHub username validation:** `agenda:add` handler validates the owner username against the GitHub API when OAuth is configured. In mock auth mode, placeholder users are still allowed.
+- **Responsive design:** NavBar uses tighter spacing on mobile (`gap-3 px-3` vs `gap-6 px-6` on larger screens).
+- **Duplicate queue entries:** Allowed — a user can have multiple entries of the same type.
+- **Advancing past last agenda item:** Already handled (returns "No more agenda items" error).
+- **Chair actions as non-chair:** Already handled (returns permission error, now displayed to user).
