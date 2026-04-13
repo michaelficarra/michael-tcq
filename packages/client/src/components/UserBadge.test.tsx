@@ -56,13 +56,23 @@ describe('UserBadge', () => {
     expect(img).toHaveAttribute('src', 'https://github.com/alice.png?size=64');
   });
 
-  it('hides the avatar on load error', () => {
+  it('shows a fallback avatar on load error', () => {
     render(<UserBadge user={alice} />);
-    const img = screen.getByRole('presentation');
+    const img = screen.getByRole('presentation') as HTMLImageElement;
 
     // Simulate a failed image load
     fireEvent.error(img);
-    expect(img).toHaveStyle({ display: 'none' });
+    expect(img.src).toMatch(/^data:image\/svg\+xml/);
+  });
+
+  it('has fixed dimensions to prevent layout reflow', () => {
+    render(<UserBadge user={alice} size={24} />);
+    const img = screen.getByRole('presentation') as HTMLImageElement;
+
+    expect(img.style.width).toBe('24px');
+    expect(img.style.height).toBe('24px');
+    expect(img.style.minWidth).toBe('24px');
+    expect(img.style.minHeight).toBe('24px');
   });
 
   it('applies additional className', () => {
