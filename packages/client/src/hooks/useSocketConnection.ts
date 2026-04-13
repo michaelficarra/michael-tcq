@@ -36,6 +36,18 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
       dispatch({ type: 'setConnected', connected: false });
     });
 
+    // Detect network loss immediately via the browser's offline event,
+    // rather than waiting for Socket.IO's ping timeout.
+    function handleOffline() {
+      dispatch({ type: 'setConnected', connected: false });
+    }
+    function handleOnline() {
+      // Socket.IO will reconnect automatically; the connect event
+      // will set connected back to true.
+    }
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
     // The server sends the full meeting state whenever it changes
     socket.on('state', (meeting) => {
       dispatch({ type: 'state', meeting });
@@ -50,6 +62,8 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
     };
   }, [meetingId, dispatch]);
 

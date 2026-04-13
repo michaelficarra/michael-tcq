@@ -18,6 +18,7 @@ import { NavBar, type Tab } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
+import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
@@ -208,6 +209,9 @@ function MeetingPageInner() {
           )}
           {!presentationMode && activeTab === 'help' && <HelpPanel />}
         </main>
+
+        {/* Connection status indicator */}
+        <ConnectionStatus connected={connected} />
 
         {/* Keyboard shortcuts dialog */}
         {showShortcuts && (

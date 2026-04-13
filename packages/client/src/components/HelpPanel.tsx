@@ -23,6 +23,8 @@ export function HelpPanel() {
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           Enter the meeting ID on the home page or follow a direct link. Once
           joined, you'll see the meeting's agenda and speaker queue in real time.
+          A small dot in the bottom-right corner shows your connection status:
+          green when connected, red when disconnected.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Entering the Queue</h4>

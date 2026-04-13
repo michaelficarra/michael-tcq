@@ -225,6 +225,8 @@ All meeting state changes are broadcast to all connected participants in real ti
 
 The server is the single source of truth. Clients send actions and wait for the server to broadcast the updated state — no optimistic updates.
 
+A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state.
+
 ## Error Handling
 
 - Server-side validation errors are sent to clients via a Socket.IO `error` event.
