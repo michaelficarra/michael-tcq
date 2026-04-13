@@ -32,6 +32,29 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Easy local development** — `npm install && npm run dev` is all that's needed to start developing. No Docker, no external databases, no OAuth setup required. Mock auth is automatic. A seed script populates a meeting with sample data for quick testing. An extensive test suite covers server logic, socket events, permissions, and UI components.
 - **Well documented** — comprehensive docs covering [local development](docs/CONTRIBUTING.md), [production deployment](docs/DEPLOYMENT.md), [architecture decisions](docs/ARCHITECTURE.md), and a complete [product requirements document](docs/PRD.md).
 
+## Screenshots
+
+![Home page](screenshots/home-page.png)
+Join or create a meeting from the home page.
+
+![Queue tab](screenshots/queue.png)
+The speaker queue with priority-ordered entries and chair controls.
+
+![Agenda tab](screenshots/agenda.png)
+The agenda tab with chairs, numbered items, and drag-to-reorder.
+
+![Keyboard shortcuts](screenshots/keyboard-shortcuts.png)
+Press `?` to view all keyboard shortcuts.
+
+![Create poll](screenshots/create-poll.png)
+Configuring a poll with customisable emoji and label options.
+
+![Active poll](screenshots/active-poll.png)
+An active poll showing reaction buttons with counts.
+
+![Help tab](screenshots/help.png)
+Built-in help page explaining the tool for participants and chairs.
+
 ## Quick Start
 
 See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for local development setup.
