@@ -19,7 +19,7 @@ export const MOCK_USER: User = {
   ghid: 1,
   ghUsername: 'testuser',
   name: 'Test User',
-  organisation: 'Test Org',
+  organisation: '',
 };
 
 /**

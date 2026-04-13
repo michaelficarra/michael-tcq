@@ -54,7 +54,7 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
       ghid: Math.abs(hash),
       ghUsername: trimmed,
       name: trimmed,
-      organisation: 'Dev',
+      organisation: '',
     };
 
     req.session.user = user;
