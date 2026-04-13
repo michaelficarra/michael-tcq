@@ -5,6 +5,12 @@ import { AgendaPanel } from './AgendaPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
+// Mock useAuth so we can control isAdmin flag
+let mockAuthState = { user: null as User | null, isAdmin: false, loading: false, mockAuth: false, switchUser: async () => {} };
+vi.mock('../contexts/AuthContext.js', () => ({
+  useAuth: () => mockAuthState,
+}));
+
 /** Create a minimal meeting state for testing. */
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
@@ -140,5 +146,124 @@ describe('AgendaPanel', () => {
     renderAgenda(meeting);
 
     expect(screen.getByText(/ACME Corp/)).toBeInTheDocument();
+  });
+
+  describe('Chair management', () => {
+    const otherChair: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+
+    it('shows remove buttons for chairs on other chairs', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      renderAgenda(meeting, chairUser);
+
+      // Should see remove button for bob but not for alice (self)
+      expect(screen.getByRole('button', { name: /remove chair bob/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /remove chair alice/i })).not.toBeInTheDocument();
+    });
+
+    it('non-chairs do not see remove buttons', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({
+        chairs: [otherChair],
+      });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.queryByRole('button', { name: /remove chair/i })).not.toBeInTheDocument();
+    });
+
+    it('admins see remove buttons on all chairs including themselves', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: true };
+      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByRole('button', { name: /remove chair alice/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /remove chair bob/i })).toBeInTheDocument();
+    });
+
+    it('shows confirmation modal before removing a chair', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      renderAgenda(meeting, chairUser);
+
+      fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
+
+      expect(screen.getByText(/remove chair/i)).toBeInTheDocument();
+      expect(screen.getByText(/bob/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^remove$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+
+    it('emits meeting:updateChairs without the removed chair', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
+
+      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+        usernames: ['alice'],
+      });
+    });
+
+    it('shows add chair button for chairs', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser] });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByRole('button', { name: /add chair/i })).toBeInTheDocument();
+    });
+
+    it('hides add chair button for non-chairs', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [otherChair] });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.queryByRole('button', { name: /add chair/i })).not.toBeInTheDocument();
+    });
+
+    it('shows username input when add button is clicked', () => {
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser] });
+      renderAgenda(meeting, chairUser);
+
+      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+
+      expect(screen.getByLabelText(/new chair username/i)).toBeInTheDocument();
+    });
+
+    it('emits meeting:updateChairs with new chair added', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser] });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: 'newperson' } });
+      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+
+      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+        usernames: ['alice', 'newperson'],
+      });
+    });
+
+    it('does not add duplicate chair username', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ chairs: [chairUser] });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: 'Alice' } });
+      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+
+      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+        usernames: ['alice'],
+      });
+    });
   });
 });

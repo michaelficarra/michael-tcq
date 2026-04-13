@@ -66,9 +66,12 @@ The home page shows two cards side by side:
 
 ## Chair Management
 
-The Agenda tab displays the list of chairs at the top. Chairs and admins can click "edit" to modify the list via a comma-separated text input. When OAuth is configured, new usernames are validated against the GitHub API.
+The Agenda tab displays the list of chairs inline next to the "Chairs" heading. Each chair is shown as a pill-shaped badge with their avatar and name. Chairs and admins can manage the list directly:
 
-For regular chairs: they cannot remove themselves from the list, and at least one chair must remain. Admins bypass both restrictions — they can set any list, including an empty one or one that excludes themselves.
+- **Add** — a "+" icon to the right of the chair pills opens an inline username input. When OAuth is configured, new usernames are validated against the GitHub API.
+- **Remove** — an "×" icon on each chair's pill removes them after a confirmation dialogue.
+
+For regular chairs: they cannot remove themselves from the list (no remove icon is shown on their own pill), and at least one chair must remain. Admins bypass both restrictions — they can remove any chair, including themselves, even if it leaves the chair list empty.
 
 ## Agenda
 

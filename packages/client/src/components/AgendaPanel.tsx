@@ -327,86 +327,149 @@ function ChairsSection() {
   const isChair = useIsChair();
   const socket = useSocket();
   const canEditChairs = isChair || isAdmin;
-  const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addValue, setAddValue] = useState('');
+  const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
   if (!meeting) return null;
 
-  /** Open the editor, pre-populated with the current chair usernames. */
-  function startEditing() {
-    setEditValue(meeting!.chairs.map((c) => c.ghUsername).join(', '));
-    setEditing(true);
+  /** Whether the current user can remove a given chair. */
+  function canRemove(chairUsername: string): boolean {
+    if (!canEditChairs) return false;
+    // Non-admins cannot remove themselves
+    if (!isAdmin && user?.ghUsername.toLowerCase() === chairUsername.toLowerCase()) return false;
+    return true;
   }
 
-  /** Submit the updated chair list. */
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const usernames = editValue
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    // Non-admin chairs: must keep at least one chair and include themselves
-    if (!isAdmin) {
-      if (usernames.length === 0) return;
-      const self = user?.ghUsername.toLowerCase();
-      if (self && !usernames.some((u) => u.toLowerCase() === self)) {
-        usernames.push(user!.ghUsername);
-      }
-    }
-
+  /** Remove a chair by emitting the updated list without them. */
+  function handleRemove(chairUsername: string) {
+    const usernames = meeting!.chairs
+      .map((c) => c.ghUsername)
+      .filter((u) => u.toLowerCase() !== chairUsername.toLowerCase());
     socket?.emit('meeting:updateChairs', { usernames });
-    setEditing(false);
+    setRemoveConfirm(null);
+  }
+
+  /** Add a new chair by username. */
+  function handleAdd(e: FormEvent) {
+    e.preventDefault();
+    const username = addValue.trim();
+    if (!username) return;
+
+    const usernames = meeting!.chairs.map((c) => c.ghUsername);
+    if (!usernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
+      usernames.push(username);
+    }
+    socket?.emit('meeting:updateChairs', { usernames });
+    setAddValue('');
+    setAdding(false);
   }
 
   return (
     <section className="mb-5" aria-label="Meeting chairs">
-      <div className="flex items-center gap-3 mb-1">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-stone-700">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500">
           Chairs
         </h2>
-        {canEditChairs && !editing && (
+
+        {meeting.chairs.map((chair) => (
+          <span key={chair.ghUsername} className={`inline-flex items-center gap-1 bg-stone-200 rounded-full pl-1 py-1 select-none ${canRemove(chair.ghUsername) ? 'pr-1' : 'pr-2'}`}>
+            <UserBadge user={chair} size={18} />
+            {canRemove(chair.ghUsername) && (
+              <button
+                onClick={() => setRemoveConfirm(chair.ghUsername)}
+                className="text-red-400 hover:text-red-600 transition-colors
+                           cursor-pointer presentation-hidden"
+                aria-label={`Remove chair ${chair.ghUsername}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+          </span>
+        ))}
+
+        {canEditChairs && !adding && (
           <button
-            onClick={startEditing}
-            className="text-xs text-stone-400 hover:text-teal-600
-                       transition-colors cursor-pointer presentation-hidden"
+            onClick={() => setAdding(true)}
+            className="text-teal-500 hover:text-teal-700 transition-colors
+                       cursor-pointer presentation-hidden"
+            aria-label="Add chair"
           >
-            edit
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clipRule="evenodd" />
+            </svg>
           </button>
+        )}
+
+        {adding && (
+          <form onSubmit={handleAdd} className="inline-flex items-center gap-1">
+            <input
+              type="text"
+              value={addValue}
+              onChange={(e) => setAddValue(e.target.value)}
+              autoFocus
+              required
+              placeholder="username"
+              aria-label="New chair username"
+              className="border border-stone-300 rounded px-2 py-0.5 text-sm w-28
+                         focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+            <button
+              type="submit"
+              className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+            >
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAdding(false); setAddValue(''); }}
+              className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </form>
         )}
       </div>
 
-      {editing ? (
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            autoFocus
-            required={!isAdmin}
-            aria-label="Chair usernames"
-            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
-          />
-          <button
-            type="submit"
-            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+      {/* Remove chair confirmation modal */}
+      {removeConfirm && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          onClick={() => setRemoveConfirm(null)}
+          role="dialog"
+          aria-label="Confirm chair removal"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg p-6 max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
-          >
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <div className="flex flex-wrap gap-3 text-sm text-stone-700">
-          {meeting.chairs.map((chair) => (
-            <UserBadge key={chair.ghUsername} user={chair} size={18} />
-          ))}
+            <h3 className="text-lg font-semibold text-stone-800 mb-2">
+              Remove Chair
+            </h3>
+            <p className="text-sm text-stone-600 mb-4">
+              Remove <strong>{removeConfirm}</strong> from the chair list?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setRemoveConfirm(null)}
+                className="text-sm text-stone-500 hover:text-stone-700
+                           transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemove(removeConfirm)}
+                autoFocus
+                className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
+                           hover:bg-red-600 transition-colors cursor-pointer
+                           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
