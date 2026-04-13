@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -807,6 +807,66 @@ describe('Socket.IO integration', () => {
       const known = state.chairs.find(c => c.ghUsername === 'knownuser');
       expect(known?.name).toBe('Known User');
       expect(known?.organisation).toBe('ACME');
+    });
+  });
+
+  describe('meeting:updateChairs (admin)', () => {
+    it('allows an admin to edit chairs for a meeting they do not chair', async () => {
+      // Set testuser as admin
+      vi.stubEnv('ADMIN_USERNAMES', 'testuser');
+
+      // Meeting where testuser is NOT a chair
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:updateChairs', { usernames: ['newchair'] });
+      const state = await statePromise;
+
+      expect(state.chairs).toHaveLength(1);
+      expect(state.chairs[0].ghUsername).toBe('newchair');
+
+      vi.unstubAllEnvs();
+    });
+
+    it('allows an admin to remove themselves from the chair list', async () => {
+      vi.stubEnv('ADMIN_USERNAMES', 'testuser');
+
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      const state = await statePromise;
+
+      expect(state.chairs).toHaveLength(1);
+      expect(state.chairs[0].ghUsername).toBe('someone-else');
+
+      vi.unstubAllEnvs();
+    });
+
+    it('allows an admin to set an empty chair list', async () => {
+      vi.stubEnv('ADMIN_USERNAMES', 'testuser');
+
+      const meeting = ctx.meetingManager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:updateChairs', { usernames: [] });
+      const state = await statePromise;
+
+      expect(state.chairs).toHaveLength(0);
+
+      vi.unstubAllEnvs();
     });
   });
 

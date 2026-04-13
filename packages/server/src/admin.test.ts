@@ -147,6 +147,33 @@ describe('Admin endpoints', () => {
     });
   });
 
+  describe('Admin chair editing privileges', () => {
+    it('admin can edit chairs for a meeting they do not chair', async () => {
+      // Create a meeting where testuser is NOT a chair
+      const meeting = manager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      // Create via REST: switch user to testuser (admin), then update chairs
+      // We test via the socket tests (socket.test.ts), but verify the manager accepts it
+      const result = manager.updateChairs(meeting.id, [
+        { ghid: 50, ghUsername: 'newchair', name: 'New Chair', organisation: '' },
+      ]);
+      expect(result).toBe(true);
+      expect(manager.get(meeting.id)!.chairs[0].ghUsername).toBe('newchair');
+    });
+
+    it('admin can set an empty chair list', async () => {
+      const meeting = manager.create([{
+        ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '',
+      }]);
+
+      const result = manager.updateChairs(meeting.id, []);
+      expect(result).toBe(true);
+      expect(manager.get(meeting.id)!.chairs).toHaveLength(0);
+    });
+  });
+
   describe('GET /api/me (admin flag)', () => {
     it('includes isAdmin: true for admin users', async () => {
       const res = await fetch(`${baseUrl}/api/me`);

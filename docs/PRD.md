@@ -34,6 +34,8 @@ Admins are designated by GitHub username via the `ADMIN_USERNAMES` environment v
 
 - View a list of all active meetings on the home page, showing each meeting's ID, chair count, agenda item count, queued speaker count, maximum concurrent connections, and time of last non-admin connection.
 - Delete any meeting (with a confirmation dialogue).
+- Edit the chair list for any meeting, even if they are not a chair themselves.
+- Remove themselves from the chair list, including when they are the last chair (allowing an empty chair list).
 
 Admin connections are excluded from connection statistics.
 
@@ -64,7 +66,9 @@ The home page shows two cards side by side:
 
 ## Chair Management
 
-The Agenda tab displays the list of chairs at the top. Chairs can click "edit" to modify the list via a comma-separated text input. When OAuth is configured, new usernames are validated against the GitHub API. A chair cannot remove themselves from the list. At least one chair must remain.
+The Agenda tab displays the list of chairs at the top. Chairs and admins can click "edit" to modify the list via a comma-separated text input. When OAuth is configured, new usernames are validated against the GitHub API.
+
+For regular chairs: they cannot remove themselves from the list, and at least one chair must remain. Admins bypass both restrictions — they can set any list, including an empty one or one that excludes themselves.
 
 ## Agenda
 

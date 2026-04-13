@@ -115,12 +115,12 @@ export class MeetingManager {
 
   /**
    * Update the list of chairs for a meeting.
-   * Returns false if the meeting doesn't exist or the new list is empty.
+   * Returns false if the meeting doesn't exist.
+   * An empty chair list is allowed (admins can clear all chairs).
    */
   updateChairs(meetingId: string, chairs: User[]): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
-    if (chairs.length === 0) return false;
 
     meeting.chairs = chairs;
     this.markDirty(meetingId);

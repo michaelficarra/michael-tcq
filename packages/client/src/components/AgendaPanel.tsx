@@ -323,9 +323,10 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
 
 function ChairsSection() {
   const { meeting } = useMeetingState();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const isChair = useIsChair();
   const socket = useSocket();
+  const canEditChairs = isChair || isAdmin;
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
 
@@ -345,12 +346,13 @@ function ChairsSection() {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    if (usernames.length === 0) return;
-
-    // Ensure the current user is still in the list
-    const self = user?.ghUsername.toLowerCase();
-    if (self && !usernames.some((u) => u.toLowerCase() === self)) {
-      usernames.push(user!.ghUsername);
+    // Non-admin chairs: must keep at least one chair and include themselves
+    if (!isAdmin) {
+      if (usernames.length === 0) return;
+      const self = user?.ghUsername.toLowerCase();
+      if (self && !usernames.some((u) => u.toLowerCase() === self)) {
+        usernames.push(user!.ghUsername);
+      }
     }
 
     socket?.emit('meeting:updateChairs', { usernames });
@@ -363,7 +365,7 @@ function ChairsSection() {
         <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500">
           Chairs
         </h2>
-        {isChair && !editing && (
+        {canEditChairs && !editing && (
           <button
             onClick={startEditing}
             className="text-xs text-stone-400 hover:text-teal-600
@@ -381,7 +383,7 @@ function ChairsSection() {
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             autoFocus
-            required
+            required={!isAdmin}
             aria-label="Chair usernames"
             className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1
                        focus:outline-none focus:ring-1 focus:ring-teal-500"

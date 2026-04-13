@@ -141,13 +141,18 @@ export function registerSocketHandlers(
     });
 
     // --- meeting:updateChairs ---
-    // Chair updates the list of chairs. At least one chair must remain.
-    // The acting chair cannot remove themselves. When OAuth is configured,
-    // usernames are validated against the GitHub API.
+    // Chairs or admins can update the list of chairs. For regular chairs:
+    // at least one chair must remain, and they cannot remove themselves.
+    // Admins bypass both restrictions — they can set any list, including
+    // an empty one or one that excludes themselves.
     socket.on('meeting:updateChairs', async (payload) => {
       if (!joinedMeetingId) return;
-      if (!meetingManager.isChair(joinedMeetingId, user)) {
-        socket.emit('error', 'Only chairs can update the chair list');
+
+      const userIsAdmin = isAdmin(user);
+      const userIsChair = meetingManager.isChair(joinedMeetingId, user);
+
+      if (!userIsChair && !userIsAdmin) {
+        socket.emit('error', 'Only chairs or admins can update the chair list');
         return;
       }
 
@@ -155,18 +160,25 @@ export function registerSocketHandlers(
         ?.map((u: string) => u.trim())
         .filter((u: string) => u.length > 0);
 
-      if (!Array.isArray(usernames) || usernames.length === 0) {
-        socket.emit('error', 'At least one chair is required');
+      if (!Array.isArray(usernames)) {
+        socket.emit('error', 'Invalid chair list');
         return;
       }
 
-      // The acting chair must remain in the list
-      const selfIncluded = usernames.some(
-        (u: string) => u.toLowerCase() === user.ghUsername.toLowerCase(),
-      );
-      if (!selfIncluded) {
-        socket.emit('error', 'You cannot remove yourself from the chair list');
-        return;
+      // Non-admin chairs: at least one chair required, cannot remove self
+      if (!userIsAdmin) {
+        if (usernames.length === 0) {
+          socket.emit('error', 'At least one chair is required');
+          return;
+        }
+
+        const selfIncluded = usernames.some(
+          (u: string) => u.toLowerCase() === user.ghUsername.toLowerCase(),
+        );
+        if (!selfIncluded) {
+          socket.emit('error', 'You cannot remove yourself from the chair list');
+          return;
+        }
       }
 
       // Resolve each username to a User object
