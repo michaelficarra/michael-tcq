@@ -98,19 +98,30 @@ Each queue entry shows:
 - Topic description
 - Speaker name, organisation, and GitHub avatar
 
-Chairs see a drag handle (⠿) to the left of each entry for reordering. Edit and delete buttons appear on the right side: chairs see them on all entries, participants see them on their own entries only.
+Chairs see a drag handle (⠿) to the left of each entry for reordering. Participants see a drag handle on their own entries. Edit and delete buttons appear on the right side: chairs see them on all entries, participants see them on their own entries only.
+
 ### Queue Advancement
 
-- **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue. Uses a version counter to prevent double-advancement from concurrent chair clicks, with automatic client-side retry on stale version.
+- **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue.
 - If the queue is empty when advancement occurs, the current speaker is cleared.
 
-### Queue Reordering (Chair Only)
+### Queue Reordering
 
-Chairs can drag-and-drop queue entries to reorder them. When an entry is moved across a type boundary (e.g. a "New Topic" is moved above a "Clarifying Question"), the entry's type changes to match its neighbour at the new position. Reordering uses UUID-based positioning (not indices) to avoid race conditions.
+Chairs can drag-and-drop any queue entry to reorder it. Participants can drag their own entries, but only downward (deferring their position — they cannot jump ahead of others).
+
+When an entry is moved, its type changes based on direction:
+- **Moving down:** the entry adopts the lowest priority of the items at or above it (including itself).
+- **Moving up:** the entry adopts the highest priority of the items at or below it (including itself).
+
+This ensures the entry's type remains consistent with the priority ordering of its neighbours.
+
+### Queue Type Cycling
+
+Chairs can click the type badge (e.g. "New Topic:") on any queue entry, and participants can click the type badge on their own entries, to cycle through the types that are legal at that position. A type is legal if changing to it would not break the priority ordering — it must be at least as low-priority as the lowest-priority item above and at least as high-priority as the highest-priority item below. When only one type is legal, the badge is not clickable.
 
 ### Queue Editing
 
-Chairs can edit any queue entry's topic inline. Participants can edit their own entries. The entry type badge is shown but not editable inline.
+Chairs can edit any queue entry's topic inline. Participants can edit their own entries.
 
 ## Current Speaker and Current Topic
 

@@ -59,9 +59,16 @@ export function HelpPanel() {
             order, questions, and replies will be addressed first.
           </li>
         </ul>
-        <p className="text-sm text-stone-600 mb-3">
+        <p className="text-sm text-stone-600 mb-2">
           You can edit or delete your own queue entries at any time by clicking
           the <strong>Edit</strong> or <strong>Delete</strong> buttons on your entry.
+          You can also click the type label (e.g. "New Topic:") to cycle
+          through the types that are legal at that position.
+        </p>
+        <p className="text-sm text-stone-600 mb-3">
+          You can drag your own entries downward to defer your position in
+          the queue (e.g. to let someone else speak first). You cannot drag
+          upward — only chairs can promote entries.
         </p>
 
         <h4 className="font-medium text-stone-700 mt-4 mb-1">Temperature Checks</h4>
@@ -115,11 +122,20 @@ export function HelpPanel() {
             owner becomes the speaker.
           </li>
         </ol>
+        <p className="text-sm text-stone-600 mb-2">
+          You can also drag queue entries to reorder them manually. When an
+          entry is moved, its type adjusts to stay consistent with the
+          priority ordering of its neighbours.
+        </p>
+        <p className="text-sm text-stone-600 mb-2">
+          You (or the entry's author) can click the type label
+          (e.g. "New Topic:") on a queue entry to cycle through the types
+          that are legal at that position. This lets you change an entry's
+          type without moving it — for example, changing a "New Topic" to a
+          "Clarifying Question" if the ordering allows it.
+        </p>
         <p className="text-sm text-stone-600 mb-3">
-          You can also drag queue entries to reorder them manually. If you move
-          an entry across a type boundary (e.g. a "New Topic" above a "Clarifying
-          Question"), its type will change to match its new position. You can
-          edit or delete any queue entry.
+          You can edit or delete any queue entry.
         </p>
 
         <h4 className="font-medium text-stone-700 mt-4 mb-1">Temperature Checks</h4>

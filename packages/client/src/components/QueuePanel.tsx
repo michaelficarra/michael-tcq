@@ -27,7 +27,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { QueueEntry } from '@tcq/shared';
+import type { QueueEntry, QueueEntryType } from '@tcq/shared';
+import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -317,6 +318,7 @@ export function QueuePanel() {
                     key={entry.id}
                     entry={entry}
                     index={index}
+                    queue={meeting.queuedSpeakers}
                     isChair={isChair}
                     isOwnEntry={!!user && entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
                     onDelete={handleRemoveEntry}
@@ -338,6 +340,8 @@ export function QueuePanel() {
 interface SortableQueueEntryProps {
   entry: QueueEntry;
   index: number;
+  /** The full queue — needed to compute legal type changes. */
+  queue: QueueEntry[];
   isChair: boolean;
   isOwnEntry: boolean;
   onDelete: (id: string) => void;
@@ -348,7 +352,7 @@ interface SortableQueueEntryProps {
 }
 
 function SortableQueueEntry({
-  entry, index, isChair, isOwnEntry, onDelete,
+  entry, index, queue, isChair, isOwnEntry, onDelete,
   initialEditing = false, onEditingStarted,
 }: SortableQueueEntryProps) {
   const socket = useSocket();
@@ -378,6 +382,46 @@ function SortableQueueEntry({
 
   // Chairs can drag any entry; participants can drag their own entries
   const canDrag = isChair || isOwnEntry;
+
+  /**
+   * Compute which types this entry can legally be changed to without
+   * breaking the priority ordering of the queue. A type is legal if
+   * its priority is:
+   * - >= the highest priority (lowest number) of items above
+   * - <= the lowest priority (highest number) of items below
+   * The entry's own current type is always included.
+   */
+  const legalTypes: QueueEntryType[] = (() => {
+    // Priority bounds from neighbours
+    let minPriority = 0; // highest possible priority (point-of-order)
+    let maxPriority = QUEUE_ENTRY_TYPES.length - 1; // lowest possible priority (topic)
+
+    // Constrain by items above: type must be at least as low-priority
+    // as the lowest-priority item above
+    for (let i = 0; i < index; i++) {
+      const p = QUEUE_ENTRY_PRIORITY[queue[i].type];
+      if (p > minPriority) minPriority = p;
+    }
+
+    // Constrain by items below: type must be at least as high-priority
+    // as the highest-priority item below
+    for (let i = index + 1; i < queue.length; i++) {
+      const p = QUEUE_ENTRY_PRIORITY[queue[i].type];
+      if (p < maxPriority) maxPriority = p;
+    }
+
+    return QUEUE_ENTRY_TYPES.filter(
+      (t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority,
+    );
+  })();
+
+  /** Cycle to the next legal type when the type badge is clicked. */
+  function handleCycleType() {
+    if (legalTypes.length <= 1) return;
+    const currentIdx = legalTypes.indexOf(entry.type);
+    const nextType = legalTypes[(currentIdx + 1) % legalTypes.length];
+    socket?.emit('queue:edit', { id: entry.id, type: nextType });
+  }
 
   const {
     attributes,
@@ -493,10 +537,21 @@ function SortableQueueEntry({
       </span>
 
       <div className="flex-1 min-w-0">
-        {/* Type badge and topic */}
-        <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
-          {entryTypeLabel(entry.type)}:
-        </span>
+        {/* Type badge and topic — chairs can click to cycle through legal types */}
+        {(isChair || isOwnEntry) && legalTypes.length > 1 ? (
+          <button
+            onClick={handleCycleType}
+            className={`text-sm font-semibold cursor-pointer hover:underline ${entryTypeColor(entry.type)}`}
+            title={`Click to change type (${legalTypes.map(entryTypeLabel).join(' → ')})`}
+            aria-label={`Change type from ${entryTypeLabel(entry.type)}`}
+          >
+            {entryTypeLabel(entry.type)}:
+          </button>
+        ) : (
+          <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
+            {entryTypeLabel(entry.type)}:
+          </span>
+        )}
         <span className="ml-1 text-stone-800">{entry.topic}</span>
 
         {/* Speaker info */}
