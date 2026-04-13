@@ -622,6 +622,108 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  // -- Temperature check events --
+
+  describe('temperature:start', () => {
+    it('starts a temperature check and broadcasts', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('temperature:start');
+      const state = await statePromise;
+
+      expect(state.trackTemperature).toBe(true);
+      expect(state.reactions).toHaveLength(0);
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('temperature:start');
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+  });
+
+  describe('temperature:stop', () => {
+    it('stops a temperature check and clears reactions', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      meeting.trackTemperature = true;
+      meeting.reactions = [{ reaction: '❤️', user: owner }];
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('temperature:stop');
+      const state = await statePromise;
+
+      expect(state.trackTemperature).toBe(false);
+      expect(state.reactions).toHaveLength(0);
+    });
+  });
+
+  describe('temperature:react', () => {
+    it('adds a reaction and broadcasts', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      meeting.trackTemperature = true;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('temperature:react', { reaction: '👍' });
+      const state = await statePromise;
+
+      expect(state.reactions).toHaveLength(1);
+      expect(state.reactions[0].reaction).toBe('👍');
+      expect(state.reactions[0].user.ghUsername).toBe('testuser');
+    });
+
+    it('toggles off an existing reaction', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      meeting.trackTemperature = true;
+
+      const client = await joinMeeting(meeting.id);
+
+      // Add
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('temperature:react', { reaction: '❤️' });
+      await statePromise;
+
+      // Toggle off
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('temperature:react', { reaction: '❤️' });
+      const state = await statePromise;
+
+      expect(state.reactions).toHaveLength(0);
+    });
+
+    it('rejects when temperature check is not active', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // trackTemperature is false by default
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('temperature:react', { reaction: '👍' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/not active/i);
+    });
+  });
+
   // -- Meeting flow events --
 
   describe('meeting:nextAgendaItem', () => {

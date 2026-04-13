@@ -31,6 +31,7 @@ import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
+import { TemperatureCheck } from './TemperatureCheck.js';
 
 export function QueuePanel() {
   const { meeting, user } = useMeetingState();
@@ -137,6 +138,30 @@ export function QueuePanel() {
                 </button>
               )}
             </div>
+
+            {/* Temperature check controls — chair only */}
+            {isChair && (
+              meeting.trackTemperature ? (
+                <button
+                  onClick={() => socket?.emit('temperature:stop')}
+                  className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
+                             text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  Stop Temperature
+                </button>
+              ) : (
+                <button
+                  onClick={() => socket?.emit('temperature:start')}
+                  className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
+                             text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  Check Temperature
+                </button>
+              )
+            )}
+
+            {/* Temperature check reaction panel — visible to all when active */}
+            <TemperatureCheck />
           </div>
         ) : (
           <div>

@@ -66,6 +66,15 @@ export interface QueueRemovePayload {
  * "New Topic" above a "Clarifying Question" changes it to "Clarifying
  * Question".
  */
+/**
+ * Payload for toggling a temperature check reaction.
+ * Each user can have at most one of each reaction type.
+ * Sending the same reaction again removes it (toggle).
+ */
+export interface TemperatureReactPayload {
+  reaction: import('./types.js').ReactionType;
+}
+
 export interface QueueReorderPayload {
   id: string;
   afterId: string | null;
@@ -164,4 +173,16 @@ export interface ClientToServerEvents {
    * so the client can retry on stale version.
    */
   'queue:next': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
+
+  /** Start a temperature check (chair only). Clears any existing reactions. */
+  'temperature:start': () => void;
+
+  /** Stop a temperature check (chair only). Clears all reactions. */
+  'temperature:stop': () => void;
+
+  /**
+   * Toggle a reaction during an active temperature check. Any authenticated
+   * user can react. Sending the same reaction again removes it.
+   */
+  'temperature:react': (payload: TemperatureReactPayload) => void;
 }

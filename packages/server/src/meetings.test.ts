@@ -687,6 +687,93 @@ describe('MeetingManager', () => {
     });
   });
 
+  // -- Temperature check mutations --
+
+  describe('startTemperature', () => {
+    it('enables temperature tracking and clears reactions', () => {
+      const meeting = manager.create([testUser]);
+      // Simulate an existing reaction
+      meeting.reactions = [{ reaction: '❤️', user: testUser }];
+
+      const result = manager.startTemperature(meeting.id);
+      expect(result).toBe(true);
+      expect(meeting.trackTemperature).toBe(true);
+      expect(meeting.reactions).toHaveLength(0);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.startTemperature('no-such-meeting')).toBe(false);
+    });
+  });
+
+  describe('stopTemperature', () => {
+    it('disables temperature tracking and clears reactions', () => {
+      const meeting = manager.create([testUser]);
+      meeting.trackTemperature = true;
+      meeting.reactions = [{ reaction: '👍', user: testUser }];
+
+      const result = manager.stopTemperature(meeting.id);
+      expect(result).toBe(true);
+      expect(meeting.trackTemperature).toBe(false);
+      expect(meeting.reactions).toHaveLength(0);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.stopTemperature('no-such-meeting')).toBe(false);
+    });
+  });
+
+  describe('toggleReaction', () => {
+    it('adds a reaction when the user has not reacted', () => {
+      const meeting = manager.create([testUser]);
+      meeting.trackTemperature = true;
+
+      const result = manager.toggleReaction(meeting.id, '❤️', testUser);
+      expect(result).toBe(true);
+      expect(meeting.reactions).toHaveLength(1);
+      expect(meeting.reactions[0].reaction).toBe('❤️');
+      expect(meeting.reactions[0].user.ghUsername).toBe('alice');
+    });
+
+    it('removes a reaction when the user already has it (toggle off)', () => {
+      const meeting = manager.create([testUser]);
+      meeting.trackTemperature = true;
+
+      // Add then toggle off
+      manager.toggleReaction(meeting.id, '👍', testUser);
+      manager.toggleReaction(meeting.id, '👍', testUser);
+      expect(meeting.reactions).toHaveLength(0);
+    });
+
+    it('allows multiple different reactions from the same user', () => {
+      const meeting = manager.create([testUser]);
+      meeting.trackTemperature = true;
+
+      manager.toggleReaction(meeting.id, '❤️', testUser);
+      manager.toggleReaction(meeting.id, '👀', testUser);
+      expect(meeting.reactions).toHaveLength(2);
+    });
+
+    it('allows different users to have the same reaction', () => {
+      const meeting = manager.create([testUser]);
+      meeting.trackTemperature = true;
+
+      manager.toggleReaction(meeting.id, '❤️', testUser);
+      manager.toggleReaction(meeting.id, '❤️', otherUser);
+      expect(meeting.reactions).toHaveLength(2);
+    });
+
+    it('returns false when temperature tracking is not active', () => {
+      const meeting = manager.create([testUser]);
+      // trackTemperature is false by default
+      expect(manager.toggleReaction(meeting.id, '❤️', testUser)).toBe(false);
+    });
+
+    it('returns false for non-existent meeting', () => {
+      expect(manager.toggleReaction('no-such-meeting', '❤️', testUser)).toBe(false);
+    });
+  });
+
   it('creates meetings with unique IDs', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 50; i++) {

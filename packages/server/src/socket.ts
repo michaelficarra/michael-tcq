@@ -374,6 +374,47 @@ export function registerSocketHandlers(
       });
     });
 
+    // --- temperature:start ---
+    // Chair starts a temperature check. Clears existing reactions.
+    socket.on('temperature:start', () => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can start a temperature check');
+        return;
+      }
+
+      meetingManager.startTemperature(joinedMeetingId);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- temperature:stop ---
+    // Chair stops the temperature check. Clears all reactions.
+    socket.on('temperature:stop', () => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can stop a temperature check');
+        return;
+      }
+
+      meetingManager.stopTemperature(joinedMeetingId);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- temperature:react ---
+    // Any authenticated user can toggle a reaction during an active
+    // temperature check. Sending the same reaction again removes it.
+    socket.on('temperature:react', (payload) => {
+      if (!joinedMeetingId) return;
+
+      const toggled = meetingManager.toggleReaction(joinedMeetingId, payload.reaction, user);
+      if (!toggled) {
+        socket.emit('error', 'Temperature check is not active');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
     // --- meeting:nextAgendaItem ---
     // Chair starts the meeting (first agenda item) or advances to the next one.
     // Includes a version check to prevent double-advancement, and persists
