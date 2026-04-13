@@ -135,47 +135,15 @@ Implemented with fully customisable options. Chairs configure the response optio
   - `TemperatureCheck` — reaction panel with buttons for each custom option, count, highlight for own reactions, tooltip with names. "Copy Results" button for chairs (copies emoji + label + count, sorted by count descending).
   - Chair flow: Check Temperature → setup form → Start Temperature Check → reaction panel + Stop Temperature button.
 
-## Step 12: Persistence — Periodic Firestore Sync
+## Step 12: Persistence — Periodic Firestore Sync ✅
 
-Wire up the persistence layer for meeting state and sessions so that data survives container restarts.
+Implemented `FirestoreMeetingStore` and Firestore session store. The `STORE` env var selects the implementation (`file` for local dev, `firestore` for production). The periodic sync and startup recovery were already implemented in earlier steps via `MeetingManager`.
 
----
+- **`firestoreStore.ts`** — `FirestoreMeetingStore` using `@google-cloud/firestore`. Each meeting is a document in a `meetings` collection.
+- **`index.ts`** — store selection via `STORE` env var. When `firestore`, uses `firestore-store` for sessions and `FirestoreMeetingStore` for meetings. Sets `trust proxy` and secure cookies for Cloud Run.
+- **`firestore-store.d.ts`** — type declaration for the untyped `firestore-store` package.
 
-**Infrastructure: Google Cloud Project and Firestore**
-
-1. **Create a GCP account** (if you don't have one) at https://cloud.google.com/. The Always Free tier does not require a credit card for Firestore, but GCP may require billing to be enabled on the project (you will not be charged within free-tier limits).
-
-2. **Create a new GCP project:**
-   - Go to https://console.cloud.google.com/projectcreate.
-   - Enter a project name (e.g. `tcq`) and click **Create**.
-   - Note the **Project ID** (e.g. `tcq-123456`).
-
-3. **Enable the Firestore API:**
-   - Go to https://console.cloud.google.com/firestore (with your project selected).
-   - Choose **Native mode** (not Datastore mode).
-   - Select a region eligible for Always Free tier: `us-east1`, `us-central1`, or `us-west1`.
-   - Click **Create Database**.
-
-4. **Create a service account for local development:**
-   - Go to https://console.cloud.google.com/iam-admin/serviceaccounts.
-   - Click **Create Service Account**.
-   - Name: `tcq-dev`. Click **Create and Continue**.
-   - Grant the role **Cloud Datastore User** (this covers Firestore Native mode access). Click **Continue**, then **Done**.
-   - Click the newly created service account, go to the **Keys** tab, click **Add Key > Create new key**, select **JSON**, and click **Create**. A JSON key file will be downloaded.
-   - Save this file as `service-account.json` in the project root (it is already in `.gitignore`). Set the environment variable `GOOGLE_APPLICATION_CREDENTIALS=./service-account.json` in your `.env` file.
-
----
-
-- **Server:**
-  - Implement `FirestoreMeetingStore` using the `@google-cloud/firestore` npm package. Each meeting is a document in a `meetings` collection, keyed by the meeting ID. The document body is the serialised `MeetingState`.
-  - Implement the periodic sync: a `setInterval` (e.g. every 30 seconds) iterates all in-memory meetings and writes any with a dirty flag to Firestore. Clear the dirty flag after a successful write. Also write immediately after high-value mutations (agenda advancement, speaker advancement).
-  - On server startup, call `loadAll()` on the active store to restore meetings from the persistent store into the in-memory map.
-  - Implement a Firestore-backed session store for `express-session` (or use an existing library such as `firestore-store`).
-  - Select the store implementation based on the `STORE` environment variable (`file` or `firestore`), defaulting to `file`.
-- Update `.env.example` with `STORE` and `GOOGLE_APPLICATION_CREDENTIALS`.
-- Add `service-account.json` to `.gitignore`.
-
-**Checkpoint:** With `STORE=firestore`, create a meeting and add some agenda items. Restart the server. The meeting state is restored from Firestore. Verify in the GCP Console (Firestore data viewer) that the document exists.
+**Infrastructure required (not yet set up):** See DEPLOYMENT.md for GCP project, Firestore database, and service account setup instructions.
 
 ## Step 13: Production Deployment
 
