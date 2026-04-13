@@ -1,19 +1,28 @@
 /**
  * Type declaration for the firestore-store package.
- * It doesn't ship its own types.
+ *
+ * It uses the connect-style factory pattern: the default export is
+ * a function that takes the express-session module and returns the
+ * FirestoreStore class.
  */
 declare module 'firestore-store' {
   import type { Store } from 'express-session';
+  import type session from 'express-session';
   import type { Firestore } from '@google-cloud/firestore';
 
   interface FirestoreStoreOptions {
     /** The Firestore database instance. */
-    dataset: Firestore;
-    /** The collection name to store sessions in. */
-    kind: string;
+    database: Firestore;
+    /** The collection name to store sessions in. Defaults to 'sessions'. */
+    collection?: string;
   }
 
-  export class FirestoreStore extends Store {
-    constructor(options: FirestoreStoreOptions);
+  interface FirestoreStoreClass {
+    new (options: FirestoreStoreOptions): Store;
   }
+
+  /** Factory function: pass express-session to get the store class. */
+  function firestoreStore(session: typeof session): FirestoreStoreClass;
+
+  export default firestoreStore;
 }

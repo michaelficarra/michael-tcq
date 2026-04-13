@@ -34,13 +34,19 @@ if (STORE_TYPE === 'firestore') {
   // Credentials are auto-discovered from GOOGLE_APPLICATION_CREDENTIALS
   // (local dev) or the default service account (Cloud Run).
   const { Firestore } = await import('@google-cloud/firestore');
-  const { FirestoreStore } = await import('firestore-store');
+  // firestore-store uses the connect-style factory: require('firestore-store')(session)
+  const firestoreStoreModule = await import('firestore-store');
+  const FirestoreStore = (firestoreStoreModule.default ?? firestoreStoreModule)(session);
 
-  const db = new Firestore();
-  meetingStore = new FirestoreMeetingStore();
+  // Use the FIRESTORE_DATABASE_ID env var if set, otherwise default.
+  // Named databases (e.g. "mtcq-db") require this to be specified.
+  const databaseId = process.env.FIRESTORE_DATABASE_ID;
+  const firestoreOpts = databaseId ? { databaseId } : {};
+  const db = new Firestore(firestoreOpts);
+  meetingStore = new FirestoreMeetingStore(firestoreOpts);
   sessionStore = new FirestoreStore({
-    dataset: db,
-    kind: 'sessions',
+    database: db,
+    collection: 'sessions',
   });
 } else {
   // File-based store for local development
@@ -98,6 +104,32 @@ app.get('/api/health', (_req, res) => {
 // All other /api routes require an authenticated session
 app.use('/api', requireAuth, createMeetingRoutes(meetingManager));
 
+// --- Static file serving (production) ---
+// In production, the Express server serves the Vite-built client assets.
+// In development, the Vite dev server handles this via proxy.
+const CLIENT_DIST = join(import.meta.dirname, '../../client/dist');
+app.use(express.static(CLIENT_DIST));
+
+// Catch-all: serve index.html for client-side routing (e.g. /meeting/:id).
+// This must come after all API and auth routes. Uses a middleware
+// instead of app.get('*') for Express 5 compatibility.
+app.use((_req, res, next) => {
+  // Don't serve index.html for API, auth, or socket.io routes
+  if (_req.path.startsWith('/api/') || _req.path.startsWith('/auth/') || _req.path.startsWith('/socket.io/')) {
+    next();
+    return;
+  }
+  // Only serve for GET requests (not POST, etc.)
+  if (_req.method !== 'GET') {
+    next();
+    return;
+  }
+  res.sendFile(join(CLIENT_DIST, 'index.html'), (err) => {
+    // If the file doesn't exist (dev mode), just skip
+    if (err) next();
+  });
+});
+
 // --- Socket.IO ---
 
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
@@ -123,12 +155,6 @@ registerSocketHandlers(io, meetingManager);
 // --- Start ---
 
 async function start() {
-  // Restore any persisted meetings from the store
-  await meetingManager.restore();
-
-  // Start periodic sync (writes dirty meetings to the store every 30 seconds)
-  meetingManager.startPeriodicSync();
-
   // Log which modes are active
   console.log(`Persistence: ${STORE_TYPE}`);
   if (isOAuthConfigured()) {
@@ -136,6 +162,19 @@ async function start() {
   } else {
     console.log('Authentication: mock (set GITHUB_CLIENT_ID to enable OAuth)');
   }
+
+  // Restore any persisted meetings from the store. If this fails
+  // (e.g. Firestore not yet set up), log the error but continue
+  // starting — the server should still be reachable so Cloud Run's
+  // health check passes and we can diagnose via logs.
+  try {
+    await meetingManager.restore();
+  } catch (err) {
+    console.error('Failed to restore meetings from store (continuing anyway):', err);
+  }
+
+  // Start periodic sync (writes dirty meetings to the store every 30 seconds)
+  meetingManager.startPeriodicSync();
 
   httpServer.listen(PORT, () => {
     console.log(`TCQ server listening on http://localhost:${PORT}`);

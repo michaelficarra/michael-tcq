@@ -1,8 +1,8 @@
 # Deploying TCQ
 
-> **Status:** Firestore persistence is implemented. Cloud Run deployment (Dockerfile, deploy commands) is not yet configured.
-
 TCQ is deployed as a single Docker container on Google Cloud Run, with Firestore for persistent storage. See [ARCHITECTURE.md](ARCHITECTURE.md) for the rationale behind these choices.
+
+Deployment is done via the `scripts/deploy.sh` script, which reads configuration from `.env`.
 
 ## Prerequisites
 
@@ -10,80 +10,167 @@ TCQ is deployed as a single Docker container on Google Cloud Run, with Firestore
 - The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) installed
 - [Docker](https://docs.docker.com/get-docker/) installed locally
 
-## Google Cloud Project Setup
-
-These steps only need to be done once.
+## First-Time Setup
 
 ### 1. Create a GCP Project
 
-1. Go to [Create a project](https://console.cloud.google.com/projectcreate).
-2. Enter a project name (e.g. `tcq`) and click **Create**.
-3. Note the **Project ID** (e.g. `tcq-123456`).
-
-### 2. Authenticate the CLI
-
 ```sh
-gcloud auth login
+gcloud projects create <your-project-id> --name="TCQ"
 gcloud config set project <your-project-id>
 ```
 
-### 3. Enable Required APIs
+You may need to [link a billing account](https://console.cloud.google.com/billing) to the project. Firestore and Cloud Run have Always Free tiers.
+
+### 2. Enable Required APIs
 
 ```sh
 gcloud services enable firestore.googleapis.com run.googleapis.com artifactregistry.googleapis.com
 ```
 
-## Firestore Database
+### 3. Create a Firestore Database
 
-TCQ uses Firestore in Native mode for meeting state persistence and session storage.
+```sh
+gcloud firestore databases create --location=us-central1
+```
 
-### Create the Database
+Or with a custom database ID:
 
-1. Go to [Firestore](https://console.cloud.google.com/firestore) in the Cloud Console.
-2. Choose **Native mode** (not Datastore mode).
-3. Select a free-tier eligible region: `us-east1`, `us-central1`, or `us-west1`.
-4. Click **Create Database**.
+```sh
+gcloud firestore databases create --location=us-central1 --database=<your-database-id>
+```
 
-### Service Account for Local Development
+Use a free-tier eligible region: `us-east1`, `us-central1`, or `us-west1`.
 
-To test Firestore locally (with `STORE=firestore`), you need a service account key:
+### 4. Create a Service Account for Cloud Run
 
-1. Go to [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts).
-2. Click **Create Service Account**.
-3. Name: `tcq-dev`. Click **Create and Continue**.
-4. Grant the role **Cloud Datastore User** (covers Firestore Native mode). Click **Continue**, then **Done**.
-5. Click the new service account, go to the **Keys** tab.
-6. Click **Add Key > Create new key**, select **JSON**, click **Create**.
-7. Save the downloaded file as `service-account.json` in the project root (already in `.gitignore`).
-8. Add to your `.env`:
-   ```
-   STORE=firestore
-   GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-   ```
+```sh
+gcloud iam service-accounts create tcq-cloudrun --display-name="TCQ Cloud Run"
 
-> **Note:** In production on Cloud Run, the default service account has Firestore access automatically — no key file needed.
+gcloud projects add-iam-policy-binding <your-project-id> \
+  --member="serviceAccount:tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com" \
+  --role="roles/datastore.user"
 
-## GitHub OAuth App
+gcloud projects add-iam-policy-binding <your-project-id> \
+  --member="user:$(gcloud config get account)" \
+  --role="roles/iam.serviceAccountUser"
+```
 
-TCQ uses GitHub OAuth for authentication. You need a separate OAuth App for each environment.
+### 5. Create an Artifact Registry Repository
 
-### Development OAuth App
+```sh
+gcloud artifacts repositories create tcq --repository-format=docker --location=us-central1
+gcloud auth configure-docker us-central1-docker.pkg.dev
+```
 
-Optional — without it, the server runs in mock auth mode. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+### 6. Configure .env
 
-### Production OAuth App
+Copy `.env.example` to `.env` (if you haven't already) and fill in the deployment fields:
+
+```
+GCP_PROJECT_ID=<your-project-id>
+GCP_REGION=us-central1
+GCP_SERVICE_ACCOUNT=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
+CLOUD_RUN_SERVICE=tcq
+FIRESTORE_DATABASE_ID=<your-database-id>    # omit if using (default)
+PROD_SESSION_SECRET=<random-secret>
+```
+
+Generate a random session secret with:
+
+```sh
+head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 40
+```
+
+Leave the `PROD_GITHUB_*` fields empty for now — they require the Cloud Run URL, which you won't have until after the first deploy.
+
+### 7. First Deploy (Without OAuth)
+
+```sh
+./scripts/deploy.sh
+```
+
+This builds the Docker image, pushes it to Artifact Registry, and deploys to Cloud Run. The script will warn that GitHub OAuth is not configured — the server will run in mock auth mode.
+
+Note the **service URL** printed at the end of the deploy.
+
+### 8. Create a Production GitHub OAuth App
+
+Now that you have the Cloud Run URL, register an OAuth App:
 
 1. Go to [GitHub Developer Settings > OAuth Apps](https://github.com/settings/developers).
 2. Click **New OAuth App**.
 3. Fill in:
    - **Application name:** `TCQ`
-   - **Homepage URL:** `https://<your-production-url>`
-   - **Authorization callback URL:** `https://<your-production-url>/auth/github/callback`
+   - **Homepage URL:** `https://<your-cloud-run-url>`
+   - **Authorization callback URL:** `https://<your-cloud-run-url>/auth/github/callback`
 4. Click **Register application**.
 5. Note the **Client ID** and generate a **Client Secret**.
 
-> **Note:** After your first Cloud Run deployment, you'll know the service URL. Come back and update the URLs to match.
+### 9. Redeploy with OAuth
 
-## Cloud Run Deployment
+Add the GitHub OAuth credentials to `.env`:
 
-*Coming in Step 13.*
+```
+PROD_GITHUB_CLIENT_ID=<client-id>
+PROD_GITHUB_CLIENT_SECRET=<client-secret>
+PROD_GITHUB_CALLBACK_URL=https://<your-cloud-run-url>/auth/github/callback
+```
+
+Then redeploy:
+
+```sh
+./scripts/deploy.sh
+```
+
+The server will now use real GitHub authentication.
+
+## Subsequent Deploys
+
+After the initial setup, deploying is a single command:
+
+```sh
+./scripts/deploy.sh
+```
+
+The script reads all configuration from `.env`, builds the image, pushes it, and deploys.
+
+## Configuration Notes
+
+- **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
+- **`--session-affinity`** — Routes reconnecting clients to the same instance.
+- **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 4. No key file needed in production.
+
+## Checking Deployment Status
+
+```sh
+# View the service URL
+gcloud run services describe tcq --region=us-central1 --format='value(status.url)'
+
+# View recent logs
+gcloud run services logs read tcq --region=us-central1 --limit=50
+
+# List revisions
+gcloud run revisions list --service=tcq --region=us-central1
+```
+
+## Local Firestore Testing
+
+To test Firestore locally (optional — the file store works for most development):
+
+```sh
+# Create a service account key
+gcloud iam service-accounts keys create service-account.json \
+  --iam-account=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
+```
+
+The key file is saved as `service-account.json` (already in `.gitignore`). Set in `.env`:
+
+```
+STORE=firestore
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+FIRESTORE_DATABASE_ID=<your-database-id>
+```
+
+## Development OAuth App
+
+Optional — without it, the server runs in mock auth mode with a fake user. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

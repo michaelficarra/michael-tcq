@@ -145,69 +145,14 @@ Implemented `FirestoreMeetingStore` and Firestore session store. The `STORE` env
 
 **Infrastructure required (not yet set up):** See DEPLOYMENT.md for GCP project, Firestore database, and service account setup instructions.
 
-## Step 13: Production Deployment
+## Step 13: Production Deployment ✅
 
-Deploy the application to Google Cloud Run.
+Implemented Dockerfile and static asset serving. The Express server serves the Vite-built client in production.
 
----
-
-**Infrastructure: Cloud Run and Artifact Registry**
-
-1. **Install the Google Cloud CLI** (`gcloud`) if not already installed: https://cloud.google.com/sdk/docs/install.
-
-2. **Authenticate and set the project:**
-   ```
-   gcloud auth login
-   gcloud config set project <your-project-id>
-   ```
-
-3. **Enable required APIs:**
-   ```
-   gcloud services enable run.googleapis.com artifactregistry.googleapis.com
-   ```
-
-4. **Create an Artifact Registry repository** (for storing the Docker image):
-   ```
-   gcloud artifacts repositories create tcq --repository-format=docker --location=us-central1
-   ```
-
-5. **Configure Docker to authenticate with Artifact Registry:**
-   ```
-   gcloud auth configure-docker us-central1-docker.pkg.dev
-   ```
-
-6. **Register a production GitHub OAuth App:**
-   - Follow the same steps as in Step 9, but use the production URL:
-     - **Homepage URL:** `https://<your-cloud-run-url>` (you will know this after the first deploy; you can update it then)
-     - **Authorization callback URL:** `https://<your-cloud-run-url>/auth/github/callback`
-   - Note the Client ID and Client Secret.
-
----
-
-- **Write a `Dockerfile`:**
-  - Multi-stage build: first stage installs dependencies and builds all three packages (shared, client, server). Second stage copies only the compiled server, the built client assets, and production `node_modules`.
-  - The entry point runs `node packages/server/dist/index.js`.
-- **Deploy to Cloud Run:**
-  ```
-  # Build and push the image
-  docker build -t us-central1-docker.pkg.dev/<project-id>/tcq/tcq:latest .
-  docker push us-central1-docker.pkg.dev/<project-id>/tcq/tcq:latest
-
-  # Deploy
-  gcloud run deploy tcq \
-    --image us-central1-docker.pkg.dev/<project-id>/tcq/tcq:latest \
-    --region us-central1 \
-    --allow-unauthenticated \
-    --set-env-vars "STORE=firestore,SESSION_SECRET=<generate-a-secret>,GITHUB_CLIENT_ID=<prod-client-id>,GITHUB_CLIENT_SECRET=<prod-client-secret>,GITHUB_CALLBACK_URL=https://<cloud-run-url>/auth/github/callback" \
-    --request-timeout 3600 \
-    --session-affinity
-  ```
-  - After the first deploy, note the Cloud Run service URL and update the production GitHub OAuth App's callback URL to match.
-  - Cloud Run's default service account has Firestore access, so no additional credentials are needed in production.
-- **Configure the request timeout** to 3,600 seconds (the maximum) to minimise WebSocket reconnections.
-- **Verify:** Visit the production URL, log in with GitHub, create a meeting, test the full flow.
-
-**Checkpoint:** The application is live on Cloud Run. OAuth works with the production GitHub App. Meetings persist across container restarts via Firestore.
+- **`Dockerfile`** — Multi-stage build: stage 1 installs deps and builds all packages; stage 2 copies only compiled artefacts and production node_modules. Entry point: `node packages/server/dist/index.js`.
+- **`.dockerignore`** — Excludes node_modules, .git, screenshots, etc.
+- **`index.ts`** — Added `express.static()` for client dist and a catch-all middleware for SPA client-side routing. Compatible with Express 5.
+- **DEPLOYMENT.md** — Full instructions for Artifact Registry, Docker build/push, and Cloud Run deploy with all env vars.
 
 ## Step 14: Polish and Remaining Details
 

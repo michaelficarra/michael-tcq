@@ -21,11 +21,12 @@ const MEETINGS_COLLECTION = 'meetings';
 export class FirestoreMeetingStore implements MeetingStore {
   private db: Firestore;
 
-  constructor() {
+  constructor(options?: ConstructorParameters<typeof Firestore>[0]) {
     // The Firestore client auto-discovers credentials from:
     // - GOOGLE_APPLICATION_CREDENTIALS env var (local dev)
     // - Default service account (Cloud Run)
-    this.db = new Firestore();
+    // Options can include databaseId for named databases.
+    this.db = new Firestore(options);
   }
 
   /** Persist a meeting's current state as a Firestore document. */

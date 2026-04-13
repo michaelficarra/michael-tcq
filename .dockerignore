@@ -1,0 +1,13 @@
+node_modules
+.data
+.env
+.git
+.gitignore
+.DS_Store
+*.swp
+*.swo
+screenshots
+service-account.json
+ARCHITECTURE.md
+PLAN.md
+PRD.md
