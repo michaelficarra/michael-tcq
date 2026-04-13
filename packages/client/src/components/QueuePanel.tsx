@@ -199,15 +199,49 @@ export function QueuePanel() {
     <div id="panel-queue" role="tabpanel" aria-label="Queue" className="p-6 space-y-6">
       {/* --- Agenda Item Section --- */}
       <section aria-labelledby="agenda-item-heading">
-        <h2
-          id="agenda-item-heading"
-          className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-1"
-        >
-          Agenda Item
-        </h2>
+        <div className="flex items-center gap-3 mb-1">
+          <h2
+            id="agenda-item-heading"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
+          >
+            Agenda Item
+          </h2>
+
+          {/* Chair controls next to the heading */}
+          {isChair && meeting.currentAgendaItem && (
+            <>
+              {hasMoreAgendaItems && (
+                <button
+                  onClick={handleNextAgendaItem}
+                  className="text-xs border border-stone-300 rounded px-2 py-0.5
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  Next Agenda Item
+                </button>
+              )}
+              {meeting.trackTemperature ? (
+                <button
+                  onClick={() => socket?.emit('temperature:stop')}
+                  className="text-xs border border-stone-300 rounded px-2 py-0.5
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  Stop Temperature Check
+                </button>
+              ) : !showTempSetup && (
+                <button
+                  onClick={() => setShowTempSetup(true)}
+                  className="text-xs border border-stone-300 rounded px-2 py-0.5
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  Check Temperature
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
         {meeting.currentAgendaItem ? (
-          <div>
+          <div className="pl-3">
             <p className="text-stone-800 font-medium">
               {meeting.currentAgendaItem.name}
             </p>
@@ -219,50 +253,21 @@ export function QueuePanel() {
                   {meeting.currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
                 </span>
               )}
-
-              {/* Next Agenda Item button — chair only */}
-              {isChair && hasMoreAgendaItems && (
-                <button
-                  onClick={handleNextAgendaItem}
-                  className="ml-3 border border-stone-300 rounded px-2 py-0.5 text-xs
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
-                >
-                  Next Agenda Item
-                </button>
-              )}
             </div>
 
-            {/* Temperature check controls — chair only */}
-            {isChair && (
-              meeting.trackTemperature ? (
-                <button
-                  onClick={() => socket?.emit('temperature:stop')}
-                  className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                             text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-                >
-                  Stop Temperature Check
-                </button>
-              ) : showTempSetup ? (
-                <TemperatureSetup
-                  onCancel={() => setShowTempSetup(false)}
-                  onStarted={() => setShowTempSetup(false)}
-                />
-              ) : (
-                <button
-                  onClick={() => setShowTempSetup(true)}
-                  className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                             text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-                >
-                  Check Temperature
-                </button>
-              )
+            {/* Temperature check setup form — chair only */}
+            {isChair && showTempSetup && (
+              <TemperatureSetup
+                onCancel={() => setShowTempSetup(false)}
+                onStarted={() => setShowTempSetup(false)}
+              />
             )}
 
             {/* Temperature check reaction panel — visible to all when active */}
             <TemperatureCheck />
           </div>
         ) : (
-          <div>
+          <div className="pl-3">
             <p className="text-stone-500">
               Waiting for the meeting to start&hellip;
             </p>
@@ -285,59 +290,50 @@ export function QueuePanel() {
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
-            className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-1"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none mb-1"
           >
             Topic
           </h2>
-          <p className="text-stone-800">{meeting.currentTopic.topic}</p>
-          <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500" />
+          <div className="pl-3">
+            <p className="text-stone-800">{meeting.currentTopic.topic}</p>
+            <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500" />
+          </div>
         </section>
       )}
 
       {/* --- Current Speaker Section --- */}
       <section aria-labelledby="speaking-heading">
-        <h2
-          id="speaking-heading"
-          className="text-xs font-bold uppercase tracking-wider text-stone-800 mb-1"
-        >
-          Speaking
-        </h2>
+        <div className="flex items-center gap-3 mb-1">
+          <h2
+            id="speaking-heading"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
+          >
+            Speaking
+          </h2>
+
+          {/* Next Speaker button — chair only, next to the heading */}
+          {isChair && (meeting.currentSpeaker || meeting.queuedSpeakers.length > 0) && (
+            <button
+              onClick={handleNextSpeaker}
+              className="text-xs border border-stone-300 rounded px-2 py-0.5
+                         text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+            >
+              Next Speaker
+            </button>
+          )}
+        </div>
 
         {meeting.currentSpeaker ? (
-          <div>
+          <div className="pl-3">
             <UserBadge user={meeting.currentSpeaker.user} size={22} className="text-stone-800 font-medium" />
             <p className="text-sm text-stone-500">
               {meeting.currentSpeaker.topic}
             </p>
-
-            {/* Next Speaker button — chair only */}
-            {isChair && (
-              <button
-                onClick={handleNextSpeaker}
-                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-              >
-                Next Speaker
-              </button>
-            )}
           </div>
         ) : (
-          <div>
-            <p className="text-stone-500">
-              Nobody speaking yet&hellip; enter the queue to get started
-            </p>
-
-            {/* Next Speaker button when nobody is speaking — starts from queue */}
-            {isChair && meeting.queuedSpeakers.length > 0 && (
-              <button
-                onClick={handleNextSpeaker}
-                className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-              >
-                Next Speaker
-              </button>
-            )}
-          </div>
+          <p className="text-stone-500 pl-3">
+            Nobody speaking yet&hellip; enter the queue to get started
+          </p>
         )}
       </section>
 
@@ -349,7 +345,7 @@ export function QueuePanel() {
         <div className="flex items-center gap-3 mb-1">
           <h2
             id="queue-heading"
-            className="text-xs font-bold uppercase tracking-wider text-stone-800"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 select-none"
           >
             Speaker Queue
           </h2>
@@ -360,16 +356,16 @@ export function QueuePanel() {
               {meeting.queuedSpeakers.length > 0 && (
                 <button
                   onClick={handleCopyQueue}
-                  className="text-xs text-stone-400 hover:text-stone-700
-                             transition-colors cursor-pointer"
+                  className="text-xs border border-stone-300 rounded px-2 py-0.5
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
                 >
                   Copy Queue
                 </button>
               )}
               <button
                 onClick={() => setShowRestore(!showRestore)}
-                className="text-xs text-stone-400 hover:text-stone-700
-                           transition-colors cursor-pointer"
+                className="text-xs border border-stone-300 rounded px-2 py-0.5
+                           text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
               >
                 {showRestore ? 'Cancel' : 'Restore Queue'}
               </button>
