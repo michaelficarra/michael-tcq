@@ -369,6 +369,73 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  describe('queue:add with asUsername', () => {
+    it('allows a chair to add an entry as another user', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Their topic', asUsername: 'alice' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers).toHaveLength(1);
+      expect(state.queuedSpeakers[0].user.ghUsername).toBe('alice');
+      expect(state.queuedSpeakers[0].topic).toBe('Their topic');
+    });
+
+    it('resolves known users from the meeting when using asUsername', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Add an agenda item owned by a known user with a full profile
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
+        ghid: 42, ghUsername: 'knownuser', name: 'Known User', organisation: 'ACME',
+      });
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'knownuser' });
+      const state = await statePromise;
+
+      // Should use the full profile, not a placeholder
+      expect(state.queuedSpeakers[0].user.name).toBe('Known User');
+      expect(state.queuedSpeakers[0].user.organisation).toBe('ACME');
+    });
+
+    it('creates a placeholder user for unknown asUsername', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'unknownperson' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakers[0].user.ghUsername).toBe('unknownperson');
+      expect(state.queuedSpeakers[0].user.name).toBe('unknownperson');
+    });
+
+    it('rejects asUsername from non-chair', async () => {
+      // Meeting where chair is someone else
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:add', { type: 'topic', topic: 'Hacked', asUsername: 'victim' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      // No entry should have been added
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakers).toHaveLength(0);
+    });
+  });
+
   describe('queue:remove', () => {
     it('removes own entry from the queue', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };

@@ -240,8 +240,8 @@ export function registerSocketHandlers(
 
     // --- queue:add ---
     // Any authenticated user can add themselves to the speaker queue.
-    // The entry is automatically inserted at the correct position based
-    // on type priority (point-of-order > question > reply > topic).
+    // Chairs can optionally specify `asUsername` to add an entry on
+    // behalf of another user (used by the "Restore Queue" feature).
     socket.on('queue:add', (payload) => {
       if (!joinedMeetingId) return;
 
@@ -255,7 +255,31 @@ export function registerSocketHandlers(
         return;
       }
 
-      const entry = meetingManager.addQueueEntry(joinedMeetingId, payload.type, topic, user);
+      // Determine who the entry is for: the current user, or a specified
+      // user if the chair provided asUsername.
+      let entryUser = user;
+      if (payload.asUsername) {
+        if (!meetingManager.isChair(joinedMeetingId, user)) {
+          socket.emit('error', 'Only chairs can add entries on behalf of others');
+          return;
+        }
+        const username = payload.asUsername.trim();
+        // Look up the user from existing meeting participants (chairs,
+        // queue entries, agenda owners) or create a placeholder.
+        const meeting = meetingManager.get(joinedMeetingId);
+        const knownUser =
+          meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === username.toLowerCase()) ??
+          meeting?.queuedSpeakers.find((e) => e.user.ghUsername.toLowerCase() === username.toLowerCase())?.user ??
+          meeting?.agenda.find((a) => a.owner.ghUsername.toLowerCase() === username.toLowerCase())?.owner;
+        entryUser = knownUser ?? {
+          ghid: 0,
+          ghUsername: username,
+          name: username,
+          organisation: '',
+        };
+      }
+
+      const entry = meetingManager.addQueueEntry(joinedMeetingId, payload.type, topic, entryUser);
       if (!entry) {
         socket.emit('error', 'Failed to add queue entry');
         return;

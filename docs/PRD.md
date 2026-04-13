@@ -123,6 +123,17 @@ Chairs can click the type badge (e.g. "New Topic:") on any queue entry, and part
 
 Chairs can edit any queue entry's topic inline. Participants can edit their own entries.
 
+### Copy and Restore Queue (Chair Only)
+
+Chairs can copy the entire queue to the clipboard in a human-readable text format, one entry per line:
+
+```
+New Topic: My discussion point (alice)
+Clarifying Question: How does this work? (bob)
+```
+
+Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(username)`, the entry is added on behalf of that user, preserving the original author. The username is resolved against known meeting participants (chairs, existing queue entries, agenda owners); unknown usernames create a placeholder user. Non-chairs cannot add entries on behalf of other users.
+
 ## Current Speaker and Current Topic
 
 ### Current Speaker

@@ -46,6 +46,11 @@ export interface QueueEditPayload {
 export interface QueueAddPayload {
   type: QueueEntryType;
   topic: string;
+  /**
+   * Optional: GitHub username to add the entry as. Chair only.
+   * When omitted, the entry is added as the current session user.
+   */
+  asUsername?: string;
 }
 
 /** Payload for removing a queue entry. */

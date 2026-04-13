@@ -99,6 +99,61 @@ export function QueuePanel() {
     socket?.emit('queue:remove', { id: entryId });
   }
 
+  // Whether the restore queue textarea is open
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreText, setRestoreText] = useState('');
+
+  /**
+   * Copy the queue to the clipboard in a human-readable text format.
+   * Each line: "Type: topic (username)"
+   */
+  function handleCopyQueue() {
+    if (!meeting) return;
+    const text = meeting.queuedSpeakers
+      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${e.user.ghUsername})`)
+      .join('\n');
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  /**
+   * Parse the restore text and bulk-add entries to the queue.
+   * Each line should be "Type: topic" or "Type: topic (username)".
+   * When a username is present, the entry is added on behalf of that
+   * user (chair-only feature via the asUsername field).
+   */
+  function handleRestoreQueue() {
+    if (!socket || !restoreText.trim()) return;
+
+    const lines = restoreText.trim().split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Parse "Type: topic" or "Type: topic (username)"
+      const colonIndex = trimmed.indexOf(':');
+      if (colonIndex === -1) continue;
+
+      const typeLabel = trimmed.slice(0, colonIndex).trim();
+      let rest = trimmed.slice(colonIndex + 1).trim();
+
+      // Extract trailing "(username)" if present
+      let asUsername: string | undefined;
+      const parenMatch = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+      if (parenMatch) {
+        rest = parenMatch[1].trim();
+        asUsername = parenMatch[2].trim();
+      }
+
+      const type = parseEntryType(typeLabel);
+      if (!type || !rest) continue;
+
+      socket.emit('queue:add', { type, topic: rest, asUsername });
+    }
+
+    setRestoreText('');
+    setShowRestore(false);
+  }
+
   /**
    * Handle the end of a drag-and-drop reorder on the queue.
    * Resolves the drop position to a UUID-based afterId so the server
@@ -291,14 +346,67 @@ export function QueuePanel() {
 
       {/* --- Speaker Queue Section --- */}
       <section aria-labelledby="queue-heading">
-        <h2
-          id="queue-heading"
-          className="text-xs font-bold uppercase tracking-wider text-stone-800 mb-1"
-        >
-          Speaker Queue
-        </h2>
+        <div className="flex items-center gap-3 mb-1">
+          <h2
+            id="queue-heading"
+            className="text-xs font-bold uppercase tracking-wider text-stone-800"
+          >
+            Speaker Queue
+          </h2>
 
-        {meeting.queuedSpeakers.length === 0 ? (
+          {/* Copy/Restore buttons — chairs only */}
+          {isChair && (
+            <>
+              {meeting.queuedSpeakers.length > 0 && (
+                <button
+                  onClick={handleCopyQueue}
+                  className="text-xs text-stone-400 hover:text-stone-700
+                             transition-colors cursor-pointer"
+                >
+                  Copy Queue
+                </button>
+              )}
+              <button
+                onClick={() => setShowRestore(!showRestore)}
+                className="text-xs text-stone-400 hover:text-stone-700
+                           transition-colors cursor-pointer"
+              >
+                {showRestore ? 'Cancel' : 'Restore Queue'}
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Restore queue textarea — chairs only */}
+        {isChair && showRestore && (
+          <div className="mb-3 border border-stone-200 rounded-lg p-3 bg-white">
+            <label htmlFor="restore-queue" className="block text-xs font-medium text-stone-600 mb-1">
+              Paste queue items (one per line: "Type: topic")
+            </label>
+            <textarea
+              id="restore-queue"
+              value={restoreText}
+              onChange={(e) => setRestoreText(e.target.value)}
+              placeholder={'New Topic: My discussion point\nClarifying Question: How does this work?\nReply: I agree with the previous speaker\nPoint of Order: We should timebox this'}
+              rows={5}
+              className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-2
+                         focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500
+                         font-mono"
+            />
+            <button
+              onClick={handleRestoreQueue}
+              disabled={!restoreText.trim()}
+              className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
+                         hover:bg-teal-600 transition-colors cursor-pointer
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+            >
+              Add to Queue
+            </button>
+          </div>
+        )}
+
+        {meeting.queuedSpeakers.length === 0 && !showRestore ? (
           <p className="text-stone-400 italic text-sm">The queue is empty.</p>
         ) : (
           <DndContext
@@ -597,6 +705,17 @@ export function entryTypeLabel(type: string): string {
     case 'question': return 'Clarifying Question';
     case 'point-of-order': return 'Point of Order';
     default: return type;
+  }
+}
+
+/** Map a display label back to a queue entry type. Case-insensitive. */
+function parseEntryType(label: string): QueueEntryType | null {
+  switch (label.toLowerCase()) {
+    case 'new topic': return 'topic';
+    case 'reply': return 'reply';
+    case 'clarifying question': return 'question';
+    case 'point of order': return 'point-of-order';
+    default: return null;
   }
 }
 

@@ -138,6 +138,23 @@ export function HelpPanel() {
           You can edit or delete any queue entry.
         </p>
 
+        <h4 className="font-medium text-stone-700 mt-4 mb-1">Copy and Restore Queue</h4>
+        <p className="text-sm text-stone-600 mb-2">
+          Next to the "Speaker Queue" heading, you'll find <strong>Copy
+          Queue</strong> and <strong>Restore Queue</strong> buttons.
+        </p>
+        <ul className="text-sm text-stone-600 ml-4 mb-3 space-y-1 list-disc">
+          <li>
+            <strong>Copy Queue</strong> copies the queue to your clipboard in a
+            text format (one entry per line, including the author's username).
+          </li>
+          <li>
+            <strong>Restore Queue</strong> lets you paste entries in the same
+            format to bulk-add them. Entries that include a username in
+            parentheses are added as that user, preserving the original author.
+          </li>
+        </ul>
+
         <h4 className="font-medium text-stone-700 mt-4 mb-1">Temperature Checks</h4>
         <p className="text-sm text-stone-600 mb-2">
           To gauge the room's sentiment on a topic:
