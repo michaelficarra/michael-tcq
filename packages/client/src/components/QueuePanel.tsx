@@ -212,7 +212,16 @@ export function QueuePanel() {
             <>
               {hasMoreAgendaItems && (
                 <button
-                  onClick={handleNextAgendaItem}
+                  onClick={() => {
+                    // Confirm if the queue has entries that will be cleared
+                    if (meeting.queuedSpeakers.length > 0) {
+                      const ok = window.confirm(
+                        `Advancing to the next agenda item will clear the speaker queue (${meeting.queuedSpeakers.length} ${meeting.queuedSpeakers.length === 1 ? 'entry' : 'entries'}). Continue?`,
+                      );
+                      if (!ok) return;
+                    }
+                    handleNextAgendaItem();
+                  }}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
                              text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
                 >
