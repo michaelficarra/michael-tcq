@@ -19,7 +19,7 @@ export function HomePage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
       <nav
-        className="sticky top-0 z-40 flex items-center gap-3 sm:gap-6 border-b border-stone-200 bg-white px-3 sm:px-6 py-3"
+        className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 bg-white px-3 sm:px-6 py-3"
         aria-label="Main navigation"
       >
         {/* Branding */}
