@@ -7,12 +7,13 @@
 
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
+import { UserBadge } from './UserBadge.js';
 
 export function UserMenu() {
   const { user, mockAuth, switchUser } = useAuth();
 
-  if (mockAuth) {
-    return <DevUserSwitcher currentUsername={user?.ghUsername ?? ''} switchUser={switchUser} />;
+  if (mockAuth && user) {
+    return <DevUserSwitcher user={user} switchUser={switchUser} />;
   }
 
   return (
@@ -28,15 +29,15 @@ export function UserMenu() {
 // -- Dev user-switcher --
 
 interface DevUserSwitcherProps {
-  currentUsername: string;
+  user: import('@tcq/shared').User;
   switchUser: (username: string) => Promise<void>;
 }
 
 /**
- * In dev mode, shows the current username as a clickable button.
- * Clicking it reveals an input to switch to a different mock user.
+ * In dev mode, shows the current user's avatar and name as a clickable
+ * button. Clicking it reveals an input to switch to a different mock user.
  */
-function DevUserSwitcher({ currentUsername, switchUser }: DevUserSwitcherProps) {
+function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [switching, setSwitching] = useState(false);
@@ -61,7 +62,7 @@ function DevUserSwitcher({ currentUsername, switchUser }: DevUserSwitcherProps) 
         className="text-sm text-stone-500 hover:text-stone-700 transition-colors cursor-pointer"
         title="Click to switch user (dev mode)"
       >
-        {currentUsername}
+        <UserBadge user={user} size={20} />
       </button>
     );
   }

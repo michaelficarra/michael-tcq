@@ -29,6 +29,7 @@ import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { SpeakerControls } from './SpeakerControls.js';
+import { UserBadge } from './UserBadge.js';
 
 export function QueuePanel() {
   const { meeting, user } = useMeetingState();
@@ -115,11 +116,8 @@ export function QueuePanel() {
             <p className="text-stone-800 font-medium">
               {meeting.currentAgendaItem.name}
             </p>
-            <p className="text-sm text-stone-500">
-              {meeting.currentAgendaItem.owner.name}
-              {meeting.currentAgendaItem.owner.organisation && (
-                <> ({meeting.currentAgendaItem.owner.organisation})</>
-              )}
+            <div className="text-sm text-stone-500 flex flex-wrap items-center gap-x-2">
+              <UserBadge user={meeting.currentAgendaItem.owner} size={18} />
               {meeting.currentAgendaItem.timebox != null && meeting.currentAgendaItem.timebox > 0 && (
                 <span className="ml-2">
                   {meeting.currentAgendaItem.timebox}{' '}
@@ -137,7 +135,7 @@ export function QueuePanel() {
                   Next Agenda Item
                 </button>
               )}
-            </p>
+            </div>
           </div>
         ) : (
           <div>
@@ -168,12 +166,7 @@ export function QueuePanel() {
             Topic
           </h2>
           <p className="text-stone-800">{meeting.currentTopic.topic}</p>
-          <p className="text-sm text-stone-500">
-            {meeting.currentTopic.user.name}
-            {meeting.currentTopic.user.organisation && (
-              <> ({meeting.currentTopic.user.organisation})</>
-            )}
-          </p>
+          <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500" />
         </section>
       )}
 
@@ -188,14 +181,7 @@ export function QueuePanel() {
 
         {meeting.currentSpeaker ? (
           <div>
-            <p className="text-stone-800 font-medium">
-              {meeting.currentSpeaker.user.name}
-              {meeting.currentSpeaker.user.organisation && (
-                <span className="font-normal text-stone-500">
-                  {' '}({meeting.currentSpeaker.user.organisation})
-                </span>
-              )}
-            </p>
+            <UserBadge user={meeting.currentSpeaker.user} size={22} className="text-stone-800 font-medium" />
             <p className="text-sm text-stone-500">
               {meeting.currentSpeaker.topic}
             </p>
@@ -337,11 +323,8 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
         <span className="ml-1 text-stone-800">{entry.topic}</span>
 
         {/* Speaker info and action buttons */}
-        <p className="text-sm text-stone-500">
-          {entry.user.name}
-          {entry.user.organisation && (
-            <> ({entry.user.organisation})</>
-          )}
+        <div className="text-sm text-stone-500 flex flex-wrap items-center">
+          <UserBadge user={entry.user} size={16} />
 
           {/* Delete button — own entries or chair */}
           {canDelete && (
@@ -354,7 +337,7 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
               Delete
             </button>
           )}
-        </p>
+        </div>
       </div>
     </li>
   );

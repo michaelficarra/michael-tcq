@@ -31,6 +31,7 @@ import type { AgendaItem } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { AgendaForm } from './AgendaForm.js';
+import { UserBadge } from './UserBadge.js';
 
 export function AgendaPanel() {
   const { meeting } = useMeetingState();
@@ -94,17 +95,11 @@ export function AgendaPanel() {
         <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">
           Chairs
         </h2>
-        <p className="text-sm text-stone-700">
-          {meeting.chairs.map((chair, i) => (
-            <span key={chair.ghUsername}>
-              {i > 0 && ', '}
-              {chair.name}
-              {chair.organisation && (
-                <span className="text-stone-400"> ({chair.organisation})</span>
-              )}
-            </span>
+        <div className="flex flex-wrap gap-3 text-sm text-stone-700">
+          {meeting.chairs.map((chair) => (
+            <UserBadge key={chair.ghUsername} user={chair} size={18} />
           ))}
-        </p>
+        </div>
       </section>
 
       {/* Agenda item list */}
@@ -184,7 +179,7 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-baseline gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
+      className={`flex items-center gap-3 border-b border-stone-100 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200' : index % 2 === 0 ? 'bg-white' : 'bg-stone-100/50'
       } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
@@ -200,12 +195,7 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
         <span className="font-medium text-stone-800">{item.name}</span>
 
         {/* Owner info */}
-        <span className="ml-2 text-sm text-stone-500">
-          {item.owner.name}
-          {item.owner.organisation && (
-            <> ({item.owner.organisation})</>
-          )}
-        </span>
+        <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500" />
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (

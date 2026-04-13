@@ -58,7 +58,8 @@ describe('NavBar', () => {
     });
 
     render(<NavBar activeTab="queue" onTabChange={() => {}} />);
-    expect(screen.getByText('testuser')).toBeInTheDocument();
+    // UserBadge displays user.name, not ghUsername
+    expect(screen.getByText('Test User')).toBeInTheDocument();
     expect(screen.queryByText('Log Out')).not.toBeInTheDocument();
   });
 
