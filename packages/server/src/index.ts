@@ -68,6 +68,7 @@ if (STORE_TYPE === 'firestore') {
 } else {
   // File-based store for local development
   const dataDir = join(process.cwd(), '.data', 'meetings');
+  console.log(`Using file store: ${dataDir}`);
   const fileStore = new FileMeetingStore(dataDir);
   await fileStore.init();
   meetingStore = fileStore;
