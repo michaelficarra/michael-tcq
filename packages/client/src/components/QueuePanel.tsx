@@ -242,7 +242,7 @@ export function QueuePanel() {
               strategy={verticalListSortingStrategy}
               disabled={!isChair}
             >
-              <ol className="space-y-3" aria-label="Queued speakers">
+              <ol aria-label="Queued speakers">
                 {meeting.queuedSpeakers.map((entry, index) => (
                   <SortableQueueEntry
                     key={entry.id}
@@ -311,7 +311,7 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
       )}
 
       {/* Position number */}
-      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-right">
+      <span className="text-lg font-semibold text-stone-400 tabular-nums min-w-[1.5rem] text-center">
         {index + 1}
       </span>
 
@@ -322,23 +322,23 @@ function SortableQueueEntry({ entry, index, isChair, isOwnEntry, onDelete }: Sor
         </span>
         <span className="ml-1 text-stone-800">{entry.topic}</span>
 
-        {/* Speaker info and action buttons */}
-        <div className="text-sm text-stone-500 flex flex-wrap items-center">
+        {/* Speaker info */}
+        <div className="text-sm text-stone-500">
           <UserBadge user={entry.user} size={16} />
-
-          {/* Delete button — own entries or chair */}
-          {canDelete && (
-            <button
-              onClick={() => onDelete(entry.id)}
-              className="ml-3 text-xs text-stone-400 hover:text-red-600
-                         transition-colors cursor-pointer"
-              aria-label={`Delete entry: ${entry.topic}`}
-            >
-              Delete
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Delete button — own entries or chair, right-aligned */}
+      {canDelete && (
+        <button
+          onClick={() => onDelete(entry.id)}
+          className="text-xs text-stone-400 hover:text-red-600
+                     transition-colors cursor-pointer shrink-0"
+          aria-label={`Delete entry: ${entry.topic}`}
+        >
+          Delete
+        </button>
+      )}
     </li>
   );
 }

@@ -192,14 +192,14 @@ function SortableAgendaItem({ item, index, isChair, onDelete }: SortableAgendaIt
 
       <div className="flex-1 min-w-0">
         {/* Item name */}
-        <span className="font-medium text-stone-800">{item.name}</span>
+        <span className="font-medium text-stone-800 align-middle">{item.name}</span>
 
         {/* Owner info */}
         <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500" />
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (
-          <span className="ml-2 text-sm text-stone-400">
+          <span className="ml-2 text-sm text-stone-400 align-middle">
             {item.timebox} {item.timebox === 1 ? 'minute' : 'minutes'}
           </span>
         )}
