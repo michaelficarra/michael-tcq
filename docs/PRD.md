@@ -17,9 +17,10 @@ All authenticated users are participants. They can:
 
 ### Chairs
 
-Chairs are designated when a meeting is created. In addition to all participant capabilities, chairs can:
+The meeting creator is the initial chair. In addition to all participant capabilities, chairs can:
 
 - Create meetings
+- Edit the list of chairs (add or remove others, but cannot remove themselves)
 - Add, edit, delete, and reorder agenda items
 - Start the meeting / advance to the next agenda item
 - Advance to the next speaker
@@ -37,7 +38,7 @@ When GitHub OAuth is not configured (no `GITHUB_CLIENT_ID` environment variable)
 
 ### Creating a Meeting
 
-An authenticated user creates a meeting by specifying one or more chairs as a comma-separated list of GitHub usernames. When OAuth is configured, chair usernames are validated against the GitHub API. The system generates a meeting ID consisting of a short sequence of memorable, easily distinguished words.
+An authenticated user clicks "Start a New Meeting" to create a meeting with themselves as the sole initial chair. The system generates a meeting ID consisting of a short sequence of memorable, easily distinguished words. Additional chairs can be added from the Agenda tab after the meeting is created.
 
 ### Joining a Meeting
 
@@ -50,7 +51,11 @@ If a user navigates to a non-existent meeting, a clear error page is shown with 
 The home page shows two cards side by side:
 
 - **Join Meeting** — a text input for the meeting ID and a "Join" button. Validates that the meeting exists before navigating to it.
-- **New Meeting** — a text input for chair GitHub usernames (comma-separated), pre-populated with the current user's username. A "Start a New Meeting" button creates the meeting and redirects to it.
+- **New Meeting** — a "Start a New Meeting" button that creates a meeting with the current user as the sole chair and redirects to it. Additional chairs can be added from the Agenda tab.
+
+## Chair Management
+
+The Agenda tab displays the list of chairs at the top. Chairs can click "edit" to modify the list via a comma-separated text input. When OAuth is configured, new usernames are validated against the GitHub API. A chair cannot remove themselves from the list. At least one chair must remain.
 
 ## Agenda
 

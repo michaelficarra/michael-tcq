@@ -3,7 +3,7 @@
  * and "Help" (usage guide) tabs.
  */
 
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { UserMenu } from '../components/UserMenu.js';
@@ -140,41 +140,20 @@ function JoinMeetingCard() {
 function NewMeetingCard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [chairs, setChairs] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  // Track whether the user has manually edited the field
-  const [userEdited, setUserEdited] = useState(false);
 
-  // Pre-populate the chairs field with the current user's GitHub username
-  // once auth loads, but only if the user hasn't already typed something.
-  useEffect(() => {
-    if (user && !userEdited) {
-      setChairs(user.ghUsername);
-    }
-  }, [user, userEdited]);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  /** Create a new meeting with the current user as the only chair. */
+  async function handleCreate() {
+    if (!user) return;
     setError('');
-
-    // Split on commas and trim whitespace from each username
-    const chairList = chairs
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    if (chairList.length === 0) {
-      setError('At least one chair is required');
-      return;
-    }
-
     setLoading(true);
+
     try {
       const res = await fetch('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: chairList }),
+        body: JSON.stringify({ chairs: [user.ghUsername] }),
       });
 
       if (!res.ok) {
@@ -196,38 +175,25 @@ function NewMeetingCard() {
     <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
       <h2 className="text-lg font-semibold text-stone-800 mb-4">New Meeting</h2>
 
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="chairs" className="block text-sm font-medium text-stone-700 mb-1">
-          Chairs
-        </label>
-        <input
-          id="chairs"
-          type="text"
-          value={chairs}
-          onChange={(e) => { setChairs(e.target.value); setUserEdited(true); }}
-          required
-          className="w-full border border-stone-300 rounded px-3 py-2 text-sm mb-1
-                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-        />
-        <p className="text-xs text-stone-400 mb-2">
-          Chairs control the agenda and speaker queue. Enter GitHub usernames separated by commas.
-        </p>
+      <p className="text-sm text-stone-500 mb-4">
+        You will be the initial chair. Additional chairs can be added
+        from the Agenda tab after the meeting is created.
+      </p>
 
-        {/* Error message */}
-        {error && (
-          <p className="text-red-600 text-sm mb-2" role="alert">{error}</p>
-        )}
+      {/* Error message */}
+      {error && (
+        <p className="text-red-600 text-sm mb-2" role="alert">{error}</p>
+      )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-1 bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                     hover:bg-teal-600 transition-colors disabled:opacity-50
-                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
-        >
-          {loading ? 'Creating…' : 'Start a New Meeting'}
-        </button>
-      </form>
+      <button
+        onClick={handleCreate}
+        disabled={loading || !user}
+        className="bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
+                   hover:bg-teal-600 transition-colors disabled:opacity-50
+                   focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+      >
+        {loading ? 'Creating…' : 'Start a New Meeting'}
+      </button>
     </div>
   );
 }

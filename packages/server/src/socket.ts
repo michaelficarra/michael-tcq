@@ -89,6 +89,68 @@ export function registerSocketHandlers(
       socket.emit('state', meeting);
     });
 
+    // --- meeting:updateChairs ---
+    // Chair updates the list of chairs. At least one chair must remain.
+    // The acting chair cannot remove themselves. When OAuth is configured,
+    // usernames are validated against the GitHub API.
+    socket.on('meeting:updateChairs', async (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can update the chair list');
+        return;
+      }
+
+      const usernames = payload.usernames
+        ?.map((u: string) => u.trim())
+        .filter((u: string) => u.length > 0);
+
+      if (!Array.isArray(usernames) || usernames.length === 0) {
+        socket.emit('error', 'At least one chair is required');
+        return;
+      }
+
+      // The acting chair must remain in the list
+      const selfIncluded = usernames.some(
+        (u: string) => u.toLowerCase() === user.ghUsername.toLowerCase(),
+      );
+      if (!selfIncluded) {
+        socket.emit('error', 'You cannot remove yourself from the chair list');
+        return;
+      }
+
+      // Resolve each username to a User object
+      const meeting = meetingManager.get(joinedMeetingId);
+      const chairs: import('@tcq/shared').User[] = [];
+
+      for (const username of usernames) {
+        // Check if this user is already known in the meeting
+        const known =
+          meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === username.toLowerCase()) ??
+          meeting?.queuedSpeakers.find((e) => e.user.ghUsername.toLowerCase() === username.toLowerCase())?.user ??
+          meeting?.agenda.find((a) => a.owner.ghUsername.toLowerCase() === username.toLowerCase())?.owner;
+
+        if (known) {
+          chairs.push(known);
+        } else if (username.toLowerCase() === user.ghUsername.toLowerCase()) {
+          chairs.push(user);
+        } else if (isOAuthConfigured()) {
+          // Validate against GitHub API when OAuth is configured
+          const ghUser = await fetchGitHubUser(username);
+          if (!ghUser) {
+            socket.emit('error', `GitHub user "${username}" not found`);
+            return;
+          }
+          chairs.push(ghUser);
+        } else {
+          // Mock auth mode — create a placeholder
+          chairs.push({ ghid: 0, ghUsername: username, name: username, organisation: '' });
+        }
+      }
+
+      meetingManager.updateChairs(joinedMeetingId, chairs);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
     // --- agenda:add ---
     // Chair adds a new agenda item. The owner is specified by GitHub username;
     // for now we create a placeholder User object. GitHub API validation will

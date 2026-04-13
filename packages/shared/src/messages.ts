@@ -95,6 +95,14 @@ export interface QueueReorderPayload {
 }
 
 /**
+ * Payload for updating the list of meeting chairs. Chair only.
+ * At least one chair must remain.
+ */
+export interface ChairsUpdatePayload {
+  usernames: string[];
+}
+
+/**
  * Payload for events that advance meeting state (queue:next,
  * meeting:nextAgendaItem). Includes the meeting version the client
  * last saw, so the server can reject stale requests and prevent
@@ -136,6 +144,9 @@ export interface ClientToServerEvents {
 
   /** Edit an existing agenda item (chair only). */
   'agenda:edit': (payload: AgendaEditPayload) => void;
+
+  /** Update the list of meeting chairs. Chair only. At least one must remain. */
+  'meeting:updateChairs': (payload: ChairsUpdatePayload) => void;
 
   /** Edit an existing queue entry (owner or chair). */
   'queue:edit': (payload: QueueEditPayload) => void;

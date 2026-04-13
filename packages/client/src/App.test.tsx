@@ -111,20 +111,10 @@ describe('HomePage', () => {
 
   // -- New Meeting --
 
-  it('pre-populates the chairs field with the current user username', async () => {
+  it('creates a meeting with the current user as chair and navigates to it', async () => {
     renderHomePage();
     await waitFor(() => {
-      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
-      expect(input.value).toBe('alice');
-    });
-  });
-
-  it('creates a meeting and navigates to it', async () => {
-    renderHomePage();
-    // Wait for auth to load and pre-populate the chairs field
-    await waitFor(() => {
-      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
-      expect(input.value).toBe('alice');
+      expect(screen.getByRole('button', { name: 'Start a New Meeting' })).toBeInTheDocument();
     });
 
     mockFetch.mockResolvedValueOnce({
@@ -132,17 +122,13 @@ describe('HomePage', () => {
       json: () => Promise.resolve({ id: 'calm-wave-fox' }),
     });
 
-    // Add another chair alongside the pre-populated one
-    fireEvent.change(screen.getByLabelText('Chairs'), {
-      target: { value: 'alice, bob' },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Start a New Meeting' }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: ['alice', 'bob'] }),
+        body: JSON.stringify({ chairs: ['alice'] }),
       });
       expect(mockNavigate).toHaveBeenCalledWith('/meeting/calm-wave-fox');
     });
@@ -150,10 +136,8 @@ describe('HomePage', () => {
 
   it('shows an error when meeting creation fails', async () => {
     renderHomePage();
-    // Wait for auth to load and pre-populate the chairs field
     await waitFor(() => {
-      const input = screen.getByLabelText('Chairs') as HTMLInputElement;
-      expect(input.value).toBe('alice');
+      expect(screen.getByRole('button', { name: 'Start a New Meeting' })).toBeInTheDocument();
     });
 
     mockFetch.mockResolvedValueOnce({

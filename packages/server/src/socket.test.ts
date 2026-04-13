@@ -732,6 +732,84 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  // -- Chair management events --
+
+  describe('meeting:updateChairs', () => {
+    it('updates the chair list and broadcasts', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:updateChairs', { usernames: ['testuser', 'newchair'] });
+      const state = await statePromise;
+
+      expect(state.chairs).toHaveLength(2);
+      expect(state.chairs.map(c => c.ghUsername)).toContain('testuser');
+      expect(state.chairs.map(c => c.ghUsername)).toContain('newchair');
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([{
+        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
+      }]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('meeting:updateChairs', { usernames: ['testuser'] });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+
+    it('rejects empty chair list', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('meeting:updateChairs', { usernames: [] });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/at least one/i);
+    });
+
+    it('rejects when the acting chair removes themselves', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/cannot remove yourself/i);
+    });
+
+    it('resolves known users from the meeting', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Add a known user via the agenda
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
+        ghid: 42, ghUsername: 'knownuser', name: 'Known User', organisation: 'ACME',
+      });
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:updateChairs', { usernames: ['testuser', 'knownuser'] });
+      const state = await statePromise;
+
+      const known = state.chairs.find(c => c.ghUsername === 'knownuser');
+      expect(known?.name).toBe('Known User');
+      expect(known?.organisation).toBe('ACME');
+    });
+  });
+
   // -- Temperature check events --
 
   /** Helper: sample temperature check options for tests. */

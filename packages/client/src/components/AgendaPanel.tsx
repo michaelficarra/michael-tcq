@@ -11,6 +11,7 @@
  */
 
 import { useState, type FormEvent } from 'react';
+import { useAuth } from '../contexts/AuthContext.js';
 import {
   DndContext,
   closestCenter,
@@ -90,17 +91,8 @@ export function AgendaPanel() {
 
   return (
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
-      {/* Chairs list */}
-      <section className="mb-5" aria-label="Meeting chairs">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">
-          Chairs
-        </h2>
-        <div className="flex flex-wrap gap-3 text-sm text-stone-700">
-          {meeting.chairs.map((chair) => (
-            <UserBadge key={chair.ghUsername} user={chair} size={18} />
-          ))}
-        </div>
-      </section>
+      {/* Chairs list with inline edit for chairs */}
+      <ChairsSection />
 
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm ? (
@@ -324,5 +316,97 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
         </div>
       )}
     </li>
+  );
+}
+
+// -- Chairs section with inline editing --
+
+function ChairsSection() {
+  const { meeting } = useMeetingState();
+  const { user } = useAuth();
+  const isChair = useIsChair();
+  const socket = useSocket();
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+
+  if (!meeting) return null;
+
+  /** Open the editor, pre-populated with the current chair usernames. */
+  function startEditing() {
+    setEditValue(meeting!.chairs.map((c) => c.ghUsername).join(', '));
+    setEditing(true);
+  }
+
+  /** Submit the updated chair list. */
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const usernames = editValue
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (usernames.length === 0) return;
+
+    // Ensure the current user is still in the list
+    const self = user?.ghUsername.toLowerCase();
+    if (self && !usernames.some((u) => u.toLowerCase() === self)) {
+      usernames.push(user!.ghUsername);
+    }
+
+    socket?.emit('meeting:updateChairs', { usernames });
+    setEditing(false);
+  }
+
+  return (
+    <section className="mb-5" aria-label="Meeting chairs">
+      <div className="flex items-center gap-3 mb-1">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+          Chairs
+        </h2>
+        {isChair && !editing && (
+          <button
+            onClick={startEditing}
+            className="text-xs text-stone-400 hover:text-teal-600
+                       transition-colors cursor-pointer presentation-hidden"
+          >
+            edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            autoFocus
+            required
+            aria-label="Chair usernames"
+            className="border border-stone-300 rounded px-2 py-0.5 text-sm flex-1
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <button
+            type="submit"
+            className="text-xs text-teal-600 hover:text-teal-800 font-medium cursor-pointer"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-3 text-sm text-stone-700">
+          {meeting.chairs.map((chair) => (
+            <UserBadge key={chair.ghUsername} user={chair} size={18} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

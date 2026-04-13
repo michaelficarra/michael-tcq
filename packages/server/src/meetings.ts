@@ -106,6 +106,22 @@ export class MeetingManager {
     );
   }
 
+  // -- Chair management --
+
+  /**
+   * Update the list of chairs for a meeting.
+   * Returns false if the meeting doesn't exist or the new list is empty.
+   */
+  updateChairs(meetingId: string, chairs: User[]): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+    if (chairs.length === 0) return false;
+
+    meeting.chairs = chairs;
+    this.markDirty(meetingId);
+    return true;
+  }
+
   // -- Agenda mutations --
 
   /**

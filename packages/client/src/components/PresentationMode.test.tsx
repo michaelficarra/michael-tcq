@@ -4,7 +4,6 @@ import type { MeetingState, User } from '@tcq/shared';
 import { QueuePanel } from './QueuePanel.js';
 import { AgendaPanel } from './AgendaPanel.js';
 import { TemperatureCheck } from './TemperatureCheck.js';
-import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
