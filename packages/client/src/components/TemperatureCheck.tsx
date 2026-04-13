@@ -107,7 +107,7 @@ export function TemperatureCheck() {
         <button
           onClick={handleCopyResults}
           className="mt-3 border border-stone-300 rounded px-3 py-1 text-sm
-                     text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                     text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
         >
           Copy Results
         </button>

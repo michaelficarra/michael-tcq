@@ -7,3 +7,12 @@ body {
 #root {
   min-height: 100svh;
 }
+
+/*
+ * Presentation mode: elements tagged with .presentation-hidden are
+ * hidden when the .presentation-mode class is on a parent element.
+ * Toggled by pressing 'f'.
+ */
+.presentation-mode .presentation-hidden {
+  display: none !important;
+}

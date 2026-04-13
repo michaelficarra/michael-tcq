@@ -68,7 +68,7 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
   return (
     <div>
       {/* Entry type buttons */}
-      <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Queue entry types">
+      <div className="flex flex-wrap gap-2 mb-3 presentation-hidden" role="group" aria-label="Queue entry types">
         {ENTRY_TYPES.map((config) => {
           // Hide the Reply button when there's no current topic
           if (config.requiresTopic && !meeting.currentTopic) return null;

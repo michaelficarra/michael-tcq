@@ -230,9 +230,21 @@ Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes 
 | `c` | Clarifying Question |
 | `p` | Point of Order |
 | `s` | Next Speaker (chair only) |
+| `f` | Toggle presentation mode |
 | `a` | Switch to Agenda tab |
 | `q` | Switch to Queue tab |
 | `?` | Toggle shortcuts dialogue |
+
+## Presentation Mode
+
+Pressing `f` toggles presentation mode. In presentation mode:
+
+- The browser enters fullscreen.
+- The navigation bar is hidden.
+- All interactive controls are hidden: forms, entry type buttons, drag handles, edit/delete buttons, and chair action buttons.
+- The queue content, current speaker, current topic, agenda items, and temperature check reactions remain visible.
+
+Pressing `f` again (or exiting fullscreen via the browser) returns to normal mode.
 
 ## Persistence
 

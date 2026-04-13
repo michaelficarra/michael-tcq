@@ -142,7 +142,7 @@ export function AgendaPanel() {
         ) : (
           <button
             onClick={() => setShowForm(true)}
-            className="text-blue-600 hover:text-blue-800 transition-colors font-medium"
+            className="text-blue-600 hover:text-blue-800 transition-colors font-medium presentation-hidden"
           >
             + New Agenda Item
           </button>
@@ -306,7 +306,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
 
       {/* Edit and delete buttons — chairs only */}
       {isChair && (
-        <div className="flex gap-3 shrink-0">
+        <div className="flex gap-3 shrink-0 presentation-hidden">
           <button
             onClick={startEditing}
             className="text-xs text-stone-400 hover:text-teal-600 transition-colors cursor-pointer"

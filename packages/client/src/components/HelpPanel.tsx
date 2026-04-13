@@ -198,6 +198,7 @@ export function HelpPanel() {
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">c</kbd></td><td>Clarifying Question</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">p</kbd></td><td>Point of Order</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">s</kbd></td><td>Next Speaker (chair only)</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">f</kbd></td><td>Toggle presentation mode (fullscreen, controls hidden)</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">a</kbd></td><td>Switch to Agenda tab</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 font-mono text-xs">q</kbd></td><td>Switch to Queue tab</td></tr>
           </tbody>

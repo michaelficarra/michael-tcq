@@ -228,7 +228,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                     handleNextAgendaItem();
                   }}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
                 >
                   Next Agenda Item
                 </button>
@@ -237,7 +237,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                 <button
                   onClick={() => socket?.emit('temperature:stop')}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
                 >
                   Stop Temperature Check
                 </button>
@@ -245,7 +245,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                 <button
                   onClick={() => setShowTempSetup(true)}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
                 >
                   Check Temperature
                 </button>
@@ -290,7 +290,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               <button
                 onClick={handleNextAgendaItem}
                 className="mt-2 border border-stone-300 rounded px-3 py-1 text-sm
-                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                           text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
               >
                 Start Meeting
               </button>
@@ -330,7 +330,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             <button
               onClick={handleNextSpeaker}
               className="text-xs border border-stone-300 rounded px-2 py-0.5
-                         text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                         text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
             >
               Next Speaker
             </button>
@@ -369,7 +369,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                 <button
                   onClick={handleCopyQueue}
                   className="text-xs border border-stone-300 rounded px-2 py-0.5
-                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                             text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
                 >
                   Copy Queue
                 </button>
@@ -377,7 +377,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               <button
                 onClick={() => setShowRestore(!showRestore)}
                 className="text-xs border border-stone-300 rounded px-2 py-0.5
-                           text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                           text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer presentation-hidden"
               >
                 {showRestore ? 'Cancel' : 'Restore Queue'}
               </button>
@@ -647,7 +647,7 @@ function SortableQueueEntry({
       {canDrag && (
         <span
           className="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing
-                     select-none text-sm leading-none"
+                     select-none text-sm leading-none presentation-hidden"
           aria-label={`Drag to reorder: ${entry.topic}`}
           {...attributes}
           {...listeners}
@@ -687,7 +687,7 @@ function SortableQueueEntry({
 
       {/* Edit and delete buttons — right-aligned */}
       {(canEdit || canDelete) && (
-        <div className="flex gap-3 shrink-0">
+        <div className="flex gap-3 shrink-0 presentation-hidden">
           {canEdit && (
             <button
               onClick={startEditing}

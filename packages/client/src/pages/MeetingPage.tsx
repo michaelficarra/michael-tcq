@@ -26,6 +26,7 @@ function MeetingPageInner() {
   const [activeTab, setActiveTab] = useState<Tab>('queue');
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [shortcutsEnabled, setShortcutsEnabledState] = useState(getShortcutsEnabled);
+  const [presentationMode, setPresentationMode] = useState(false);
   const { meeting, connected, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
@@ -38,6 +39,35 @@ function MeetingPageInner() {
       dispatch({ type: 'setUser', user });
     }
   }, [user, dispatch]);
+
+  // --- Presentation mode ---
+  // Hides the nav bar and controls, and enters browser fullscreen.
+
+  /** Toggle presentation mode on/off, entering/exiting fullscreen. */
+  const togglePresentationMode = useCallback(() => {
+    setPresentationMode((prev) => {
+      const next = !prev;
+      if (next) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.().catch(() => {});
+      }
+      return next;
+    });
+  }, []);
+
+  // Exit presentation mode when the user exits fullscreen via Escape or
+  // browser UI (e.g. pressing Escape in fullscreen exits fullscreen but
+  // doesn't trigger our keyboard shortcut handler).
+  useEffect(() => {
+    function handleFullscreenChange() {
+      if (!document.fullscreenElement) {
+        setPresentationMode(false);
+      }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // --- Auto-edit state (shared between keyboard shortcuts and SpeakerControls) ---
 
@@ -81,11 +111,12 @@ function MeetingPageInner() {
     { key: 'c', description: 'Clarifying Question', action: () => addQueueEntry('question', 'Clarifying question') },
     { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
     { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
+    { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode },
     { key: 'a', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
     { key: 'q', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
     { key: '?', description: 'Toggle shortcuts dialogue', action: () => setShowShortcuts((v) => !v), alwaysActive: true },
     { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
-  ], [addQueueEntry, advanceNextSpeaker]);
+  ], [addQueueEntry, advanceNextSpeaker, togglePresentationMode]);
 
   useKeyboardShortcuts(shortcuts, shortcutsEnabled);
 
@@ -140,37 +171,42 @@ function MeetingPageInner() {
 
   return (
     <SocketContext value={socket}>
-      <div className="min-h-screen bg-stone-50">
-        <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className={`min-h-screen bg-stone-50 ${presentationMode ? 'presentation-mode' : ''}`}>
+        {/* Navigation and controls are hidden in presentation mode */}
+        {!presentationMode && (
+          <>
+            <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Dismissible error banner for non-fatal errors (e.g. permission denied) */}
-        {error && (
-          <div
-            className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-700
-                       flex items-center justify-between"
-            role="alert"
-          >
-            <span>{error}</span>
-            <button
-              onClick={() => dispatch({ type: 'setError', error: '' })}
-              className="text-red-400 hover:text-red-600 ml-4 cursor-pointer"
-              aria-label="Dismiss error"
-            >
-              ✕
-            </button>
-          </div>
+            {/* Dismissible error banner for non-fatal errors */}
+            {error && (
+              <div
+                className="bg-red-50 border-b border-red-200 px-6 py-2 text-sm text-red-700
+                           flex items-center justify-between"
+                role="alert"
+              >
+                <span>{error}</span>
+                <button
+                  onClick={() => dispatch({ type: 'setError', error: '' })}
+                  className="text-red-400 hover:text-red-600 ml-4 cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         <main>
           {activeTab === 'agenda' && <AgendaPanel />}
           {activeTab === 'queue' && (
             <QueuePanel
-              autoEditEntryId={autoEditEntryId}
+              autoEditEntryId={presentationMode ? null : autoEditEntryId}
               onAddEntry={addQueueEntry}
               onAutoEditConsumed={() => setAutoEditEntryId(null)}
             />
           )}
-          {activeTab === 'help' && <HelpPanel />}
+          {!presentationMode && activeTab === 'help' && <HelpPanel />}
         </main>
 
         {/* Keyboard shortcuts dialog */}
