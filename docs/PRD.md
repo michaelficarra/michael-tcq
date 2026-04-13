@@ -232,7 +232,7 @@ Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes 
 | `s` | Next Speaker (chair only) |
 | `a` | Switch to Agenda tab |
 | `q` | Switch to Queue tab |
-| `?` | Show keyboard shortcuts |
+| `?` | Toggle shortcuts dialogue |
 
 ## Persistence
 

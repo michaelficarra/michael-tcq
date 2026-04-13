@@ -83,7 +83,7 @@ function MeetingPageInner() {
     { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
     { key: 'a', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
     { key: 'q', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
-    { key: '?', description: 'Show keyboard shortcuts', action: () => setShowShortcuts(true), alwaysActive: true },
+    { key: '?', description: 'Toggle shortcuts dialogue', action: () => setShowShortcuts((v) => !v), alwaysActive: true },
     { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
   ], [addQueueEntry, advanceNextSpeaker]);
 
