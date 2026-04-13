@@ -13,6 +13,7 @@ interface MeetingInfo {
   agendaItemCount: number;
   queuedSpeakerCount: number;
   maxConcurrent: number;
+  currentConnections: number;
   lastConnection: string;
 }
 
@@ -54,14 +55,14 @@ export function AdminPanel() {
   }
 
   /** Format the last connection time for display. */
-  function formatLastConnection(value: string): string {
-    if (!value) return 'never';
-    if (value === 'now') return 'now';
+  function formatLastConnection(m: MeetingInfo): string {
+    if (!m.lastConnection) return 'never';
+    if (m.lastConnection === 'now') return `now (${m.currentConnections})`;
     try {
-      const date = new Date(value);
+      const date = new Date(m.lastConnection);
       return date.toLocaleString();
     } catch {
-      return value;
+      return m.lastConnection;
     }
   }
 
@@ -107,7 +108,7 @@ export function AdminPanel() {
                   <td className="px-4 py-2 text-stone-600">{m.queuedSpeakerCount}</td>
                   <td className="px-4 py-2 text-stone-600">{m.maxConcurrent}</td>
                   <td className="px-4 py-2 text-stone-600">
-                    {formatLastConnection(m.lastConnection)}
+                    {formatLastConnection(m)}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button

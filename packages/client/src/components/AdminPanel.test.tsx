@@ -24,6 +24,7 @@ const sampleMeetings = [
     agendaItemCount: 5,
     queuedSpeakerCount: 3,
     maxConcurrent: 12,
+    currentConnections: 7,
     lastConnection: 'now',
   },
   {
@@ -32,6 +33,7 @@ const sampleMeetings = [
     agendaItemCount: 0,
     queuedSpeakerCount: 0,
     maxConcurrent: 4,
+    currentConnections: 0,
     lastConnection: '2026-04-13T12:00:00.000Z',
   },
 ];
@@ -62,8 +64,8 @@ describe('AdminPanel', () => {
     await waitFor(() => {
       // Max concurrent for first meeting
       expect(screen.getByText('12')).toBeInTheDocument();
-      // Last connection for first meeting
-      expect(screen.getByText('now')).toBeInTheDocument();
+      // Last connection for first meeting (with current connection count)
+      expect(screen.getByText('now (7)')).toBeInTheDocument();
     });
   });
 

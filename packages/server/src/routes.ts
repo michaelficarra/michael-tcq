@@ -147,6 +147,7 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
       agendaItemCount: number;
       queuedSpeakerCount: number;
       maxConcurrent: number;
+      currentConnections: number;
       lastConnection: string;
     }[] = [];
 
@@ -154,13 +155,15 @@ export function createMeetingRoutes(meetingManager: MeetingManager): Router {
     // (we need access to the meeting data, not just stats)
     for (const meeting of meetingManager.listAll()) {
       const s = stats.get(meeting.id);
+      const current = s?.currentConnections ?? 0;
       meetings.push({
         id: meeting.id,
         chairCount: meeting.chairs.length,
         agendaItemCount: meeting.agenda.length,
         queuedSpeakerCount: meeting.queuedSpeakers.length,
         maxConcurrent: s?.maxConcurrent ?? 0,
-        lastConnection: s?.currentConnections
+        currentConnections: current,
+        lastConnection: current > 0
           ? 'now'
           : s?.lastConnection ?? '',
       });
