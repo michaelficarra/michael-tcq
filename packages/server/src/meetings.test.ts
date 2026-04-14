@@ -904,9 +904,10 @@ describe('MeetingManager', () => {
       expect(meeting.reactions).toHaveLength(0);
     });
 
-    it('allows multiple different options from the same user', () => {
+    it('allows multiple different options from the same user in multi-select mode', () => {
       const meeting = manager.create([testUser]);
       manager.startPoll(meeting.id, samplePollOptions);
+      meeting.pollMultiSelect = true;
 
       manager.toggleReaction(meeting.id, meeting.pollOptions[0].id, testUser);
       manager.toggleReaction(meeting.id, meeting.pollOptions[1].id, testUser);

@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import type { MeetingState } from '@tcq/shared';
+import type { MeetingState, User } from '@tcq/shared';
 import { userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
-import { mockAuth } from './mockAuth.js';
 import './session.js';
 
 /** A no-op in-memory store for tests. */
@@ -18,12 +17,18 @@ class InMemoryStore implements MeetingStore {
   async remove(meetingId: string) { this.data.delete(meetingId); }
 }
 
-/** Create a test app with session + routes. */
-function createTestApp(meetingManager: MeetingManager) {
+/** The admin user for these tests. */
+const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin', organisation: '' };
+
+/** Create a test app with session + routes, authenticated as a specific user. */
+function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) {
   const app = express();
   app.use(express.json());
   app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
-  app.use(mockAuth);
+  app.use((req, _res, next) => {
+    if (!req.session.user) req.session.user = user;
+    next();
+  });
   app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));
   return app;
 }
@@ -47,8 +52,8 @@ describe('Admin endpoints', () => {
   let close: () => void;
 
   beforeEach(async () => {
-    // Set testuser as an admin for these tests
-    vi.stubEnv('ADMIN_USERNAMES', 'testuser');
+    // Set the test user as an admin for these tests
+    vi.stubEnv('ADMIN_USERNAMES', 'testadmin');
 
     manager = new MeetingManager(new InMemoryStore());
     const app = createTestApp(manager);

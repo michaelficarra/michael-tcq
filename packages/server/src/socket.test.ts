@@ -4,11 +4,11 @@ import session from 'express-session';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
-import type { MeetingState, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import type { MeetingState, ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
-import { mockAuth } from './mockAuth.js';
 import { registerSocketHandlers } from './socket.js';
+import './session.js';
 
 // --- Helpers ---
 
@@ -31,8 +31,21 @@ interface TestContext {
   baseUrl: string;
 }
 
-/** Spin up a test server with Express session + Socket.IO + mock auth. */
-function createTestServer(): TestContext {
+/** The default test user — used by most socket tests as the session identity. */
+const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+/** Middleware that sets a specific user on the session. */
+function sessionAs(user: User): express.RequestHandler {
+  return (req, _res, next) => {
+    if (!req.session.user) {
+      req.session.user = user;
+    }
+    next();
+  };
+}
+
+/** Spin up a test server with Express session + a specific session user. */
+function createTestServer(user: User = TEST_USER): TestContext {
   const app = express();
   const httpServer = createServer(app);
 
@@ -42,8 +55,10 @@ function createTestServer(): TestContext {
     saveUninitialized: false,
   });
 
+  const authMiddleware = sessionAs(user);
+
   app.use(sessionMiddleware);
-  app.use(mockAuth);
+  app.use(authMiddleware);
 
   const meetingManager = new MeetingManager(new InMemoryStore());
 
@@ -53,7 +68,7 @@ function createTestServer(): TestContext {
 
   // Share session with Socket.IO (same as production setup)
   io.engine.use(sessionMiddleware);
-  io.engine.use(mockAuth);
+  io.engine.use(authMiddleware);
 
   registerSocketHandlers(io, meetingManager);
 

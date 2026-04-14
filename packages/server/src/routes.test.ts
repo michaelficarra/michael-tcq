@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import type { MeetingState } from '@tcq/shared';
+import type { MeetingState, User } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
-import { mockAuth } from './mockAuth.js';
+import './session.js';
 
 /** A no-op in-memory store for unit tests. */
 class InMemoryStore implements MeetingStore {
@@ -20,11 +20,16 @@ class InMemoryStore implements MeetingStore {
  * Helper: make a request to the Express app without starting a real HTTP server.
  * Uses the built-in fetch against a dynamically assigned port.
  */
-function createTestApp(meetingManager: MeetingManager) {
+const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '' };
+
+function createTestApp(meetingManager: MeetingManager, user: User = TEST_USER) {
   const app = express();
   app.use(express.json());
   app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
-  app.use(mockAuth);
+  app.use((req, _res, next) => {
+    if (!req.session.user) req.session.user = user;
+    next();
+  });
   app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));
   return app;
 }

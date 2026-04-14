@@ -17,8 +17,8 @@ import './session.js';
 
 export const MOCK_USER: User = {
   ghid: 1,
-  ghUsername: 'testuser',
-  name: 'Test User',
+  ghUsername: 'admin',
+  name: 'Admin',
   organisation: '',
 };
 
