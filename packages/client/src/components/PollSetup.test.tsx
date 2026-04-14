@@ -35,11 +35,11 @@ describe('PollSetup', () => {
     renderSetup();
 
     // Should show all default options
-    const emojiInputs = screen.getAllByLabelText('Option emoji');
+    const emojiInputs = screen.getAllByLabelText('Choose emoji');
     expect(emojiInputs.length).toBe(DEFAULT_POLL_OPTIONS.length);
 
-    // First option should be the heart emoji
-    expect((emojiInputs[0] as HTMLInputElement).value).toBe('❤️');
+    // First option should be the heart emoji (displayed as button text)
+    expect(emojiInputs[0].textContent).toBe('❤️');
   });
 
   it('renders label inputs for each option', () => {
@@ -53,25 +53,25 @@ describe('PollSetup', () => {
   it('allows adding a new option', () => {
     renderSetup();
 
-    const initialCount = screen.getAllByLabelText('Option emoji').length;
+    const initialCount = screen.getAllByLabelText('Choose emoji').length;
     fireEvent.click(screen.getByText('+ Add Option'));
-    expect(screen.getAllByLabelText('Option emoji').length).toBe(initialCount + 1);
+    expect(screen.getAllByLabelText('Choose emoji').length).toBe(initialCount + 1);
   });
 
   it('allows removing an option', () => {
     renderSetup();
 
-    const initialCount = screen.getAllByLabelText('Option emoji').length;
+    const initialCount = screen.getAllByLabelText('Choose emoji').length;
     const removeButtons = screen.getAllByLabelText('Remove option');
     fireEvent.click(removeButtons[0]);
-    expect(screen.getAllByLabelText('Option emoji').length).toBe(initialCount - 1);
+    expect(screen.getAllByLabelText('Choose emoji').length).toBe(initialCount - 1);
   });
 
   it('disables remove buttons when there are only 2 options', () => {
     renderSetup();
 
     // Remove options one at a time until only 2 remain (default is 6)
-    while (screen.getAllByLabelText('Option emoji').length > 2) {
+    while (screen.getAllByLabelText('Choose emoji').length > 2) {
       // Find the first enabled remove button and click it
       const btn = screen.getAllByLabelText('Remove option').find(
         (b) => !(b as HTMLButtonElement).disabled,
@@ -120,7 +120,7 @@ describe('PollSetup', () => {
     renderSetup();
 
     // Remove until only 2 remain, then clear both labels to make them invalid
-    while (screen.getAllByLabelText('Option emoji').length > 2) {
+    while (screen.getAllByLabelText('Choose emoji').length > 2) {
       const btn = screen.getAllByLabelText('Remove option').find(
         (b) => !(b as HTMLButtonElement).disabled,
       );

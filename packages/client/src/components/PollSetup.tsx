@@ -10,8 +10,10 @@
  * Defaults to the six standard options from the PRD.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useState, useCallback, type FormEvent } from 'react';
 import { DEFAULT_POLL_OPTIONS } from '@tcq/shared';
+import EmojiPicker from '@emoji-mart/react';
+import emojiData from '@emoji-mart/data';
 import { useSocket } from '../contexts/SocketContext.js';
 
 /** A draft option being configured before the poll starts. */
@@ -34,6 +36,33 @@ function createDefaults(): DraftOption[] {
   }));
 }
 
+interface EmojiEntry { skins: { native: string }[] }
+interface EmojiData { emojis: Record<string, EmojiEntry>; categories: { id: string; emojis: string[] }[] }
+
+/** IDs matching this pattern are multi-person family/couple combinations. */
+const FAMILY_COMBO_RE = /^(?:family|man-|woman-|two_(?:wo)?men_|man_and_woman_|people_holding|couplekiss|couple_with_heart|woman-(?:kiss|heart)-|man-(?:kiss|heart)-)/;
+
+/** Check whether an emoji is acceptable for random selection (no flags, no skin tone modifiers, no family combos). */
+function acceptableRandomEmoji(id: string, emoji: EmojiEntry, flagIds: Set<string>): boolean {
+  if (flagIds.has(id)) return false;
+  if (emoji.skins.length > 1) return false;
+  if (FAMILY_COMBO_RE.test(id)) return false;
+  return true;
+}
+
+/** All acceptable emoji for random selection, derived from the emoji-mart dataset. */
+const RANDOM_EMOJI_POOL: string[] = (() => {
+  const data = emojiData as EmojiData;
+  const flagIds = new Set(data.categories.find((c) => c.id === 'flags')?.emojis ?? []);
+  return Object.entries(data.emojis)
+    .filter(([id, emoji]) => acceptableRandomEmoji(id, emoji, flagIds))
+    .map(([, emoji]) => emoji.skins[0].native);
+})();
+
+function randomEmoji(): string {
+  return RANDOM_EMOJI_POOL[Math.floor(Math.random() * RANDOM_EMOJI_POOL.length)];
+}
+
 interface PollSetupProps {
   onCancel: () => void;
   onStarted: () => void;
@@ -44,6 +73,26 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   const [topic, setTopic] = useState('');
   const [multiSelect, setMultiSelect] = useState(true);
   const [options, setOptions] = useState<DraftOption[]>(createDefaults);
+  /** Key of the option whose emoji picker is open, or null if none. */
+  const [pickerOpenFor, setPickerOpenFor] = useState<number | null>(null);
+  /** Position for the emoji picker popover (fixed positioning). */
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+
+  /** Open the picker positioned relative to the clicked button. */
+  const openPicker = useCallback((key: number, button: HTMLButtonElement) => {
+    if (pickerOpenFor === key) {
+      setPickerOpenFor(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    const pickerHeight = 435; // emoji-mart default height
+    const margin = 8;
+    // Open to the right of the button, aligned to its top, shifted up if needed to fit
+    const top = Math.min(rect.top, window.innerHeight - pickerHeight - margin);
+    const left = rect.right + 4;
+    setPickerPos({ top, left });
+    setPickerOpenFor(key);
+  }, [pickerOpenFor]);
 
   /** Update a single option's field. */
   function updateOption(key: number, field: 'emoji' | 'label', value: string) {
@@ -57,9 +106,9 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
     setOptions((prev) => prev.filter((opt) => opt.key !== key));
   }
 
-  /** Add a new blank option at the end. */
+  /** Add a new option with a random emoji at the end. */
   function addOption() {
-    setOptions((prev) => [...prev, { key: nextKey++, emoji: '', label: '' }]);
+    setOptions((prev) => [...prev, { key: nextKey++, emoji: randomEmoji(), label: '' }]);
   }
 
   /** Start the poll with the configured options. */
@@ -122,18 +171,47 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
       {/* Option list */}
       <div className="space-y-2 mb-3">
         {options.map((opt) => (
-          <div key={opt.key} className="flex items-center gap-2">
-            {/* Emoji input — small field for a single emoji */}
-            <input
-              type="text"
-              value={opt.emoji}
-              onChange={(e) => updateOption(opt.key, 'emoji', e.target.value)}
-              placeholder="😀"
-              aria-label="Option emoji"
+          <div key={opt.key} className="flex items-center gap-2 relative">
+            {/* Emoji picker button */}
+            <button
+              type="button"
+              onClick={(e) => openPicker(opt.key, e.currentTarget)}
+              aria-label="Choose emoji"
               className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-center text-lg w-12
-                         dark:bg-stone-700 dark:text-stone-100
-                         focus:outline-none focus:ring-1 focus:ring-teal-500"
-            />
+                         dark:bg-stone-700 dark:text-stone-100 cursor-pointer
+                         hover:bg-stone-50 dark:hover:bg-stone-600 transition-colors"
+            >
+              {opt.emoji || '😀'}
+            </button>
+            {pickerOpenFor === opt.key && pickerPos && (
+              <>
+                {/* Invisible backdrop to dismiss picker on outside click */}
+                <div className="fixed inset-0 z-40" onClick={() => setPickerOpenFor(null)} />
+                <div
+                  className="fixed z-50"
+                  style={{ top: pickerPos.top, left: pickerPos.left }}
+                  ref={(el) => {
+                    if (!el) return;
+                    // emoji-mart renders a shadow DOM; find and focus the search input
+                    requestAnimationFrame(() => {
+                      const shadow = el.querySelector('em-emoji-picker')?.shadowRoot;
+                      const input = shadow?.querySelector('input[type="search"]') as HTMLInputElement | null;
+                      input?.focus();
+                    });
+                  }}
+                >
+                  <EmojiPicker
+                    data={emojiData}
+                    onEmojiSelect={(emoji: { native: string }) => {
+                      updateOption(opt.key, 'emoji', emoji.native);
+                      setPickerOpenFor(null);
+                    }}
+                    theme="auto"
+                    previewPosition="none"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Label input */}
             <input
