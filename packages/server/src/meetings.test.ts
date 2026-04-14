@@ -266,7 +266,7 @@ describe('MeetingManager', () => {
   describe('reorderAgendaItem', () => {
     it('moves an item to the beginning when afterId is null', () => {
       const meeting = manager.create([testUser]);
-      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      manager.addAgendaItem(meeting.id, 'A', testUser);
       manager.addAgendaItem(meeting.id, 'B', testUser);
       const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
 
@@ -279,7 +279,7 @@ describe('MeetingManager', () => {
     it('moves an item after another item', () => {
       const meeting = manager.create([testUser]);
       const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
-      const b = manager.addAgendaItem(meeting.id, 'B', testUser)!;
+      manager.addAgendaItem(meeting.id, 'B', testUser);
       const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
 
       // Move A to after C (i.e. to the end)
@@ -291,7 +291,7 @@ describe('MeetingManager', () => {
     it('moves an item to the middle', () => {
       const meeting = manager.create([testUser]);
       const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
-      const b = manager.addAgendaItem(meeting.id, 'B', testUser)!;
+      manager.addAgendaItem(meeting.id, 'B', testUser);
       const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
 
       // Move C after A (between A and B)
@@ -607,8 +607,8 @@ describe('MeetingManager', () => {
   describe('reorderQueueEntry', () => {
     it('moves an entry to the beginning when afterId is null', () => {
       const meeting = manager.create([testUser]);
-      const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
-      const b = manager.addQueueEntry(meeting.id, 'topic', 'B', testUser)!;
+      manager.addQueueEntry(meeting.id, 'topic', 'A', testUser);
+      manager.addQueueEntry(meeting.id, 'topic', 'B', testUser);
       const c = manager.addQueueEntry(meeting.id, 'topic', 'C', testUser)!;
 
       // Move C to the beginning
@@ -620,7 +620,7 @@ describe('MeetingManager', () => {
     it('moves an entry after another entry', () => {
       const meeting = manager.create([testUser]);
       const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
-      const b = manager.addQueueEntry(meeting.id, 'topic', 'B', testUser)!;
+      manager.addQueueEntry(meeting.id, 'topic', 'B', testUser);
       const c = manager.addQueueEntry(meeting.id, 'topic', 'C', testUser)!;
 
       // Move A to after C (to the end)
@@ -635,7 +635,7 @@ describe('MeetingManager', () => {
       const meeting = manager.create([testUser]);
       // Queue: POO, Question, Topic
       const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
-      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      manager.addQueueEntry(meeting.id, 'question', 'Q', testUser);
       const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
 
       // Move POO after Topic (to the end, moving down)
@@ -663,8 +663,8 @@ describe('MeetingManager', () => {
     it('moving up: adopts the highest priority of items below', () => {
       const meeting = manager.create([testUser]);
       // Queue: POO, Question, Topic
-      const poo = manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser)!;
-      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      manager.addQueueEntry(meeting.id, 'point-of-order', 'POO', testUser);
+      manager.addQueueEntry(meeting.id, 'question', 'Q', testUser);
       const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
 
       // Move Topic to the beginning (moving up)
@@ -678,7 +678,7 @@ describe('MeetingManager', () => {
     it('moving up: adopts type of the single item below', () => {
       const meeting = manager.create([testUser]);
       // Queue: Question, Topic
-      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      manager.addQueueEntry(meeting.id, 'question', 'Q', testUser);
       const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
 
       // Move Topic before Question (moving up)
@@ -728,7 +728,7 @@ describe('MeetingManager', () => {
     it('moving up: topic moving above questions becomes question', () => {
       const meeting = manager.create([testUser]);
       // Queue: Question, Topic (auto-sorted by addQueueEntry)
-      const q = manager.addQueueEntry(meeting.id, 'question', 'Q', testUser)!;
+      manager.addQueueEntry(meeting.id, 'question', 'Q', testUser);
       const t = manager.addQueueEntry(meeting.id, 'topic', 'T', testUser)!;
 
       // Move Topic to the beginning (moving up)

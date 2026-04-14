@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, PollOption, User } from '@tcq/shared';
+import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, User } from '@tcq/shared';
 import { QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';

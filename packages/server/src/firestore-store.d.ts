@@ -7,7 +7,7 @@
  */
 declare module 'firestore-store' {
   import type { Store } from 'express-session';
-  import type session from 'express-session';
+  import type expressSession from 'express-session';
   import type { Firestore } from '@google-cloud/firestore';
 
   interface FirestoreStoreOptions {
@@ -22,7 +22,7 @@ declare module 'firestore-store' {
   }
 
   /** Factory function: pass express-session to get the store class. */
-  function firestoreStore(session: typeof session): FirestoreStoreClass;
+  function firestoreStore(session: typeof expressSession): FirestoreStoreClass;
 
   export default firestoreStore;
 }

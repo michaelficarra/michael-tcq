@@ -36,7 +36,7 @@ export function stripMarkdown(text: string): string {
     // Remove HTML tags
     .replace(/<[^>]+>/g, '')
     // Remove agenda key emoji prefixes
-    .replace(/[❄️🔒⌛️🔁]\s*/g, '')
+    .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();
@@ -52,7 +52,7 @@ export function cleanName(text: string): string {
     // Remove HTML tags
     .replace(/<[^>]+>/g, '')
     // Remove agenda key emoji prefixes
-    .replace(/[❄️🔒⌛️🔁]\s*/g, '')
+    .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();

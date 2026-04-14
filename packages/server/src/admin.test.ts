@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { MeetingState } from '@tcq/shared';
