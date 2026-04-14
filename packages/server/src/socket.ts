@@ -575,9 +575,9 @@ export function registerSocketHandlers(
     });
 
     // --- queue:next ---
-    // Chair advances to the next speaker. Includes a version check to
-    // prevent double-advancement from concurrent chair clicks. Uses an
-    // ack callback so the client can retry on stale version.
+    // Chair advances to the next speaker. Uses a precondition check on the
+    // current speaker entry ID to prevent double-advancement from concurrent
+    // chair clicks. Uses an ack callback so the client can detect conflicts.
     socket.on('queue:next', (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
@@ -588,14 +588,15 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Version check: reject if the client's state is stale
+      // Precondition check: reject if another chair already advanced the speaker.
+      // The client sends the currentSpeakerEntryId it sees; if it doesn't match
+      // the server's current speaker, another chair has already acted.
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
-      if (payload.version !== meeting.version) {
-        // Client has a stale view — send current state and the new version
-        // so the client can retry immediately
+      if (payload.currentSpeakerEntryId !== (meeting.currentSpeakerEntryId ?? null)) {
+        // Client's view is stale — send current state so it can update
         socket.emit('state', meeting);
-        respond({ ok: false, version: meeting.version });
+        respond({ ok: false, error: 'Another chair already advanced the speaker' });
         return;
       }
 
@@ -742,9 +743,9 @@ export function registerSocketHandlers(
 
     // --- meeting:nextAgendaItem ---
     // Chair starts the meeting (first agenda item) or advances to the next one.
-    // Includes a version check to prevent double-advancement, and persists
-    // immediately as a high-value mutation. Uses an ack callback so the
-    // client can retry on stale version.
+    // Uses a precondition check on the current agenda item ID to prevent
+    // double-advancement, and persists immediately as a high-value mutation.
+    // Uses an ack callback so the client can detect conflicts.
     socket.on('meeting:nextAgendaItem', (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
@@ -755,12 +756,14 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Version check: reject if the client's state is stale
+      // Precondition check: reject if another chair already advanced the agenda.
+      // The client sends the currentAgendaItemId it sees; if it doesn't match
+      // the server's current agenda item, another chair has already acted.
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
-      if (payload.version !== meeting.version) {
+      if (payload.currentAgendaItemId !== (meeting.currentAgendaItemId ?? null)) {
         socket.emit('state', meeting);
-        respond({ ok: false, version: meeting.version });
+        respond({ ok: false, error: 'Another chair already advanced the agenda' });
         return;
       }
 

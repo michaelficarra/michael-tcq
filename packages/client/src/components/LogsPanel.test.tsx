@@ -11,8 +11,8 @@ const carol: User = { ghid: 3, ghUsername: 'carol', name: 'Carol', organisation:
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
     id: 'test', users: { alice, bob, carol }, chairIds: ['alice'], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerId: undefined,
-    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
+    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,

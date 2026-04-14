@@ -21,8 +21,8 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     chairIds: [],
     agenda: [],
     currentAgendaItemId: undefined,
-    currentSpeakerId: undefined,
-    currentTopicId: undefined,
+    currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined,
     queueEntries: {},
     queuedSpeakerIds: [],
     reactions: [],
@@ -120,7 +120,7 @@ describe('QueuePanel', () => {
     renderQueue(meeting, chairUser, mockSocket);
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Meeting' }));
-    expect(emit).toHaveBeenCalledWith('meeting:nextAgendaItem', { version: 0 }, expect.any(Function));
+    expect(emit).toHaveBeenCalledWith('meeting:nextAgendaItem', { currentAgendaItemId: null }, expect.any(Function));
   });
 
   // -- Next Agenda Item button --
@@ -178,7 +178,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { bob: otherUser },
       queueEntries: { 'entry-1': { id: 'entry-1', type: 'topic', topic: 'My proposal', userId: 'bob' } },
-      currentSpeakerId: 'entry-1',
+      currentSpeakerEntryId: 'entry-1',
     });
     renderQueue(meeting);
 
@@ -192,7 +192,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       queueEntries: { 'ct-1': { id: 'ct-1', type: 'topic', topic: 'Active discussion point', userId: 'alice' } },
-      currentTopicId: 'ct-1',
+      currentTopicEntryId: 'ct-1',
     });
     renderQueue(meeting);
 
@@ -236,7 +236,7 @@ describe('QueuePanel', () => {
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
       queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' } },
-      currentSpeakerId: 's1',
+      currentSpeakerEntryId: 's1',
     });
     renderQueue(meeting, chairUser);
     expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
@@ -258,7 +258,7 @@ describe('QueuePanel', () => {
       users: { bob: otherUser },
       chairIds: ['bob'],
       queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' } },
-      currentSpeakerId: 's1',
+      currentSpeakerEntryId: 's1',
     });
     renderQueue(meeting, chairUser);
     expect(screen.queryByRole('button', { name: 'Next Speaker' })).not.toBeInTheDocument();
@@ -275,13 +275,13 @@ describe('QueuePanel', () => {
         s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' },
         'topic-123': { id: 'topic-123', type: 'topic', topic: 'Topic', userId: 'bob' },
       },
-      currentSpeakerId: 's1',
-      currentTopicId: 'topic-123',
+      currentSpeakerEntryId: 's1',
+      currentTopicEntryId: 'topic-123',
     });
     renderQueue(meeting, chairUser, mockSocket);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next Speaker' }));
-    expect(emit).toHaveBeenCalledWith('queue:next', { version: 0 }, expect.any(Function));
+    expect(emit).toHaveBeenCalledWith('queue:next', { currentSpeakerEntryId: 's1' }, expect.any(Function));
   });
 
   // -- Delete buttons on queue entries --

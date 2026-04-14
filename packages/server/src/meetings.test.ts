@@ -52,7 +52,7 @@ describe('MeetingManager', () => {
     expect(meeting.agenda).toEqual([]);
     expect(meeting.queuedSpeakerIds).toEqual([]);
     expect(meeting.currentAgendaItemId).toBeUndefined();
-    expect(meeting.currentSpeakerId).toBeUndefined();
+    expect(meeting.currentSpeakerEntryId).toBeUndefined();
     expect(meeting.trackPoll).toBe(false);
   });
 
@@ -113,8 +113,8 @@ describe('MeetingManager', () => {
       chairIds: [testUserKey],
       agenda: [],
       currentAgendaItemId: undefined,
-      currentSpeakerId: undefined,
-      currentTopicId: undefined,
+      currentSpeakerEntryId: undefined,
+      currentTopicEntryId: undefined,
       queueEntries: {},
       queuedSpeakerIds: [],
       reactions: [],
@@ -357,8 +357,8 @@ describe('MeetingManager', () => {
 
       manager.nextAgendaItem(meeting.id);
 
-      expect(meeting.currentSpeakerId).toBeDefined();
-      const currentEntry = meeting.queueEntries[meeting.currentSpeakerId!];
+      expect(meeting.currentSpeakerEntryId).toBeDefined();
+      const currentEntry = meeting.queueEntries[meeting.currentSpeakerEntryId!];
       expect(meeting.users[currentEntry.userId].ghid).toBe(otherUser.ghid);
       expect(currentEntry.topic).toBe('Introducing: Proposal');
       expect(currentEntry.type).toBe('topic');
@@ -377,7 +377,7 @@ describe('MeetingManager', () => {
       const result = manager.nextAgendaItem(meeting.id);
       expect(result?.name).toBe('Second');
       expect(meeting.agenda.find((i) => i.id === meeting.currentAgendaItemId)?.name).toBe('Second');
-      const currentEntry = meeting.queueEntries[meeting.currentSpeakerId!];
+      const currentEntry = meeting.queueEntries[meeting.currentSpeakerEntryId!];
       expect(meeting.users[currentEntry.userId].ghid).toBe(otherUser.ghid);
     });
 
@@ -412,12 +412,12 @@ describe('MeetingManager', () => {
       meeting.queuedSpeakerIds = ['q1'];
       const ct1Entry = { id: 'ct1', type: 'topic' as const, topic: 'old topic', userId: otherKey };
       meeting.queueEntries['ct1'] = ct1Entry;
-      meeting.currentTopicId = 'ct1';
+      meeting.currentTopicEntryId = 'ct1';
 
       // Advance — queue and topic should be cleared
       manager.nextAgendaItem(meeting.id);
       expect(meeting.queuedSpeakerIds).toHaveLength(0);
-      expect(meeting.currentTopicId).toBeUndefined();
+      expect(meeting.currentTopicEntryId).toBeUndefined();
     });
   });
 
@@ -577,7 +577,7 @@ describe('MeetingManager', () => {
 
       expect(speaker).not.toBeNull();
       expect(speaker!.topic).toBe('First');
-      expect(meeting.queueEntries[meeting.currentSpeakerId!]?.topic).toBe('First');
+      expect(meeting.queueEntries[meeting.currentSpeakerEntryId!]?.topic).toBe('First');
       expect(meeting.queuedSpeakerIds).toHaveLength(1);
       expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('Second');
     });
@@ -588,7 +588,7 @@ describe('MeetingManager', () => {
 
       manager.nextSpeaker(meeting.id);
 
-      expect(meeting.queueEntries[meeting.currentTopicId!]?.topic).toBe('New discussion');
+      expect(meeting.queueEntries[meeting.currentTopicEntryId!]?.topic).toBe('New discussion');
     });
 
     it('does not change currentTopic for non-topic types', () => {
@@ -598,13 +598,13 @@ describe('MeetingManager', () => {
       const testUserKey = ensureUser(meeting, testUser);
       const oldTopicEntry = { id: 'old', type: 'topic' as const, topic: 'Previous topic', userId: testUserKey };
       meeting.queueEntries['old'] = oldTopicEntry;
-      meeting.currentTopicId = 'old';
+      meeting.currentTopicEntryId = 'old';
 
       manager.addQueueEntry(meeting.id, 'question', 'A question', otherUser);
       manager.nextSpeaker(meeting.id);
 
       // currentTopic should remain unchanged
-      expect(meeting.queueEntries[meeting.currentTopicId!]?.topic).toBe('Previous topic');
+      expect(meeting.queueEntries[meeting.currentTopicEntryId!]?.topic).toBe('Previous topic');
     });
 
     it('clears the current speaker when queue is empty', () => {
@@ -612,12 +612,12 @@ describe('MeetingManager', () => {
       const testUserKey = ensureUser(meeting, testUser);
       const oldEntry = { id: 'old', type: 'topic' as const, topic: 'Done', userId: testUserKey };
       meeting.queueEntries['old'] = oldEntry;
-      meeting.currentSpeakerId = 'old';
+      meeting.currentSpeakerEntryId = 'old';
 
       const result = manager.nextSpeaker(meeting.id);
 
       expect(result).toBeNull();
-      expect(meeting.currentSpeakerId).toBeUndefined();
+      expect(meeting.currentSpeakerEntryId).toBeUndefined();
     });
 
     it('returns null for non-existent meeting', () => {

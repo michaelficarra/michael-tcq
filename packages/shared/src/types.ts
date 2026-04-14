@@ -123,8 +123,8 @@ export interface MeetingState {
   chairIds: string[];
   agenda: AgendaItem[];
   currentAgendaItemId?: string;
-  currentSpeakerId?: string;
-  currentTopicId?: string;
+  currentSpeakerEntryId?: string;
+  currentTopicEntryId?: string;
   /** All queue entries for the current agenda item, keyed by entry ID. */
   queueEntries: Record<string, QueueEntry>;
   /** Ordered list of queue entry IDs for speakers waiting to speak. */

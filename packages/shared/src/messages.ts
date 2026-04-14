@@ -103,26 +103,35 @@ export interface ChairsUpdatePayload {
 }
 
 /**
- * Payload for events that advance meeting state (queue:next,
- * meeting:nextAgendaItem). Includes the meeting version the client
- * last saw, so the server can reject stale requests and prevent
- * double-advancement from concurrent chair clicks.
+ * Payload for advancing to the next speaker. Includes the queue entry
+ * ID of the current speaker as a precondition — the server rejects if
+ * another chair already advanced (i.e. the current speaker changed).
+ * This prevents double-advancement without false rejections from
+ * unrelated mutations (queue edits, reactions, etc.).
  */
-export interface AdvancePayload {
-  version: number;
+export interface NextSpeakerPayload {
+  /** The queue entry ID of the current speaker the client sees, or null if none. */
+  currentSpeakerEntryId: string | null;
+}
+
+/**
+ * Payload for advancing to the next agenda item. Includes the current
+ * agenda item ID as a precondition — the server rejects if another
+ * chair already advanced to a different agenda item.
+ */
+export interface NextAgendaItemPayload {
+  /** The agenda item ID the client sees as current, or null if meeting hasn't started. */
+  currentAgendaItemId: string | null;
 }
 
 /**
  * Response sent back via Socket.IO acknowledgement callback for
- * advancement events. On success, `ok` is true. On rejection (stale
- * version or error), `ok` is false and `version` contains the current
- * server-side version so the client can retry immediately.
+ * advancement events. On success, `ok` is true. On rejection
+ * (conflicting advancement or error), `ok` is false with an error message.
  */
 export interface AdvanceResponse {
   ok: boolean;
-  /** Current server-side version — present when ok is false. */
-  version?: number;
-  /** Error message — present when ok is false due to a non-version error. */
+  /** Error message — present when ok is false. */
   error?: string;
 }
 
@@ -164,10 +173,9 @@ export interface ClientToServerEvents {
    * Start the meeting by advancing to the first agenda item, or advance
    * to the next agenda item if the meeting is already in progress.
    * Chair only. The agenda item's owner becomes the current speaker.
-   * Includes version for stale-state prevention; responds via ack callback
-   * so the client can retry on stale version.
+   * Includes precondition (current agenda item ID) to prevent double-advancement.
    */
-  'meeting:nextAgendaItem': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
+  'meeting:nextAgendaItem': (payload: NextAgendaItemPayload, ack: (response: AdvanceResponse) => void) => void;
 
   /**
    * Add the current user to the speaker queue. The entry is automatically
@@ -194,10 +202,9 @@ export interface ClientToServerEvents {
    * the queue and makes that person the current speaker. If the entry
    * type is "topic", it also becomes the current topic. If the queue is
    * empty, clears the current speaker.
-   * Includes version for stale-state prevention; responds via ack callback
-   * so the client can retry on stale version.
+   * Includes precondition (current speaker entry ID) to prevent double-advancement.
    */
-  'queue:next': (payload: AdvancePayload, ack: (response: AdvanceResponse) => void) => void;
+  'queue:next': (payload: NextSpeakerPayload, ack: (response: AdvanceResponse) => void) => void;
 
   /**
    * Start a poll with custom options (chair only).

@@ -104,7 +104,7 @@ function MeetingPageInner() {
   const advanceNextSpeaker = useCallback(() => {
     if (!socket || !meeting || !isChair) return;
     setActiveTab('queue');
-    socket.emit('queue:next', { version: meeting.version }, () => {});
+    socket.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
   }, [socket, meeting, isChair]);
 
   const shortcuts = useMemo<Shortcut[]>(() => [

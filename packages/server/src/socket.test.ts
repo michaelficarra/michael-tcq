@@ -641,10 +641,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { version: meeting.version }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.queueEntries[state.currentSpeakerId!]?.topic).toBe('First');
+      expect(state.queueEntries[state.currentSpeakerEntryId!]?.topic).toBe('First');
       expect(state.queuedSpeakerIds).toHaveLength(1);
       expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Second');
     });
@@ -657,10 +657,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { version: meeting.version }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.queueEntries[state.currentTopicId!]?.topic).toBe('New discussion');
+      expect(state.queueEntries[state.currentTopicEntryId!]?.topic).toBe('New discussion');
     });
 
     it('clears the speaker when queue is empty', async () => {
@@ -671,37 +671,37 @@ describe('Socket.IO integration', () => {
       meeting.queueEntries['old-speaker'] = {
         id: 'old-speaker', type: 'topic', topic: 'Done', userId: ownerKey,
       };
-      meeting.currentSpeakerId = 'old-speaker';
+      meeting.currentSpeakerEntryId = 'old-speaker';
       meeting.queueEntries['old-topic'] = {
         id: 'old-topic', type: 'topic', topic: 'Done', userId: ownerKey,
       };
-      meeting.currentTopicId = 'old-topic';
+      meeting.currentTopicEntryId = 'old-topic';
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      // Use the current meeting version (version was bumped by create + mutations)
-      client.emit('queue:next', { version: meeting.version }, () => {});
+      // Use the current speaker entry ID as the precondition
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.currentSpeakerId).toBeUndefined();
+      expect(state.currentSpeakerEntryId).toBeUndefined();
     });
 
-    it('rejects stale version via ack with current version', async () => {
+    it('rejects conflicting advance when currentSpeakerEntryId does not match', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Only entry', owner);
 
       const client = await joinMeeting(meeting.id);
 
-      // Send queue:next with a stale version (0 instead of current)
+      // Send queue:next with a wrong currentSpeakerEntryId (simulates another chair having advanced)
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { version: 0 }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: 'stale-id' }, resolve);
       });
       const response = await ackPromise;
 
       expect(response.ok).toBe(false);
-      expect(response.version).toBe(meeting.version);
+      expect(response.error).toMatch(/another chair/i);
 
       // Queue should not have advanced
       expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(1);
@@ -715,7 +715,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { version: meeting.version }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, resolve);
       });
       const response = await ackPromise;
 
@@ -730,12 +730,69 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { version: 0 }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: null }, resolve);
       });
       const response = await ackPromise;
 
       expect(response.ok).toBe(false);
       expect(response.error).toMatch(/only chairs/i);
+    });
+
+    it('accepts advancement after unrelated mutations (queue edit)', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Capture the precondition before any mutations
+      const precondition = meeting.currentSpeakerEntryId ?? null;
+
+      // Make an unrelated mutation — edit a queue entry's topic
+      const entryId = meeting.queuedSpeakerIds[0];
+      ctx.meetingManager.editQueueEntry(meeting.id, entryId, { topic: 'Edited topic' });
+
+      // Advance with the original precondition — should succeed because
+      // the speaker didn't change, only the queue entry text did
+      const ackPromise = new Promise<any>((resolve) => {
+        client.emit('queue:next', { currentSpeakerEntryId: precondition }, resolve);
+      });
+      const response = await ackPromise;
+
+      expect(response.ok).toBe(true);
+      // The edited entry should now be the current speaker
+      const updated = ctx.meetingManager.get(meeting.id)!;
+      const speaker = updated.queueEntries[updated.currentSpeakerEntryId!];
+      expect(speaker.topic).toBe('Edited topic');
+    });
+
+    it('rejects when another chair already advanced the speaker', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Third', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Both chairs see no current speaker
+      const staleEntryId = meeting.currentSpeakerEntryId ?? null;
+
+      // Chair A advances (server-side, simulating the first concurrent click)
+      ctx.meetingManager.nextSpeaker(meeting.id);
+
+      // Chair B tries to advance with the stale precondition
+      const ackPromise = new Promise<any>((resolve) => {
+        client.emit('queue:next', { currentSpeakerEntryId: staleEntryId }, resolve);
+      });
+      const response = await ackPromise;
+
+      expect(response.ok).toBe(false);
+      expect(response.error).toMatch(/another chair/i);
+      // Should still be on the first speaker (Chair A's advance), not skipped to second
+      const updated = ctx.meetingManager.get(meeting.id)!;
+      expect(updated.queueEntries[updated.currentSpeakerEntryId!].topic).toBe('First');
     });
   });
 
@@ -1014,11 +1071,11 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       const state = await statePromise;
 
       expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First topic');
-      const currentEntry = state.queueEntries[state.currentSpeakerId!];
+      const currentEntry = state.queueEntries[state.currentSpeakerEntryId!];
       expect(state.users[currentEntry.userId].ghUsername).toBe('testuser');
       expect(currentEntry.topic).toBe('Introducing: First topic');
     });
@@ -1033,12 +1090,12 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       const state1 = await statePromise;
 
-      // Advance to second — use the version from the state we just received
+      // Advance to second — use the currentAgendaItemId from the state we just received
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: state1.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.currentAgendaItemId ?? null }, () => {});
       const state2 = await statePromise;
 
       expect(state2.agenda.find((i) => i.id === state2.currentAgendaItemId)?.name).toBe('Second');
@@ -1055,7 +1112,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('meeting:nextAgendaItem', { version: meeting.version }, resolve);
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, resolve);
       });
       const response = await ackPromise;
 
@@ -1072,18 +1129,18 @@ describe('Socket.IO integration', () => {
 
       // Start (first item)
       let ackPromise = new Promise<any>((resolve) => {
-        client.emit('meeting:nextAgendaItem', { version: meeting.version }, resolve);
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, resolve);
       });
       const startResponse = await ackPromise;
       expect(startResponse.ok).toBe(true);
 
-      // Wait for the state broadcast so we have the new version
+      // Wait for the state broadcast so we have the new agenda item
       await new Promise((r) => setTimeout(r, 50));
       const currentMeeting = ctx.meetingManager.get(meeting.id)!;
 
       // Try to advance past end
       ackPromise = new Promise<any>((resolve) => {
-        client.emit('meeting:nextAgendaItem', { version: currentMeeting.version }, resolve);
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: currentMeeting.currentAgendaItemId ?? null }, resolve);
       });
       const response = await ackPromise;
 
@@ -1091,27 +1148,81 @@ describe('Socket.IO integration', () => {
       expect(response.error).toMatch(/no more agenda items/i);
     });
 
-    it('rejects stale version (prevents double-advancement)', async () => {
+    it('rejects conflicting advance when currentAgendaItemId does not match', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
 
       const client = await joinMeeting(meeting.id);
-      const staleVersion = meeting.version;
 
-      // Start meeting (advances version)
+      // Start meeting (advances to first item, so currentAgendaItemId changes)
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: staleVersion }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       await statePromise;
 
-      // Try to advance again with the stale version — should be rejected
+      // Try to advance again with null (the pre-start value) — should be rejected
+      // because another advancement already happened
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: staleVersion }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       const state = await statePromise;
 
       // Should still be on the first item (rejected, but got current state back)
       expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First');
+    });
+
+    it('accepts advancement after unrelated mutations (queue add)', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
+      const state1 = await statePromise;
+
+      // Make an unrelated mutation — add a queue entry (bumps version but
+      // doesn't change the current agenda item)
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Discussion', owner);
+
+      // Advance with the precondition from state1 — should succeed because
+      // the current agenda item hasn't changed
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.currentAgendaItemId ?? null }, () => {});
+      const state2 = await statePromise;
+
+      expect(state2.agenda.find((i) => i.id === state2.currentAgendaItemId)?.name).toBe('Second');
+    });
+
+    it('rejects when another chair already advanced the agenda item', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Third', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Both chairs see no current agenda item (meeting not started)
+      const staleItemId = meeting.currentAgendaItemId ?? null;
+
+      // Chair A starts the meeting (server-side, simulating the first concurrent click)
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+
+      // Chair B tries to start with the stale precondition (null)
+      const ackPromise = new Promise<any>((resolve) => {
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: staleItemId }, resolve);
+      });
+      const response = await ackPromise;
+
+      expect(response.ok).toBe(false);
+      expect(response.error).toMatch(/another chair/i);
+      // Should still be on First (Chair A's advance), not skipped to Second
+      const updated = ctx.meetingManager.get(meeting.id)!;
+      expect(updated.agenda.find((i) => i.id === updated.currentAgendaItemId)?.name).toBe('First');
     });
   });
 
@@ -1150,7 +1261,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       const state = await statePromise;
 
       expect(state.log).toHaveLength(2);
@@ -1168,12 +1279,12 @@ describe('Socket.IO integration', () => {
 
       // Start meeting (advance to first item)
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Advance to second item
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
       state = await statePromise;
 
       // Should have: meeting-started, item-started(First), topic-discussed (intro), item-finished(First), item-started(Second)
@@ -1195,7 +1306,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a new topic to the queue and advance
@@ -1204,7 +1315,7 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { version: state.version }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
       state = await statePromise;
 
       // The introductory topic group should be finalised in the log
@@ -1225,7 +1336,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a reply and advance to it
@@ -1234,7 +1345,7 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { version: state.version }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
       state = await statePromise;
 
       // Reply should be in the same topic group as the intro (not finalised yet)
@@ -1251,7 +1362,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a point-of-order and advance to it
@@ -1260,7 +1371,7 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { version: state.version }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
       state = await statePromise;
 
       // Point-of-order should NOT be in the current topic speakers
@@ -1311,7 +1422,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add entries to the queue
@@ -1321,7 +1432,7 @@ describe('Socket.IO integration', () => {
 
       // Advance to next agenda item (leaving the queue non-empty)
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
       state = await statePromise;
 
       const finished = state.log.find((e) => e.type === 'agenda-item-finished');
@@ -1342,12 +1453,12 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Advance to next item with empty queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
       state = await statePromise;
 
       const finished = state.log.find((e) => e.type === 'agenda-item-finished');

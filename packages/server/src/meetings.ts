@@ -82,8 +82,8 @@ export class MeetingManager {
       chairIds,
       agenda: [],
       currentAgendaItemId: undefined,
-      currentSpeakerId: undefined,
-      currentTopicId: undefined,
+      currentSpeakerEntryId: undefined,
+      currentTopicEntryId: undefined,
       queueEntries: {},
       queuedSpeakerIds: [],
       reactions: [],
@@ -328,10 +328,10 @@ export class MeetingManager {
     // Clear queue entries and start fresh for the new agenda item
     meeting.queueEntries = { [speakerEntry.id]: speakerEntry };
     meeting.queuedSpeakerIds = [];
-    meeting.currentSpeakerId = speakerEntry.id;
+    meeting.currentSpeakerEntryId = speakerEntry.id;
 
     // Clear the current topic for the new agenda item
-    meeting.currentTopicId = undefined;
+    meeting.currentTopicEntryId = undefined;
 
     this.markDirty(meetingId);
     return nextItem;
@@ -450,7 +450,7 @@ export class MeetingManager {
 
     if (meeting.queuedSpeakerIds.length === 0) {
       // Queue is empty — clear the current speaker
-      meeting.currentSpeakerId = undefined;
+      meeting.currentSpeakerEntryId = undefined;
       this.markDirty(meetingId);
       return null;
     }
@@ -458,11 +458,11 @@ export class MeetingManager {
     // Pop the first entry from the queue
     const entryId = meeting.queuedSpeakerIds.shift()!;
     const entry = meeting.queueEntries[entryId];
-    meeting.currentSpeakerId = entryId;
+    meeting.currentSpeakerEntryId = entryId;
 
     // If this is a new topic, update the current topic
     if (entry.type === 'topic') {
-      meeting.currentTopicId = entryId;
+      meeting.currentTopicEntryId = entryId;
     }
 
     this.markDirty(meetingId);
@@ -779,7 +779,7 @@ function migrateLegacyMeeting(meeting: MeetingState): void {
     delete m.queuedSpeakers;
   }
 
-  // currentSpeaker → currentSpeakerId
+  // currentSpeaker → currentSpeakerEntryId
   if (m.currentSpeaker && typeof m.currentSpeaker === 'object' && m.currentSpeaker.id) {
     const cs = m.currentSpeaker;
     if (cs.user && typeof cs.user === 'object') {
@@ -787,11 +787,11 @@ function migrateLegacyMeeting(meeting: MeetingState): void {
       delete cs.user;
     }
     queueEntries[cs.id] = cs;
-    meeting.currentSpeakerId = cs.id;
+    meeting.currentSpeakerEntryId = cs.id;
     delete m.currentSpeaker;
   }
 
-  // currentTopic → currentTopicId
+  // currentTopic → currentTopicEntryId
   if (m.currentTopic && typeof m.currentTopic === 'object' && m.currentTopic.id) {
     const ct = m.currentTopic;
     if (ct.user && typeof ct.user === 'object') {
@@ -799,7 +799,7 @@ function migrateLegacyMeeting(meeting: MeetingState): void {
       delete ct.user;
     }
     queueEntries[ct.id] = ct;
-    meeting.currentTopicId = ct.id;
+    meeting.currentTopicEntryId = ct.id;
     delete m.currentTopic;
   }
 

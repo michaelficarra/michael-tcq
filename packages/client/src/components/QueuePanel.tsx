@@ -56,8 +56,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.currentAgendaItemId);
 
   // Derive queue-related values from normalised IDs + maps
-  const currentSpeaker = meeting?.currentSpeakerId ? meeting.queueEntries[meeting.currentSpeakerId] : undefined;
-  const currentTopic = meeting?.currentTopicId ? meeting.queueEntries[meeting.currentTopicId] : undefined;
+  const currentSpeaker = meeting?.currentSpeakerEntryId ? meeting.queueEntries[meeting.currentSpeakerEntryId] : undefined;
+  const currentTopic = meeting?.currentTopicEntryId ? meeting.queueEntries[meeting.currentTopicEntryId] : undefined;
   const queuedSpeakers = meeting?.queuedSpeakerIds.map(id => meeting.queueEntries[id]).filter(Boolean) ?? [];
 
   // Whether the poll setup form is open

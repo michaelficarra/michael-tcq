@@ -18,7 +18,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Inline editing** — agenda items and queue entries can be edited in place without needing to delete and re-create.
 - **GitHub avatars** — user avatars are shown alongside names throughout the application.
 - **Visual queue indicators** — point-of-order entries are highlighted with a red border and background. A user's own queue entries are shown with a teal left border.
-- **Race condition prevention** — advancement events use a version counter with automatic client-side retry. Reordering uses UUID-based positioning instead of array indices.
+- **Race condition prevention** — advancement events use precondition checks (current speaker/agenda item ID) to prevent double-advancement when two chairs click simultaneously. Reordering uses UUID-based positioning instead of array indices.
 - **Error display** — server errors are shown as a dismissible banner or a full-page error (e.g. "Meeting not found") rather than silently failing.
 - **Mock auth mode** — a built-in dev user-switcher allows testing with multiple identities without configuring GitHub OAuth.
 - **Editable chair list** — chairs can edit the list of chairs from the Agenda tab during a meeting, adding or removing others (but not themselves).

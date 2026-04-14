@@ -11,8 +11,8 @@ const testUser: User = {
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
     id: 'test-meeting', users: {}, chairIds: [], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerId: undefined,
-    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
+    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,
@@ -48,7 +48,7 @@ describe('SpeakerControls', () => {
     const meeting = makeMeeting({
       users: { alice: testUser },
       queueEntries: { 'ct-1': { id: 'ct-1', type: 'topic', topic: 'Active topic', userId: 'alice' } },
-      currentTopicId: 'ct-1',
+      currentTopicEntryId: 'ct-1',
     });
     renderControls(meeting);
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();

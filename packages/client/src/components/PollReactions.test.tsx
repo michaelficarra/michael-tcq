@@ -19,8 +19,8 @@ const sampleOptions: PollOption[] = [
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
     id: 'test', users: {}, chairIds: [], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerId: undefined,
-    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
+    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,

@@ -10,8 +10,8 @@ const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisat
 
 const baseMeeting: MeetingState = {
   id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
-  currentAgendaItemId: undefined, currentSpeakerId: undefined,
-  currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
+  currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
+  currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
   reactions: [], trackPoll: false, pollOptions: [],
   version: 0, log: [], currentTopicSpeakers: [],
 };

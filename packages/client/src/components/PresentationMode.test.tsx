@@ -13,8 +13,8 @@ const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation:
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
     id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerId: undefined,
-    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
+    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,
@@ -103,7 +103,7 @@ describe('Presentation mode', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
         queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'bob' } },
-        currentSpeakerId: 's1',
+        currentSpeakerEntryId: 's1',
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -187,7 +187,7 @@ describe('Presentation mode', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
         queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Speaking about this', userId: 'bob' } },
-        currentSpeakerId: 's1',
+        currentSpeakerEntryId: 's1',
       });
       renderInPresentationMode(
         wrapWithProviders(
