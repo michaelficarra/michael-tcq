@@ -42,6 +42,80 @@ export interface Reaction {
   user: User;
 }
 
+// -- Log entry types --
+
+/** A speaker turn within a topic group. */
+export interface TopicSpeaker {
+  user: User;
+  type: QueueEntryType;
+  topic: string;
+  /** ISO timestamp when this speaker started. */
+  startTime: string;
+  /** Duration in ms, set when the next speaker is advanced. Absent for the current speaker. */
+  duration?: number;
+}
+
+interface LogEntryBase {
+  /** ISO timestamp when this event occurred. */
+  timestamp: string;
+}
+
+export interface MeetingStartedLog extends LogEntryBase {
+  type: 'meeting-started';
+  chair: User;
+}
+
+export interface AgendaItemStartedLog extends LogEntryBase {
+  type: 'agenda-item-started';
+  chair: User;
+  itemName: string;
+  itemOwner: User;
+}
+
+export interface AgendaItemFinishedLog extends LogEntryBase {
+  type: 'agenda-item-finished';
+  chair: User;
+  itemName: string;
+  /** Duration in ms from when the item started to when it was advanced. */
+  duration: number;
+  /** Distinct users who spoke during this item (excluding Point of Order speakers). */
+  participants: User[];
+  /**
+   * Text serialisation of the remaining queue entries at the time the
+   * agenda item was advanced, if the queue was non-empty.
+   * Format: "Type: topic (username)" per line.
+   */
+  remainingQueue?: string;
+}
+
+export interface TopicDiscussedLog extends LogEntryBase {
+  type: 'topic-discussed';
+  chair: User;
+  topicName: string;
+  speakers: TopicSpeaker[];
+  /** Duration in ms from the first speaker to when the topic was finalised. */
+  duration: number;
+}
+
+export interface PollRanLog extends LogEntryBase {
+  type: 'poll-ran';
+  startChair: User;
+  endChair: User;
+  /** Duration in ms from poll start to poll stop. */
+  duration: number;
+  /** Number of distinct users who voted. */
+  totalVoters: number;
+  /** Results: each option's label, emoji, and count, sorted by count descending. */
+  results: { emoji: string; label: string; count: number }[];
+}
+
+export type LogEntry =
+  | MeetingStartedLog
+  | AgendaItemStartedLog
+  | AgendaItemFinishedLog
+  | TopicDiscussedLog
+  | PollRanLog;
+
 export interface MeetingState {
   id: string;
   chairs: User[];
@@ -78,4 +152,24 @@ export interface MeetingState {
    * the last connection).
    */
   lastConnectionTime?: string;
+
+  /** Append-only log of meeting events, displayed in the Logs tab. */
+  log: LogEntry[];
+
+  /**
+   * Speakers in the current (not yet finalised) topic group.
+   * Accumulated as speakers are advanced; finalised into a
+   * TopicDiscussedLog entry when a new topic starts or the
+   * agenda item changes.
+   */
+  currentTopicSpeakers: TopicSpeaker[];
+
+  /** ISO timestamp when the current agenda item started. Used to compute duration on finish. */
+  currentAgendaItemStartTime?: string;
+
+  /** ISO timestamp when the current poll was started. */
+  pollStartTime?: string;
+
+  /** The chair who started the current poll. */
+  pollStartChair?: User;
 }

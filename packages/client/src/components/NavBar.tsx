@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom';
 import { UserMenu } from './UserMenu.js';
 import { Logo } from './Logo.js';
 
-export type Tab = 'agenda' | 'queue' | 'help';
+export type Tab = 'agenda' | 'queue' | 'log' | 'help';
 
 interface NavBarProps {
   activeTab: Tab;
@@ -61,6 +61,7 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
       <div className="flex gap-4" role="tablist" aria-label="Meeting views">
         <TabButton tab="agenda" activeTab={activeTab} onTabChange={onTabChange} label="Agenda" />
         <TabButton tab="queue" activeTab={activeTab} onTabChange={onTabChange} label="Queue" />
+        <TabButton tab="log" activeTab={activeTab} onTabChange={onTabChange} label="Log" />
         <TabButton tab="help" activeTab={activeTab} onTabChange={onTabChange} label="Help" />
       </div>
 

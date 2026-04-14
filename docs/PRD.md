@@ -213,6 +213,60 @@ Chairs see a **Copy Results** button that copies a summary to the clipboard: eac
 
 **Stop Poll** ends the poll, clears all reactions and options.
 
+## Log
+
+The Log tab provides a chronological record of meeting events, giving participants a timeline of what has happened during the meeting. The log is maintained by the server as part of the persisted meeting state and broadcast to all clients in real time alongside other state updates.
+
+### Log Entries
+
+Each log entry records:
+
+- **Event type** — determines the description format.
+- **Timestamp** — ISO 8601, set by the server when the event occurs.
+- **Event-specific data** — varies by event type (see below).
+
+### Event Types
+
+The following events are logged:
+
+| Event | Logged when | Description format | Additional data |
+|-------|-------------|-------------------|-----------------|
+| **Meeting started** | Chair advances to the first agenda item | "Meeting started" | — |
+| **Agenda item started** | Chair advances to a new agenda item | "Started: *item name*" | Item owner (initial speaker) |
+| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one) | "Finished: *item name*" | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
+| **Topic discussed** | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the agenda item owner's introductory turn | Topic name with speaker's user badge inline | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below) |
+| **Poll ran** | Chair stops a poll | "Ran a poll" | Chair who ran it (or both chairs if different people started and stopped), duration, total number of voters, results summary (each option's emoji, label, and count) |
+
+### Speaker Grouping
+
+Speaker changes are not logged as individual top-level events. Instead, they are grouped under the topic they relate to. Each **Topic discussed** log entry has two display formats:
+
+**Compact format** (single speaker, no replies or clarifications): the topic name, total duration, and speaker's user badge are shown on a single line. The speaker's entry is not repeated as a nested row.
+
+**Expanded format** (multiple speakers): the topic name, total duration, and the first speaker's user badge are shown on the heading line. Replies and clarifying questions appear as nested rows below, each showing their entry type badge, topic/question text, individual duration, and user badge. The first speaker is not duplicated as a nested row since it already appears in the heading.
+
+Point of Order entries are excluded from the log entirely — they are procedural interruptions and not part of the discussion record.
+
+The current (ongoing) topic group remains open — its last speaker has no duration yet and is labelled "ongoing".
+
+### Durations
+
+The "Agenda item finished" entry's duration covers the full time from when the item started to when it was advanced. Each topic discussed entry shows the total time for that topic group. Within an expanded topic group, each individual speaker has their own duration.
+
+### Display
+
+The Log tab shows log entries in reverse chronological order (most recent first). Each entry displays a relative time (e.g. "5 minutes ago") that updates live, with the full timestamp shown on hover in the viewer's locale and time zone. Entries are visually grouped by agenda item. Item names and topics render inline markdown.
+
+### Persistence
+
+The log is stored as an array of entries within the `MeetingState` and is persisted alongside all other meeting data. Log entries are append-only — they are never edited or deleted during the meeting's lifetime. The log is broadcast to clients as part of the normal `state` event.
+
+### Keyboard Shortcut
+
+| Key | Action |
+|-----|--------|
+| `3` | Switch to Log tab |
+
 ## Real-Time Updates
 
 All meeting state changes are broadcast to all connected participants in real time. This includes:
@@ -222,6 +276,7 @@ All meeting state changes are broadcast to all connected participants in real ti
 - Current speaker and current topic changes
 - Agenda item advancement
 - Poll state, options, and reactions
+- Log entries for significant meeting events
 
 The server is the single source of truth. Clients send actions and wait for the server to broadcast the updated state — no optimistic updates.
 
@@ -239,10 +294,11 @@ Wherever a user's name is shown (agenda item owners, queue entry speakers, curre
 
 ## Navigation
 
-The meeting view has three tabs:
+The meeting view has four tabs:
 
 - **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
 - **Queue** — displays the current agenda item (with poll controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
+- **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
 - **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode). The Help tab is also available on the home page.
@@ -259,8 +315,10 @@ Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes 
 | `p` | Point of Order |
 | `s` | Next Speaker (chair only) |
 | `f` | Toggle presentation mode |
-| `a` | Switch to Agenda tab |
-| `q` | Switch to Queue tab |
+| `1` | Switch to Agenda tab |
+| `2` | Switch to Queue tab |
+| `3` | Switch to Log tab |
+| `4` | Switch to Help tab |
 | `?` | Toggle shortcuts dialogue |
 
 ## Presentation Mode

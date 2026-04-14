@@ -1,9 +1,87 @@
 import type { Server, Socket } from 'socket.io';
-import type { ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shared';
+import type { ClientToServerEvents, ServerToClientEvents, User, MeetingState } from '@tcq/shared';
+import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { isAdmin } from './admin.js';
+
+// -- Log helpers --
+
+/**
+ * Finalise the duration of the last speaker in the current topic group.
+ * Called before advancing to the next speaker or changing agenda items.
+ */
+function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
+  const speakers = meeting.currentTopicSpeakers;
+  if (speakers.length > 0) {
+    const last = speakers[speakers.length - 1];
+    if (last.duration === undefined) {
+      last.duration = new Date(now).getTime() - new Date(last.startTime).getTime();
+    }
+  }
+}
+
+/**
+ * Finalise the current topic group into a TopicDiscussedLog entry
+ * and append it to the meeting log. Resets currentTopicSpeakers.
+ */
+function finaliseTopicGroup(meeting: MeetingState, chair: User, now: string): void {
+  if (meeting.currentTopicSpeakers.length === 0) return;
+
+  finaliseLastSpeakerDuration(meeting, now);
+
+  const speakers = meeting.currentTopicSpeakers;
+  const firstStart = new Date(speakers[0].startTime).getTime();
+  const duration = new Date(now).getTime() - firstStart;
+
+  meeting.log.push({
+    type: 'topic-discussed',
+    timestamp: speakers[0].startTime,
+    chair,
+    topicName: speakers[0].topic,
+    speakers: [...speakers],
+    duration,
+  });
+
+  meeting.currentTopicSpeakers = [];
+}
+
+/**
+ * Collect distinct participants from topic-discussed log entries
+ * that occurred after a given timestamp (the agenda item start).
+ * Excludes Point of Order speakers.
+ */
+function collectParticipants(meeting: MeetingState, sinceTimestamp: string): User[] {
+  const seen = new Set<string>();
+  const participants: User[] = [];
+
+  // Gather from finalised topic groups
+  for (const entry of meeting.log) {
+    if (entry.type !== 'topic-discussed') continue;
+    if (entry.timestamp < sinceTimestamp) continue;
+    for (const speaker of entry.speakers) {
+      if (speaker.type === 'point-of-order') continue;
+      const key = speaker.user.ghUsername.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        participants.push(speaker.user);
+      }
+    }
+  }
+
+  // Also include speakers from the current (not yet finalised) topic group
+  for (const speaker of meeting.currentTopicSpeakers) {
+    if (speaker.type === 'point-of-order') continue;
+    const key = speaker.user.ghUsername.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      participants.push(speaker.user);
+    }
+  }
+
+  return participants;
+}
 
 /** A Socket with our typed events and session user attached. */
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -534,7 +612,32 @@ export function registerSocketHandlers(
         return;
       }
 
-      meetingManager.nextSpeaker(joinedMeetingId);
+      const now = new Date().toISOString();
+
+      // Peek at the next speaker before advancing (to decide on topic grouping)
+      const nextEntry = meeting.queuedSpeakers[0];
+
+      // Finalise the previous speaker's duration
+      finaliseLastSpeakerDuration(meeting, now);
+
+      // If the next speaker starts a new topic, finalise the current topic group
+      if (nextEntry && nextEntry.type === 'topic') {
+        finaliseTopicGroup(meeting, user, now);
+      }
+
+      const newSpeaker = meetingManager.nextSpeaker(joinedMeetingId);
+
+      // Add the new speaker to the current topic group (skip point-of-order)
+      if (newSpeaker && newSpeaker.type !== 'point-of-order') {
+        meeting.currentTopicSpeakers.push({
+          user: newSpeaker.user,
+          type: newSpeaker.type,
+          topic: newSpeaker.topic,
+          startTime: now,
+        });
+        meetingManager.markDirty(joinedMeetingId);
+      }
+
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
 
@@ -566,15 +669,24 @@ export function registerSocketHandlers(
         }
       }
 
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+
       meetingManager.startPoll(
         joinedMeetingId,
         payload.options.map((o) => ({ emoji: o.emoji.trim(), label: o.label.trim() })),
       );
+
+      // Record poll start metadata for the log entry when the poll ends
+      meeting.pollStartTime = new Date().toISOString();
+      meeting.pollStartChair = user;
+      meetingManager.markDirty(joinedMeetingId);
+
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
     // --- poll:stop ---
-    // Chair stops the poll. Clears all reactions.
+    // Chair stops the poll. Clears all reactions and appends a poll-ran log entry.
     socket.on('poll:stop', () => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
@@ -582,7 +694,44 @@ export function registerSocketHandlers(
         return;
       }
 
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+
+      const now = new Date().toISOString();
+
+      // Build the log entry before stopPoll clears reactions/options
+      if (meeting.pollStartTime) {
+        // Count distinct voters
+        const voterSet = new Set<string>();
+        for (const r of meeting.reactions) {
+          voterSet.add(r.user.ghUsername.toLowerCase());
+        }
+
+        // Build results sorted by count descending
+        const results = meeting.pollOptions.map((opt) => ({
+          emoji: opt.emoji,
+          label: opt.label,
+          count: meeting.reactions.filter((r) => r.optionId === opt.id).length,
+        })).sort((a, b) => b.count - a.count);
+
+        meeting.log.push({
+          type: 'poll-ran',
+          timestamp: meeting.pollStartTime,
+          startChair: meeting.pollStartChair ?? user,
+          endChair: user,
+          duration: new Date(now).getTime() - new Date(meeting.pollStartTime).getTime(),
+          totalVoters: voterSet.size,
+          results,
+        });
+      }
+
       meetingManager.stopPoll(joinedMeetingId);
+
+      // Clear poll start metadata
+      meeting.pollStartTime = undefined;
+      meeting.pollStartChair = undefined;
+      meetingManager.markDirty(joinedMeetingId);
+
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
@@ -625,12 +774,73 @@ export function registerSocketHandlers(
         return;
       }
 
+      const now = new Date().toISOString();
+      const isFirstItem = !meeting.currentAgendaItem;
+      const outgoingItem = meeting.currentAgendaItem;
+      const outgoingStartTime = meeting.currentAgendaItemStartTime;
+
+      // Finalise log entries for the outgoing agenda item
+      if (outgoingItem && outgoingStartTime) {
+        // Finalise the current topic group
+        finaliseTopicGroup(meeting, user, now);
+
+        // Collect participants from all topic groups during this item
+        const participants = collectParticipants(meeting, outgoingStartTime);
+
+        // Serialise the remaining queue if non-empty
+        const remainingQueue = meeting.queuedSpeakers.length > 0
+          ? meeting.queuedSpeakers
+              .map((e) => `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${e.user.ghUsername})`)
+              .join('\n')
+          : undefined;
+
+        // Append agenda-item-finished
+        meeting.log.push({
+          type: 'agenda-item-finished',
+          timestamp: now,
+          chair: user,
+          itemName: outgoingItem.name,
+          duration: new Date(now).getTime() - new Date(outgoingStartTime).getTime(),
+          participants,
+          remainingQueue,
+        });
+      }
+
       const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
       if (!nextItem) {
         respond({ ok: false, error: 'No more agenda items' });
         return;
       }
 
+      // Append meeting-started or agenda-item-started
+      if (isFirstItem) {
+        meeting.log.push({
+          type: 'meeting-started',
+          timestamp: now,
+          chair: user,
+        });
+      }
+
+      meeting.log.push({
+        type: 'agenda-item-started',
+        timestamp: now,
+        chair: user,
+        itemName: nextItem.name,
+        itemOwner: nextItem.owner,
+      });
+
+      // Track when this agenda item started
+      meeting.currentAgendaItemStartTime = now;
+
+      // Start the introductory topic group with the item owner
+      meeting.currentTopicSpeakers = [{
+        user: nextItem.owner,
+        type: 'topic',
+        topic: `Introducing: ${nextItem.name}`,
+        startTime: now,
+      }];
+
+      meetingManager.markDirty(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
 

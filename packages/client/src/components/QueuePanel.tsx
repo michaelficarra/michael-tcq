@@ -28,7 +28,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { QueueEntry, QueueEntryType } from '@tcq/shared';
-import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
+import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -788,13 +788,7 @@ function SortableQueueEntry({
 
 /** Map a queue entry type to its display label. */
 export function entryTypeLabel(type: string): string {
-  switch (type) {
-    case 'topic': return 'New Topic';
-    case 'reply': return 'Reply';
-    case 'question': return 'Clarifying Question';
-    case 'point-of-order': return 'Point of Order';
-    default: return type;
-  }
+  return QUEUE_ENTRY_LABELS[type as QueueEntryType] ?? type;
 }
 
 /** Map a display label back to a queue entry type. Case-insensitive. */

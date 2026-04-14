@@ -18,6 +18,7 @@ import { NavBar, type Tab } from '../components/NavBar.js';
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
+import { LogsPanel } from '../components/LogsPanel.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
 
@@ -113,8 +114,10 @@ function MeetingPageInner() {
     { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
     { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
     { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode },
-    { key: 'a', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
-    { key: 'q', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
+    { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
+    { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
+    { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log') },
+    { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help') },
     { key: '?', description: 'Toggle shortcuts dialogue', action: () => setShowShortcuts((v) => !v), alwaysActive: true },
     { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
   ], [addQueueEntry, advanceNextSpeaker, togglePresentationMode]);
@@ -207,6 +210,7 @@ function MeetingPageInner() {
               onAutoEditConsumed={() => setAutoEditEntryId(null)}
             />
           )}
+          {!presentationMode && activeTab === 'log' && <LogsPanel />}
           {!presentationMode && activeTab === 'help' && <HelpPanel />}
         </main>
 

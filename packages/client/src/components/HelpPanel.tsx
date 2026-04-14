@@ -84,6 +84,15 @@ export function HelpPanel() {
           to remove your reaction. You can select multiple options. Hover over a
           button to see who else has reacted.
         </p>
+
+        <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Meeting Log</h4>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+          The <strong>Log</strong> tab shows a timeline of meeting events: when
+          agenda items started and finished, who spoke on each topic (with
+          replies and clarifying questions grouped under their topic), and poll
+          results. Each event shows a relative time that you can hover over to
+          see the full timestamp in your local time zone.
+        </p>
       </section>
 
       {/* --- For Chairs --- */}
@@ -205,8 +214,10 @@ export function HelpPanel() {
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">p</kbd></td><td>Point of Order</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">s</kbd></td><td>Next Speaker (chair only)</td></tr>
             <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">f</kbd></td><td>Toggle presentation mode (fullscreen, controls hidden)</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">a</kbd></td><td>Switch to Agenda tab</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">q</kbd></td><td>Switch to Queue tab</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">1</kbd></td><td>Switch to Agenda tab</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">2</kbd></td><td>Switch to Queue tab</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">3</kbd></td><td>Switch to Log tab</td></tr>
+            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">4</kbd></td><td>Switch to Help tab</td></tr>
           </tbody>
         </table>
       </section>

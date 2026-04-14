@@ -114,6 +114,7 @@ describe('MeetingManager', () => {
       queuedSpeakers: [],
       reactions: [],
       trackPoll: false, pollOptions: [], version: 0,
+      log: [], currentTopicSpeakers: [],
     });
 
     // Create a new manager and restore from the store

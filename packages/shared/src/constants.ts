@@ -8,6 +8,14 @@ export const QUEUE_ENTRY_TYPES: readonly QueueEntryType[] = [
   'topic',
 ] as const;
 
+/** Human-readable labels for each queue entry type. */
+export const QUEUE_ENTRY_LABELS: Record<QueueEntryType, string> = {
+  'point-of-order': 'Point of Order',
+  question: 'Clarifying Question',
+  reply: 'Reply',
+  topic: 'New Topic',
+};
+
 /** Maps each queue entry type to its numeric priority (lower number = higher priority). */
 export const QUEUE_ENTRY_PRIORITY: Record<QueueEntryType, number> = {
   'point-of-order': 0,

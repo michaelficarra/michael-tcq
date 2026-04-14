@@ -71,6 +71,8 @@ export class MeetingManager {
       pollOptions: [],
       version: 0,
       lastConnectionTime: new Date().toISOString(),
+      log: [],
+      currentTopicSpeakers: [],
     };
 
     this.meetings.set(id, meeting);

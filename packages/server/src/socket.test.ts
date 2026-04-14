@@ -1129,4 +1129,223 @@ describe('Socket.IO integration', () => {
     state = await statePromise;
     expect(state.id).toBe(meeting2.id);
   });
+
+  // -- Meeting log tests --
+
+  describe('meeting log', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    it('logs meeting-started and agenda-item-started on first agenda advancement', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', owner);
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      const state = await statePromise;
+
+      expect(state.log).toHaveLength(2);
+      expect(state.log[0].type).toBe('meeting-started');
+      expect(state.log[1].type).toBe('agenda-item-started');
+      expect(state.log[1].type === 'agenda-item-started' && state.log[1].itemName).toBe('First Item');
+    });
+
+    it('logs agenda-item-finished when advancing to the next item', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second Item', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting (advance to first item)
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Advance to second item
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      state = await statePromise;
+
+      // Should have: meeting-started, item-started(First), topic-discussed (intro), item-finished(First), item-started(Second)
+      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      expect(finished).toBeDefined();
+      expect(finished!.type === 'agenda-item-finished' && finished!.itemName).toBe('First Item');
+      expect(finished!.type === 'agenda-item-finished' && finished!.duration).toBeGreaterThanOrEqual(0);
+      expect(finished!.type === 'agenda-item-finished' && finished!.participants).toHaveLength(1);
+
+      const secondStarted = state.log.filter((e) => e.type === 'agenda-item-started');
+      expect(secondStarted).toHaveLength(2);
+    });
+
+    it('groups speakers under topic-discussed entries', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Add a new topic to the queue and advance
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'My topic' });
+      state = await statePromise;
+
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { version: state.version }, () => {});
+      state = await statePromise;
+
+      // The introductory topic group should be finalised in the log
+      const topicEntries = state.log.filter((e) => e.type === 'topic-discussed');
+      expect(topicEntries).toHaveLength(1);
+      expect(topicEntries[0].type === 'topic-discussed' && topicEntries[0].speakers).toHaveLength(1);
+
+      // The new topic should be in currentTopicSpeakers (not yet finalised)
+      expect(state.currentTopicSpeakers).toHaveLength(1);
+      expect(state.currentTopicSpeakers[0].topic).toBe('My topic');
+    });
+
+    it('nests replies under the current topic group', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Add a reply and advance to it
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'reply', topic: 'My reply' });
+      state = await statePromise;
+
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { version: state.version }, () => {});
+      state = await statePromise;
+
+      // Reply should be in the same topic group as the intro (not finalised yet)
+      expect(state.currentTopicSpeakers).toHaveLength(2);
+      expect(state.currentTopicSpeakers[1].type).toBe('reply');
+      expect(state.currentTopicSpeakers[1].topic).toBe('My reply');
+    });
+
+    it('excludes point-of-order speakers from topic groups', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Add a point-of-order and advance to it
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'point-of-order', topic: 'POO' });
+      state = await statePromise;
+
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:next', { version: state.version }, () => {});
+      state = await statePromise;
+
+      // Point-of-order should NOT be in the current topic speakers
+      expect(state.currentTopicSpeakers).toHaveLength(1);
+      expect(state.currentTopicSpeakers[0].topic).toContain('Introducing');
+    });
+
+    it('logs poll-ran entry when a poll is stopped', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start a poll
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('poll:start', {
+        options: [
+          { emoji: '👍', label: 'Yes' },
+          { emoji: '👎', label: 'No' },
+        ],
+      });
+      let state = await statePromise;
+
+      // React to an option
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('poll:react', { optionId: state.pollOptions[0].id });
+      state = await statePromise;
+
+      // Stop the poll
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('poll:stop');
+      state = await statePromise;
+
+      const pollEntry = state.log.find((e) => e.type === 'poll-ran');
+      expect(pollEntry).toBeDefined();
+      if (pollEntry?.type === 'poll-ran') {
+        expect(pollEntry.totalVoters).toBe(1);
+        expect(pollEntry.results).toHaveLength(2);
+        expect(pollEntry.duration).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('includes remaining queue in agenda-item-finished when queue is non-empty', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Add entries to the queue
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Leftover topic' });
+      state = await statePromise;
+
+      // Advance to next agenda item (leaving the queue non-empty)
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      state = await statePromise;
+
+      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      expect(finished).toBeDefined();
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.remainingQueue).toBeDefined();
+        expect(finished.remainingQueue).toContain('Leftover topic');
+        expect(finished.remainingQueue).toContain('testuser');
+      }
+    });
+
+    it('does not include remainingQueue when queue is empty at advancement', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
+      let state = await statePromise;
+
+      // Advance to next item with empty queue
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { version: state.version }, () => {});
+      state = await statePromise;
+
+      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      expect(finished).toBeDefined();
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.remainingQueue).toBeUndefined();
+      }
+    });
+  });
 });

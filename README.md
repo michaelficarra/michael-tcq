@@ -25,6 +25,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Admin dashboard** — admins (configured via `ADMIN_USERNAMES` env var) see a list of all active meetings on the home page with connection statistics, and can delete meetings.
 - **Agenda import** — chairs can import an agenda from a URL to a markdown document (e.g. a TC39 meeting agenda on GitHub). The parser extracts items from both numbered lists and markdown tables, preserving markdown formatting in item names.
 - **Inline markdown** — agenda item names and queue entry topics support a limited subset of inline markdown: bold, italic, strikethrough, code, and links. Rendered in the UI wherever items are displayed.
+- **Meeting log** — the Logs tab shows a chronological timeline of meeting events: agenda items started and finished (with duration and participant summaries), speaker topics with grouped replies and clarifying questions, and poll results. Timestamps are displayed as relative times with full locale-formatted timestamps on hover.
 - **Confirmation on agenda advancement** — advancing to the next agenda item prompts for confirmation when the queue is non-empty, preventing accidental queue loss.
 - **Dark mode** — automatically follows the system colour scheme via `prefers-color-scheme`. No manual toggle needed.
 - **Connection status indicator** — a small dot in the bottom-right corner shows green when connected to the server and red when disconnected.
@@ -59,6 +60,9 @@ Configuring a poll with customisable emoji and label options.
 
 ![Active poll](screenshots/active-poll.png)
 An active poll showing reaction buttons with counts.
+
+![Meeting log](screenshots/meeting-log.png)
+The log tab showing a timeline of meeting events with speaker topics and durations.
 
 ![Help tab](screenshots/help.png)
 Built-in help page explaining the tool for participants and chairs.
