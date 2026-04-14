@@ -9,19 +9,10 @@ import { isAdmin } from './admin.js';
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 /**
- * Tracks how many sockets are connected to each meeting, so we can
- * clean up meetings after all participants have left.
+ * Tracks how many sockets are connected to each meeting, used for
+ * admin dashboard statistics and connection tracking.
  */
 const meetingClientCounts = new Map<string, number>();
-
-/**
- * Timers for delayed meeting cleanup. When the last client disconnects,
- * we wait before removing the meeting to allow for brief reconnections.
- */
-const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-/** How long to wait (ms) after the last client disconnects before cleaning up. */
-const CLEANUP_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Per-meeting connection statistics for the admin dashboard. */
 export interface MeetingStats {
@@ -118,13 +109,13 @@ export function registerSocketHandlers(
           }
         }
         socket.leave(joinedMeetingId);
-        decrementClientCount(joinedMeetingId, meetingManager);
+        decrementClientCount(joinedMeetingId);
       }
 
       // Join the new meeting room
       joinedMeetingId = meetingId;
       socket.join(meetingId);
-      incrementClientCount(meetingId);
+      incrementClientCount(meetingId, meetingManager);
 
       // Track connection stats for admin dashboard (non-admin only)
       if (!isAdmin(user)) {
@@ -661,7 +652,7 @@ export function registerSocketHandlers(
           }
         }
 
-        decrementClientCount(joinedMeetingId, meetingManager);
+        decrementClientCount(joinedMeetingId);
       }
     });
   });
@@ -678,44 +669,27 @@ function getSocketUser(socket: TypedSocket): User | undefined {
   return session?.user;
 }
 
-/** Increment the count of connected clients for a meeting and cancel any pending cleanup. */
-function incrementClientCount(meetingId: string): void {
+/** Increment the count of connected clients for a meeting and record the connection time. */
+function incrementClientCount(meetingId: string, meetingManager: MeetingManager): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
   meetingClientCounts.set(meetingId, current + 1);
 
-  // Cancel any pending cleanup timer — someone reconnected
-  const timer = cleanupTimers.get(meetingId);
-  if (timer) {
-    clearTimeout(timer);
-    cleanupTimers.delete(meetingId);
+  // Update the persisted last-connection timestamp so the expiry
+  // sweep knows when the meeting was last active.
+  const meeting = meetingManager.get(meetingId);
+  if (meeting) {
+    meeting.lastConnectionTime = new Date().toISOString();
+    meetingManager.markDirty(meetingId);
   }
 }
 
-/**
- * Decrement the count of connected clients for a meeting.
- * When the count reaches zero, start a delayed cleanup timer.
- */
-function decrementClientCount(meetingId: string, meetingManager: MeetingManager): void {
+/** Decrement the count of connected clients for a meeting. */
+function decrementClientCount(meetingId: string): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
   const next = Math.max(0, current - 1);
 
   if (next === 0) {
     meetingClientCounts.delete(meetingId);
-
-    // Start a delayed cleanup — if no one reconnects, remove the meeting
-    const timer = setTimeout(() => {
-      cleanupTimers.delete(meetingId);
-
-      // Only remove if still zero clients
-      if (!meetingClientCounts.has(meetingId)) {
-        console.log(`Cleaning up meeting ${meetingId} (no connected clients)`);
-        meetingManager.remove(meetingId).catch((err) => {
-          console.error(`Failed to remove meeting ${meetingId}:`, err);
-        });
-      }
-    }, CLEANUP_DELAY_MS);
-
-    cleanupTimers.set(meetingId, timer);
   } else {
     meetingClientCounts.set(meetingId, next);
   }

@@ -280,7 +280,7 @@ The application supports dark mode via `prefers-color-scheme: dark`. When the us
 
 ## Persistence
 
-Meeting state is held in memory on the server and periodically synchronised to a persistent store (every 30 seconds for changed meetings, immediately for high-value events like agenda/speaker advancement). On server startup, meetings are restored from the store. When all clients disconnect from a meeting, a cleanup timer starts (5 minutes); if no one reconnects, the meeting is deleted.
+Meeting state is held in memory on the server and periodically synchronised to a persistent store (every 30 seconds for changed meetings, immediately for high-value events like agenda/speaker advancement). On server startup, meetings are restored from the store. Meetings are automatically deleted 90 days after their most recent client connection. An hourly sweep removes expired meetings, and any expired meetings found on startup are pruned during restore.
 
 Two store implementations:
 

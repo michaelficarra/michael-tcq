@@ -12,6 +12,9 @@ import { generateMeetingId } from './meetingId.js';
  * is written to periodically (see `startPeriodicSync`) and on
  * significant events.
  */
+/** How long (in ms) a meeting is retained after its most recent connection. */
+const MEETING_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
 export class MeetingManager {
   /** The canonical in-memory state for all active meetings. */
   private meetings = new Map<string, MeetingState>();
@@ -31,11 +34,23 @@ export class MeetingManager {
    */
   async restore(): Promise<void> {
     const meetings = await this.store.loadAll();
+    const now = Date.now();
+    let expired = 0;
+
     for (const meeting of meetings) {
-      this.meetings.set(meeting.id, meeting);
+      if (this.isExpired(meeting, now)) {
+        expired++;
+        await this.store.remove(meeting.id);
+      } else {
+        this.meetings.set(meeting.id, meeting);
+      }
     }
-    if (meetings.length > 0) {
-      console.log(`Restored ${meetings.length} meeting(s) from store`);
+
+    if (expired > 0) {
+      console.log(`Removed ${expired} expired meeting(s) from store`);
+    }
+    if (this.meetings.size > 0) {
+      console.log(`Restored ${this.meetings.size} meeting(s) from store`);
     }
   }
 
@@ -55,6 +70,7 @@ export class MeetingManager {
       trackPoll: false,
       pollOptions: [],
       version: 0,
+      lastConnectionTime: new Date().toISOString(),
     };
 
     this.meetings.set(id, meeting);
@@ -608,5 +624,48 @@ export class MeetingManager {
     }, intervalMs);
 
     return () => clearInterval(timer);
+  }
+
+  /**
+   * Start a periodic sweep that removes expired meetings (no connection
+   * in the last 90 days). Runs once per hour. Returns a cleanup function
+   * that stops the interval.
+   */
+  startExpirySweep(intervalMs = 60 * 60 * 1000): () => void {
+    const timer = setInterval(() => {
+      this.removeExpiredMeetings().catch((err) => {
+        console.error('Expiry sweep failed:', err);
+      });
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }
+
+  /** Remove all meetings whose last connection is older than 90 days. */
+  private async removeExpiredMeetings(): Promise<void> {
+    const now = Date.now();
+    const expiredIds: string[] = [];
+
+    for (const meeting of this.meetings.values()) {
+      if (this.isExpired(meeting, now)) {
+        expiredIds.push(meeting.id);
+      }
+    }
+
+    for (const id of expiredIds) {
+      console.log(`Expiring meeting ${id} (no connections in 90 days)`);
+      await this.remove(id);
+    }
+  }
+
+  /**
+   * Check whether a meeting has expired. A meeting expires 90 days after
+   * its most recent connection. Meetings without a lastConnectionTime
+   * (created before this feature) are not considered expired.
+   */
+  private isExpired(meeting: MeetingState, now: number): boolean {
+    if (!meeting.lastConnectionTime) return false;
+    const lastConnection = new Date(meeting.lastConnectionTime).getTime();
+    return now - lastConnection > MEETING_EXPIRY_MS;
   }
 }

@@ -71,4 +71,11 @@ export interface MeetingState {
    * sends the version it saw, and the server rejects if it's stale.
    */
   version: number;
+
+  /**
+   * ISO timestamp of the most recent client connection to this meeting.
+   * Used to determine when to expire stale meetings (90 days after
+   * the last connection).
+   */
+  lastConnectionTime?: string;
 }

@@ -185,6 +185,9 @@ async function start() {
   // Start periodic sync (writes dirty meetings to the store every 30 seconds)
   meetingManager.startPeriodicSync();
 
+  // Start periodic expiry sweep (removes meetings with no connections in 90 days)
+  meetingManager.startExpirySweep();
+
   httpServer.listen(PORT, () => {
     console.log(`TCQ server listening on http://localhost:${PORT}`);
   });
