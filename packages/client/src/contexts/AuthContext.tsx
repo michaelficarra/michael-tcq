@@ -39,6 +39,7 @@ const AuthContext = createContext<AuthState>({
 });
 
 /** Read the current auth state. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthState {
   return useContext(AuthContext);
 }
@@ -62,8 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMockAuth(!!data.mockAuth);
       setAdminFlag(!!data.isAdmin);
       // Remove the extra flags before storing as User
-      const { mockAuth: _, isAdmin: _a, ...userData } = data;
-      setUser(userData as User);
+      delete data.mockAuth;
+      delete data.isAdmin;
+      setUser(data as User);
     } catch {
       setUser(null);
     } finally {

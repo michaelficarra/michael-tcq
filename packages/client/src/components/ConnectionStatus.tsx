@@ -3,38 +3,39 @@
  * Green when connected, red when disconnected.
  *
  * When the connection transitions to disconnected, a "Connection lost"
- * tooltip appears. It auto-dismisses after 5 seconds or on click.
+ * tooltip appears. It dismisses on click or when reconnected.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 
 interface ConnectionStatusProps {
   connected: boolean;
 }
 
 export function ConnectionStatus({ connected }: ConnectionStatusProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const prevConnected = useRef(connected);
+  // Track the previous connected prop value, whether the tooltip is visible,
+  // and whether the user has dismissed it. Using a single setState call to
+  // detect prop transitions avoids refs and effects.
+  const [state, setState] = useState({
+    prevConnected: connected,
+    tooltipVisible: false,
+  });
 
-  useEffect(() => {
-    // Show tooltip only on transition from connected → disconnected
-    if (prevConnected.current && !connected) {
-      setShowTooltip(true);
+  if (connected !== state.prevConnected) {
+    if (state.prevConnected && !connected) {
+      // Connected → disconnected: show tooltip
+      setState({ prevConnected: connected, tooltipVisible: true });
+    } else {
+      // Disconnected → connected (or any other change): hide tooltip
+      setState({ prevConnected: connected, tooltipVisible: false });
     }
-
-    // Hide tooltip when reconnected
-    if (connected) {
-      setShowTooltip(false);
-    }
-
-    prevConnected.current = connected;
-  }, [connected]);
+  }
 
   return (
     <div className="fixed bottom-3 right-3 flex items-center gap-2">
-      {showTooltip && (
+      {state.tooltipVisible && (
         <button
-          onClick={() => setShowTooltip(false)}
+          onClick={() => setState((s) => ({ ...s, tooltipVisible: false }))}
           className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow cursor-pointer"
           aria-live="assertive"
         >

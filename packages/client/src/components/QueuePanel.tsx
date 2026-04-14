@@ -109,16 +109,16 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
     return transform;
   }, []);
 
+  // Whether the restore queue textarea is open
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreText, setRestoreText] = useState('');
+
   if (!meeting) return null;
 
   /** Remove a queue entry (own entry, or any entry if chair). */
   function handleRemoveEntry(entryId: string) {
     socket?.emit('queue:remove', { id: entryId });
   }
-
-  // Whether the restore queue textarea is open
-  const [showRestore, setShowRestore] = useState(false);
-  const [restoreText, setRestoreText] = useState('');
 
   /**
    * Copy the queue to the clipboard in a human-readable text format.
@@ -555,6 +555,18 @@ function SortableQueueEntry({
   const [editing, setEditing] = useState(initialEditing);
   const [editTopic, setEditTopic] = useState(initialEditing ? entry.topic : '');
 
+  // When initialEditing transitions to true, enter edit mode and
+  // notify the parent so it can clear the flag.
+  useEffect(() => {
+    if (initialEditing && !editing) {
+      setEditTopic(entry.topic); // eslint-disable-line react-hooks/set-state-in-effect
+      setEditing(true);
+    }
+    if (initialEditing) {
+      onEditingStarted?.();
+    }
+  }, [initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Ref callback for the edit input — focuses and selects text only
   // on initial mount, not on re-renders.
   const editInputRef = useCallback((el: HTMLInputElement | null) => {
@@ -563,18 +575,6 @@ function SortableQueueEntry({
       el.select();
     }
   }, []);
-
-  // When initialEditing transitions to true, enter edit mode and
-  // notify the parent so it can clear the flag.
-  useEffect(() => {
-    if (initialEditing && !editing) {
-      setEditTopic(entry.topic);
-      setEditing(true);
-    }
-    if (initialEditing) {
-      onEditingStarted?.();
-    }
-  }, [initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Chairs can drag any entry; participants can drag their own entries
   const canDrag = isChair || isOwnEntry;
@@ -796,7 +796,7 @@ function SortableQueueEntry({
 }
 
 /** Map a queue entry type to its display label. */
-export function entryTypeLabel(type: string): string {
+function entryTypeLabel(type: string): string {
   return QUEUE_ENTRY_LABELS[type as QueueEntryType] ?? type;
 }
 
@@ -812,7 +812,7 @@ function parseEntryType(label: string): QueueEntryType | null {
 }
 
 /** Map a queue entry type to a Tailwind text colour class. */
-export function entryTypeColor(type: string): string {
+function entryTypeColor(type: string): string {
   switch (type) {
     case 'topic': return 'text-blue-600';
     case 'reply': return 'text-cyan-600';

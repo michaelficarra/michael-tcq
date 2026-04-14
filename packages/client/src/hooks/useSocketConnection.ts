@@ -67,5 +67,6 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
     };
   }, [meetingId, dispatch]);
 
+  // eslint-disable-next-line react-hooks/refs -- Ref is synchronised by the effect above; reading it here is safe.
   return socketRef.current;
 }

@@ -39,7 +39,7 @@ function markdownToHtml(text: string): string {
   let processed = text.replace(/`([^`]+)`/g, (_match, code: string) => {
     const idx = codeSpans.length;
     codeSpans.push(`<code class="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`);
-    return `\x00CODE${idx}\x00`;
+    return `\uE000CODE${idx}\uE000`;
   });
 
   // Escape HTML in the remaining text
@@ -61,7 +61,7 @@ function markdownToHtml(text: string): string {
   processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
   // Restore code spans
-  processed = processed.replace(/\x00CODE(\d+)\x00/g, (_match, idx: string) => {
+  processed = processed.replace(/\uE000CODE(\d+)\uE000/g, (_match, idx: string) => {
     return codeSpans[parseInt(idx, 10)];
   });
 

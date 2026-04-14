@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
 import { userKey } from '@tcq/shared';

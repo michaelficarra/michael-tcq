@@ -723,8 +723,8 @@ export class MeetingManager {
  * to the normalised format (ID references with lookup maps).
  * Detects legacy format by checking for the absence of the `users` field.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 function migrateLegacyMeeting(meeting: MeetingState): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const m = meeting as any;
 
   // Already migrated (or new format)
@@ -840,7 +840,6 @@ function migrateLegacyMeeting(meeting: MeetingState): void {
 }
 
 /** Migrate a single log entry from inline User objects to user ID references. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migrateLogEntry(entry: any, eu: (u: User) => string): void {
   // Common: chair → chairId
   if (entry.chair && typeof entry.chair === 'object') {
@@ -883,3 +882,4 @@ function migrateLogEntry(entry: any, eu: (u: User) => string): void {
       break;
   }
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
