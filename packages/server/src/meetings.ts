@@ -594,8 +594,11 @@ export class MeetingManager {
   /**
    * Toggle a reaction for a user on a specific poll option.
    * If the user already reacted to this option, the reaction is removed.
-   * If they haven't, a reaction is added. Each user can react to each
-   * option at most once.
+   * If they haven't, a reaction is added.
+   *
+   * In multi-select mode (default), each user can react to each option
+   * at most once. In single-select mode, selecting a new option removes
+   * any previous selection by that user.
    *
    * Returns false if the meeting doesn't exist, poll
    * is not active, or the option ID is invalid.
@@ -620,6 +623,10 @@ export class MeetingManager {
       // Remove it (toggle off)
       meeting.reactions.splice(existingIndex, 1);
     } else {
+      // In single-select mode, remove any existing reaction by this user first
+      if (!meeting.pollMultiSelect) {
+        meeting.reactions = meeting.reactions.filter((r) => r.userId !== key);
+      }
       // Add it (toggle on)
       meeting.reactions.push({ optionId, userId: key });
     }

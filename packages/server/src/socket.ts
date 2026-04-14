@@ -671,6 +671,7 @@ export function registerSocketHandlers(
       meeting.pollStartTime = new Date().toISOString();
       meeting.pollStartChairId = ensureUser(meeting, user);
       meeting.pollTopic = payload.topic?.trim() || undefined;
+      meeting.pollMultiSelect = payload.multiSelect !== false;
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
@@ -724,6 +725,7 @@ export function registerSocketHandlers(
       meeting.pollStartTime = undefined;
       meeting.pollStartChairId = undefined;
       meeting.pollTopic = undefined;
+      meeting.pollMultiSelect = undefined;
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);

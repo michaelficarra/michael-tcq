@@ -99,6 +99,7 @@ describe('PollSetup', () => {
     fireEvent.click(screen.getByText('Start Poll'));
 
     expect(emit).toHaveBeenCalledWith('poll:start', {
+      multiSelect: true,
       options: DEFAULT_POLL_OPTIONS.map((o) => ({
         emoji: o.emoji,
         label: o.label,
@@ -149,6 +150,22 @@ describe('PollSetup', () => {
 
     expect(emit).toHaveBeenCalledWith('poll:start', expect.objectContaining({
       topic: 'Should we advance?',
+    }));
+  });
+
+  it('sends multiSelect: false when checkbox is unchecked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    renderSetup(mockSocket);
+
+    // Uncheck the multi-select checkbox
+    fireEvent.click(screen.getByLabelText(/allow selecting multiple/i));
+
+    fireEvent.click(screen.getByText('Start Poll'));
+
+    expect(emit).toHaveBeenCalledWith('poll:start', expect.objectContaining({
+      multiSelect: false,
     }));
   });
 

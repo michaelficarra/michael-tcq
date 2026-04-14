@@ -79,6 +79,8 @@ export interface QueueRemovePayload {
 export interface PollStartPayload {
   /** Optional topic/question for the poll. */
   topic?: string;
+  /** Whether participants can select multiple options. Defaults to true. */
+  multiSelect?: boolean;
   options: { emoji: string; label: string }[];
 }
 

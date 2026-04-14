@@ -211,11 +211,11 @@ When a chair clicks **Poll**, a setup form appears with an optional topic/questi
 | 🤷 | Indifferent |
 | 😕 | Unconvinced |
 
-Chairs can add, remove, and edit options before starting the poll. Each option's emoji is entered via a text input (the OS emoji picker can be used). A minimum of 2 options is required. The chair clicks **Start Poll** to begin.
+Chairs can add, remove, and edit options before starting the poll. Each option's emoji is entered via a text input (the OS emoji picker can be used). A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin.
 
 ### Reactions
 
-During an active poll, all participants see a modal with the poll topic (if provided), a count-up timer showing how long the poll has been open, and a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
+During an active poll, all participants see a modal with the poll topic (if provided), a count-up timer showing how long the poll has been open, and a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). In single-select mode, selecting a new option automatically deselects the previous one. Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
 
 ### Results
 

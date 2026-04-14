@@ -42,6 +42,7 @@ interface PollSetupProps {
 export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   const socket = useSocket();
   const [topic, setTopic] = useState('');
+  const [multiSelect, setMultiSelect] = useState(true);
   const [options, setOptions] = useState<DraftOption[]>(createDefaults);
 
   /** Update a single option's field. */
@@ -74,6 +75,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
 
     socket?.emit('poll:start', {
       topic: topic.trim() || undefined,
+      multiSelect,
       options: validOptions.map((opt) => ({
         emoji: opt.emoji.trim(),
         label: opt.label.trim(),
@@ -105,6 +107,17 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
                    dark:bg-stone-700 dark:text-stone-100
                    focus:outline-none focus:ring-1 focus:ring-teal-500"
       />
+
+      {/* Selection mode */}
+      <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400 mb-3 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={multiSelect}
+          onChange={(e) => setMultiSelect(e.target.checked)}
+          className="accent-teal-600"
+        />
+        Allow selecting multiple options
+      </label>
 
       {/* Option list */}
       <div className="space-y-2 mb-3">

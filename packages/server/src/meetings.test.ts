@@ -937,6 +937,34 @@ describe('MeetingManager', () => {
     it('returns false for non-existent meeting', () => {
       expect(manager.toggleReaction('no-such-meeting', 'any', testUser)).toBe(false);
     });
+
+    it('in single-select mode, removes previous reaction when selecting a new option', () => {
+      const meeting = manager.create([testUser]);
+      manager.startPoll(meeting.id, [{ emoji: '👍', label: 'Yes' }, { emoji: '👎', label: 'No' }]);
+      meeting.pollMultiSelect = false;
+
+      const opt1 = meeting.pollOptions[0].id;
+      const opt2 = meeting.pollOptions[1].id;
+
+      manager.toggleReaction(meeting.id, opt1, testUser);
+      expect(meeting.reactions).toHaveLength(1);
+      expect(meeting.reactions[0].optionId).toBe(opt1);
+
+      // Select a different option — should replace, not add
+      manager.toggleReaction(meeting.id, opt2, testUser);
+      expect(meeting.reactions).toHaveLength(1);
+      expect(meeting.reactions[0].optionId).toBe(opt2);
+    });
+
+    it('in multi-select mode, allows multiple reactions from the same user', () => {
+      const meeting = manager.create([testUser]);
+      manager.startPoll(meeting.id, [{ emoji: '👍', label: 'Yes' }, { emoji: '👎', label: 'No' }]);
+      meeting.pollMultiSelect = true;
+
+      manager.toggleReaction(meeting.id, meeting.pollOptions[0].id, testUser);
+      manager.toggleReaction(meeting.id, meeting.pollOptions[1].id, testUser);
+      expect(meeting.reactions).toHaveLength(2);
+    });
   });
 
   it('creates meetings with unique IDs', () => {

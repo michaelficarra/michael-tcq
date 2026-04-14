@@ -182,4 +182,7 @@ export interface MeetingState {
 
   /** The topic/question for the current poll, if one was provided. */
   pollTopic?: string;
+
+  /** Whether the current poll allows selecting multiple options. */
+  pollMultiSelect?: boolean;
 }
