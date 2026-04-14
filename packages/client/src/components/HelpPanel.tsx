@@ -204,7 +204,6 @@ export function HelpPanel() {
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           Press <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5
           font-mono text-xs">?</kbd> at any time to see all keyboard shortcuts.
-          Shortcuts are disabled when typing in a text field.
         </p>
         <table className="text-sm text-stone-600 dark:text-stone-400">
           <tbody>
