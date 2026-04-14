@@ -164,11 +164,21 @@ Chairs can also restore a queue by pasting entries in this format. When a line i
 
 ### Current Speaker
 
-The currently speaking person is displayed prominently, showing their GitHub avatar, name, organisation, and the topic/question they queued with. Only one person speaks at a time.
+The currently speaking person is displayed prominently, showing their GitHub avatar, name, organisation, and the topic/question they queued with. A count-up timer shows how long the current speaker has been speaking (updated every second). Only one person speaks at a time.
 
 ### Current Topic
 
-When a speaker introduces a new topic, that topic becomes the "current topic" and is displayed in a dedicated section. The current topic determines whether the "Reply" queue entry type is available, and the reply form references the current topic by name.
+When a speaker introduces a new topic, that topic becomes the "current topic" and is displayed in a dedicated section. A count-up timer shows how long the current topic has been under discussion. The current topic determines whether the "Reply" queue entry type is available, and the reply form references the current topic by name.
+
+### Timers
+
+The Queue tab displays live count-up timers on three elements:
+
+- **Current agenda item** — time since the agenda item started. If the item has a timebox, the timer turns bold red when the timebox is exceeded.
+- **Current topic** — time since the current topic was introduced.
+- **Current speaker** — time since the current speaker began speaking.
+
+Timers update every second and are displayed in M:SS format (or H:MM:SS for durations over an hour). They remain visible in presentation mode. Point of Order speakers, being procedural interruptions, do not display a speaker timer.
 
 ## Meeting Flow
 

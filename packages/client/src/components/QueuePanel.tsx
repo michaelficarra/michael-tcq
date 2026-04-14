@@ -37,6 +37,7 @@ import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
 import { PollSetup } from './PollSetup.js';
+import { CountUpTimer } from './CountUpTimer.js';
 
 interface QueuePanelProps {
   /** ID of a newly added queue entry that should open in edit mode. */
@@ -59,6 +60,15 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const currentSpeaker = meeting?.currentSpeakerEntryId ? meeting.queueEntries[meeting.currentSpeakerEntryId] : undefined;
   const currentTopic = meeting?.currentTopicEntryId ? meeting.queueEntries[meeting.currentTopicEntryId] : undefined;
   const queuedSpeakers = meeting?.queuedSpeakerIds.map(id => meeting.queueEntries[id]).filter(Boolean) ?? [];
+
+  // Derive start times for count-up timers
+  const agendaItemStartTime = meeting?.currentAgendaItemStartTime;
+  const currentTopicStartTime = meeting?.currentTopicSpeakers?.[0]?.startTime;
+  const currentSpeakerStartTime = (() => {
+    if (!meeting?.currentTopicSpeakers?.length) return undefined;
+    const last = meeting.currentTopicSpeakers[meeting.currentTopicSpeakers.length - 1];
+    return last.duration === undefined ? last.startTime : undefined;
+  })();
 
   // Whether the poll setup form is open
   const [showPollSetup, setShowPollSetup] = useState(false);
@@ -269,6 +279,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
                   {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
                 </span>
               )}
+              {agendaItemStartTime && <CountUpTimer since={agendaItemStartTime} className="ml-2 text-xs text-stone-400 dark:text-stone-500 tabular-nums" overAfterMinutes={currentAgendaItem.timebox} />}
             </div>
 
           </div>
@@ -302,7 +313,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </h2>
           <div className="pl-3">
             <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentTopic.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.users[currentTopic.userId]} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
+            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+              <UserBadge user={meeting.users[currentTopic.userId]} size={18} />
+              {currentTopicStartTime && <CountUpTimer since={currentTopicStartTime} />}
+            </div>
           </div>
         </section>
       )}
@@ -332,7 +346,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         {currentSpeaker ? (
           <div className="pl-3">
             <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentSpeaker.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.users[currentSpeaker.userId]} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
+            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+              <UserBadge user={meeting.users[currentSpeaker.userId]} size={18} />
+              {currentSpeakerStartTime && <CountUpTimer since={currentSpeakerStartTime} />}
+            </div>
           </div>
         ) : (
           <p className="text-stone-500 dark:text-stone-400 pl-3">

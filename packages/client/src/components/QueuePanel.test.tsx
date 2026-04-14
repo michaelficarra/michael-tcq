@@ -200,6 +200,33 @@ describe('QueuePanel', () => {
     expect(screen.getByText('Topic')).toBeInTheDocument();
   });
 
+  // -- Count-up timers --
+
+  it('shows a timer for the current agenda item', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
+      currentAgendaItemId: '1',
+      currentAgendaItemStartTime: new Date(Date.now() - 125_000).toISOString(),
+    });
+    renderQueue(meeting);
+    expect(screen.getByText('2:05')).toBeInTheDocument();
+  });
+
+  it('shows a timer for the current speaker', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'alice' } },
+      currentSpeakerEntryId: 's1',
+      currentTopicSpeakers: [{
+        userId: 'alice', type: 'topic', topic: 'Test',
+        startTime: new Date(Date.now() - 65_000).toISOString(),
+      }],
+    });
+    renderQueue(meeting);
+    expect(screen.getByText('1:05')).toBeInTheDocument();
+  });
+
   // -- Speaker queue --
 
   it('shows "The queue is empty" when there are no queued speakers', () => {
