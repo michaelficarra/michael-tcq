@@ -198,6 +198,22 @@ describe('LogsPanel', () => {
     expect(screen.getByText('Bob')).toBeTruthy();
   });
 
+  it('renders a poll-ran entry with topic when provided', () => {
+    renderLog(makeMeeting({
+      log: [{
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'alice',
+        endChairId: 'alice',
+        topic: 'Should we advance?',
+        duration: 60 * 1000,
+        totalVoters: 3,
+        results: [{ emoji: '👍', label: 'Yes', count: 3 }],
+      }],
+    }));
+    expect(screen.getByText(/Should we advance\?/)).toBeTruthy();
+  });
+
   it('renders the current topic group as ongoing', () => {
     const speakers: TopicSpeaker[] = [{
       userId: 'bob', type: 'topic', topic: 'Active discussion',

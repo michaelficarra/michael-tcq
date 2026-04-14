@@ -101,6 +101,8 @@ export interface PollRanLog extends LogEntryBase {
   type: 'poll-ran';
   startChairId: string;
   endChairId: string;
+  /** The poll topic/question, if one was provided. */
+  topic?: string;
   /** Duration in ms from poll start to poll stop. */
   duration: number;
   /** Number of distinct users who voted. */
@@ -177,4 +179,7 @@ export interface MeetingState {
 
   /** The user key of the chair who started the current poll. */
   pollStartChairId?: string;
+
+  /** The topic/question for the current poll, if one was provided. */
+  pollTopic?: string;
 }

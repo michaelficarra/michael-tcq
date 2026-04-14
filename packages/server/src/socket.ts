@@ -670,6 +670,7 @@ export function registerSocketHandlers(
       // Record poll start metadata for the log entry when the poll ends
       meeting.pollStartTime = new Date().toISOString();
       meeting.pollStartChairId = ensureUser(meeting, user);
+      meeting.pollTopic = payload.topic?.trim() || undefined;
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
@@ -710,6 +711,7 @@ export function registerSocketHandlers(
           timestamp: meeting.pollStartTime,
           startChairId: meeting.pollStartChairId ?? chairId,
           endChairId: chairId,
+          topic: meeting.pollTopic,
           duration: new Date(now).getTime() - new Date(meeting.pollStartTime).getTime(),
           totalVoters: voterSet.size,
           results,
@@ -721,6 +723,7 @@ export function registerSocketHandlers(
       // Clear poll start metadata
       meeting.pollStartTime = undefined;
       meeting.pollStartChairId = undefined;
+      meeting.pollTopic = undefined;
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);

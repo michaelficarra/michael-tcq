@@ -200,7 +200,7 @@ A poll is a lightweight, real-time sentiment check that allows the chair to gaug
 
 ### Configuration (Chair Only)
 
-When a chair clicks **Poll**, a setup form appears with a list of response options. Each option has an emoji and a label. The six default options are:
+When a chair clicks **Poll**, a setup form appears with an optional topic/question field at the top, followed by a list of response options. Each option has an emoji and a label. The six default options are:
 
 | Emoji | Label |
 |-------|-------|
@@ -215,7 +215,7 @@ Chairs can add, remove, and edit options before starting the poll. Each option's
 
 ### Reactions
 
-During an active poll, all participants see a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
+During an active poll, all participants see a modal with the poll topic (if provided), a count-up timer showing how long the poll has been open, and a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
 
 ### Results
 
@@ -247,7 +247,7 @@ The following events are logged:
 | **Agenda item started** | Chair advances to a new agenda item | "Started: *item name*" | Item owner (initial speaker) |
 | **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one) | "Finished: *item name*" | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
 | **Topic discussed** | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the agenda item owner's introductory turn | Topic name with speaker's user badge inline | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below) |
-| **Poll ran** | Chair stops a poll | "Ran a poll" | Chair who ran it (or both chairs if different people started and stopped), duration, total number of voters, results summary (each option's emoji, label, and count) |
+| **Poll ran** | Chair stops a poll | "Ran a poll" (or "Ran a poll: *topic*" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count) |
 
 ### Speaker Grouping
 

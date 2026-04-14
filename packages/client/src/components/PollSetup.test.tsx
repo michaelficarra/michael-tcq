@@ -135,4 +135,31 @@ describe('PollSetup', () => {
 
     expect(screen.getByText('Start Poll')).toBeDisabled();
   });
+
+  it('includes the poll topic in the emitted payload when provided', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    renderSetup(mockSocket);
+
+    // Enter a topic
+    fireEvent.change(screen.getByLabelText('Poll topic'), { target: { value: 'Should we advance?' } });
+
+    fireEvent.click(screen.getByText('Start Poll'));
+
+    expect(emit).toHaveBeenCalledWith('poll:start', expect.objectContaining({
+      topic: 'Should we advance?',
+    }));
+  });
+
+  it('omits topic from payload when left empty', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    renderSetup(mockSocket);
+    fireEvent.click(screen.getByText('Start Poll'));
+
+    const payload = emit.mock.calls.find((c: unknown[]) => c[0] === 'poll:start')?.[1];
+    expect(payload.topic).toBeUndefined();
+  });
 });

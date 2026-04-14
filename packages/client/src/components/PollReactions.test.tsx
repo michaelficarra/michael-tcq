@@ -127,4 +127,34 @@ describe('PollReactions', () => {
     }));
     expect(screen.getByRole('group', { name: /poll reactions/i })).toBeInTheDocument();
   });
+
+  it('displays the poll topic when provided', () => {
+    const meeting = makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
+      pollTopic: 'Should we advance this proposal?',
+    });
+    renderPoll(meeting);
+    expect(screen.getByText('Should we advance this proposal?')).toBeInTheDocument();
+  });
+
+  it('does not display a topic line when no topic is set', () => {
+    const meeting = makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
+    });
+    renderPoll(meeting);
+    // Only the options and group should be rendered, no topic paragraph
+    expect(screen.queryByText(/should|topic/i)).not.toBeInTheDocument();
+  });
+
+  it('displays a count-up timer when pollStartTime is set', () => {
+    const meeting = makeMeeting({
+      trackPoll: true,
+      pollOptions: sampleOptions,
+      pollStartTime: new Date(Date.now() - 125_000).toISOString(),
+    });
+    renderPoll(meeting);
+    expect(screen.getByText('2:05')).toBeInTheDocument();
+  });
 });

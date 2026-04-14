@@ -12,6 +12,7 @@
 import { userKey } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
+import { CountUpTimer } from './CountUpTimer.js';
 
 export function PollReactions() {
   const { meeting, user } = useMeetingState();
@@ -52,9 +53,19 @@ export function PollReactions() {
 
   return (
     <div>
+      {/* Poll topic and timer */}
+      <div className="flex items-center gap-3 mb-4">
+        {meeting.pollTopic && (
+          <p className="text-stone-800 dark:text-stone-200 font-medium max-w-[50vw]">{meeting.pollTopic}</p>
+        )}
+        {meeting.pollStartTime && (
+          <CountUpTimer since={meeting.pollStartTime} />
+        )}
+      </div>
+
       {/* Reaction buttons */}
       <div
-        className="flex flex-wrap gap-3"
+        className="flex flex-wrap gap-3 justify-center"
         role="group"
         aria-label="Poll reactions"
       >
@@ -105,7 +116,7 @@ export function PollReactions() {
 
       {/* Chair actions — Copy Results and Stop Poll */}
       {isChair && (
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-5 justify-center">
           <button
             onClick={handleCopyResults}
             className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
@@ -115,8 +126,8 @@ export function PollReactions() {
           </button>
           <button
             onClick={() => socket?.emit('poll:stop')}
-            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
-                       text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+            className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white rounded px-3 py-1 text-sm
+                       transition-colors cursor-pointer"
           >
             Stop Poll
           </button>

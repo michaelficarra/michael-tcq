@@ -229,7 +229,7 @@ function PollRanEntry({ entry, users }: { entry: LogEntry & { type: 'poll-ran' }
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-stone-800 dark:text-stone-200">
-            Ran a poll
+            {entry.topic ? <>Ran a poll: {entry.topic}</> : 'Ran a poll'}
           </span>
           <span className="text-xs text-stone-400 dark:text-stone-500">
             {formatDuration(entry.duration)}

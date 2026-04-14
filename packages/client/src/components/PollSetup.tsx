@@ -41,6 +41,7 @@ interface PollSetupProps {
 
 export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   const socket = useSocket();
+  const [topic, setTopic] = useState('');
   const [options, setOptions] = useState<DraftOption[]>(createDefaults);
 
   /** Update a single option's field. */
@@ -72,6 +73,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
     if (validOptions.length < 2) return;
 
     socket?.emit('poll:start', {
+      topic: topic.trim() || undefined,
       options: validOptions.map((opt) => ({
         emoji: opt.emoji.trim(),
         label: opt.label.trim(),
@@ -91,6 +93,18 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
       <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3">
         Create Poll
       </h3>
+
+      {/* Poll topic (optional) */}
+      <input
+        type="text"
+        value={topic}
+        onChange={(e) => setTopic(e.target.value)}
+        placeholder="Poll topic (optional)"
+        aria-label="Poll topic"
+        className="w-full border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm mb-3
+                   dark:bg-stone-700 dark:text-stone-100
+                   focus:outline-none focus:ring-1 focus:ring-teal-500"
+      />
 
       {/* Option list */}
       <div className="space-y-2 mb-3">

@@ -77,6 +77,8 @@ export interface QueueRemovePayload {
  * assigns unique IDs. Minimum 2 options required.
  */
 export interface PollStartPayload {
+  /** Optional topic/question for the poll. */
+  topic?: string;
   options: { emoji: string; label: string }[];
 }
 
