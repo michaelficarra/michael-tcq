@@ -110,7 +110,7 @@ export function HelpPanel() {
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          On the <strong>Agenda</strong> tab, click <strong>+ New Agenda
+          On the <strong>Agenda</strong> tab, click <strong>New Agenda
           Item</strong> to add items. Each item has a name, an owner (the person
           who will present it), and an optional timebox in minutes. Drag items to
           reorder them. Click <strong>edit</strong> or <strong>delete</strong> to
