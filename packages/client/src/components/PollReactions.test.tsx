@@ -18,9 +18,9 @@ const sampleOptions: PollOption[] = [
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test', chairs: [], agenda: [],
-    currentAgendaItem: undefined, currentSpeaker: undefined,
-    currentTopic: undefined, queuedSpeakers: [],
+    id: 'test', users: {}, chairIds: [], agenda: [],
+    currentAgendaItemId: undefined, currentSpeakerId: undefined,
+    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,
@@ -64,9 +64,9 @@ describe('PollReactions', () => {
       trackPoll: true,
       pollOptions: sampleOptions,
       reactions: [
-        { optionId: 'opt-1', user: alice },
-        { optionId: 'opt-1', user: bob },
-        { optionId: 'opt-2', user: alice },
+        { optionId: 'opt-1', userId: 'alice' },
+        { optionId: 'opt-1', userId: 'bob' },
+        { optionId: 'opt-2', userId: 'alice' },
       ],
     });
     renderPoll(meeting);
@@ -80,7 +80,7 @@ describe('PollReactions', () => {
     const meeting = makeMeeting({
       trackPoll: true,
       pollOptions: sampleOptions,
-      reactions: [{ optionId: 'opt-2', user: alice }],
+      reactions: [{ optionId: 'opt-2', userId: 'alice' }],
     });
     renderPoll(meeting, alice);
 
@@ -106,11 +106,12 @@ describe('PollReactions', () => {
 
   it('shows user names in the tooltip', () => {
     const meeting = makeMeeting({
+      users: { alice, bob },
       trackPoll: true,
       pollOptions: sampleOptions,
       reactions: [
-        { optionId: 'opt-1', user: alice },
-        { optionId: 'opt-1', user: bob },
+        { optionId: 'opt-1', userId: 'alice' },
+        { optionId: 'opt-1', userId: 'bob' },
       ],
     });
     renderPoll(meeting);

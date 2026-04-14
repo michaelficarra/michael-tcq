@@ -26,7 +26,7 @@ const FALLBACK_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
 );
 
 interface UserBadgeProps {
-  user: User;
+  user: User | undefined;
   /** Avatar size in pixels. Defaults to 20. */
   size?: number;
   /** Additional CSS classes for the wrapper. */
@@ -34,6 +34,22 @@ interface UserBadgeProps {
 }
 
 export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
+  if (!user) {
+    return (
+      <span className={`inline-flex items-center align-middle gap-1.5 ${className}`}>
+        <img
+          src={FALLBACK_AVATAR}
+          alt=""
+          width={size}
+          height={size}
+          style={{ width: size, height: size, minWidth: size, minHeight: size }}
+          className="rounded-full shrink-0"
+        />
+        <span className="text-stone-400 dark:text-stone-500 italic">unknown</span>
+      </span>
+    );
+  }
+
   return (
     <span className={`inline-flex items-center align-middle gap-1.5 ${className}`}>
       <img

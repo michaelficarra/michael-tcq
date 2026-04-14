@@ -136,10 +136,10 @@ describe('Socket.IO integration', () => {
 
     const state = await statePromise;
     expect(state.id).toBe(meeting.id);
-    expect(state.chairs).toHaveLength(1);
-    expect(state.chairs[0].ghUsername).toBe('testuser');
+    expect(state.chairIds).toHaveLength(1);
+    expect(state.users[state.chairIds[0]].ghUsername).toBe('testuser');
     expect(state.agenda).toEqual([]);
-    expect(state.queuedSpeakers).toEqual([]);
+    expect(state.queuedSpeakerIds).toEqual([]);
   });
 
   it('two clients in the same meeting both receive state', async () => {
@@ -214,7 +214,7 @@ describe('Socket.IO integration', () => {
 
       expect(state.agenda).toHaveLength(1);
       expect(state.agenda[0].name).toBe('First item');
-      expect(state.agenda[0].owner.ghUsername).toBe('testuser');
+      expect(state.users[state.agenda[0].ownerId].ghUsername).toBe('testuser');
       expect(state.agenda[0].timebox).toBe(15);
     });
 
@@ -343,10 +343,11 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'My topic' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers).toHaveLength(1);
-      expect(state.queuedSpeakers[0].type).toBe('topic');
-      expect(state.queuedSpeakers[0].topic).toBe('My topic');
-      expect(state.queuedSpeakers[0].user.ghUsername).toBe('testuser');
+      expect(state.queuedSpeakerIds).toHaveLength(1);
+      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(entry.type).toBe('topic');
+      expect(entry.topic).toBe('My topic');
+      expect(state.users[entry.userId].ghUsername).toBe('testuser');
     });
 
     it('inserts entries in priority order', async () => {
@@ -364,8 +365,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'point-of-order', topic: 'Urgent' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers[0].type).toBe('point-of-order');
-      expect(state.queuedSpeakers[1].type).toBe('topic');
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('point-of-order');
+      expect(state.queueEntries[state.queuedSpeakerIds[1]].type).toBe('topic');
     });
   });
 
@@ -380,9 +381,10 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'Their topic', asUsername: 'alice' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers).toHaveLength(1);
-      expect(state.queuedSpeakers[0].user.ghUsername).toBe('alice');
-      expect(state.queuedSpeakers[0].topic).toBe('Their topic');
+      expect(state.queuedSpeakerIds).toHaveLength(1);
+      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.users[entry.userId].ghUsername).toBe('alice');
+      expect(entry.topic).toBe('Their topic');
     });
 
     it('resolves known users from the meeting when using asUsername', async () => {
@@ -400,8 +402,9 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       // Should use the full profile, not a placeholder
-      expect(state.queuedSpeakers[0].user.name).toBe('Known User');
-      expect(state.queuedSpeakers[0].user.organisation).toBe('ACME');
+      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.users[entry.userId].name).toBe('Known User');
+      expect(state.users[entry.userId].organisation).toBe('ACME');
     });
 
     it('creates a placeholder user for unknown asUsername', async () => {
@@ -414,8 +417,9 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'unknownperson' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers[0].user.ghUsername).toBe('unknownperson');
-      expect(state.queuedSpeakers[0].user.name).toBe('unknownperson');
+      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.users[entry.userId].ghUsername).toBe('unknownperson');
+      expect(state.users[entry.userId].name).toBe('unknownperson');
     });
 
     it('rejects asUsername from non-chair', async () => {
@@ -432,7 +436,7 @@ describe('Socket.IO integration', () => {
 
       expect(error).toMatch(/only chairs/i);
       // No entry should have been added
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakers).toHaveLength(0);
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
     });
   });
 
@@ -447,14 +451,14 @@ describe('Socket.IO integration', () => {
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'topic', topic: 'Remove me' });
       const stateAfterAdd = await statePromise;
-      const entryId = stateAfterAdd.queuedSpeakers[0].id;
+      const entryId = stateAfterAdd.queuedSpeakerIds[0];
 
       // Remove it
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:remove', { id: entryId });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers).toHaveLength(0);
+      expect(state.queuedSpeakerIds).toHaveLength(0);
     });
 
     it('rejects removal of another user\'s entry by non-chair', async () => {
@@ -492,7 +496,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:reorder', { id: c.id, afterId: null });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers.map((e) => e.topic)).toEqual(['C', 'A', 'B']);
+      expect(state.queuedSpeakerIds.map((id) => state.queueEntries[id].topic)).toEqual(['C', 'A', 'B']);
     });
 
     it('changes entry type when crossing a type boundary', async () => {
@@ -508,8 +512,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:reorder', { id: t.id, afterId: null });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers[0].id).toBe(t.id);
-      expect(state.queuedSpeakers[0].type).toBe('question');
+      expect(state.queuedSpeakerIds[0]).toBe(t.id);
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('question');
     });
 
     it('rejects non-owner non-chair from reordering', async () => {
@@ -547,8 +551,8 @@ describe('Socket.IO integration', () => {
       const statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:reorder', { id: a.id, afterId: b.id });
       const state = await statePromise;
-      expect(state.queuedSpeakers[0].id).toBe(b.id);
-      expect(state.queuedSpeakers[1].id).toBe(a.id);
+      expect(state.queuedSpeakerIds[0]).toBe(b.id);
+      expect(state.queuedSpeakerIds[1]).toBe(a.id);
     });
 
     it('rejects owner moving their entry up', async () => {
@@ -585,7 +589,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:edit', { id: entry.id, topic: 'New topic' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers[0].topic).toBe('New topic');
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('New topic');
     });
 
     it('rejects edit from non-owner non-chair', async () => {
@@ -606,7 +610,7 @@ describe('Socket.IO integration', () => {
 
       expect(error).toMatch(/your own/i);
       // Entry should be unchanged
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakers[0].topic).toBe('Not yours');
+      expect(ctx.meetingManager.get(meeting.id)!.queueEntries[ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds[0]].topic).toBe('Not yours');
     });
 
     it('allows chair to edit any entry', async () => {
@@ -623,7 +627,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:edit', { id: entry.id, topic: 'Chair edited' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakers[0].topic).toBe('Chair edited');
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Chair edited');
     });
   });
 
@@ -640,9 +644,9 @@ describe('Socket.IO integration', () => {
       client.emit('queue:next', { version: meeting.version }, () => {});
       const state = await statePromise;
 
-      expect(state.currentSpeaker?.topic).toBe('First');
-      expect(state.queuedSpeakers).toHaveLength(1);
-      expect(state.queuedSpeakers[0].topic).toBe('Second');
+      expect(state.queueEntries[state.currentSpeakerId!]?.topic).toBe('First');
+      expect(state.queuedSpeakerIds).toHaveLength(1);
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Second');
     });
 
     it('sets currentTopic when advancing a topic-type entry', async () => {
@@ -656,19 +660,22 @@ describe('Socket.IO integration', () => {
       client.emit('queue:next', { version: meeting.version }, () => {});
       const state = await statePromise;
 
-      expect(state.currentTopic?.topic).toBe('New discussion');
+      expect(state.queueEntries[state.currentTopicId!]?.topic).toBe('New discussion');
     });
 
     it('clears the speaker when queue is empty', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       // Set a current speaker and topic but leave queue empty
-      meeting.currentSpeaker = {
-        id: 'old-speaker', type: 'topic', topic: 'Done', user: owner,
+      const ownerKey = 'testuser';
+      meeting.queueEntries['old-speaker'] = {
+        id: 'old-speaker', type: 'topic', topic: 'Done', userId: ownerKey,
       };
-      meeting.currentTopic = {
-        id: 'old-topic', type: 'topic', topic: 'Done', user: owner,
+      meeting.currentSpeakerId = 'old-speaker';
+      meeting.queueEntries['old-topic'] = {
+        id: 'old-topic', type: 'topic', topic: 'Done', userId: ownerKey,
       };
+      meeting.currentTopicId = 'old-topic';
 
       const client = await joinMeeting(meeting.id);
 
@@ -677,7 +684,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:next', { version: meeting.version }, () => {});
       const state = await statePromise;
 
-      expect(state.currentSpeaker).toBeUndefined();
+      expect(state.currentSpeakerId).toBeUndefined();
     });
 
     it('rejects stale version via ack with current version', async () => {
@@ -697,7 +704,7 @@ describe('Socket.IO integration', () => {
       expect(response.version).toBe(meeting.version);
 
       // Queue should not have advanced
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakers).toHaveLength(1);
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(1);
     });
 
     it('returns ok: true via ack on success', async () => {
@@ -745,9 +752,10 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:updateChairs', { usernames: ['testuser', 'newchair'] });
       const state = await statePromise;
 
-      expect(state.chairs).toHaveLength(2);
-      expect(state.chairs.map(c => c.ghUsername)).toContain('testuser');
-      expect(state.chairs.map(c => c.ghUsername)).toContain('newchair');
+      expect(state.chairIds).toHaveLength(2);
+      const chairUsernames = state.chairIds.map(id => state.users[id].ghUsername);
+      expect(chairUsernames).toContain('testuser');
+      expect(chairUsernames).toContain('newchair');
     });
 
     it('rejects from non-chair', async () => {
@@ -804,9 +812,9 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:updateChairs', { usernames: ['testuser', 'knownuser'] });
       const state = await statePromise;
 
-      const known = state.chairs.find(c => c.ghUsername === 'knownuser');
-      expect(known?.name).toBe('Known User');
-      expect(known?.organisation).toBe('ACME');
+      const knownKey = state.chairIds.find(id => state.users[id].ghUsername === 'knownuser')!;
+      expect(state.users[knownKey]?.name).toBe('Known User');
+      expect(state.users[knownKey]?.organisation).toBe('ACME');
     });
   });
 
@@ -826,8 +834,8 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:updateChairs', { usernames: ['newchair'] });
       const state = await statePromise;
 
-      expect(state.chairs).toHaveLength(1);
-      expect(state.chairs[0].ghUsername).toBe('newchair');
+      expect(state.chairIds).toHaveLength(1);
+      expect(state.users[state.chairIds[0]].ghUsername).toBe('newchair');
 
       vi.unstubAllEnvs();
     });
@@ -845,8 +853,8 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
       const state = await statePromise;
 
-      expect(state.chairs).toHaveLength(1);
-      expect(state.chairs[0].ghUsername).toBe('someone-else');
+      expect(state.chairIds).toHaveLength(1);
+      expect(state.users[state.chairIds[0]].ghUsername).toBe('someone-else');
 
       vi.unstubAllEnvs();
     });
@@ -864,7 +872,7 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:updateChairs', { usernames: [] });
       const state = await statePromise;
 
-      expect(state.chairs).toHaveLength(0);
+      expect(state.chairIds).toHaveLength(0);
 
       vi.unstubAllEnvs();
     });
@@ -957,7 +965,7 @@ describe('Socket.IO integration', () => {
 
       expect(state.reactions).toHaveLength(1);
       expect(state.reactions[0].optionId).toBe(optionId);
-      expect(state.reactions[0].user.ghUsername).toBe('testuser');
+      expect(state.users[state.reactions[0].userId].ghUsername).toBe('testuser');
     });
 
     it('toggles off an existing reaction', async () => {
@@ -1009,9 +1017,10 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:nextAgendaItem', { version: meeting.version }, () => {});
       const state = await statePromise;
 
-      expect(state.currentAgendaItem?.name).toBe('First topic');
-      expect(state.currentSpeaker?.user.ghUsername).toBe('testuser');
-      expect(state.currentSpeaker?.topic).toBe('Introducing: First topic');
+      expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First topic');
+      const currentEntry = state.queueEntries[state.currentSpeakerId!];
+      expect(state.users[currentEntry.userId].ghUsername).toBe('testuser');
+      expect(currentEntry.topic).toBe('Introducing: First topic');
     });
 
     it('advances to the next agenda item', async () => {
@@ -1032,7 +1041,7 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:nextAgendaItem', { version: state1.version }, () => {});
       const state2 = await statePromise;
 
-      expect(state2.currentAgendaItem?.name).toBe('Second');
+      expect(state2.agenda.find((i) => i.id === state2.currentAgendaItemId)?.name).toBe('Second');
     });
 
     it('rejects from non-chair via ack', async () => {
@@ -1102,7 +1111,7 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       // Should still be on the first item (rejected, but got current state back)
-      expect(state.currentAgendaItem?.name).toBe('First');
+      expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First');
     });
   });
 
@@ -1172,7 +1181,7 @@ describe('Socket.IO integration', () => {
       expect(finished).toBeDefined();
       expect(finished!.type === 'agenda-item-finished' && finished!.itemName).toBe('First Item');
       expect(finished!.type === 'agenda-item-finished' && finished!.duration).toBeGreaterThanOrEqual(0);
-      expect(finished!.type === 'agenda-item-finished' && finished!.participants).toHaveLength(1);
+      expect(finished!.type === 'agenda-item-finished' && finished!.participantIds).toHaveLength(1);
 
       const secondStarted = state.log.filter((e) => e.type === 'agenda-item-started');
       expect(secondStarted).toHaveLength(2);

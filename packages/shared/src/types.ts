@@ -8,7 +8,7 @@ export interface User {
 export interface AgendaItem {
   id: string;
   name: string;
-  owner: User;
+  ownerId: string; // user key (lowercase ghUsername)
   timebox?: number; // duration in minutes
 }
 
@@ -18,7 +18,7 @@ export interface QueueEntry {
   id: string;
   type: QueueEntryType;
   topic: string;
-  user: User;
+  userId: string; // user key
 }
 
 /**
@@ -39,14 +39,14 @@ export interface PollOption {
 export interface Reaction {
   /** The ID of the PollOption this reaction is for. */
   optionId: string;
-  user: User;
+  userId: string; // user key
 }
 
 // -- Log entry types --
 
 /** A speaker turn within a topic group. */
 export interface TopicSpeaker {
-  user: User;
+  userId: string; // user key
   type: QueueEntryType;
   topic: string;
   /** ISO timestamp when this speaker started. */
@@ -62,24 +62,24 @@ interface LogEntryBase {
 
 export interface MeetingStartedLog extends LogEntryBase {
   type: 'meeting-started';
-  chair: User;
+  chairId: string;
 }
 
 export interface AgendaItemStartedLog extends LogEntryBase {
   type: 'agenda-item-started';
-  chair: User;
+  chairId: string;
   itemName: string;
-  itemOwner: User;
+  itemOwnerId: string;
 }
 
 export interface AgendaItemFinishedLog extends LogEntryBase {
   type: 'agenda-item-finished';
-  chair: User;
+  chairId: string;
   itemName: string;
   /** Duration in ms from when the item started to when it was advanced. */
   duration: number;
   /** Distinct users who spoke during this item (excluding Point of Order speakers). */
-  participants: User[];
+  participantIds: string[];
   /**
    * Text serialisation of the remaining queue entries at the time the
    * agenda item was advanced, if the queue was non-empty.
@@ -90,7 +90,7 @@ export interface AgendaItemFinishedLog extends LogEntryBase {
 
 export interface TopicDiscussedLog extends LogEntryBase {
   type: 'topic-discussed';
-  chair: User;
+  chairId: string;
   topicName: string;
   speakers: TopicSpeaker[];
   /** Duration in ms from the first speaker to when the topic was finalised. */
@@ -99,8 +99,8 @@ export interface TopicDiscussedLog extends LogEntryBase {
 
 export interface PollRanLog extends LogEntryBase {
   type: 'poll-ran';
-  startChair: User;
-  endChair: User;
+  startChairId: string;
+  endChairId: string;
   /** Duration in ms from poll start to poll stop. */
   duration: number;
   /** Number of distinct users who voted. */
@@ -118,12 +118,17 @@ export type LogEntry =
 
 export interface MeetingState {
   id: string;
-  chairs: User[];
+  /** Lookup map of all users who have participated in this meeting, keyed by lowercase ghUsername. */
+  users: Record<string, User>;
+  chairIds: string[];
   agenda: AgendaItem[];
-  currentAgendaItem?: AgendaItem;
-  currentSpeaker?: QueueEntry;
-  currentTopic?: QueueEntry;
-  queuedSpeakers: QueueEntry[];
+  currentAgendaItemId?: string;
+  currentSpeakerId?: string;
+  currentTopicId?: string;
+  /** All queue entries for the current agenda item, keyed by entry ID. */
+  queueEntries: Record<string, QueueEntry>;
+  /** Ordered list of queue entry IDs for speakers waiting to speak. */
+  queuedSpeakerIds: string[];
 
   /** Whether a poll is currently active. */
   trackPoll: boolean;
@@ -170,6 +175,6 @@ export interface MeetingState {
   /** ISO timestamp when the current poll was started. */
   pollStartTime?: string;
 
-  /** The chair who started the current poll. */
-  pollStartChair?: User;
+  /** The user key of the chair who started the current poll. */
+  pollStartChairId?: string;
 }

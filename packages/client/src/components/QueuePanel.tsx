@@ -28,7 +28,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { QueueEntry, QueueEntryType } from '@tcq/shared';
-import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
+import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -51,6 +51,14 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const { meeting, user } = useMeetingState();
   const isChair = useIsChair();
   const socket = useSocket();
+
+  // Derive the current agenda item from the ID reference
+  const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.currentAgendaItemId);
+
+  // Derive queue-related values from normalised IDs + maps
+  const currentSpeaker = meeting?.currentSpeakerId ? meeting.queueEntries[meeting.currentSpeakerId] : undefined;
+  const currentTopic = meeting?.currentTopicId ? meeting.queueEntries[meeting.currentTopicId] : undefined;
+  const queuedSpeakers = meeting?.queuedSpeakerIds.map(id => meeting.queueEntries[id]).filter(Boolean) ?? [];
 
   // Whether the poll setup form is open
   const [showPollSetup, setShowPollSetup] = useState(false);
@@ -81,9 +89,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   /** Called when a drag starts — determine if we need to restrict direction. */
   function handleDragStart(event: DragStartEvent) {
     if (!meeting || !user) return;
-    const entry = meeting.queuedSpeakers.find((e) => e.id === event.active.id);
+    const entry = meeting.queueEntries[event.active.id as string];
     if (!entry) return;
-    const isOwner = entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase();
+    const isOwner = entry.userId === userKey(user);
     // Restrict upward movement for non-chair owners
     restrictUpwardRef.current = isOwner && !isChair;
   }
@@ -118,8 +126,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
    */
   function handleCopyQueue() {
     if (!meeting) return;
-    const text = meeting.queuedSpeakers
-      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${e.user.ghUsername})`)
+    const text = queuedSpeakers
+      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.ghUsername ?? e.userId})`)
       .join('\n');
     navigator.clipboard.writeText(text).catch(() => {});
   }
@@ -172,7 +180,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
     const { active, over } = event;
     if (!over || active.id === over.id || !meeting) return;
 
-    const items = meeting.queuedSpeakers;
+    const items = queuedSpeakers;
     const oldIndex = items.findIndex((e) => e.id === active.id);
     const newIndex = items.findIndex((e) => e.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
@@ -195,11 +203,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
   // Determine whether there are more agenda items after the current one
   const hasMoreAgendaItems = (() => {
-    if (!meeting.currentAgendaItem) {
+    if (!currentAgendaItem) {
       return meeting.agenda.length > 0;
     }
     const currentIndex = meeting.agenda.findIndex(
-      (item) => item.id === meeting.currentAgendaItem!.id,
+      (item) => item.id === currentAgendaItem.id,
     );
     return currentIndex < meeting.agenda.length - 1;
   })();
@@ -217,13 +225,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </h2>
 
           {/* Chair controls next to the heading */}
-          {isChair && meeting.currentAgendaItem && (
+          {isChair && currentAgendaItem && (
             <>
               {hasMoreAgendaItems && (
                 <button
                   onClick={() => {
                     // Show confirmation if the queue has entries that will be cleared
-                    if (meeting.queuedSpeakers.length > 0) {
+                    if (queuedSpeakers.length > 0) {
                       setShowAdvanceConfirm(true);
                       return;
                     }
@@ -248,17 +256,17 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           )}
         </div>
 
-        {meeting.currentAgendaItem ? (
+        {currentAgendaItem ? (
           <div className="pl-3">
             <p className="text-stone-800 dark:text-stone-200 font-medium">
-              <InlineMarkdown>{meeting.currentAgendaItem.name}</InlineMarkdown>
+              <InlineMarkdown>{currentAgendaItem.name}</InlineMarkdown>
             </p>
             <div className="text-sm text-stone-500 dark:text-stone-400 flex flex-wrap items-center gap-x-2">
-              <UserBadge user={meeting.currentAgendaItem.owner} size={18} />
-              {meeting.currentAgendaItem.timebox != null && meeting.currentAgendaItem.timebox > 0 && (
+              <UserBadge user={meeting.users[currentAgendaItem.ownerId]} size={18} />
+              {currentAgendaItem.timebox != null && currentAgendaItem.timebox > 0 && (
                 <span className="ml-2">
-                  {meeting.currentAgendaItem.timebox}{' '}
-                  {meeting.currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
+                  {currentAgendaItem.timebox}{' '}
+                  {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
                 </span>
               )}
             </div>
@@ -284,7 +292,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       </section>
 
       {/* --- Current Topic Section (hidden when same as current speaker) --- */}
-      {meeting.currentTopic && meeting.currentTopic.id !== meeting.currentSpeaker?.id && (
+      {currentTopic && currentTopic.id !== currentSpeaker?.id && (
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
@@ -293,8 +301,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             Topic
           </h2>
           <div className="pl-3">
-            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{meeting.currentTopic.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.currentTopic.user} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
+            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentTopic.topic}</InlineMarkdown></p>
+            <UserBadge user={meeting.users[currentTopic.userId]} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
           </div>
         </section>
       )}
@@ -310,7 +318,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </h2>
 
           {/* Next Speaker button — chair only, next to the heading */}
-          {isChair && (meeting.currentSpeaker || meeting.queuedSpeakers.length > 0) && (
+          {isChair && (currentSpeaker || queuedSpeakers.length > 0) && (
             <button
               onClick={handleNextSpeaker}
               className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
@@ -321,10 +329,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           )}
         </div>
 
-        {meeting.currentSpeaker ? (
+        {currentSpeaker ? (
           <div className="pl-3">
-            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{meeting.currentSpeaker.topic}</InlineMarkdown></p>
-            <UserBadge user={meeting.currentSpeaker.user} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
+            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentSpeaker.topic}</InlineMarkdown></p>
+            <UserBadge user={meeting.users[currentSpeaker.userId]} size={18} className="text-sm text-stone-500 dark:text-stone-400" />
           </div>
         ) : (
           <p className="text-stone-500 dark:text-stone-400 pl-3">
@@ -349,7 +357,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           {/* Copy/Restore buttons — chairs only */}
           {isChair && (
             <>
-              {meeting.queuedSpeakers.length > 0 && (
+              {queuedSpeakers.length > 0 && (
                 <button
                   onClick={handleCopyQueue}
                   className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
@@ -399,7 +407,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           </div>
         )}
 
-        {meeting.queuedSpeakers.length === 0 && !showRestore ? (
+        {queuedSpeakers.length === 0 && !showRestore ? (
           <p className="text-stone-400 dark:text-stone-500 italic text-sm">The queue is empty.</p>
         ) : (
           <DndContext
@@ -410,18 +418,18 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={meeting.queuedSpeakers.map((e) => e.id)}
+              items={meeting.queuedSpeakerIds}
               strategy={verticalListSortingStrategy}
             >
               <ol aria-label="Queued speakers">
-                {meeting.queuedSpeakers.map((entry, index) => (
+                {queuedSpeakers.map((entry, index) => (
                   <SortableQueueEntry
                     key={entry.id}
                     entry={entry}
                     index={index}
-                    queue={meeting.queuedSpeakers}
+                    queue={queuedSpeakers}
                     isChair={isChair}
-                    isOwnEntry={!!user && entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
+                    isOwnEntry={!!user && entry.userId === userKey(user)}
                     onDelete={handleRemoveEntry}
                     initialEditing={autoEditEntryId === entry.id}
                     onEditingStarted={onAutoEditConsumed}
@@ -452,8 +460,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             </h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Advancing to the next agenda item will clear the speaker queue
-              ({meeting.queuedSpeakers.length}{' '}
-              {meeting.queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
+              ({queuedSpeakers.length}{' '}
+              {queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
               Continue?
             </p>
             <div className="flex gap-3 justify-end">
@@ -542,6 +550,7 @@ function SortableQueueEntry({
   entry, index, queue, isChair, isOwnEntry, onDelete,
   initialEditing = false, onEditingStarted,
 }: SortableQueueEntryProps) {
+  const { meeting } = useMeetingState();
   const socket = useSocket();
   const [editing, setEditing] = useState(initialEditing);
   const [editTopic, setEditTopic] = useState(initialEditing ? entry.topic : '');
@@ -753,7 +762,7 @@ function SortableQueueEntry({
 
         {/* Speaker info */}
         <div className="text-sm text-stone-500 dark:text-stone-400">
-          <UserBadge user={entry.user} size={16} />
+          <UserBadge user={meeting?.users[entry.userId]} size={16} />
         </div>
       </div>
 

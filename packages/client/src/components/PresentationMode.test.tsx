@@ -12,9 +12,9 @@ const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation:
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test', chairs: [chairUser], agenda: [],
-    currentAgendaItem: undefined, currentSpeaker: undefined,
-    currentTopic: undefined, queuedSpeakers: [],
+    id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
+    currentAgendaItemId: undefined, currentSpeakerId: undefined,
+    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,
@@ -67,7 +67,7 @@ describe('Presentation mode', () => {
 
     it('hides the Start Meeting button', () => {
       const meeting = makeMeeting({
-        agenda: [{ id: '1', name: 'Item', owner: chairUser }],
+        agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -83,10 +83,10 @@ describe('Presentation mode', () => {
     it('hides Next Agenda Item button', () => {
       const meeting = makeMeeting({
         agenda: [
-          { id: '1', name: 'First', owner: chairUser },
-          { id: '2', name: 'Second', owner: chairUser },
+          { id: '1', name: 'First', ownerId: 'alice' },
+          { id: '2', name: 'Second', ownerId: 'alice' },
         ],
-        currentAgendaItem: { id: '1', name: 'First', owner: chairUser },
+        currentAgendaItemId: '1',
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -101,7 +101,9 @@ describe('Presentation mode', () => {
 
     it('hides Next Speaker button', () => {
       const meeting = makeMeeting({
-        currentSpeaker: { id: 's1', type: 'topic', topic: 'Test', user: otherUser },
+        users: { alice: chairUser, bob: otherUser },
+        queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'bob' } },
+        currentSpeakerId: 's1',
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -116,9 +118,8 @@ describe('Presentation mode', () => {
 
     it('hides drag handles on queue entries', () => {
       const meeting = makeMeeting({
-        queuedSpeakers: [
-          { id: 'q1', type: 'topic', topic: 'My topic', user: chairUser },
-        ],
+        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
+        queuedSpeakerIds: ['q1'],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -133,9 +134,8 @@ describe('Presentation mode', () => {
 
     it('hides edit/delete buttons on queue entries', () => {
       const meeting = makeMeeting({
-        queuedSpeakers: [
-          { id: 'q1', type: 'topic', topic: 'My topic', user: chairUser },
-        ],
+        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
+        queuedSpeakerIds: ['q1'],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -151,9 +151,9 @@ describe('Presentation mode', () => {
 
     it('keeps queue entry content visible', () => {
       const meeting = makeMeeting({
-        queuedSpeakers: [
-          { id: 'q1', type: 'topic', topic: 'Visible topic', user: otherUser },
-        ],
+        users: { alice: chairUser, bob: otherUser },
+        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Visible topic', userId: 'bob' } },
+        queuedSpeakerIds: ['q1'],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -168,9 +168,9 @@ describe('Presentation mode', () => {
 
     it('keeps the type badge visible on queue entries', () => {
       const meeting = makeMeeting({
-        queuedSpeakers: [
-          { id: 'q1', type: 'topic', topic: 'Test', user: otherUser },
-        ],
+        users: { alice: chairUser, bob: otherUser },
+        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
+        queuedSpeakerIds: ['q1'],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -185,7 +185,9 @@ describe('Presentation mode', () => {
 
     it('keeps current speaker info visible', () => {
       const meeting = makeMeeting({
-        currentSpeaker: { id: 's1', type: 'topic', topic: 'Speaking about this', user: otherUser },
+        users: { alice: chairUser, bob: otherUser },
+        queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Speaking about this', userId: 'bob' } },
+        currentSpeakerId: 's1',
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -215,7 +217,7 @@ describe('Presentation mode', () => {
 
     it('hides edit/delete buttons on agenda items', () => {
       const meeting = makeMeeting({
-        agenda: [{ id: '1', name: 'Test Item', owner: chairUser }],
+        agenda: [{ id: '1', name: 'Test Item', ownerId: 'alice' }],
       });
       renderInPresentationMode(
         wrapWithProviders(<AgendaPanel />, meeting),
@@ -227,7 +229,8 @@ describe('Presentation mode', () => {
 
     it('keeps agenda item content visible', () => {
       const meeting = makeMeeting({
-        agenda: [{ id: '1', name: 'Visible Item', owner: otherUser, timebox: 15 }],
+        users: { alice: chairUser, bob: otherUser },
+        agenda: [{ id: '1', name: 'Visible Item', ownerId: 'bob', timebox: 15 }],
       });
       renderInPresentationMode(
         wrapWithProviders(<AgendaPanel />, meeting),
@@ -274,7 +277,6 @@ describe('Presentation mode', () => {
         { id: 'opt-2', emoji: '👎', label: 'Negative' },
       ];
       const meeting = makeMeeting({
-        chairs: [chairUser],
         trackPoll: true,
         pollOptions: options,
       });

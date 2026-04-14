@@ -9,9 +9,9 @@ import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 
 const baseMeeting: MeetingState = {
-  id: 'test', chairs: [chairUser], agenda: [],
-  currentAgendaItem: undefined, currentSpeaker: undefined,
-  currentTopic: undefined, queuedSpeakers: [],
+  id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
+  currentAgendaItemId: undefined, currentSpeakerId: undefined,
+  currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
   reactions: [], trackPoll: false, pollOptions: [],
   version: 0, log: [], currentTopicSpeakers: [],
 };

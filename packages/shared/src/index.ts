@@ -1,3 +1,4 @@
 export type { User, AgendaItem, QueueEntry, QueueEntryType, PollOption, Reaction, MeetingState, LogEntry, TopicSpeaker, MeetingStartedLog, AgendaItemStartedLog, AgendaItemFinishedLog, TopicDiscussedLog, PollRanLog } from './types.js';
 export type { ClientToServerEvents, ServerToClientEvents, AgendaAddPayload, AgendaEditPayload, AgendaDeletePayload, AgendaReorderPayload, ChairsUpdatePayload, QueueAddPayload, QueueEditPayload, QueueRemovePayload, QueueReorderPayload, PollStartPayload, PollReactPayload, AdvancePayload, AdvanceResponse } from './messages.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
+export { userKey } from './helpers.js';

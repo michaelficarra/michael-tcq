@@ -1,8 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, User } from '@tcq/shared';
-import { QUEUE_ENTRY_PRIORITY } from '@tcq/shared';
+import { QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
+
+/**
+ * Register a user in a meeting's users map, returning their canonical key.
+ * Always updates the stored user so name/organisation changes are picked up.
+ */
+export function ensureUser(meeting: MeetingState, user: User): string {
+  const key = userKey(user);
+  meeting.users[key] = user;
+  return key;
+}
 
 /**
  * Manages the in-memory map of active meetings and coordinates with
@@ -42,6 +52,7 @@ export class MeetingManager {
         expired++;
         await this.store.remove(meeting.id);
       } else {
+        migrateLegacyMeeting(meeting);
         this.meetings.set(meeting.id, meeting);
       }
     }
@@ -58,14 +69,23 @@ export class MeetingManager {
   create(chairs: User[]): MeetingState {
     const id = generateMeetingId((candidate) => this.meetings.has(candidate));
 
+    const users: Record<string, User> = {};
+    const chairIds = chairs.map((c) => {
+      const key = userKey(c);
+      users[key] = c;
+      return key;
+    });
+
     const meeting: MeetingState = {
       id,
-      chairs,
+      users,
+      chairIds,
       agenda: [],
-      currentAgendaItem: undefined,
-      currentSpeaker: undefined,
-      currentTopic: undefined,
-      queuedSpeakers: [],
+      currentAgendaItemId: undefined,
+      currentSpeakerId: undefined,
+      currentTopicId: undefined,
+      queueEntries: {},
+      queuedSpeakerIds: [],
       reactions: [],
       trackPoll: false,
       pollOptions: [],
@@ -83,6 +103,13 @@ export class MeetingManager {
   /** Get a meeting by ID, or undefined if it doesn't exist. */
   get(id: string): MeetingState | undefined {
     return this.meetings.get(id);
+  }
+
+  /** Look up the current agenda item for a meeting, or undefined if none is set. */
+  getCurrentAgendaItem(meetingId: string): AgendaItem | undefined {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting?.currentAgendaItemId) return undefined;
+    return meeting.agenda.find((item) => item.id === meeting.currentAgendaItemId);
   }
 
   /** List all active meetings. Used by the admin dashboard. */
@@ -122,11 +149,7 @@ export class MeetingManager {
   isChair(meetingId: string, user: User): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
-    // Compare by username (case-insensitive) since chairs are specified
-    // by GitHub username, and it's the stable identifier throughout the app.
-    return meeting.chairs.some(
-      (chair) => chair.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
-    );
+    return meeting.chairIds.includes(userKey(user));
   }
 
   // -- Chair management --
@@ -140,7 +163,7 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    meeting.chairs = chairs;
+    meeting.chairIds = chairs.map((c) => ensureUser(meeting, c));
     this.markDirty(meetingId);
     return true;
   }
@@ -158,7 +181,7 @@ export class MeetingManager {
     const item: AgendaItem = {
       id: randomUUID(),
       name,
-      owner,
+      ownerId: ensureUser(meeting, owner),
       timebox,
     };
 
@@ -184,16 +207,11 @@ export class MeetingManager {
     if (!item) return false;
 
     if (updates.name !== undefined) item.name = updates.name;
-    if (updates.owner !== undefined) item.owner = updates.owner;
+    if (updates.owner !== undefined) item.ownerId = ensureUser(meeting, updates.owner);
     if (updates.timebox === null) {
       item.timebox = undefined;
     } else if (updates.timebox !== undefined) {
       item.timebox = updates.timebox;
-    }
-
-    // If this item is the current agenda item, update that reference too
-    if (meeting.currentAgendaItem?.id === itemId) {
-      meeting.currentAgendaItem = item;
     }
 
     this.markDirty(meetingId);
@@ -212,6 +230,12 @@ export class MeetingManager {
     if (index === -1) return false;
 
     meeting.agenda.splice(index, 1);
+
+    // If the deleted item was the current agenda item, clear the reference
+    if (meeting.currentAgendaItemId === itemId) {
+      meeting.currentAgendaItemId = undefined;
+    }
+
     this.markDirty(meetingId);
     return true;
   }
@@ -276,13 +300,13 @@ export class MeetingManager {
 
     let nextIndex: number;
 
-    if (!meeting.currentAgendaItem) {
+    if (!meeting.currentAgendaItemId) {
       // No current item — start with the first one
       nextIndex = 0;
     } else {
       // Find the current item's position and advance to the next
       const currentIndex = meeting.agenda.findIndex(
-        (item) => item.id === meeting.currentAgendaItem!.id,
+        (item) => item.id === meeting.currentAgendaItemId,
       );
       nextIndex = currentIndex + 1;
     }
@@ -291,19 +315,23 @@ export class MeetingManager {
     if (nextIndex >= meeting.agenda.length) return null;
 
     const nextItem = meeting.agenda[nextIndex];
-    meeting.currentAgendaItem = nextItem;
+    meeting.currentAgendaItemId = nextItem.id;
 
     // The item owner becomes the current speaker
-    meeting.currentSpeaker = {
+    const speakerEntry: QueueEntry = {
       id: randomUUID(),
       type: 'topic',
       topic: `Introducing: ${nextItem.name}`,
-      user: nextItem.owner,
+      userId: nextItem.ownerId,
     };
 
-    // Clear the current topic and queue for the new agenda item
-    meeting.currentTopic = undefined;
-    meeting.queuedSpeakers = [];
+    // Clear queue entries and start fresh for the new agenda item
+    meeting.queueEntries = { [speakerEntry.id]: speakerEntry };
+    meeting.queuedSpeakerIds = [];
+    meeting.currentSpeakerId = speakerEntry.id;
+
+    // Clear the current topic for the new agenda item
+    meeting.currentTopicId = undefined;
 
     this.markDirty(meetingId);
     return nextItem;
@@ -331,15 +359,19 @@ export class MeetingManager {
       id: randomUUID(),
       type,
       topic,
-      user,
+      userId: ensureUser(meeting, user),
     };
+
+    // Add to the lookup map
+    meeting.queueEntries[entry.id] = entry;
 
     // Find the correct insertion position: after all entries of the same
     // or higher priority type, maintaining FIFO within each type.
     const entryPriority = QUEUE_ENTRY_PRIORITY[type];
-    let insertIndex = meeting.queuedSpeakers.length; // default: end
-    for (let i = 0; i < meeting.queuedSpeakers.length; i++) {
-      const existingPriority = QUEUE_ENTRY_PRIORITY[meeting.queuedSpeakers[i].type];
+    let insertIndex = meeting.queuedSpeakerIds.length; // default: end
+    for (let i = 0; i < meeting.queuedSpeakerIds.length; i++) {
+      const existing = meeting.queueEntries[meeting.queuedSpeakerIds[i]];
+      const existingPriority = QUEUE_ENTRY_PRIORITY[existing.type];
       if (existingPriority > entryPriority) {
         // Found an entry with lower priority — insert before it
         insertIndex = i;
@@ -347,7 +379,7 @@ export class MeetingManager {
       }
     }
 
-    meeting.queuedSpeakers.splice(insertIndex, 0, entry);
+    meeting.queuedSpeakerIds.splice(insertIndex, 0, entry.id);
     this.markDirty(meetingId);
     return entry;
   }
@@ -365,7 +397,7 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const entry = meeting.queuedSpeakers.find((e) => e.id === entryId);
+    const entry = meeting.queueEntries[entryId];
     if (!entry) return false;
 
     if (updates.topic !== undefined) entry.topic = updates.topic;
@@ -383,10 +415,12 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const index = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    const index = meeting.queuedSpeakerIds.indexOf(entryId);
     if (index === -1) return false;
 
-    meeting.queuedSpeakers.splice(index, 1);
+    meeting.queuedSpeakerIds.splice(index, 1);
+    delete meeting.queueEntries[entryId];
+
     this.markDirty(meetingId);
     return true;
   }
@@ -398,7 +432,7 @@ export class MeetingManager {
   getQueueEntry(meetingId: string, entryId: string): QueueEntry | undefined {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return undefined;
-    return meeting.queuedSpeakers.find((e) => e.id === entryId);
+    return meeting.queueEntries[entryId];
   }
 
   /**
@@ -414,20 +448,21 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
-    if (meeting.queuedSpeakers.length === 0) {
+    if (meeting.queuedSpeakerIds.length === 0) {
       // Queue is empty — clear the current speaker
-      meeting.currentSpeaker = undefined;
+      meeting.currentSpeakerId = undefined;
       this.markDirty(meetingId);
       return null;
     }
 
     // Pop the first entry from the queue
-    const [entry] = meeting.queuedSpeakers.splice(0, 1);
-    meeting.currentSpeaker = entry;
+    const entryId = meeting.queuedSpeakerIds.shift()!;
+    const entry = meeting.queueEntries[entryId];
+    meeting.currentSpeakerId = entryId;
 
     // If this is a new topic, update the current topic
     if (entry.type === 'topic') {
-      meeting.currentTopic = entry;
+      meeting.currentTopicId = entryId;
     }
 
     this.markDirty(meetingId);
@@ -454,28 +489,29 @@ export class MeetingManager {
     if (!meeting) return false;
 
     // Find and remove the entry being moved
-    const entryIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    const entryIndex = meeting.queuedSpeakerIds.indexOf(entryId);
     if (entryIndex === -1) return false;
 
-    const [entry] = meeting.queuedSpeakers.splice(entryIndex, 1);
+    const entry = meeting.queueEntries[entryId];
+    meeting.queuedSpeakerIds.splice(entryIndex, 1);
 
     if (afterId === null) {
       // Move to the beginning of the queue
-      meeting.queuedSpeakers.unshift(entry);
+      meeting.queuedSpeakerIds.unshift(entryId);
     } else {
       // Find the "after" entry in the (now shorter) array
-      const afterIndex = meeting.queuedSpeakers.findIndex((e) => e.id === afterId);
+      const afterIndex = meeting.queuedSpeakerIds.indexOf(afterId);
       if (afterIndex === -1) {
         // afterId not found — put the entry back and report failure
-        meeting.queuedSpeakers.splice(entryIndex, 0, entry);
+        meeting.queuedSpeakerIds.splice(entryIndex, 0, entryId);
         return false;
       }
       // Insert immediately after the "after" entry
-      meeting.queuedSpeakers.splice(afterIndex + 1, 0, entry);
+      meeting.queuedSpeakerIds.splice(afterIndex + 1, 0, entryId);
     }
 
     // Determine the new position and whether the entry moved up or down
-    const newIndex = meeting.queuedSpeakers.findIndex((e) => e.id === entryId);
+    const newIndex = meeting.queuedSpeakerIds.indexOf(entryId);
     const movedDown = newIndex > entryIndex;
 
     // Change the entry's type based on its direction of movement:
@@ -485,25 +521,31 @@ export class MeetingManager {
     // - Moving up: adopt the highest priority (lowest number) of the
     //   items at or below it (including itself), so it doesn't underrank
     //   what's after it.
-    if (meeting.queuedSpeakers.length > 1) {
+    if (meeting.queuedSpeakerIds.length > 1) {
       if (movedDown) {
         // Items at and above the new position (indices 0..newIndex)
-        const itemsAtAndAbove = meeting.queuedSpeakers.slice(0, newIndex + 1);
+        const idsAtAndAbove = meeting.queuedSpeakerIds.slice(0, newIndex + 1);
         // Lowest priority = highest priority number
-        const lowestPriority = itemsAtAndAbove.reduce(
-          (lowest, e) => QUEUE_ENTRY_PRIORITY[e.type] > QUEUE_ENTRY_PRIORITY[lowest.type] ? e : lowest,
-          itemsAtAndAbove[0],
-        );
-        entry.type = lowestPriority.type;
+        let lowestType = entry.type;
+        for (const id of idsAtAndAbove) {
+          const e = meeting.queueEntries[id];
+          if (QUEUE_ENTRY_PRIORITY[e.type] > QUEUE_ENTRY_PRIORITY[lowestType]) {
+            lowestType = e.type;
+          }
+        }
+        entry.type = lowestType;
       } else {
         // Items at and below the new position (indices newIndex..end)
-        const itemsAtAndBelow = meeting.queuedSpeakers.slice(newIndex);
+        const idsAtAndBelow = meeting.queuedSpeakerIds.slice(newIndex);
         // Highest priority = lowest priority number
-        const highestPriority = itemsAtAndBelow.reduce(
-          (highest, e) => QUEUE_ENTRY_PRIORITY[e.type] < QUEUE_ENTRY_PRIORITY[highest.type] ? e : highest,
-          itemsAtAndBelow[0],
-        );
-        entry.type = highestPriority.type;
+        let highestType = entry.type;
+        for (const id of idsAtAndBelow) {
+          const e = meeting.queueEntries[id];
+          if (QUEUE_ENTRY_PRIORITY[e.type] < QUEUE_ENTRY_PRIORITY[highestType]) {
+            highestType = e.type;
+          }
+        }
+        entry.type = highestType;
       }
     }
 
@@ -567,9 +609,11 @@ export class MeetingManager {
     const optionExists = meeting.pollOptions.some((o) => o.id === optionId);
     if (!optionExists) return false;
 
+    const key = ensureUser(meeting, user);
+
     // Check if the user already reacted to this option
     const existingIndex = meeting.reactions.findIndex(
-      (r) => r.optionId === optionId && r.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
+      (r) => r.optionId === optionId && r.userId === key,
     );
 
     if (existingIndex !== -1) {
@@ -577,7 +621,7 @@ export class MeetingManager {
       meeting.reactions.splice(existingIndex, 1);
     } else {
       // Add it (toggle on)
-      meeting.reactions.push({ optionId, user });
+      meeting.reactions.push({ optionId, userId: key });
     }
 
     this.markDirty(meetingId);
@@ -669,5 +713,173 @@ export class MeetingManager {
     if (!meeting.lastConnectionTime) return false;
     const lastConnection = new Date(meeting.lastConnectionTime).getTime();
     return now - lastConnection > MEETING_EXPIRY_MS;
+  }
+}
+
+// -- Legacy migration --
+
+/**
+ * Migrate a meeting from the legacy format (inline User/QueueEntry objects)
+ * to the normalised format (ID references with lookup maps).
+ * Detects legacy format by checking for the absence of the `users` field.
+ */
+function migrateLegacyMeeting(meeting: MeetingState): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m = meeting as any;
+
+  // Already migrated (or new format)
+  if (meeting.users && typeof meeting.users === 'object' && !Array.isArray(meeting.users)) {
+    // Handle partial migration from the previous currentAgendaItem → currentAgendaItemId change
+    if (m.currentAgendaItem && !meeting.currentAgendaItemId) {
+      meeting.currentAgendaItemId = m.currentAgendaItem.id;
+      delete m.currentAgendaItem;
+    }
+    return;
+  }
+
+  const users: Record<string, User> = {};
+  const eu = (u: User): string => {
+    const key = userKey(u);
+    users[key] = u;
+    return key;
+  };
+
+  // Chairs: User[] → string[]
+  if (Array.isArray(m.chairs) && m.chairs.length > 0 && typeof m.chairs[0] === 'object' && m.chairs[0].ghUsername) {
+    meeting.chairIds = m.chairs.map((c: User) => eu(c));
+  }
+  delete m.chairs;
+
+  // Agenda items: owner → ownerId
+  for (const item of meeting.agenda) {
+    if ((item as any).owner && typeof (item as any).owner === 'object') {
+      (item as any).ownerId = eu((item as any).owner);
+      delete (item as any).owner;
+    }
+  }
+
+  // currentAgendaItem → currentAgendaItemId
+  if (m.currentAgendaItem && !meeting.currentAgendaItemId) {
+    meeting.currentAgendaItemId = m.currentAgendaItem.id;
+    delete m.currentAgendaItem;
+  }
+
+  // Queue entries: queuedSpeakers → queueEntries + queuedSpeakerIds
+  const queueEntries: Record<string, QueueEntry> = {};
+  if (Array.isArray(m.queuedSpeakers)) {
+    meeting.queuedSpeakerIds = [];
+    for (const entry of m.queuedSpeakers) {
+      if (entry.user && typeof entry.user === 'object') {
+        entry.userId = eu(entry.user);
+        delete entry.user;
+      }
+      queueEntries[entry.id] = entry;
+      meeting.queuedSpeakerIds.push(entry.id);
+    }
+    delete m.queuedSpeakers;
+  }
+
+  // currentSpeaker → currentSpeakerId
+  if (m.currentSpeaker && typeof m.currentSpeaker === 'object' && m.currentSpeaker.id) {
+    const cs = m.currentSpeaker;
+    if (cs.user && typeof cs.user === 'object') {
+      cs.userId = eu(cs.user);
+      delete cs.user;
+    }
+    queueEntries[cs.id] = cs;
+    meeting.currentSpeakerId = cs.id;
+    delete m.currentSpeaker;
+  }
+
+  // currentTopic → currentTopicId
+  if (m.currentTopic && typeof m.currentTopic === 'object' && m.currentTopic.id) {
+    const ct = m.currentTopic;
+    if (ct.user && typeof ct.user === 'object') {
+      ct.userId = eu(ct.user);
+      delete ct.user;
+    }
+    queueEntries[ct.id] = ct;
+    meeting.currentTopicId = ct.id;
+    delete m.currentTopic;
+  }
+
+  meeting.queueEntries = queueEntries;
+
+  // Reactions: user → userId
+  if (Array.isArray(meeting.reactions)) {
+    for (const r of meeting.reactions) {
+      if ((r as any).user && typeof (r as any).user === 'object') {
+        (r as any).userId = eu((r as any).user);
+        delete (r as any).user;
+      }
+    }
+  }
+
+  // TopicSpeakers: user → userId
+  if (Array.isArray(meeting.currentTopicSpeakers)) {
+    for (const s of meeting.currentTopicSpeakers) {
+      if ((s as any).user && typeof (s as any).user === 'object') {
+        (s as any).userId = eu((s as any).user);
+        delete (s as any).user;
+      }
+    }
+  }
+
+  // Log entries
+  for (const entry of meeting.log) {
+    migrateLogEntry(entry, eu);
+  }
+
+  // pollStartChair → pollStartChairId
+  if (m.pollStartChair && typeof m.pollStartChair === 'object') {
+    meeting.pollStartChairId = eu(m.pollStartChair);
+    delete m.pollStartChair;
+  }
+
+  meeting.users = users;
+}
+
+/** Migrate a single log entry from inline User objects to user ID references. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateLogEntry(entry: any, eu: (u: User) => string): void {
+  // Common: chair → chairId
+  if (entry.chair && typeof entry.chair === 'object') {
+    entry.chairId = eu(entry.chair);
+    delete entry.chair;
+  }
+
+  switch (entry.type) {
+    case 'agenda-item-started':
+      if (entry.itemOwner && typeof entry.itemOwner === 'object') {
+        entry.itemOwnerId = eu(entry.itemOwner);
+        delete entry.itemOwner;
+      }
+      break;
+    case 'agenda-item-finished':
+      if (Array.isArray(entry.participants) && entry.participants.length > 0 && typeof entry.participants[0] === 'object') {
+        entry.participantIds = entry.participants.map((p: User) => eu(p));
+        delete entry.participants;
+      }
+      break;
+    case 'topic-discussed':
+      if (Array.isArray(entry.speakers)) {
+        for (const s of entry.speakers) {
+          if (s.user && typeof s.user === 'object') {
+            s.userId = eu(s.user);
+            delete s.user;
+          }
+        }
+      }
+      break;
+    case 'poll-ran':
+      if (entry.startChair && typeof entry.startChair === 'object') {
+        entry.startChairId = eu(entry.startChair);
+        delete entry.startChair;
+      }
+      if (entry.endChair && typeof entry.endChair === 'object') {
+        entry.endChairId = eu(entry.endChair);
+        delete entry.endChair;
+      }
+      break;
   }
 }

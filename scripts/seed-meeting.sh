@@ -330,13 +330,17 @@ socket.on('state', (state) => {
     console.log('Meeting seeded successfully!');
     console.log('');
     console.log('  Agenda items:     ' + state.agenda.length);
-    console.log('  Current item:     ' + (state.currentAgendaItem?.name ?? 'none'));
-    console.log('  Current speaker:  ' + (state.currentSpeaker?.topic ?? 'none'));
-    console.log('  Queue entries:    ' + state.queuedSpeakers.length);
+    const currentItem = state.agenda.find(a => a.id === state.currentAgendaItemId);
+    console.log('  Current item:     ' + (currentItem?.name ?? 'none'));
+    const currentSpeaker = state.currentSpeakerId ? state.queueEntries[state.currentSpeakerId] : undefined;
+    console.log('  Current speaker:  ' + (currentSpeaker?.topic ?? 'none'));
+    console.log('  Queue entries:    ' + state.queuedSpeakerIds.length);
     console.log('');
-    state.queuedSpeakers.forEach((e, i) => {
+    state.queuedSpeakerIds.forEach((id, i) => {
+      const e = state.queueEntries[id];
+      const u = state.users[e.userId];
       console.log('    ' + (i + 1) + '. [' + e.type + '] ' + e.topic
-        + ' (' + e.user.name + ')');
+        + ' (' + (u?.name ?? e.userId) + ')');
     });
     console.log('');
     console.log('  URL: http://localhost:5173/meeting/$MEETING_ID');

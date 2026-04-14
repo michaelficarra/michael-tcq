@@ -85,11 +85,11 @@ function MeetingPageInner() {
     setActiveTab('queue');
 
     // Capture current entry IDs so we can identify the new one
-    const currentIds = new Set(meeting.queuedSpeakers.map((e) => e.id));
+    const currentIds = new Set(meeting.queuedSpeakerIds);
     socket.once('state', (newState) => {
-      const newEntry = newState.queuedSpeakers.find((e: { id: string }) => !currentIds.has(e.id));
-      if (newEntry) {
-        setAutoEditEntryId(newEntry.id);
+      const newId = newState.queuedSpeakerIds.find((id: string) => !currentIds.has(id));
+      if (newId) {
+        setAutoEditEntryId(newId);
       }
     });
 

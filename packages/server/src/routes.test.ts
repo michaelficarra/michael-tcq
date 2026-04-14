@@ -80,10 +80,10 @@ describe('Meeting REST routes', () => {
 
       const body = await res.json();
       expect(body.id).toMatch(/^[a-z]+(-[a-z]+)+$/);
-      expect(body.chairs).toHaveLength(1);
-      expect(body.chairs[0].ghUsername).toBe('testuser');
+      expect(body.chairIds).toHaveLength(1);
+      expect(body.chairIds[0]).toBe('testuser');
       expect(body.agenda).toEqual([]);
-      expect(body.queuedSpeakers).toEqual([]);
+      expect(body.queuedSpeakerIds).toEqual([]);
     });
 
     it('returns 400 when chairs is missing', async () => {

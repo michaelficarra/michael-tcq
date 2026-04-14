@@ -15,12 +15,14 @@ vi.mock('../contexts/AuthContext.js', () => ({
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
     id: 'test-meeting',
-    chairs: [],
+    users: {},
+    chairIds: [],
     agenda: [],
-    currentAgendaItem: undefined,
-    currentSpeaker: undefined,
-    currentTopic: undefined,
-    queuedSpeakers: [],
+    currentAgendaItemId: undefined,
+    currentSpeakerId: undefined,
+    currentTopicId: undefined,
+    queueEntries: {},
+    queuedSpeakerIds: [],
     reactions: [],
     trackPoll: false, pollOptions: [], version: 0,
     log: [], currentTopicSpeakers: [],
@@ -55,9 +57,10 @@ describe('AgendaPanel', () => {
 
   it('displays agenda items as a numbered list', () => {
     const meeting = makeMeeting({
+      users: { alice: chairUser },
       agenda: [
-        { id: '1', name: 'First item', owner: chairUser, timebox: 20 },
-        { id: '2', name: 'Second item', owner: chairUser },
+        { id: '1', name: 'First item', ownerId: 'alice', timebox: 20 },
+        { id: '2', name: 'Second item', ownerId: 'alice' },
       ],
     });
     renderAgenda(meeting);
@@ -70,7 +73,7 @@ describe('AgendaPanel', () => {
   });
 
   it('shows the "New Agenda Item" button for chairs', () => {
-    const meeting = makeMeeting({ chairs: [chairUser] });
+    const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
     renderAgenda(meeting, chairUser);
 
     expect(screen.getByText('New Agenda Item')).toBeInTheDocument();
@@ -78,7 +81,8 @@ describe('AgendaPanel', () => {
 
   it('hides the "New Agenda Item" button for non-chairs', () => {
     const meeting = makeMeeting({
-      chairs: [{ ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }],
+      users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
+      chairIds: ['other'],
     });
     renderAgenda(meeting, chairUser);
 
@@ -86,7 +90,7 @@ describe('AgendaPanel', () => {
   });
 
   it('shows the agenda form when "New Agenda Item" is clicked', () => {
-    const meeting = makeMeeting({ chairs: [chairUser] });
+    const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
     renderAgenda(meeting, chairUser);
 
     fireEvent.click(screen.getByText('New Agenda Item'));
@@ -98,9 +102,10 @@ describe('AgendaPanel', () => {
 
   it('shows delete buttons for chairs', () => {
     const meeting = makeMeeting({
-      chairs: [chairUser],
+      users: { alice: chairUser },
+      chairIds: ['alice'],
       agenda: [
-        { id: '1', name: 'Deletable item', owner: chairUser },
+        { id: '1', name: 'Deletable item', ownerId: 'alice' },
       ],
     });
     renderAgenda(meeting, chairUser);
@@ -110,9 +115,10 @@ describe('AgendaPanel', () => {
 
   it('hides delete buttons for non-chairs', () => {
     const meeting = makeMeeting({
-      chairs: [{ ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }],
+      users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }, alice: chairUser },
+      chairIds: ['other'],
       agenda: [
-        { id: '1', name: 'Item', owner: chairUser },
+        { id: '1', name: 'Item', ownerId: 'alice' },
       ],
     });
     renderAgenda(meeting, chairUser);
@@ -125,9 +131,10 @@ describe('AgendaPanel', () => {
     const mockSocket = { emit } as unknown as TypedSocket;
 
     const meeting = makeMeeting({
-      chairs: [chairUser],
+      users: { alice: chairUser },
+      chairIds: ['alice'],
       agenda: [
-        { id: 'item-1', name: 'To delete', owner: chairUser },
+        { id: 'item-1', name: 'To delete', ownerId: 'alice' },
       ],
     });
     renderAgenda(meeting, chairUser, mockSocket);
@@ -138,10 +145,11 @@ describe('AgendaPanel', () => {
 
   it('shows owner organisation in parentheses', () => {
     const meeting = makeMeeting({
+      users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' } },
       agenda: [{
         id: '1',
         name: 'Test',
-        owner: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' },
+        ownerId: 'alice',
       }],
     });
     renderAgenda(meeting);
@@ -154,7 +162,7 @@ describe('AgendaPanel', () => {
 
     it('shows remove buttons for chairs on other chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
       renderAgenda(meeting, chairUser);
 
       // Should see remove button for bob but not for alice (self)
@@ -165,7 +173,8 @@ describe('AgendaPanel', () => {
     it('non-chairs do not see remove buttons', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
       const meeting = makeMeeting({
-        chairs: [otherChair],
+        users: { bob: otherChair },
+        chairIds: ['bob'],
       });
       renderAgenda(meeting, chairUser);
 
@@ -174,7 +183,7 @@ describe('AgendaPanel', () => {
 
     it('admins see remove buttons on all chairs including themselves', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: true };
-      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.getByRole('button', { name: /remove chair alice/i })).toBeInTheDocument();
@@ -183,7 +192,7 @@ describe('AgendaPanel', () => {
 
     it('shows confirmation modal before removing a chair', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
       renderAgenda(meeting, chairUser);
 
       fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
@@ -198,7 +207,7 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser, otherChair] });
+      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
@@ -211,7 +220,7 @@ describe('AgendaPanel', () => {
 
     it('shows add chair button for chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser] });
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.getByRole('button', { name: /add chair/i })).toBeInTheDocument();
@@ -219,7 +228,7 @@ describe('AgendaPanel', () => {
 
     it('hides add chair button for non-chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [otherChair] });
+      const meeting = makeMeeting({ users: { bob: otherChair }, chairIds: ['bob'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.queryByRole('button', { name: /add chair/i })).not.toBeInTheDocument();
@@ -227,7 +236,7 @@ describe('AgendaPanel', () => {
 
     it('shows username input when add button is clicked', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser] });
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
       renderAgenda(meeting, chairUser);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
@@ -239,7 +248,7 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser] });
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
@@ -255,7 +264,7 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ chairs: [chairUser] });
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));

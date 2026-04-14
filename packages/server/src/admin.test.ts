@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { MeetingState } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
@@ -160,7 +161,7 @@ describe('Admin endpoints', () => {
         { ghid: 50, ghUsername: 'newchair', name: 'New Chair', organisation: '' },
       ]);
       expect(result).toBe(true);
-      expect(manager.get(meeting.id)!.chairs[0].ghUsername).toBe('newchair');
+      expect(manager.get(meeting.id)!.chairIds[0]).toBe(userKey({ ghUsername: 'newchair' }));
     });
 
     it('admin can set an empty chair list', async () => {
@@ -170,7 +171,7 @@ describe('Admin endpoints', () => {
 
       const result = manager.updateChairs(meeting.id, []);
       expect(result).toBe(true);
-      expect(manager.get(meeting.id)!.chairs).toHaveLength(0);
+      expect(manager.get(meeting.id)!.chairIds).toHaveLength(0);
     });
   });
 

@@ -81,14 +81,14 @@ function RelativeTime({ timestamp }: { timestamp: string }) {
 
 // -- Participant avatars row --
 
-function ParticipantList({ participants }: { participants: User[] }) {
-  if (participants.length === 0) return null;
+function ParticipantList({ participantIds, users }: { participantIds: string[]; users: Record<string, User> }) {
+  if (participantIds.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1 mt-1.5">
       <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Participants:</span>
-      {participants.map((p) => (
-        <UserBadge key={p.ghUsername} user={p} size={18} className="text-xs text-stone-600 dark:text-stone-300" />
+      {participantIds.map((id) => (
+        <UserBadge key={id} user={users[id]} size={18} className="text-xs text-stone-600 dark:text-stone-300" />
       ))}
     </div>
   );
@@ -96,7 +96,7 @@ function ParticipantList({ participants }: { participants: User[] }) {
 
 // -- Speaker row within a topic group --
 
-function SpeakerRow({ speaker }: { speaker: TopicSpeaker }) {
+function SpeakerRow({ speaker, users }: { speaker: TopicSpeaker; users: Record<string, User> }) {
   const label = QUEUE_ENTRY_LABELS[speaker.type] ?? speaker.type;
 
   return (
@@ -112,7 +112,7 @@ function SpeakerRow({ speaker }: { speaker: TopicSpeaker }) {
           {formatDuration(speaker.duration)}
         </span>
       )}
-      <UserBadge user={speaker.user} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+      <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
     </div>
   );
 }
@@ -130,7 +130,7 @@ function MeetingStartedEntry({ entry }: { entry: LogEntry & { type: 'meeting-sta
   );
 }
 
-function AgendaItemStartedEntry({ entry }: { entry: LogEntry & { type: 'agenda-item-started' } }) {
+function AgendaItemStartedEntry({ entry, users }: { entry: LogEntry & { type: 'agenda-item-started' }; users: Record<string, User> }) {
   return (
     <div>
       <div className="flex items-center gap-2 flex-wrap">
@@ -138,13 +138,13 @@ function AgendaItemStartedEntry({ entry }: { entry: LogEntry & { type: 'agenda-i
         <span className="text-sm text-stone-800 dark:text-stone-200">
           <span className="font-medium">Started:</span> <InlineMarkdown>{entry.itemName}</InlineMarkdown>
         </span>
-        <UserBadge user={entry.itemOwner} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
+        <UserBadge user={users[entry.itemOwnerId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
       </div>
     </div>
   );
 }
 
-function AgendaItemFinishedEntry({ entry }: { entry: LogEntry & { type: 'agenda-item-finished' } }) {
+function AgendaItemFinishedEntry({ entry, users }: { entry: LogEntry & { type: 'agenda-item-finished' }; users: Record<string, User> }) {
   return (
     <div className="flex items-start gap-2">
       <RelativeTime timestamp={entry.timestamp} />
@@ -157,7 +157,7 @@ function AgendaItemFinishedEntry({ entry }: { entry: LogEntry & { type: 'agenda-
             {formatDuration(entry.duration)}
           </span>
         </div>
-        <ParticipantList participants={entry.participants} />
+        <ParticipantList participantIds={entry.participantIds} users={users} />
         {entry.remainingQueue && (
           <details className="mt-1.5">
             <summary className="text-xs text-stone-400 dark:text-stone-500 cursor-pointer hover:text-stone-600 dark:hover:text-stone-300">
@@ -173,7 +173,7 @@ function AgendaItemFinishedEntry({ entry }: { entry: LogEntry & { type: 'agenda-
   );
 }
 
-function TopicDiscussedEntry({ entry }: { entry: LogEntry & { type: 'topic-discussed' } }) {
+function TopicDiscussedEntry({ entry, users }: { entry: LogEntry & { type: 'topic-discussed' }; users: Record<string, User> }) {
   const isSingleSpeaker = entry.speakers.length === 1;
   const speaker = entry.speakers[0];
 
@@ -189,7 +189,7 @@ function TopicDiscussedEntry({ entry }: { entry: LogEntry & { type: 'topic-discu
           <span className="text-xs text-stone-400 dark:text-stone-500">
             {formatDuration(entry.duration)}
           </span>
-          <UserBadge user={speaker.user} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+          <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
         </div>
       </div>
     );
@@ -209,19 +209,19 @@ function TopicDiscussedEntry({ entry }: { entry: LogEntry & { type: 'topic-discu
         <span className="text-xs text-stone-400 dark:text-stone-500">
           {formatDuration(entry.duration)}
         </span>
-        <UserBadge user={firstSpeaker.user} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+        <UserBadge user={users[firstSpeaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
       </div>
       <div className="mt-1 space-y-0.5">
         {remainingSpeakers.map((s, i) => (
-          <SpeakerRow key={i} speaker={s} />
+          <SpeakerRow key={i} speaker={s} users={users} />
         ))}
       </div>
     </div>
   );
 }
 
-function PollRanEntry({ entry }: { entry: LogEntry & { type: 'poll-ran' } }) {
-  const sameChair = entry.startChair.ghUsername.toLowerCase() === entry.endChair.ghUsername.toLowerCase();
+function PollRanEntry({ entry, users }: { entry: LogEntry & { type: 'poll-ran' }; users: Record<string, User> }) {
+  const sameChair = entry.startChairId === entry.endChairId;
 
   return (
     <div className="flex items-start gap-2">
@@ -238,11 +238,11 @@ function PollRanEntry({ entry }: { entry: LogEntry & { type: 'poll-ran' } }) {
             {entry.totalVoters} voter{entry.totalVoters !== 1 ? 's' : ''}
           </span>
           {sameChair ? (
-            <UserBadge user={entry.startChair} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+            <UserBadge user={users[entry.startChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
           ) : (
             <>
-              <UserBadge user={entry.startChair} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
-              <UserBadge user={entry.endChair} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+              <UserBadge user={users[entry.startChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+              <UserBadge user={users[entry.endChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
             </>
           )}
         </div>
@@ -260,7 +260,7 @@ function PollRanEntry({ entry }: { entry: LogEntry & { type: 'poll-ran' } }) {
 
 // -- Current topic group (not yet finalised) --
 
-function CurrentTopicGroup({ speakers }: { speakers: TopicSpeaker[] }) {
+function CurrentTopicGroup({ speakers, users }: { speakers: TopicSpeaker[]; users: Record<string, User> }) {
   if (speakers.length === 0) return null;
 
   const isSingleSpeaker = speakers.length === 1;
@@ -276,7 +276,7 @@ function CurrentTopicGroup({ speakers }: { speakers: TopicSpeaker[] }) {
             <InlineMarkdown>{speaker.topic}</InlineMarkdown>
           </span>
           <span className="text-xs text-teal-500 font-medium">ongoing</span>
-          <UserBadge user={speaker.user} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+          <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
         </div>
       </div>
     );
@@ -293,11 +293,11 @@ function CurrentTopicGroup({ speakers }: { speakers: TopicSpeaker[] }) {
           <InlineMarkdown>{speakers[0].topic}</InlineMarkdown>
         </span>
         <span className="text-xs text-teal-500 font-medium">ongoing</span>
-        <UserBadge user={speakers[0].user} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+        <UserBadge user={users[speakers[0].userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
       </div>
       <div className="mt-1 space-y-0.5">
         {remainingSpeakers.map((s, i) => (
-          <SpeakerRow key={i} speaker={s} />
+          <SpeakerRow key={i} speaker={s} users={users} />
         ))}
       </div>
     </div>
@@ -306,18 +306,18 @@ function CurrentTopicGroup({ speakers }: { speakers: TopicSpeaker[] }) {
 
 // -- Log entry dispatcher --
 
-function LogEntryRow({ entry }: { entry: LogEntry }) {
+function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, User> }) {
   switch (entry.type) {
     case 'meeting-started':
       return <MeetingStartedEntry entry={entry} />;
     case 'agenda-item-started':
-      return <AgendaItemStartedEntry entry={entry} />;
+      return <AgendaItemStartedEntry entry={entry} users={users} />;
     case 'agenda-item-finished':
-      return <AgendaItemFinishedEntry entry={entry} />;
+      return <AgendaItemFinishedEntry entry={entry} users={users} />;
     case 'topic-discussed':
-      return <TopicDiscussedEntry entry={entry} />;
+      return <TopicDiscussedEntry entry={entry} users={users} />;
     case 'poll-ran':
-      return <PollRanEntry entry={entry} />;
+      return <PollRanEntry entry={entry} users={users} />;
   }
 }
 
@@ -342,12 +342,12 @@ export function LogsPanel() {
 
       <div className="space-y-4">
         {/* Current (ongoing) topic group at the top */}
-        {hasCurrentTopic && <CurrentTopicGroup speakers={meeting.currentTopicSpeakers} />}
+        {hasCurrentTopic && <CurrentTopicGroup speakers={meeting.currentTopicSpeakers} users={meeting.users} />}
 
         {/* Finalised log entries in reverse chronological order */}
         {reversedLog.map((entry, i) => (
           <div key={i}>
-            <LogEntryRow entry={entry} />
+            <LogEntryRow entry={entry} users={meeting.users} />
             {entry.type === 'agenda-item-started' && i < reversedLog.length - 1 && (
               <hr className="border-stone-200 dark:border-stone-700 mt-4" />
             )}

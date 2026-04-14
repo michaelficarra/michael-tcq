@@ -29,6 +29,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaItem } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { AgendaForm } from './AgendaForm.js';
@@ -196,7 +197,7 @@ export function AgendaPanel() {
                   item={item}
                   index={index}
                   isChair={isChair}
-                  isOwnItem={!!user && item.owner.ghUsername.toLowerCase() === user.ghUsername.toLowerCase()}
+                  isOwnItem={!!user && item.ownerId === userKey(user)}
                   onDelete={handleDelete}
                 />
               ))}
@@ -239,6 +240,7 @@ interface SortableAgendaItemProps {
 }
 
 function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: SortableAgendaItemProps) {
+  const { meeting } = useMeetingState();
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -262,7 +264,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
     setEditName(item.name);
-    setEditOwner(item.owner.ghUsername);
+    setEditOwner(meeting?.users[item.ownerId]?.ghUsername ?? item.ownerId);
     setEditTimebox(item.timebox != null && item.timebox > 0 ? String(item.timebox) : '');
     setEditing(true);
   }
@@ -372,7 +374,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
         <InlineMarkdown className="font-medium text-stone-800 dark:text-stone-200 align-middle">{item.name}</InlineMarkdown>
 
         {/* Owner info */}
-        <UserBadge user={item.owner} size={16} className="ml-2 text-sm text-stone-500 dark:text-stone-400" />
+        <UserBadge user={meeting?.users[item.ownerId]} size={16} className="ml-2 text-sm text-stone-500 dark:text-stone-400" />
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (
@@ -420,18 +422,18 @@ function ChairsSection() {
   if (!meeting) return null;
 
   /** Whether the current user can remove a given chair. */
-  function canRemove(chairUsername: string): boolean {
+  function canRemove(chairId: string): boolean {
     if (!canEditChairs) return false;
     // Non-admins cannot remove themselves
-    if (!isAdmin && user?.ghUsername.toLowerCase() === chairUsername.toLowerCase()) return false;
+    if (!isAdmin && user && userKey(user) === chairId) return false;
     return true;
   }
 
   /** Remove a chair by emitting the updated list without them. */
-  function handleRemove(chairUsername: string) {
-    const usernames = meeting!.chairs
-      .map((c) => c.ghUsername)
-      .filter((u) => u.toLowerCase() !== chairUsername.toLowerCase());
+  function handleRemove(chairId: string) {
+    const usernames = meeting!.chairIds
+      .filter((id) => id !== chairId)
+      .map((id) => meeting!.users[id]?.ghUsername ?? id);
     socket?.emit('meeting:updateChairs', { usernames });
     setRemoveConfirm(null);
   }
@@ -442,7 +444,7 @@ function ChairsSection() {
     const username = addValue.trim();
     if (!username) return;
 
-    const usernames = meeting!.chairs.map((c) => c.ghUsername);
+    const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.ghUsername ?? id);
     if (!usernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
       usernames.push(username);
     }
@@ -458,23 +460,26 @@ function ChairsSection() {
           Chairs
         </h2>
 
-        {meeting.chairs.map((chair) => (
-          <span key={chair.ghUsername} className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chair.ghUsername) ? 'pr-1' : 'pr-2'}`}>
-            <UserBadge user={chair} size={18} />
-            {canRemove(chair.ghUsername) && (
-              <button
-                onClick={() => setRemoveConfirm(chair.ghUsername)}
-                className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors
-                           cursor-pointer presentation-hidden"
-                aria-label={`Remove chair ${chair.ghUsername}`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                </svg>
-              </button>
-            )}
-          </span>
-        ))}
+        {meeting.chairIds.map((chairId) => {
+          const chair = meeting.users[chairId];
+          return (
+            <span key={chairId} className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chairId) ? 'pr-1' : 'pr-2'}`}>
+              <UserBadge user={chair} size={18} />
+              {canRemove(chairId) && (
+                <button
+                  onClick={() => setRemoveConfirm(chairId)}
+                  className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors
+                             cursor-pointer presentation-hidden"
+                  aria-label={`Remove chair ${chair?.ghUsername ?? chairId}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+            </span>
+          );
+        })}
 
         {canEditChairs && !adding && (
           <button

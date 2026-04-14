@@ -9,6 +9,7 @@
  * of the results to the clipboard, sorted by count descending.
  */
 
+import { userKey } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 
@@ -66,11 +67,11 @@ export function PollReactions() {
 
           // Check if the current user has reacted to this option
           const isSelected = user && reactionsForOption.some(
-            (r) => r.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
+            (r) => r.userId === userKey(user),
           );
 
           // Build the tooltip showing who reacted
-          const names = reactionsForOption.map((r) => r.user.name).join(', ');
+          const names = reactionsForOption.map((r) => meeting.users[r.userId]?.name ?? r.userId).join(', ');
 
           return (
             <button

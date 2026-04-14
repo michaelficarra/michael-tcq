@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 
 // -- State --
 
@@ -71,9 +72,7 @@ export function useIsChair(): boolean {
   if (!meeting || !user) return false;
   // Compare by username (case-insensitive) since chairs are specified
   // by GitHub username, and it's the stable identifier throughout the app.
-  return meeting.chairs.some(
-    (chair) => chair.ghUsername.toLowerCase() === user.ghUsername.toLowerCase(),
-  );
+  return meeting.chairIds.includes(userKey(user));
 }
 
 /** Provider component that wraps the meeting page. */

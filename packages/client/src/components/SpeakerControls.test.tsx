@@ -10,9 +10,9 @@ const testUser: User = {
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test-meeting', chairs: [], agenda: [],
-    currentAgendaItem: undefined, currentSpeaker: undefined,
-    currentTopic: undefined, queuedSpeakers: [],
+    id: 'test-meeting', users: {}, chairIds: [], agenda: [],
+    currentAgendaItemId: undefined, currentSpeakerId: undefined,
+    currentTopicId: undefined, queueEntries: {}, queuedSpeakerIds: [],
     reactions: [], trackPoll: false, pollOptions: [],
     version: 0, log: [], currentTopicSpeakers: [],
     ...overrides,
@@ -46,9 +46,9 @@ describe('SpeakerControls', () => {
 
   it('shows the Reply button when there is a current topic', () => {
     const meeting = makeMeeting({
-      currentTopic: {
-        id: 'ct-1', type: 'topic', topic: 'Active topic', user: testUser,
-      },
+      users: { alice: testUser },
+      queueEntries: { 'ct-1': { id: 'ct-1', type: 'topic', topic: 'Active topic', userId: 'alice' } },
+      currentTopicId: 'ct-1',
     });
     renderControls(meeting);
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();

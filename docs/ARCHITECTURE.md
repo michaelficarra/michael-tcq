@@ -55,7 +55,8 @@ tcq/
 │   │   └── src/
 │   │       ├── types.ts         # MeetingState, User, QueueEntry, PollOption, etc.
 │   │       ├── messages.ts      # Socket.IO event type definitions
-│   │       └── constants.ts     # Queue entry types, default poll options
+│   │       ├── constants.ts     # Queue entry types, default poll options
+│   │       └── helpers.ts       # Shared utilities (userKey)
 │   ├── client/                  # React + Vite frontend
 │   │   └── src/
 │   │       ├── App.tsx

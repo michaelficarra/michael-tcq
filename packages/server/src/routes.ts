@@ -158,7 +158,7 @@ export function createMeetingRoutes(
       res.status(403).json({
         error: 'Only chairs can import an agenda',
         user: user.ghUsername,
-        chairs: meeting.chairs.map((c) => c.ghUsername),
+        chairs: meeting.chairIds,
       });
       return;
     }
@@ -258,9 +258,9 @@ export function createMeetingRoutes(
       const current = s?.currentConnections ?? 0;
       meetings.push({
         id: meeting.id,
-        chairCount: meeting.chairs.length,
+        chairCount: meeting.chairIds.length,
         agendaItemCount: meeting.agenda.length,
-        queuedSpeakerCount: meeting.queuedSpeakers.length,
+        queuedSpeakerCount: meeting.queuedSpeakerIds.length,
         maxConcurrent: s?.maxConcurrent ?? 0,
         currentConnections: current,
         lastConnection: current > 0

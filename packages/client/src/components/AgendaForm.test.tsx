@@ -10,9 +10,9 @@ const chairUser: User = {
 };
 
 const baseMeeting: MeetingState = {
-  id: 'test', chairs: [chairUser], agenda: [],
-  currentAgendaItem: undefined, currentSpeaker: undefined, currentTopic: undefined,
-  queuedSpeakers: [], reactions: [], trackPoll: false, pollOptions: [], version: 0,
+  id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
+  currentAgendaItemId: undefined, currentSpeakerId: undefined, currentTopicId: undefined,
+  queueEntries: {}, queuedSpeakerIds: [], reactions: [], trackPoll: false, pollOptions: [], version: 0,
   log: [], currentTopicSpeakers: [],
 };
 

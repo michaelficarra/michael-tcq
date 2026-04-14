@@ -1,7 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, User, MeetingState } from '@tcq/shared';
-import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
+import { QUEUE_ENTRY_LABELS, userKey } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
+import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { isAdmin } from './admin.js';
@@ -26,7 +27,7 @@ function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
  * Finalise the current topic group into a TopicDiscussedLog entry
  * and append it to the meeting log. Resets currentTopicSpeakers.
  */
-function finaliseTopicGroup(meeting: MeetingState, chair: User, now: string): void {
+function finaliseTopicGroup(meeting: MeetingState, chairId: string, now: string): void {
   if (meeting.currentTopicSpeakers.length === 0) return;
 
   finaliseLastSpeakerDuration(meeting, now);
@@ -38,7 +39,7 @@ function finaliseTopicGroup(meeting: MeetingState, chair: User, now: string): vo
   meeting.log.push({
     type: 'topic-discussed',
     timestamp: speakers[0].startTime,
-    chair,
+    chairId,
     topicName: speakers[0].topic,
     speakers: [...speakers],
     duration,
@@ -48,13 +49,12 @@ function finaliseTopicGroup(meeting: MeetingState, chair: User, now: string): vo
 }
 
 /**
- * Collect distinct participants from topic-discussed log entries
+ * Collect distinct participant user IDs from topic-discussed log entries
  * that occurred after a given timestamp (the agenda item start).
  * Excludes Point of Order speakers.
  */
-function collectParticipants(meeting: MeetingState, sinceTimestamp: string): User[] {
+function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): string[] {
   const seen = new Set<string>();
-  const participants: User[] = [];
 
   // Gather from finalised topic groups
   for (const entry of meeting.log) {
@@ -62,25 +62,17 @@ function collectParticipants(meeting: MeetingState, sinceTimestamp: string): Use
     if (entry.timestamp < sinceTimestamp) continue;
     for (const speaker of entry.speakers) {
       if (speaker.type === 'point-of-order') continue;
-      const key = speaker.user.ghUsername.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        participants.push(speaker.user);
-      }
+      seen.add(speaker.userId);
     }
   }
 
   // Also include speakers from the current (not yet finalised) topic group
   for (const speaker of meeting.currentTopicSpeakers) {
     if (speaker.type === 'point-of-order') continue;
-    const key = speaker.user.ghUsername.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      participants.push(speaker.user);
-    }
+    seen.add(speaker.userId);
   }
 
-  return participants;
+  return [...seen];
 }
 
 /** A Socket with our typed events and session user attached. */
@@ -252,18 +244,17 @@ export function registerSocketHandlers(
 
       // Resolve each username to a User object
       const meeting = meetingManager.get(joinedMeetingId);
-      const chairs: import('@tcq/shared').User[] = [];
+      const chairs: User[] = [];
 
       for (const username of usernames) {
+        const key = username.toLowerCase();
+
         // Check if this user is already known in the meeting
-        const known =
-          meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === username.toLowerCase()) ??
-          meeting?.queuedSpeakers.find((e) => e.user.ghUsername.toLowerCase() === username.toLowerCase())?.user ??
-          meeting?.agenda.find((a) => a.owner.ghUsername.toLowerCase() === username.toLowerCase())?.owner;
+        const known = meeting?.users[key];
 
         if (known) {
           chairs.push(known);
-        } else if (username.toLowerCase() === user.ghUsername.toLowerCase()) {
+        } else if (key === user.ghUsername.toLowerCase()) {
           chairs.push(user);
         } else if (isOAuthConfigured()) {
           // Validate against GitHub API when OAuth is configured
@@ -307,12 +298,12 @@ export function registerSocketHandlers(
       }
 
       // Build the owner User object. If the owner is a known user in the
-      // meeting (chair, current user), use their full profile. Otherwise,
-      // create a placeholder with the username.
+      // meeting, use their full profile. Otherwise, create a placeholder.
       const meeting = meetingManager.get(joinedMeetingId);
+      const key = ownerUsername.toLowerCase();
       const owner: User =
-        meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === ownerUsername.toLowerCase()) ??
-        (user.ghUsername.toLowerCase() === ownerUsername.toLowerCase() ? user : undefined) ??
+        meeting?.users[key] ??
+        (user.ghUsername.toLowerCase() === key ? user : undefined) ??
         { ghid: 0, ghUsername: ownerUsername, name: ownerUsername, organisation: '' };
 
       // Parse timebox: treat 0, negative, and NaN as "no timebox"
@@ -332,7 +323,7 @@ export function registerSocketHandlers(
       }
 
       // Build the updates object, resolving owner username if provided
-      const updates: { name?: string; owner?: import('@tcq/shared').User; timebox?: number | null } = {};
+      const updates: { name?: string; owner?: User; timebox?: number | null } = {};
 
       if (payload.name !== undefined) {
         const trimmed = payload.name.trim();
@@ -349,10 +340,10 @@ export function registerSocketHandlers(
           socket.emit('error', 'Owner username cannot be empty');
           return;
         }
-        // Resolve owner the same way as agenda:add
+        // Resolve owner from known users or create placeholder
         const meeting = meetingManager.get(joinedMeetingId);
-        const existingUser = meeting?.chairs.find((c) => c.ghUsername === ownerUsername);
-        updates.owner = existingUser ?? {
+        const key = ownerUsername.toLowerCase();
+        updates.owner = meeting?.users[key] ?? {
           ghid: 0,
           ghUsername: ownerUsername,
           name: ownerUsername,
@@ -442,14 +433,10 @@ export function registerSocketHandlers(
           return;
         }
         const username = payload.asUsername.trim();
-        // Look up the user from existing meeting participants (chairs,
-        // queue entries, agenda owners) or create a placeholder.
+        const key = username.toLowerCase();
+        // Look up the user from known meeting participants or create a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
-        const knownUser =
-          meeting?.chairs.find((c) => c.ghUsername.toLowerCase() === username.toLowerCase()) ??
-          meeting?.queuedSpeakers.find((e) => e.user.ghUsername.toLowerCase() === username.toLowerCase())?.user ??
-          meeting?.agenda.find((a) => a.owner.ghUsername.toLowerCase() === username.toLowerCase())?.owner;
-        entryUser = knownUser ?? {
+        entryUser = meeting?.users[key] ?? {
           ghid: 0,
           ghUsername: username,
           name: username,
@@ -479,7 +466,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      const isOwner = entry.user.ghid === user.ghid;
+      const isOwner = entry.userId === userKey(user);
       const isChairUser = meetingManager.isChair(joinedMeetingId, user);
       if (!isOwner && !isChairUser) {
         socket.emit('error', 'You can only edit your own queue entries');
@@ -521,7 +508,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      const isOwner = entry.user.ghid === user.ghid;
+      const isOwner = entry.userId === userKey(user);
       const isChairUser = meetingManager.isChair(joinedMeetingId, user);
       if (!isOwner && !isChairUser) {
         socket.emit('error', 'You can only remove your own queue entries');
@@ -545,7 +532,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      const isOwner = entry.user.ghUsername.toLowerCase() === user.ghUsername.toLowerCase();
+      const isOwner = entry.userId === userKey(user);
       const isChairUser = meetingManager.isChair(joinedMeetingId, user);
 
       if (!isOwner && !isChairUser) {
@@ -559,13 +546,13 @@ export function registerSocketHandlers(
       if (isOwner && !isChairUser) {
         const meeting = meetingManager.get(joinedMeetingId);
         if (meeting) {
-          const currentIndex = meeting.queuedSpeakers.findIndex((e) => e.id === payload.id);
+          const currentIndex = meeting.queuedSpeakerIds.indexOf(payload.id);
           if (payload.afterId === null) {
             // Moving to the beginning — that's moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
             return;
           }
-          const afterIndex = meeting.queuedSpeakers.findIndex((e) => e.id === payload.afterId);
+          const afterIndex = meeting.queuedSpeakerIds.indexOf(payload.afterId);
           if (afterIndex < currentIndex) {
             // Target is above current position — moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
@@ -613,16 +600,18 @@ export function registerSocketHandlers(
       }
 
       const now = new Date().toISOString();
+      const chairId = ensureUser(meeting, user);
 
       // Peek at the next speaker before advancing (to decide on topic grouping)
-      const nextEntry = meeting.queuedSpeakers[0];
+      const nextEntryId = meeting.queuedSpeakerIds[0];
+      const nextEntry = nextEntryId ? meeting.queueEntries[nextEntryId] : undefined;
 
       // Finalise the previous speaker's duration
       finaliseLastSpeakerDuration(meeting, now);
 
       // If the next speaker starts a new topic, finalise the current topic group
       if (nextEntry && nextEntry.type === 'topic') {
-        finaliseTopicGroup(meeting, user, now);
+        finaliseTopicGroup(meeting, chairId, now);
       }
 
       const newSpeaker = meetingManager.nextSpeaker(joinedMeetingId);
@@ -630,7 +619,7 @@ export function registerSocketHandlers(
       // Add the new speaker to the current topic group (skip point-of-order)
       if (newSpeaker && newSpeaker.type !== 'point-of-order') {
         meeting.currentTopicSpeakers.push({
-          user: newSpeaker.user,
+          userId: newSpeaker.userId,
           type: newSpeaker.type,
           topic: newSpeaker.topic,
           startTime: now,
@@ -679,7 +668,7 @@ export function registerSocketHandlers(
 
       // Record poll start metadata for the log entry when the poll ends
       meeting.pollStartTime = new Date().toISOString();
-      meeting.pollStartChair = user;
+      meeting.pollStartChairId = ensureUser(meeting, user);
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
@@ -698,13 +687,14 @@ export function registerSocketHandlers(
       if (!meeting) return;
 
       const now = new Date().toISOString();
+      const chairId = ensureUser(meeting, user);
 
       // Build the log entry before stopPoll clears reactions/options
       if (meeting.pollStartTime) {
         // Count distinct voters
         const voterSet = new Set<string>();
         for (const r of meeting.reactions) {
-          voterSet.add(r.user.ghUsername.toLowerCase());
+          voterSet.add(r.userId);
         }
 
         // Build results sorted by count descending
@@ -717,8 +707,8 @@ export function registerSocketHandlers(
         meeting.log.push({
           type: 'poll-ran',
           timestamp: meeting.pollStartTime,
-          startChair: meeting.pollStartChair ?? user,
-          endChair: user,
+          startChairId: meeting.pollStartChairId ?? chairId,
+          endChairId: chairId,
           duration: new Date(now).getTime() - new Date(meeting.pollStartTime).getTime(),
           totalVoters: voterSet.size,
           results,
@@ -729,7 +719,7 @@ export function registerSocketHandlers(
 
       // Clear poll start metadata
       meeting.pollStartTime = undefined;
-      meeting.pollStartChair = undefined;
+      meeting.pollStartChairId = undefined;
       meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
@@ -775,22 +765,27 @@ export function registerSocketHandlers(
       }
 
       const now = new Date().toISOString();
-      const isFirstItem = !meeting.currentAgendaItem;
-      const outgoingItem = meeting.currentAgendaItem;
+      const chairId = ensureUser(meeting, user);
+      const isFirstItem = !meeting.currentAgendaItemId;
+      const outgoingItem = meetingManager.getCurrentAgendaItem(joinedMeetingId);
       const outgoingStartTime = meeting.currentAgendaItemStartTime;
 
       // Finalise log entries for the outgoing agenda item
       if (outgoingItem && outgoingStartTime) {
         // Finalise the current topic group
-        finaliseTopicGroup(meeting, user, now);
+        finaliseTopicGroup(meeting, chairId, now);
 
         // Collect participants from all topic groups during this item
-        const participants = collectParticipants(meeting, outgoingStartTime);
+        const participantIds = collectParticipantIds(meeting, outgoingStartTime);
 
         // Serialise the remaining queue if non-empty
-        const remainingQueue = meeting.queuedSpeakers.length > 0
-          ? meeting.queuedSpeakers
-              .map((e) => `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${e.user.ghUsername})`)
+        const remainingQueue = meeting.queuedSpeakerIds.length > 0
+          ? meeting.queuedSpeakerIds
+              .map((id) => {
+                const e = meeting.queueEntries[id];
+                const u = meeting.users[e.userId];
+                return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.ghUsername ?? e.userId})`;
+              })
               .join('\n')
           : undefined;
 
@@ -798,10 +793,10 @@ export function registerSocketHandlers(
         meeting.log.push({
           type: 'agenda-item-finished',
           timestamp: now,
-          chair: user,
+          chairId,
           itemName: outgoingItem.name,
           duration: new Date(now).getTime() - new Date(outgoingStartTime).getTime(),
-          participants,
+          participantIds,
           remainingQueue,
         });
       }
@@ -817,16 +812,16 @@ export function registerSocketHandlers(
         meeting.log.push({
           type: 'meeting-started',
           timestamp: now,
-          chair: user,
+          chairId,
         });
       }
 
       meeting.log.push({
         type: 'agenda-item-started',
         timestamp: now,
-        chair: user,
+        chairId,
         itemName: nextItem.name,
-        itemOwner: nextItem.owner,
+        itemOwnerId: nextItem.ownerId,
       });
 
       // Track when this agenda item started
@@ -834,7 +829,7 @@ export function registerSocketHandlers(
 
       // Start the introductory topic group with the item owner
       meeting.currentTopicSpeakers = [{
-        user: nextItem.owner,
+        userId: nextItem.ownerId,
         type: 'topic',
         topic: `Introducing: ${nextItem.name}`,
         startTime: now,
