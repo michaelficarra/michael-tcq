@@ -45,6 +45,13 @@ Users authenticate via GitHub OAuth. Their GitHub display name, username, and or
 
 When GitHub OAuth is not configured, the server runs in mock auth mode with a fake user, allowing development without creating an OAuth App. In mock auth mode, a dev user-switcher in the navigation bar allows switching between different mock identities.
 
+## Home Page
+
+The home page shows two cards side by side:
+
+- **Join Meeting** — a text input for the meeting ID and a "Join" button. Validates that the meeting exists before navigating to it.
+- **New Meeting** — a "Start a New Meeting" button that creates a meeting with the current user as the sole chair and redirects to it. Additional chairs can be added from the Agenda tab.
+
 ## Meetings
 
 ### Creating a Meeting
@@ -57,21 +64,28 @@ Any authenticated user can join a meeting by entering its meeting ID or by navig
 
 If a user navigates to a non-existent meeting, a clear error page is shown with a link back to the home page.
 
-## Home Page
+## Meeting Flow
 
-The home page shows two cards side by side:
+1. A chair creates a meeting and shares the meeting ID with participants.
+2. Participants join.
+3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's owner automatically becomes the current speaker.
+4. Participants enter the queue to discuss the item.
+5. The chair advances through the queue.
+6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's owner becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
+7. This repeats until the agenda is exhausted.
 
-- **Join Meeting** — a text input for the meeting ID and a "Join" button. Validates that the meeting exists before navigating to it.
-- **New Meeting** — a "Start a New Meeting" button that creates a meeting with the current user as the sole chair and redirects to it. Additional chairs can be added from the Agenda tab.
+Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
 
-## Chair Management
+## Navigation
 
-The Agenda tab displays the list of chairs inline next to the "Chairs" heading. Each chair is shown as a pill-shaped badge with their avatar and name. Chairs and admins can manage the list directly:
+The meeting view has four tabs:
 
-- **Add** — a "+" icon to the right of the chair pills opens an inline username input. When OAuth is configured, new usernames are validated against the GitHub API.
-- **Remove** — an "×" icon on each chair's pill removes them after a confirmation dialogue.
+- **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
+- **Queue** — displays the current agenda item (with poll controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
+- **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
+- **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
-For regular chairs: they cannot remove themselves from the list (no remove icon is shown on their own pill), and at least one chair must remain. Admins bypass both restrictions — they can remove any chair, including themselves, even if it leaves the chair list empty.
+The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode). The Help tab is also available on the home page.
 
 ## Agenda
 
@@ -80,6 +94,15 @@ The agenda is an ordered list of items. Each agenda item has:
 - **Name** — the title of the item
 - **Owner** — a GitHub user who will introduce/present it (shown with their GitHub avatar)
 - **Timebox** (optional) — a duration in minutes
+
+### Chair Management
+
+The Agenda tab displays the list of chairs inline next to the "Chairs" heading. Each chair is shown as a pill-shaped badge with their avatar and name. Chairs and admins can manage the list directly:
+
+- **Add** — a "+" icon to the right of the chair pills opens an inline username input. When OAuth is configured, new usernames are validated against the GitHub API.
+- **Remove** — an "×" icon on each chair's pill removes them after a confirmation dialogue.
+
+For regular chairs: they cannot remove themselves from the list (no remove icon is shown on their own pill), and at least one chair must remain. Admins bypass both restrictions — they can remove any chair, including themselves, even if it leaves the chair list empty.
 
 ### Agenda Management (Chair Only)
 
@@ -164,8 +187,6 @@ Clarifying Question: How does this work? (bob)
 
 Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(username)`, the entry is added on behalf of that user, preserving the original author. The username is resolved against known meeting participants (chairs, existing queue entries, agenda owners); unknown usernames create a placeholder user. Non-chairs cannot add entries on behalf of other users.
 
-## Current Speaker and Current Topic
-
 ### Current Speaker
 
 The currently speaking person is displayed prominently, showing their GitHub avatar, name, organisation, and the topic/question they queued with. A count-up timer shows how long the current speaker has been speaking (updated every second). Only one person speaks at a time.
@@ -183,18 +204,6 @@ The Queue tab displays live count-up timers on three elements:
 - **Current speaker** — time since the current speaker began speaking.
 
 Timers update every second and are displayed in M:SS format (or H:MM:SS for durations over an hour). They remain visible in presentation mode. Point of Order speakers, being procedural interruptions, do not display a speaker timer.
-
-## Meeting Flow
-
-1. A chair creates a meeting and shares the meeting ID with participants.
-2. Participants join.
-3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's owner automatically becomes the current speaker.
-4. Participants enter the queue to discuss the item.
-5. The chair advances through the queue.
-6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's owner becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
-7. This repeats until the agenda is exhausted.
-
-Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
 
 ## Polls
 
@@ -229,7 +238,7 @@ Chairs see a **Copy Results** button that copies a summary to the clipboard: eac
 
 ## Log
 
-The Log tab provides a chronological record of meeting events, giving participants a timeline of what has happened during the meeting. The log is maintained by the server as part of the persisted meeting state and broadcast to all clients in real time alongside other state updates.
+The Log tab provides a chronological record of meeting events, giving participants a timeline of what has happened during the meeting. The log is maintained as part of the persisted meeting state and updated for all clients in real time.
 
 ### Log Entries
 
@@ -275,44 +284,9 @@ The Log tab shows log entries in reverse chronological order (most recent first)
 
 The log is permanent and cannot be edited or deleted during the meeting's lifetime. It is available to all connected participants and updated in real time.
 
-### Keyboard Shortcut
-
-| Key | Action |
-|-----|--------|
-| `3` | Switch to Log tab |
-
-## Real-Time Updates
-
-All meeting state changes are broadcast to all connected participants in real time. This includes:
-
-- Agenda item additions, edits, deletions, and reordering
-- Queue additions, edits, deletions, and reordering
-- Current speaker and current topic changes
-- Agenda item advancement
-- Poll state, options, and reactions
-- Log entries for significant meeting events
-
-A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state.
-
-## Error Handling
-
-- Fatal errors (e.g. "Meeting not found") are shown as a full-page error with a link back to the home page.
-- Non-fatal errors (e.g. "Only chairs can...") are shown as a dismissible red banner at the top of the meeting page.
-
 ## User Identity Display
 
 Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from GitHub and hidden gracefully if the image fails to load.
-
-## Navigation
-
-The meeting view has four tabs:
-
-- **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
-- **Queue** — displays the current agenda item (with poll controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
-- **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
-- **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
-
-The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (Log Out link in OAuth mode, or a clickable username with user-switcher form in mock auth mode). The Help tab is also available on the home page.
 
 ## Keyboard Shortcuts
 
@@ -346,6 +320,24 @@ Pressing `f` again (or exiting fullscreen via the browser) returns to normal mod
 ## Dark Mode
 
 The application supports dark mode via `prefers-color-scheme: dark`. When the user's operating system is set to a dark colour scheme, the UI automatically switches to a dark palette. There is no manual toggle — it follows the system preference.
+
+## Real-Time Updates
+
+All meeting state changes are broadcast to all connected participants in real time. This includes:
+
+- Agenda item additions, edits, deletions, and reordering
+- Queue additions, edits, deletions, and reordering
+- Current speaker and current topic changes
+- Agenda item advancement
+- Poll state, options, and reactions
+- Log entries for significant meeting events
+
+A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state.
+
+## Error Handling
+
+- Fatal errors (e.g. "Meeting not found") are shown as a full-page error with a link back to the home page.
+- Non-fatal errors (e.g. "Only chairs can...") are shown as a dismissible red banner at the top of the meeting page.
 
 ## Persistence
 
