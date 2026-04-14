@@ -115,6 +115,8 @@ When a participant enters the queue, their entry is automatically inserted at th
 
 Clicking one of the entry type buttons immediately adds the participant to the queue with a placeholder topic description. The entry appears in the queue for all connected users in real time, and the new entry's topic field opens in inline edit mode with the placeholder text selected so the participant can immediately type a more specific description. The Reply button is only visible when there is a current topic.
 
+If the participant presses Escape or clicks Cancel at any point during the initial editing of a new entry, the entry is removed from the queue. This applies regardless of whether the placeholder text has been modified. Cancelling an edit on an existing entry (opened via the Edit button) does not remove it.
+
 ### Queue Display
 
 Each queue entry shows:

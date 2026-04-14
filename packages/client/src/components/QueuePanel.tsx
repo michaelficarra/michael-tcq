@@ -571,6 +571,9 @@ function SortableQueueEntry({
   const socket = useSocket();
   const [editing, setEditing] = useState(initialEditing);
   const [editTopic, setEditTopic] = useState(initialEditing ? entry.topic : '');
+  // Track whether we're in the initial editing state for a freshly created entry.
+  // When true and the text hasn't been modified, Cancel/Escape removes the entry.
+  const [isNewEntry, setIsNewEntry] = useState(initialEditing);
 
   // When initialEditing transitions to true, enter edit mode and
   // notify the parent so it can clear the flag.
@@ -578,6 +581,7 @@ function SortableQueueEntry({
     if (initialEditing && !editing) {
       setEditTopic(entry.topic); // eslint-disable-line react-hooks/set-state-in-effect
       setEditing(true);
+      setIsNewEntry(true);
     }
     if (initialEditing) {
       onEditingStarted?.();
@@ -658,6 +662,7 @@ function SortableQueueEntry({
   /** Open the inline edit form, pre-populated with current topic. */
   function startEditing() {
     setEditTopic(entry.topic);
+    setIsNewEntry(false);
     setEditing(true);
   }
 
@@ -668,7 +673,17 @@ function SortableQueueEntry({
     if (!trimmed) return;
 
     socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
+    setIsNewEntry(false);
     setEditing(false);
+  }
+
+  /** Cancel editing. If this is a new entry with unmodified text, delete it. */
+  function handleEditCancel() {
+    if (isNewEntry) {
+      onDelete(entry.id);
+    } else {
+      setEditing(false);
+    }
   }
 
   // --- Editing mode: inline form ---
@@ -700,6 +715,7 @@ function SortableQueueEntry({
             type="text"
             value={editTopic}
             onChange={(e) => setEditTopic(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') handleEditCancel(); }}
             required
             aria-label="Topic description"
             // Focus and select all text on mount so the user can
@@ -718,7 +734,7 @@ function SortableQueueEntry({
           </button>
           <button
             type="button"
-            onClick={() => setEditing(false)}
+            onClick={handleEditCancel}
             className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
           >
             Cancel

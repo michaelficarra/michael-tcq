@@ -360,6 +360,105 @@ describe('QueuePanel', () => {
     expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'entry-42' });
   });
 
+  // -- Cancel/Escape on new entry --
+
+  it('removes new entry when Cancel is clicked with unmodified text', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
+      queuedSpeakerIds: ['q1'],
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    // Simulate auto-edit on a newly created entry — the QueuePanel receives
+    // autoEditEntryId which triggers initialEditing on the matching entry.
+    // For this test, we re-render with autoEditEntryId set.
+    const { unmount } = render(
+      <TestMeetingProvider meeting={meeting} user={chairUser}>
+        <SocketContext value={mockSocket}>
+          <QueuePanel
+            autoEditEntryId="q1"
+            onAddEntry={() => {}}
+            onAutoEditConsumed={() => {}}
+          />
+        </SocketContext>
+      </TestMeetingProvider>,
+    );
+
+    // The entry should be in edit mode with the placeholder text
+    const input = screen.getAllByLabelText('Topic description')[0];
+    expect(input).toHaveValue('New topic');
+
+    // Click Cancel without modifying text — should delete the entry
+    const cancelBtn = screen.getAllByText('Cancel')[0];
+    fireEvent.click(cancelBtn);
+    expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'q1' });
+
+    unmount();
+  });
+
+  it('removes new entry when Cancel is clicked even after modifying text', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
+      queuedSpeakerIds: ['q1'],
+    });
+
+    render(
+      <TestMeetingProvider meeting={meeting} user={chairUser}>
+        <SocketContext value={mockSocket}>
+          <QueuePanel
+            autoEditEntryId="q1"
+            onAddEntry={() => {}}
+            onAutoEditConsumed={() => {}}
+          />
+        </SocketContext>
+      </TestMeetingProvider>,
+    );
+
+    // Modify the text
+    const input = screen.getByLabelText('Topic description');
+    fireEvent.change(input, { target: { value: 'Modified text' } });
+
+    // Click Cancel — should still delete the entry since it's a new entry
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'q1' });
+  });
+
+  it('removes new entry when Escape is pressed with unmodified text', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
+      queuedSpeakerIds: ['q1'],
+    });
+
+    render(
+      <TestMeetingProvider meeting={meeting} user={chairUser}>
+        <SocketContext value={mockSocket}>
+          <QueuePanel
+            autoEditEntryId="q1"
+            onAddEntry={() => {}}
+            onAutoEditConsumed={() => {}}
+          />
+        </SocketContext>
+      </TestMeetingProvider>,
+    );
+
+    // Press Escape without modifying text — should delete the entry
+    const input = screen.getByLabelText('Topic description');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'q1' });
+  });
+
   // -- Drag-and-drop reorder handles --
 
   it('shows drag handles for chairs', () => {
