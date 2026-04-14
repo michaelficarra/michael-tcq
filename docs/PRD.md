@@ -30,7 +30,7 @@ The meeting creator is the initial chair. In addition to all participant capabil
 
 ### Admins
 
-Admins are designated by GitHub username via the `ADMIN_USERNAMES` environment variable. In addition to all participant capabilities, admins can:
+Admins are designated by GitHub username via server configuration. In addition to all participant capabilities, admins can:
 
 - View a list of all active meetings on the home page, showing each meeting's ID, chair count, agenda item count, queued speaker count, maximum concurrent connections, and time of last non-admin connection.
 - Delete any meeting (with a confirmation dialogue).
@@ -41,9 +41,9 @@ Admin connections are excluded from connection statistics.
 
 ## Authentication
 
-Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application.
+Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application. Unauthenticated users see a login page with a "Log in with GitHub" button.
 
-When GitHub OAuth is not configured (no `GITHUB_CLIENT_ID` environment variable), the server runs in mock auth mode with a fake user, allowing development without creating an OAuth App. In mock auth mode, a dev user-switcher in the navigation bar allows switching between different mock identities.
+When GitHub OAuth is not configured, the server runs in mock auth mode with a fake user, allowing development without creating an OAuth App. In mock auth mode, a dev user-switcher in the navigation bar allows switching between different mock identities.
 
 ## Meetings
 
@@ -84,7 +84,7 @@ The agenda is an ordered list of items. Each agenda item has:
 ### Agenda Management (Chair Only)
 
 - **Add** — Create a new agenda item by specifying a name, owner (GitHub username, validated against GitHub when OAuth is configured), and optional timebox. The form fields are: Agenda Item Name (flexible width), Owner (pre-populated with current user), and Timebox in minutes.
-- **Import** — When the agenda is empty, chairs can import an agenda from a URL pointing to a markdown document (e.g. a TC39 meeting agenda on GitHub). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. Markdown formatting in item names is preserved.
+- **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. Markdown formatting in item names is preserved.
 - **Edit** — Inline edit of an existing agenda item's name, owner, and timebox.
 - **Delete** — Remove an agenda item.
 - **Reorder** — Drag-and-drop to rearrange agenda items. The entire agenda item row is the drag target.
@@ -95,7 +95,8 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 
 ### Agenda Display
 
-The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), owner (with GitHub avatar, display name, and organisation), and timebox duration if set.
+The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), owner (with GitHub avatar, display name, and organisation), and timebox duration if set. Items owned by the current user are visually distinguished with a coloured left border.
+
 ## Queue
 
 The queue is the core of the application. It determines who speaks next.
@@ -104,7 +105,7 @@ The queue is the core of the application. It determines who speaks next.
 
 There are four types of queue entry, listed here from highest to lowest priority:
 
-1. **Point of Order** — procedural matters (displayed in red)
+1. **Point of Order** — procedural matters (displayed in red, with a highlighted background across the full row)
 2. **Clarifying Question** — questions for clarification (displayed in green)
 3. **Reply** — a response to the current topic being discussed (displayed in blue); only available when there is a current topic
 4. **New Topic** — a new line of discussion (displayed in a distinct colour)
@@ -126,12 +127,13 @@ Each queue entry shows:
 - Topic description
 - Speaker name, organisation, and GitHub avatar
 
-Chairs see a drag handle (⠿) to the left of each entry for reordering. Participants see a drag handle on their own entries. Edit and delete buttons appear on the right side: chairs see them on all entries, participants see them on their own entries only.
+The user's own queue entries are visually distinguished with a coloured left border. Chairs see a drag handle (⠿) to the left of each entry for reordering. Participants see a drag handle on their own entries. Edit and delete buttons appear on the right side: chairs see them on all entries, participants see them on their own entries only.
 
 ### Queue Advancement
 
 - **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue.
 - If the queue is empty when advancement occurs, the current speaker is cleared.
+- If two chairs attempt to advance the speaker or agenda item simultaneously, the second action is rejected to prevent conflicts.
 
 ### Queue Reordering
 
@@ -189,7 +191,7 @@ Timers update every second and are displayed in M:SS format (or H:MM:SS for dura
 3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's owner automatically becomes the current speaker.
 4. Participants enter the queue to discuss the item.
 5. The chair advances through the queue.
-6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's owner becomes the current speaker. The queue and current topic are cleared.
+6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's owner becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
 7. This repeats until the agenda is exhausted.
 
 Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
@@ -211,7 +213,7 @@ When a chair clicks **Poll**, a setup form appears with an optional topic/questi
 | 🤷 | Indifferent |
 | 😕 | Unconvinced |
 
-Chairs can add, remove, and edit options before starting the poll. Each option's emoji is entered via a text input (the OS emoji picker can be used). A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin.
+Chairs can add, remove, and edit options before starting the poll. Each option's emoji is selected via a dedicated emoji picker with search and categories. A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin.
 
 ### Reactions
 
@@ -271,7 +273,7 @@ The Log tab shows log entries in reverse chronological order (most recent first)
 
 ### Persistence
 
-The log is stored as an array of entries within the `MeetingState` and is persisted alongside all other meeting data. Log entries are append-only — they are never edited or deleted during the meeting's lifetime. The log is broadcast to clients as part of the normal `state` event.
+The log is permanent and cannot be edited or deleted during the meeting's lifetime. It is available to all connected participants and updated in real time.
 
 ### Keyboard Shortcut
 
@@ -290,19 +292,16 @@ All meeting state changes are broadcast to all connected participants in real ti
 - Poll state, options, and reactions
 - Log entries for significant meeting events
 
-The server is the single source of truth. Clients send actions and wait for the server to broadcast the updated state — no optimistic updates.
-
 A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state.
 
 ## Error Handling
 
-- Server-side validation errors are sent to clients via a Socket.IO `error` event.
 - Fatal errors (e.g. "Meeting not found") are shown as a full-page error with a link back to the home page.
 - Non-fatal errors (e.g. "Only chairs can...") are shown as a dismissible red banner at the top of the meeting page.
 
 ## User Identity Display
 
-Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from `https://github.com/{username}.png` and hidden gracefully if the image fails to load.
+Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from GitHub and hidden gracefully if the image fails to load.
 
 ## Navigation
 
@@ -350,11 +349,4 @@ The application supports dark mode via `prefers-color-scheme: dark`. When the us
 
 ## Persistence
 
-Meeting state is held in memory on the server and periodically synchronised to a persistent store (every 30 seconds for changed meetings, immediately for high-value events like agenda/speaker advancement). On server startup, meetings are restored from the store. Meetings are automatically deleted 90 days after their most recent client connection. An hourly sweep removes expired meetings, and any expired meetings found on startup are pruned during restore.
-
-Two store implementations:
-
-- **File store** (default, for local development) — each meeting is a JSON file on disk.
-- **Firestore store** (for production) — each meeting is a document in a Firestore collection.
-
-Sessions are stored in the same backing store (in-memory for file mode, Firestore for production).
+Meeting state is persisted and survives server restarts. Meetings are automatically deleted 90 days after their most recent client connection.
