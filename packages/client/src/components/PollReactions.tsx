@@ -56,9 +56,13 @@ export function PollReactions() {
       {/* Poll topic and timer */}
       <div className="flex items-center gap-3 mb-4">
         {meeting.pollTopic && (
-          <p className="text-stone-800 dark:text-stone-200 font-medium max-w-[50vw]">{meeting.pollTopic}</p>
+          <p className="text-stone-800 dark:text-stone-200 font-medium">{meeting.pollTopic}</p>
         )}
-        {meeting.pollStartTime && <CountUpTimer since={meeting.pollStartTime} />}
+        {meeting.pollStartTime && (
+          <span className="ml-auto">
+            <CountUpTimer since={meeting.pollStartTime} />
+          </span>
+        )}
       </div>
 
       {/* Reaction buttons */}

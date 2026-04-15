@@ -579,7 +579,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           aria-label="Active poll"
           aria-modal="true"
         >
-          <div className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[calc(100vw-2rem)]">
+          <div className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[80vw]">
             <PollReactions />
           </div>
         </div>
