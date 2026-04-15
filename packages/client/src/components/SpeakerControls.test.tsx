@@ -22,6 +22,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     currentTopicEntryId: undefined,
     queueEntries: {},
     queuedSpeakerIds: [],
+    queueClosed: false,
     reactions: [],
     trackPoll: false,
     pollOptions: [],
@@ -84,5 +85,23 @@ describe('SpeakerControls', () => {
   it('has an accessible group label', () => {
     renderControls(makeMeeting());
     expect(screen.getByRole('group', { name: 'Queue entry types' })).toBeInTheDocument();
+  });
+
+  it('disables buttons when queue is closed and user is not a chair', () => {
+    const meeting = makeMeeting({ queueClosed: true });
+    renderControls(meeting);
+
+    expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeDisabled();
+  });
+
+  it('enables buttons when queue is closed and user IS a chair', () => {
+    const meeting = makeMeeting({ queueClosed: true, chairIds: ['alice'] });
+    renderControls(meeting);
+
+    expect(screen.getByRole('button', { name: 'New Topic' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
   });
 });

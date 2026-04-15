@@ -504,6 +504,8 @@ describe('Socket.IO integration', () => {
           organisation: '',
         },
       ]);
+      // Open the queue so the test reaches the asUsername check
+      ctx.meetingManager.setQueueClosed(meeting.id, false);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1685,6 +1687,110 @@ describe('Socket.IO integration', () => {
       if (finished?.type === 'agenda-item-finished') {
         expect(finished.remainingQueue).toBeUndefined();
       }
+    });
+  });
+
+  describe('queue:setClosed', () => {
+    it('chair can close and open the queue', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Close the queue
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:setClosed', { closed: true });
+      let state = await statePromise;
+      expect(state.queueClosed).toBe(true);
+
+      // Re-open the queue
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:setClosed', { closed: false });
+      state = await statePromise;
+      expect(state.queueClosed).toBe(false);
+    });
+
+    it('rejects from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:setClosed', { closed: true });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+    });
+
+    it('non-chair queue:add rejected when queue is closed', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+      // Close the queue
+      ctx.meetingManager.setQueueClosed(meeting.id, true);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:add', { type: 'topic', topic: 'Should fail' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/queue is closed/i);
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
+    });
+
+    it('chair can add entries when queue is closed', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Close the queue
+      ctx.meetingManager.setQueueClosed(meeting.id, true);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'topic', topic: 'Chair entry' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakerIds).toHaveLength(1);
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Chair entry');
+    });
+
+    it('meeting:nextAgendaItem reopens the queue', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 1', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 2', owner);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start the meeting (advances to first agenda item)
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      let state = await statePromise;
+      expect(state.queueClosed).toBe(false);
+
+      // Close the queue
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:setClosed', { closed: true });
+      state = await statePromise;
+      expect(state.queueClosed).toBe(true);
+
+      // Advance to next agenda item — should reopen queue
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
+      state = await statePromise;
+      expect(state.queueClosed).toBe(false);
+    });
+
+    it('queue is closed by default before meeting starts', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      await joinMeeting(meeting.id);
+      const state = ctx.meetingManager.get(meeting.id)!;
+      expect(state.queueClosed).toBe(true);
     });
   });
 });

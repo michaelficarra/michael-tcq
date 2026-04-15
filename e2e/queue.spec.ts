@@ -7,6 +7,7 @@ import {
   startMeeting,
   addQueueEntry,
   queueSection,
+  switchUser,
 } from './helpers.js';
 
 /**
@@ -381,5 +382,93 @@ test.describe('Timers', () => {
 
     const speaking = queueSection(page, 'Speaking');
     await expect(speaking.getByText(/\d+:\d{2}/)).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Queue Close / Open
+// ---------------------------------------------------------------------------
+
+test.describe('Queue Close / Open', () => {
+  test('queue is closed before meeting starts for non-chairs, open after starting', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item 1');
+
+    // Switch to a non-chair user before starting
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    // Before starting: entry buttons should be disabled for non-chair
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    await expect(page.getByText('The queue is closed.')).toBeVisible();
+
+    // Switch back to chair and start the meeting
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await page.getByRole('button', { name: 'Start Meeting' }).click();
+
+    // Switch to non-chair — buttons should be enabled after start
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
+    await expect(page.getByText('The queue is closed.')).not.toBeVisible();
+  });
+
+  test('chair can close and reopen the queue', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Close the queue
+    await page.getByRole('button', { name: 'Close Queue' }).click();
+    await expect(page.getByRole('button', { name: 'Open Queue' })).toBeVisible();
+
+    // Reopen the queue
+    await page.getByRole('button', { name: 'Open Queue' }).click();
+    await expect(page.getByRole('button', { name: 'Close Queue' })).toBeVisible();
+  });
+
+  test('non-chair sees disabled buttons when queue is closed', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Close the queue as chair
+    await page.getByRole('button', { name: 'Close Queue' }).click();
+
+    // Switch to a non-chair user
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    // Buttons should be disabled
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    await expect(page.getByText('The queue is closed.')).toBeVisible();
+
+    // Switch back to chair and reopen
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await page.getByRole('button', { name: 'Open Queue' }).click();
+
+    // Switch back to non-chair — buttons should be enabled
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
+    await expect(page.getByText('The queue is closed.')).not.toBeVisible();
+  });
+
+  test('advancing agenda item reopens a closed queue', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item 1');
+    await addAgendaItem(page, 'Item 2');
+    await startMeeting(page);
+
+    // Close the queue
+    await page.getByRole('button', { name: 'Close Queue' }).click();
+    await expect(page.getByRole('button', { name: 'Open Queue' })).toBeVisible();
+
+    // Advance to next agenda item
+    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+
+    // Queue should be reopened
+    await expect(page.getByRole('button', { name: 'Close Queue' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
   });
 });

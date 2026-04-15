@@ -12,7 +12,7 @@
  */
 
 import type { QueueEntryType } from '@tcq/shared';
-import { useMeetingState } from '../contexts/MeetingContext.js';
+import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 
 /** Configuration for each entry type button. */
 const ENTRY_TYPES: {
@@ -62,8 +62,11 @@ interface SpeakerControlsProps {
 
 export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
   const { meeting } = useMeetingState();
+  const isChair = useIsChair();
 
   if (!meeting) return null;
+
+  const disabled = meeting.queueClosed && !isChair;
 
   return (
     <div>
@@ -77,9 +80,11 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
             <button
               key={config.type}
               onClick={() => onAddEntry(config.type, config.placeholder)}
+              disabled={disabled}
               className={`text-white text-sm font-medium px-3 py-1.5 rounded
-                         transition-colors cursor-pointer
+                         transition-colors
                          focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-stone-900 focus:ring-blue-500
+                         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                          ${config.bgClass}`}
             >
               {config.label}

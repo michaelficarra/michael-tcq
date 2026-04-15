@@ -417,6 +417,13 @@ export function registerSocketHandlers(
         return;
       }
 
+      // Reject if queue is closed and user is not a chair
+      const addMeeting = meetingManager.get(joinedMeetingId);
+      if (addMeeting?.queueClosed && !meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'The queue is closed');
+        return;
+      }
+
       // Determine who the entry is for: the current user, or a specified
       // user if the chair provided asUsername.
       let entryUser = user;
@@ -564,6 +571,18 @@ export function registerSocketHandlers(
         return;
       }
 
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- queue:setClosed ---
+    // Chair opens or closes the queue to new entries from non-chair users.
+    socket.on('queue:setClosed', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can open or close the queue');
+        return;
+      }
+      meetingManager.setQueueClosed(joinedMeetingId, payload.closed);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 

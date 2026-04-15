@@ -117,6 +117,7 @@ describe('MeetingManager', () => {
       currentTopicEntryId: undefined,
       queueEntries: {},
       queuedSpeakerIds: [],
+      queueClosed: false,
       reactions: [],
       trackPoll: false,
       pollOptions: [],

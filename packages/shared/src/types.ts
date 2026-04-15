@@ -132,6 +132,9 @@ export interface MeetingState {
   /** Ordered list of queue entry IDs for speakers waiting to speak. */
   queuedSpeakerIds: string[];
 
+  /** Whether the queue is closed to new entries from non-chair users. */
+  queueClosed: boolean;
+
   /** Whether a poll is currently active. */
   trackPoll: boolean;
 

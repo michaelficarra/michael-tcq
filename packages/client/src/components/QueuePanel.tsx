@@ -379,9 +379,18 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             Speaker Queue
           </h2>
 
-          {/* Copy/Restore buttons — chairs only */}
+          {/* Queue management buttons — chairs only */}
           {isChair && (
             <>
+              {currentAgendaItem && (
+                <button
+                  onClick={() => socket?.emit('queue:setClosed', { closed: !meeting.queueClosed })}
+                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+                >
+                  {meeting.queueClosed ? 'Open Queue' : 'Close Queue'}
+                </button>
+              )}
               {queuedSpeakers.length > 0 && (
                 <button
                   onClick={handleCopyQueue}
@@ -465,6 +474,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               </ol>
             </SortableContext>
           </DndContext>
+        )}
+
+        {meeting.queueClosed && !isChair && (
+          <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">The queue is closed.</p>
         )}
       </section>
 

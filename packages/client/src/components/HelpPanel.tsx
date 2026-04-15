@@ -68,9 +68,11 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
           </li>
         </ul>
 
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
           Your own entries are marked with a teal left border so you can spot them quickly. Point-of-order entries are
-          highlighted with a red border and background to reflect their urgency.
+          highlighted with a red border and background to reflect their urgency. A chair may close the queue at any time
+          to stop accepting new entries — when this happens, the entry type buttons will be disabled. You will be able
+          to add entries again once the chair reopens the queue or advances to the next agenda item.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing Your Entries</h4>
@@ -195,6 +197,25 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             Count-up timers are shown for the current agenda item, current topic, and current speaker. The agenda item
             timer turns bold red when the timebox is exceeded.
+          </p>
+
+          <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Closing the Queue</h4>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            Use the <strong>Close Queue</strong> button in the Speaker Queue header to prevent participants from adding
+            new entries. When the queue is closed:
+          </p>
+          <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-2 space-y-1 list-disc">
+            <li>
+              Participants' entry type buttons are disabled and keyboard shortcuts for adding entries are blocked.
+            </li>
+            <li>
+              Chairs can still add entries — both directly and via <strong>Restore Queue</strong>.
+            </li>
+            <li>Existing entries remain in the queue and can still be edited, reordered, or removed.</li>
+          </ul>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+            The queue is closed by default before the meeting starts. It automatically reopens when advancing to a new
+            agenda item. Click <strong>Open Queue</strong> to reopen it manually at any time.
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Polls</h4>

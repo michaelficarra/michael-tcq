@@ -25,6 +25,7 @@ The meeting creator is the initial chair. In addition to all participant capabil
 - Start the meeting / advance to the next agenda item
 - Advance to the next speaker
 - Edit, reorder, and remove any entry in the speaker queue
+- Close and reopen the queue to prevent or allow new entries from participants
 - Initiate, configure, and stop polls
 - Copy poll results to the clipboard
 
@@ -134,6 +135,12 @@ There are four types of queue entry, listed here from highest to lowest priority
 4. **New Topic** — a new line of discussion (displayed in a distinct colour)
 
 When a participant enters the queue, their entry is automatically inserted at the correct position based on type priority. Within the same type, entries are ordered FIFO (first in, first out). Duplicate entries by the same user are allowed.
+
+### Queue Open / Close
+
+The queue can be open or closed. When the queue is closed, non-chair participants cannot add new entries — the entry type buttons are disabled and a "The queue is closed." message is shown. Chairs can still add entries when the queue is closed (e.g. via Restore Queue or on behalf of others).
+
+The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries (n, r, c, p) are also blocked for non-chairs when the queue is closed.
 
 ### Entering the Queue
 

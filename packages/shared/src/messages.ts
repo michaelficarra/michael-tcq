@@ -58,6 +58,11 @@ export interface QueueRemovePayload {
   id: string;
 }
 
+/** Payload for opening or closing the queue to non-chair entries. */
+export interface QueueSetClosedPayload {
+  closed: boolean;
+}
+
 /**
  * Payload for reordering a queue entry. Chair only.
  *
@@ -200,6 +205,12 @@ export interface ClientToServerEvents {
    * neighbours at the new position.
    */
   'queue:reorder': (payload: QueueReorderPayload) => void;
+
+  /**
+   * Open or close the queue to new entries from non-chair users.
+   * Chair only. When closed, only chairs can add queue entries.
+   */
+  'queue:setClosed': (payload: QueueSetClosedPayload) => void;
 
   /**
    * Advance to the next speaker. Chair only. Pops the first entry from

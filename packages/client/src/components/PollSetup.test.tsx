@@ -18,6 +18,7 @@ const baseMeeting: MeetingState = {
   currentTopicEntryId: undefined,
   queueEntries: {},
   queuedSpeakerIds: [],
+  queueClosed: false,
   reactions: [],
   trackPoll: false,
   pollOptions: [],

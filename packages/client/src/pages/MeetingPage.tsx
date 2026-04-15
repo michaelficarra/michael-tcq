@@ -103,6 +103,8 @@ function MeetingPageInner() {
 
   const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
 
+  const isChair = useIsChair();
+
   /**
    * Add a queue entry with placeholder text, then trigger auto-edit on
    * the new entry. Used by both keyboard shortcuts and the SpeakerControls
@@ -111,6 +113,7 @@ function MeetingPageInner() {
   const addQueueEntry = useCallback(
     (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
       if (!socket || !meeting) return;
+      if (meeting.queueClosed && !isChair) return;
       setActiveTab('queue');
 
       // Capture current entry IDs so we can identify the new one
@@ -124,12 +127,10 @@ function MeetingPageInner() {
 
       socket.emit('queue:add', { type, topic: placeholder });
     },
-    [socket, meeting],
+    [socket, meeting, isChair],
   );
 
   // --- Keyboard shortcuts ---
-
-  const isChair = useIsChair();
 
   /** Advance to the next speaker (chair only). */
   const advanceNextSpeaker = useCallback(() => {

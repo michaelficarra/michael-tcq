@@ -31,6 +31,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     currentTopicEntryId: undefined,
     queueEntries: {},
     queuedSpeakerIds: [],
+    queueClosed: false,
     reactions: [],
     trackPoll: false,
     pollOptions: [],
@@ -518,5 +519,17 @@ describe('QueuePanel', () => {
     expect(screen.getByText('Agenda Item')).toBeInTheDocument();
     expect(screen.getByText('Speaking')).toBeInTheDocument();
     expect(screen.getByText('Speaker Queue')).toBeInTheDocument();
+  });
+
+  // -- Queue closed message --
+
+  it('shows "The queue is closed." at the bottom of the speaker queue for non-chairs', () => {
+    renderQueue(makeMeeting({ queueClosed: true }), otherUser);
+    expect(screen.getByText('The queue is closed.')).toBeInTheDocument();
+  });
+
+  it('does not show closed message when user is a chair', () => {
+    renderQueue(makeMeeting({ queueClosed: true, chairIds: ['alice'] }), chairUser);
+    expect(screen.queryByText('The queue is closed.')).not.toBeInTheDocument();
   });
 });

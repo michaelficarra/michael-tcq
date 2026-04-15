@@ -26,6 +26,7 @@ export type {
   QueueEditPayload,
   QueueRemovePayload,
   QueueReorderPayload,
+  QueueSetClosedPayload,
   PollStartPayload,
   PollReactPayload,
   NextSpeakerPayload,

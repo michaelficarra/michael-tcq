@@ -21,6 +21,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     currentTopicEntryId: undefined,
     queueEntries: {},
     queuedSpeakerIds: [],
+    queueClosed: false,
     reactions: [],
     trackPoll: false,
     pollOptions: [],

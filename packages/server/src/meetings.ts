@@ -53,6 +53,9 @@ export class MeetingManager {
         await this.store.remove(meeting.id);
       } else {
         migrateLegacyMeeting(meeting);
+        // Default queueClosed for meetings persisted before this field existed
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration for legacy persisted data
+        if ((meeting as any).queueClosed === undefined) meeting.queueClosed = false;
         this.meetings.set(meeting.id, meeting);
       }
     }
@@ -86,6 +89,7 @@ export class MeetingManager {
       currentTopicEntryId: undefined,
       queueEntries: {},
       queuedSpeakerIds: [],
+      queueClosed: true,
       reactions: [],
       trackPoll: false,
       pollOptions: [],
@@ -331,6 +335,9 @@ export class MeetingManager {
     // Clear the current topic for the new agenda item
     meeting.currentTopicEntryId = undefined;
 
+    // Re-open the queue for the new agenda item
+    meeting.queueClosed = false;
+
     this.markDirty(meetingId);
     return nextItem;
   }
@@ -410,6 +417,15 @@ export class MeetingManager {
     meeting.queuedSpeakerIds.splice(index, 1);
     delete meeting.queueEntries[entryId];
 
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /** Open or close the queue to new entries from non-chair users. */
+  setQueueClosed(meetingId: string, closed: boolean): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+    meeting.queueClosed = closed;
     this.markDirty(meetingId);
     return true;
   }
