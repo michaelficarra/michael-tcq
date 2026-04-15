@@ -12,7 +12,7 @@
 
 ```sh
 git clone <repository-url>
-cd tcq
+cd <repository-name>
 npm install
 ```
 
@@ -24,9 +24,9 @@ npm run dev
 
 This starts both the Express API server (port 3000) and the Vite dev server (port 5173) concurrently. Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-The Vite dev server proxies API, auth, and WebSocket requests to the Express server, so you should always access the app through port 5173 during development.
+The Vite dev server proxies `/api`, `/auth`, and `/socket.io` requests to the Express server, so you should always access the app through port 5173 during development.
 
-**Authentication:** By default, the server runs in mock auth mode — a fake user is automatically logged in on every request, so you can develop and test without configuring GitHub OAuth. To test with real GitHub authentication, see the section below.
+**Authentication:** By default, the server runs in mock auth mode — the authentication button automatically logs you into an administator account so you can develop and test without configuring GitHub OAuth. Click the user in the top right to change the mocked user. To test with real GitHub authentication, see the section below.
 
 ### 3. (Optional) Configure GitHub OAuth
 
@@ -56,32 +56,125 @@ packages/
   shared/   — TypeScript types and constants shared between client and server
   server/   — Express + Socket.IO backend
   client/   — React + Vite frontend
+e2e/        — Playwright end-to-end tests
 ```
 
 ## Available Scripts
 
-| Command             | Description                                            |
-| ------------------- | ------------------------------------------------------ |
-| `npm run dev`       | Start both servers in development mode with hot reload |
-| `npm run build`     | Build all packages for production                      |
-| `npm test`          | Run all tests                                          |
-| `npm run typecheck` | Type-check all packages                                |
+### Root workspace
 
-## Running Tests
+| Command                | Description                                            |
+| ---------------------- | ------------------------------------------------------ |
+| `npm run dev`          | Start both servers in development mode with hot reload |
+| `npm run build`        | Build all packages for production                      |
+| `npm run typecheck`    | Type-check all packages                                |
+| `npm run lint`         | Lint server and client                                 |
+| `npm run format`       | Auto-fix formatting with Prettier                      |
+| `npm run format:check` | Check formatting without making changes                |
+| `npm test`             | Run all unit and integration tests                     |
+| `npm run test:e2e`     | Run Playwright end-to-end tests                        |
+
+### Per-workspace scripts
+
+Lint, typecheck, and test commands can be scoped to a single workspace:
 
 ```sh
-# Run all tests
-npm test
-
-# Run tests for a specific package
+npm run typecheck -w packages/shared
+npm run lint -w packages/client
 npm test -w packages/server
-npm test -w packages/client
+```
 
-# Run tests in watch mode
+Watch mode is available per-workspace:
+
+```sh
+npm run test:watch -w packages/server
+npm run test:watch -w packages/client
+```
+
+## Unit and Integration Tests
+
+Tests use [Vitest](https://vitest.dev/).
+
+Run server and client tests together:
+
+```sh
+npm test
+```
+
+### Server Tests
+
+**Server tests** (`packages/server/`) run in a Node environment.
+
+```sh
+npm test -w packages/server
+```
+
+Watch mode (re-runs on file changes)
+
+```sh
 npm run test:watch -w packages/server
 ```
 
-## Code Style
+### Client Tests
 
-- TypeScript throughout (strict mode enabled).
-- The frontend uses React with Tailwind CSS for styling.
+**Client tests** (`packages/client/`) run in a jsdom environment using [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/).
+
+```sh
+npm test -w packages/client
+```
+
+Watch mode (re-runs on file changes)
+
+```sh
+npm run test:watch -w packages/client
+```
+
+### End-to-End Tests
+
+E2E tests use [Playwright](https://playwright.dev/) and live in the `e2e/` directory. They each align directly with a claim from [`docs/PRD.md`](PRD.md).
+
+#### Setup
+
+Install the Playwright browsers (first time only, or after upgrading `@playwright/test`):
+
+```sh
+npx playwright install --with-deps
+```
+
+#### Running
+
+```sh
+npm run test:e2e
+```
+
+This automatically builds the shared package, starts the server and client on test ports (3001 and 5174), runs all tests, and tears everything down afterwards. A fresh temporary data directory is created for each run.
+
+Tests run against **Chromium, Firefox, and WebKit** in parallel.
+
+#### Useful flags
+
+```sh
+# Run tests in a single browser only
+npm run test:e2e -- --project=chromium
+
+# Run tests matching a pattern
+npm run test:e2e -- --grep "Queue"
+
+# Run tests in headed mode (opens a visible browser)
+npm run test:e2e -- --headed
+
+# Open the Playwright Inspector for step-by-step debugging
+npm run test:e2e -- --debug
+```
+
+## Validating Changes
+
+Run these checks locally before pushing (CI will run them too):
+
+```sh
+npm run typecheck
+npm run format:check
+npm run lint
+npm test
+npm run test:e2e
+```
