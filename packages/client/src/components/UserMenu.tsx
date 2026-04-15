@@ -17,12 +17,19 @@ export function UserMenu() {
   }
 
   return (
-    <a
-      href="/auth/logout"
-      className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
-    >
-      Log Out
-    </a>
+    <span className="inline-flex items-center gap-3">
+      {user && (
+        <span className="text-sm text-stone-500 dark:text-stone-400">
+          <UserBadge user={user} size={20} />
+        </span>
+      )}
+      <a
+        href="/auth/logout"
+        className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
+      >
+        Log Out
+      </a>
+    </span>
   );
 }
 

@@ -75,6 +75,24 @@ test.describe('Home Page', () => {
   });
 });
 
+test.describe('User Badge in Nav', () => {
+  test('user badge with avatar and name is visible in the navigation bar', async ({ page }) => {
+    await waitForHomePage(page);
+    const nav = page.getByRole('navigation');
+    // Badge should show an avatar image and the user's name
+    await expect(nav.locator('img').first()).toBeVisible();
+    await expect(nav).toContainText('Admin');
+  });
+
+  test('user badge is visible on the meeting page nav bar', async ({ page }) => {
+    const id = await createMeeting(page);
+    await page.goto(`/meeting/${id}`);
+    const nav = page.getByRole('navigation');
+    await expect(nav.locator('img').first()).toBeVisible();
+    await expect(nav).toContainText('Admin');
+  });
+});
+
 test.describe('Mock Auth User Switcher', () => {
   test('clicking username opens a text input for switching users', async ({ page }) => {
     await waitForHomePage(page);
