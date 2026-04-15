@@ -233,8 +233,8 @@ function MeetingPageInner() {
               onAutoEditConsumed={() => setAutoEditEntryId(null)}
             />
           )}
-          {!presentationMode && activeTab === 'log' && <LogsPanel />}
-          {!presentationMode && activeTab === 'help' && <HelpPanel />}
+          {activeTab === 'log' && <LogsPanel />}
+          {activeTab === 'help' && <HelpPanel />}
         </main>
 
         {/* Connection status indicator */}

@@ -333,7 +333,7 @@ export function LogsPanel() {
   const isEmpty = reversedLog.length === 0 && !hasCurrentTopic;
 
   return (
-    <div role="tabpanel" aria-label="Logs" className="p-4 sm:p-6 max-w-3xl mx-auto">
+    <div role="tabpanel" aria-label="Log" className="p-4 sm:p-6 max-w-3xl mx-auto">
       {isEmpty && (
         <p className="text-stone-500 dark:text-stone-400 text-sm">
           No events yet. The log will populate as the meeting progresses.

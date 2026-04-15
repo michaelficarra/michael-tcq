@@ -162,4 +162,37 @@ describe('MeetingPage tab–hash sync', () => {
       expect(screen.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
     });
   });
+
+  describe('presentation mode', () => {
+    /** Enter presentation mode by pressing the 'f' shortcut key. */
+    function enterPresentationMode() {
+      act(() => {
+        fireEvent.keyDown(document, { key: 'f' });
+      });
+    }
+
+    it('renders the agenda panel in presentation mode', () => {
+      renderMeetingPage('#agenda');
+      enterPresentationMode();
+      expect(screen.getByRole('tabpanel', { name: 'Agenda' })).toBeInTheDocument();
+    });
+
+    it('renders the queue panel in presentation mode', () => {
+      renderMeetingPage('#queue');
+      enterPresentationMode();
+      expect(screen.getByRole('tabpanel', { name: 'Queue' })).toBeInTheDocument();
+    });
+
+    it('renders the log panel in presentation mode', () => {
+      renderMeetingPage('#log');
+      enterPresentationMode();
+      expect(screen.getByRole('tabpanel', { name: 'Log' })).toBeInTheDocument();
+    });
+
+    it('renders the help panel in presentation mode', () => {
+      renderMeetingPage('#help');
+      enterPresentationMode();
+      expect(screen.getByRole('tabpanel', { name: 'Help' })).toBeInTheDocument();
+    });
+  });
 });
