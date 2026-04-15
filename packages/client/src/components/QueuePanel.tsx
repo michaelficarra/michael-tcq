@@ -511,7 +511,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       {/* Advance agenda item confirmation modal */}
       {showAdvanceConfirm && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
           onClick={() => setShowAdvanceConfirm(false)}
           role="dialog"
           aria-label="Confirm agenda advancement"
@@ -554,7 +554,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       {/* Poll setup modal — chair only (lazy-loaded to keep emoji-mart out of the main bundle) */}
       {showPollSetup && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
           onClick={() => setShowPollSetup(false)}
           role="dialog"
           aria-label="Create poll"
@@ -574,7 +574,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       {/* Active poll modal — non-dismissable, visible to all */}
       {meeting.trackPoll && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
           role="dialog"
           aria-label="Active poll"
           aria-modal="true"

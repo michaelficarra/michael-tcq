@@ -127,7 +127,7 @@ export function AdminPanel() {
       {/* Delete confirmation modal */}
       {deleteConfirm && (
         <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
+          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
           onClick={() => setDeleteConfirm(null)}
           role="dialog"
           aria-label="Confirm deletion"
