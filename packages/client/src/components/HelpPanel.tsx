@@ -74,14 +74,10 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
           to stop accepting new entries — when this happens, the entry type buttons will be disabled. You will be able
           to add entries again once the chair reopens the queue or advances to the next agenda item.
         </p>
-
-        <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing Your Entries</h4>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           You can <strong>edit</strong> or <strong>delete</strong> your own queue entries at any time. You can also drag
           your own entries <em>downward</em> to defer your position in the queue (e.g. to let someone else speak first).
-        </p>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          Queue topics and agenda item names support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,{' '}
+          Queue topics support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,{' '}
           <code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">
             ~~strikethrough~~
           </code>
@@ -151,22 +147,21 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Creating a Meeting</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-            On the home page, click <strong>Start a New Meeting</strong>. You'll be the initial chair. Share the
-            resulting meeting ID or URL with participants. Additional chairs can be added once the meeting is created.
+            On the home page, click <strong>Start a New Meeting</strong>. Share the resulting meeting ID or URL with
+            participants. You'll be the initial chair. On the <strong>Agenda</strong> tab, you can add or remove other
+            chairs (but not yourself).
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             On the <strong>Agenda</strong> tab, click <strong>New Agenda Item</strong> to add items. Each item has a
             name, an owner (the person who will present it), and an optional timebox in minutes. Drag items to reorder
-            them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items.
-          </p>
-          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-            You can <strong>import an agenda</strong> from a URL to a markdown document (e.g. a TC39 meeting agenda on
-            GitHub). The parser extracts items from both numbered lists and markdown tables.
+            them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items. Agenda item names
+            support basic inline markdown (bold, italic, strikethrough, code, and links).
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-            The chair list can be edited from the Agenda tab — you can add or remove other chairs (but not yourself).
+            You can <strong>import an agenda</strong> from a URL to a markdown document (e.g. a TC39 meeting agenda on
+            GitHub). The parser extracts items from both numbered lists and markdown tables.
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Running the Meeting</h4>
@@ -198,6 +193,22 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
             Count-up timers are shown for the current agenda item, current topic, and current speaker. The agenda item
             timer turns bold red when the timebox is exceeded.
           </p>
+
+          <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Copy and Restore Queue</h4>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            Next to the "Speaker Queue" heading, you'll find <strong>Copy Queue</strong> and{' '}
+            <strong>Restore Queue</strong> buttons.
+          </p>
+          <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
+            <li>
+              <strong>Copy Queue</strong> copies the queue to your clipboard in a text format (one entry per line,
+              including the author's username).
+            </li>
+            <li>
+              <strong>Restore Queue</strong> lets you paste entries in the same format to bulk-add them. Entries that
+              include a username in parentheses are added as that user, preserving the original author.
+            </li>
+          </ul>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Closing the Queue</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
@@ -239,22 +250,6 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
               Click <strong>Stop Poll</strong> when done. The results will be recorded in the meeting log.
             </li>
           </ol>
-
-          <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Copy and Restore Queue</h4>
-          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-            Next to the "Speaker Queue" heading, you'll find <strong>Copy Queue</strong> and{' '}
-            <strong>Restore Queue</strong> buttons.
-          </p>
-          <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
-            <li>
-              <strong>Copy Queue</strong> copies the queue to your clipboard in a text format (one entry per line,
-              including the author's username).
-            </li>
-            <li>
-              <strong>Restore Queue</strong> lets you paste entries in the same format to bulk-add them. Entries that
-              include a username in parentheses are added as that user, preserving the original author.
-            </li>
-          </ul>
         </section>
       )}
     </div>
