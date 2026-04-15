@@ -28,19 +28,23 @@ const app = express();
 const httpServer = createServer(app);
 
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  // In development/test, the Vite dev server proxies Socket.IO requests to
-  // Express on a different port, so we need to allow its origin for CORS.
-  // Accept any localhost origin to avoid coupling to specific port numbers.
-  cors: {
-    origin: (origin, callback) => {
-      if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  },
+  // In production, the client is served from the same Express server (same
+  // origin), so no CORS configuration is needed. In development, the Vite
+  // dev server proxies Socket.IO requests from a different port, so we
+  // allow any localhost origin.
+  cors:
+    envSuffix === 'production'
+      ? undefined
+      : {
+          origin: (origin, callback) => {
+            if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+              callback(null, true);
+            } else {
+              callback(new Error('Not allowed by CORS'));
+            }
+          },
+          credentials: true,
+        },
 });
 
 const PORT = process.env.PORT ?? 3000;
