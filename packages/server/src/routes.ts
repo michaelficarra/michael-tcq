@@ -190,17 +190,46 @@ export function createMeetingRoutes(
       return;
     }
 
-    // Fetch the markdown
+    // Fetch the markdown (with timeout and size limit)
+    const MAX_BODY_SIZE = 1024 * 1024; // 1 MB
     let markdown: string;
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (!response.ok) {
         res.status(502).json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` });
         return;
       }
-      markdown = await response.text();
+
+      // Check Content-Length header if available
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+        res.status(413).json({ error: 'Document is too large (limit: 1 MB)' });
+        return;
+      }
+
+      // Read body incrementally with a size cap
+      const reader = response.body?.getReader();
+      if (!reader) {
+        res.status(502).json({ error: 'Failed to read response body' });
+        return;
+      }
+      const chunks: Uint8Array[] = [];
+      let totalSize = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalSize += value.byteLength;
+        if (totalSize > MAX_BODY_SIZE) {
+          reader.cancel();
+          res.status(413).json({ error: 'Document is too large (limit: 1 MB)' });
+          return;
+        }
+        chunks.push(value);
+      }
+      markdown = new TextDecoder().decode(Buffer.concat(chunks));
     } catch (err) {
-      res.status(502).json({ error: `Failed to fetch URL: ${(err as Error).message}` });
+      const message = (err as Error).name === 'TimeoutError' ? 'Request timed out' : (err as Error).message;
+      res.status(502).json({ error: `Failed to fetch URL: ${message}` });
       return;
     }
 
