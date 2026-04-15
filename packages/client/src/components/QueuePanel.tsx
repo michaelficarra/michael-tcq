@@ -8,7 +8,7 @@
  * and the queue list with drag-and-drop reordering for chairs.
  */
 
-import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -36,7 +36,7 @@ import { InlineMarkdown } from './InlineMarkdown.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
-import { PollSetup } from './PollSetup.js';
+const PollSetup = lazy(() => import('./PollSetup.js').then(m => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
 
 interface QueuePanelProps {
@@ -506,8 +506,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         </div>
       )}
 
-      {/* Poll setup modal — chair only */}
-      {/* Poll setup modal — chair only */}
+      {/* Poll setup modal — chair only (lazy-loaded to keep emoji-mart out of the main bundle) */}
       {showPollSetup && (
         <div
           className="fixed inset-0 bg-black/30 flex items-center justify-center z-40"
@@ -520,10 +519,12 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <PollSetup
-              onCancel={() => setShowPollSetup(false)}
-              onStarted={() => setShowPollSetup(false)}
-            />
+            <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
+              <PollSetup
+                onCancel={() => setShowPollSetup(false)}
+                onStarted={() => setShowPollSetup(false)}
+              />
+            </Suspense>
           </div>
         </div>
       )}
