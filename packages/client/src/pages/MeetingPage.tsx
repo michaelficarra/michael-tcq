@@ -15,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { useKeyboardShortcuts, getShortcutsEnabled, setShortcutsEnabled, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
+
+const TABS: readonly Tab[] = ['agenda', 'queue', 'log', 'help'];
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
@@ -25,7 +27,28 @@ import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.j
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
 function MeetingPageInner() {
   const { id: meetingId } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<Tab>('queue');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const hash = window.location.hash.slice(1);
+    return TABS.includes(hash as Tab) ? (hash as Tab) : 'queue';
+  });
+
+  // Sync tab state → URL fragment
+  useEffect(() => {
+    window.history.replaceState(null, '', `#${activeTab}`);
+  }, [activeTab]);
+
+  // Listen for hashchange events (browser back/forward)
+  useEffect(() => {
+    function handleHashChange() {
+      const hash = window.location.hash.slice(1);
+      if (TABS.includes(hash as Tab)) {
+        setActiveTab(hash as Tab);
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [shortcutsEnabled, setShortcutsEnabledState] = useState(getShortcutsEnabled);
   const [presentationMode, setPresentationMode] = useState(false);
