@@ -130,6 +130,47 @@ test.describe('Log Tab', () => {
     await expect(logContent.getByText('My important topic')).toBeVisible();
   });
 
+  test('Export button is hidden when log is empty', async ({ page }) => {
+    await createMeeting(page);
+    await goToLogTab(page);
+    await expect(page.getByRole('button', { name: 'Export' })).not.toBeVisible();
+  });
+
+  test('Export button triggers a download with meeting content', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Export Test Item', 'admin');
+    await startMeeting(page);
+
+    // Add a topic and advance past it to get a topic-discussed entry
+    await addQueueEntry(page, 'New Topic', 'Exported topic');
+    await expect(page.getByText('Exported topic')).toBeVisible();
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await page.waitForTimeout(500);
+
+    await goToLogTab(page);
+    await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
+
+    // Listen for the download
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export' }).click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/-\d+\.md$/);
+
+    // Read the downloaded file and verify content
+    const content = await (await download.createReadStream())
+      .toArray()
+      .then((chunks) => Buffer.concat(chunks).toString('utf-8'));
+    expect(content).toContain('Meeting Log');
+    expect(content).toContain('Export Test Item');
+    expect(content).toContain('Exported topic');
+    expect(content).toContain('Participants');
+    expect(content).toContain('@admin');
+  });
+
   test('log updates in real time as events occur', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);

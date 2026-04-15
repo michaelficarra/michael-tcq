@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { LogEntry, TopicSpeaker, User } from '@tcq/shared';
+import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
 import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { UserBadge } from './UserBadge.js';
@@ -377,6 +377,148 @@ function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, 
   }
 }
 
+// -- Plain-text export --
+
+function userName(users: Record<string, User>, id: string): string {
+  return `@${users[id]?.ghUsername ?? id}`;
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  return d
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d{3}Z$/, ' UTC');
+}
+
+function serialiseSpeakers(speakers: TopicSpeaker[], users: Record<string, User>): string {
+  const lines: string[] = [];
+  const first = speakers[0];
+  const durationStr = first.duration !== undefined ? ` (${formatDuration(first.duration)})` : ' (ongoing)';
+  lines.push(
+    `- **${QUEUE_ENTRY_LABELS[first.type]}:** ${first.topic}${durationStr} — ${userName(users, first.userId)}`,
+  );
+  for (const s of speakers.slice(1)) {
+    const dur = s.duration !== undefined ? ` (${formatDuration(s.duration)})` : ' (ongoing)';
+    lines.push(`  - **${QUEUE_ENTRY_LABELS[s.type]}:** ${s.topic}${dur} — ${userName(users, s.userId)}`);
+  }
+  return lines.join('\n');
+}
+
+function serialiseLog(meeting: MeetingState): string {
+  const lines: string[] = ['# Meeting Log', ''];
+  const users = meeting.users;
+
+  for (const entry of meeting.log) {
+    switch (entry.type) {
+      case 'meeting-started':
+        lines.push(`Meeting started — ${userName(users, entry.chairId)} (${formatTimestamp(entry.timestamp)})`);
+        lines.push('');
+        break;
+
+      case 'agenda-item-started': {
+        const owner = userName(users, entry.itemOwnerId);
+        lines.push(`## ${entry.itemName}`);
+        lines.push('');
+        lines.push(
+          `Owner: ${owner} | Started: ${formatTimestamp(entry.timestamp)} | Chair: ${userName(users, entry.chairId)}`,
+        );
+        lines.push('');
+        break;
+      }
+
+      case 'agenda-item-finished': {
+        const parts = entry.participantIds.map((id) => userName(users, id)).join(', ');
+        lines.push(
+          `**Finished** (${formatDuration(entry.duration)}, ${entry.participantIds.length} participant${entry.participantIds.length !== 1 ? 's' : ''}) — ${userName(users, entry.chairId)}`,
+        );
+        if (entry.participantIds.length > 0) {
+          lines.push(`Participants: ${parts}`);
+        }
+        if (entry.remainingQueue) {
+          lines.push('');
+          lines.push('<details><summary>Remaining queue</summary>');
+          lines.push('');
+          lines.push('```');
+          lines.push(entry.remainingQueue);
+          lines.push('```');
+          lines.push('');
+          lines.push('</details>');
+        }
+        lines.push('');
+        break;
+      }
+
+      case 'topic-discussed':
+        lines.push(serialiseSpeakers(entry.speakers, users));
+        lines.push('');
+        break;
+
+      case 'poll-ran': {
+        const topic = entry.topic ? `**Poll:** ${entry.topic}` : '**Poll**';
+        const chair =
+          entry.startChairId === entry.endChairId
+            ? userName(users, entry.startChairId)
+            : `${userName(users, entry.startChairId)} / ${userName(users, entry.endChairId)}`;
+        lines.push(
+          `${topic} (${formatDuration(entry.duration)}, ${entry.totalVoters} voter${entry.totalVoters !== 1 ? 's' : ''}) — ${chair}`,
+        );
+        lines.push('');
+        for (const r of entry.results) {
+          lines.push(`- ${r.emoji} ${r.label}: ${r.count}`);
+        }
+        lines.push('');
+        break;
+      }
+    }
+  }
+
+  // Current (ongoing) topic speakers
+  if (meeting.currentTopicSpeakers.length > 0) {
+    lines.push(serialiseSpeakers(meeting.currentTopicSpeakers, users));
+    lines.push('');
+  }
+
+  // Participant summary sorted by total speaking time
+  const speakerTotals = new Map<string, number>();
+  for (const entry of meeting.log) {
+    if (entry.type === 'topic-discussed') {
+      for (const s of entry.speakers) {
+        speakerTotals.set(s.userId, (speakerTotals.get(s.userId) ?? 0) + (s.duration ?? 0));
+      }
+    }
+  }
+  for (const s of meeting.currentTopicSpeakers) {
+    speakerTotals.set(s.userId, (speakerTotals.get(s.userId) ?? 0) + (s.duration ?? 0));
+  }
+
+  if (speakerTotals.size > 0) {
+    const sorted = [...speakerTotals.entries()].sort((a, b) => b[1] - a[1]);
+
+    lines.push('## Participants');
+    lines.push('');
+    lines.push('| Speaker | Time |');
+    lines.push('| --- | --- |');
+    for (const [id, total] of sorted) {
+      const dur = total > 0 ? formatDuration(total) : '0s';
+      lines.push(`| ${userName(users, id)} | ${dur} |`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function downloadFile(text: string, filename: string) {
+  const blob = new Blob([text], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // -- Main component --
 
 export function LogPanel() {
@@ -394,6 +536,16 @@ export function LogPanel() {
         <p className="text-stone-500 dark:text-stone-400 text-sm">
           No events yet. The log will populate as the meeting progresses.
         </p>
+      )}
+
+      {!isEmpty && (
+        <button
+          onClick={() => downloadFile(serialiseLog(meeting), `${meeting.id}-${Math.floor(Date.now() / 1000)}.md`)}
+          className="float-right ml-4 mb-2 text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                     text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+        >
+          Export
+        </button>
       )}
 
       <div className="space-y-4">

@@ -288,6 +288,10 @@ The "Agenda item finished" entry's duration covers the full time from when the i
 
 The Log tab shows log entries in reverse chronological order (most recent first). Each entry displays a relative time (e.g. "5 minutes ago") that updates live, with the full timestamp shown on hover in the viewer's locale and time zone. Entries are visually grouped by agenda item. Item names and topics render inline markdown.
 
+### Export
+
+The **Export** button downloads a Markdown file (named `{meeting-id}-{epoch-seconds}.md`) containing the full meeting log in chronological order (oldest events first). Agenda items are rendered as headings, speaker topics as nested lists with entry types in bold, and poll results as lists. All timestamps are UTC. The file ends with a **Participants** summary table listing every user who spoke during the meeting, sorted by total speaking time (descending). The button is hidden when the log is empty and in presentation mode.
+
 ### Persistence
 
 The log is permanent and cannot be edited or deleted during the meeting's lifetime. It is available to all connected participants and updated in real time.

@@ -103,7 +103,9 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           The <strong>Log</strong> tab shows a timeline of meeting events: when agenda items started and finished, who
           spoke on each topic (with replies and clarifying questions grouped under their topic), and poll results. Each
-          event shows a relative time that you can hover over to see the full timestamp in your local time zone.
+          event shows a relative time that you can hover over to see the full timestamp in your local time zone. Click{' '}
+          <strong>Export</strong> to download a Markdown transcript of the meeting, including a participant summary
+          sorted by total speaking time.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Presentation Mode</h4>
