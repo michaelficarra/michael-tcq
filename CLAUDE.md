@@ -38,16 +38,17 @@ After making changes, verify by running (in this order):
 
 Do **not** run e2e tests routinely — only when changing or adding e2e specs.
 
-## Documentation
+## Important Files
 
-Keep docs up to date alongside code changes:
+Keep these up to date alongside code changes:
 
 - **`README.md`** — notable new features.
 - **`docs/PRD.md`** — any user-facing functionality change, described in enough detail to reproduce. Do not be overly prescriptive about incidental things like styling, size, or positioning.
 - **`docs/ARCHITECTURE.md`** — architectural changes.
 - **`docs/CONTRIBUTING.md`** — development process changes.
 - **`docs/DEPLOYMENT.md`** — deployment process changes.
-- **`.github/workflows/ci.yml`** — development process changes (kept in sync with validation steps).
+- **`.github/workflows/ci.yml`** — development process changes.
+- **`CLAUDE.md`** - development process changes or project structure changes.
 
 ## Testing
 
