@@ -286,7 +286,7 @@ const actions = [];
 selectedAgenda.forEach((item, i) => {
   actions.push(() => socket.emit('agenda:add', {
     name: item.name,
-    ownerUsername: owners[i % owners.length],
+    ownerUsername: owners[Math.floor(Math.random() * owners.length)],
     timebox: item.timebox,
   }));
 });
