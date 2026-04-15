@@ -6,8 +6,11 @@ node_modules
 .DS_Store
 *.swp
 *.swo
+docs
+e2e
 screenshots
+scripts
+test-results
+playwright.config.ts
+README.md
 service-account.json
-ARCHITECTURE.md
-PLAN.md
-PRD.md
