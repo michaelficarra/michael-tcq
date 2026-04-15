@@ -36,7 +36,7 @@ export type MeetingAction =
   | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
   | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number };
 
-function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
+export function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
   switch (action.type) {
     case 'state':
       // Full state replacement from the server — clears any previous error
