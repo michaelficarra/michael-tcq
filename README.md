@@ -40,7 +40,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 - **Memorable meeting IDs** — meetings use human-readable word-based IDs (e.g. `bright-pine-lake`) instead of opaque random strings.
 - **Presentation mode** ([bterlson/tcq#22](https://github.com/bterlson/tcq/issues/22)) — press `f` to enter fullscreen with all controls hidden, ideal for projecting the queue during a meeting.
-- **Keyboard shortcuts** — press `?` to see all shortcuts. Quick keys for entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`a`, `q`), and toggling presentation mode (`f`).
+- **Keyboard shortcuts** — press `?` to see all shortcuts. Quick keys for entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`1`, `2`, `3`, `4`), and toggling presentation mode (`f`).
 - **In-app help page** — a Help tab explains how the tool works for both chairs and participants, with guidance on when to use each queue entry type.
 - **Dark mode** — automatically follows the system colour scheme via `prefers-color-scheme`. No manual toggle needed.
 - **Sticky navigation** ([bterlson/tcq#23](https://github.com/bterlson/tcq/issues/23)) — the navigation bar stays fixed at the top of the page when scrolling long agendas or queues.
