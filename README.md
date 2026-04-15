@@ -28,8 +28,8 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 ### Polls and meeting log
 
 - **Customisable polls** ([bterlson/tcq#67](https://github.com/bterlson/tcq/pull/67)) — poll options (also known as temperature checks) are fully configurable per poll. Chairs can add, remove, and customise the emoji and label for each option, rather than being limited to a fixed set. Results can be copied to the clipboard.
-- **Meeting log** — the Logs tab shows a chronological timeline of meeting events: agenda items started and finished (with duration and participant summaries), speaker topics with grouped replies and clarifying questions, and poll results. Timestamps are displayed as relative times with full locale-formatted timestamps on hover.
-- **Log export** — download the meeting log as a plain-text transcript with an automatically generated participant summary sorted by total speaking time.
+- **Meeting log** — the Log tab shows a chronological timeline of meeting events: agenda items started and finished (with duration and participant summaries), speaker topics with grouped replies and clarifying questions, and poll results. Timestamps are displayed as relative times with full locale-formatted timestamps on hover.
+- **Log export** — download the meeting log as a Markdown file with an automatically generated participant summary sorted by total speaking time.
 
 ### Content and display
 
