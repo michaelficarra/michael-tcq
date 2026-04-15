@@ -44,10 +44,8 @@ export default defineConfig({
   ],
   webServer: {
     command: [
-      `NODE_ENV=test`,
-      `DATA_DIR=${dataDir}`,
-      `PORT=${SERVER_PORT}`,
-      `npm run build -w packages/shared`,
+      `export NODE_ENV=test DATA_DIR=${dataDir} PORT=${SERVER_PORT}`,
+      `&& npm run build -w packages/shared`,
       `&& npx concurrently`,
       `-n server,client`,
       `-c blue,green`,
