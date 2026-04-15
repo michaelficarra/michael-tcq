@@ -739,7 +739,7 @@ function SortableQueueEntry({
           entry.type === 'point-of-order'
             ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
+        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
         {/* Placeholder for drag handle column */}
         {canDrag && <span className="w-4" />}
@@ -799,7 +799,7 @@ function SortableQueueEntry({
           : entry.type === 'point-of-order'
             ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-      } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
+      } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
     >
       {/* Drag handle — chairs can drag any entry, participants their own */}
       {canDrag && (

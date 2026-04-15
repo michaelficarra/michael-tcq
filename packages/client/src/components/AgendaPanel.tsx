@@ -298,7 +298,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
         style={style}
         className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
           index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'
-        } ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
+        } ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
         <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
           {index + 1}
@@ -367,7 +367,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
           : index % 2 === 0
             ? 'bg-white dark:bg-stone-900'
             : 'bg-stone-100/50 dark:bg-stone-800/50'
-      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
+      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
