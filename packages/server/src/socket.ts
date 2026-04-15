@@ -129,6 +129,11 @@ export function broadcastMeetingState(
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
     io.to(meetingId).emit('state', meeting);
+    // Clear after broadcasting so it only applies to the broadcast that
+    // immediately follows the handler that set it. Without this, a stale
+    // value could be misattributed if a future code path changes the
+    // current speaker without explicitly setting lastSpeakerAdvancementAttributedTo.
+    delete meeting.lastSpeakerAdvancementAttributedTo;
   }
 }
 
@@ -640,6 +645,7 @@ export function registerSocketHandlers(
         meetingManager.markDirty(joinedMeetingId);
       }
 
+      meeting.lastSpeakerAdvancementAttributedTo = chairId;
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
 
@@ -860,6 +866,7 @@ export function registerSocketHandlers(
         },
       ];
 
+      meeting.lastSpeakerAdvancementAttributedTo = chairId;
       meetingManager.markDirty(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });

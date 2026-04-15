@@ -157,6 +157,14 @@ export interface MeetingState {
   version: number;
 
   /**
+   * The user key of the chair who triggered the most recent speaker or
+   * agenda advancement. Set by the server on advancement events so
+   * clients can distinguish self-initiated advancements (no cooldown)
+   * from those triggered by another chair (cooldown applied).
+   */
+  lastSpeakerAdvancementAttributedTo?: string;
+
+  /**
    * ISO timestamp of the most recent client connection to this meeting.
    * Used to determine when to expire stale meetings (90 days after
    * the last connection).

@@ -19,6 +19,7 @@ import {
   setShortcutsEnabled,
   type Shortcut,
 } from '../hooks/useKeyboardShortcuts.js';
+import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
 
 const TABS: readonly Tab[] = ['agenda', 'queue', 'log', 'help'];
@@ -133,11 +134,12 @@ function MeetingPageInner() {
   // --- Keyboard shortcuts ---
 
   /** Advance to the next speaker (chair only). */
+  const { fire: advanceNextSpeakerRaw } = useAdvanceAction('queue:next');
   const advanceNextSpeaker = useCallback(() => {
-    if (!socket || !meeting || !isChair) return;
+    if (!isChair) return;
     setActiveTab('queue');
-    socket.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
-  }, [socket, meeting, isChair]);
+    advanceNextSpeakerRaw();
+  }, [isChair, advanceNextSpeakerRaw]);
 
   const shortcuts = useMemo<Shortcut[]>(
     () => [

@@ -79,9 +79,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   // Whether the "advance agenda item" confirmation modal is open
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
 
-  // Advancement actions with automatic retry on stale version
-  const handleNextAgendaItem = useAdvanceAction('meeting:nextAgendaItem');
-  const handleNextSpeaker = useAdvanceAction('queue:next');
+  // Advancement actions with debounce + cooldown protection
+  const { fire: handleNextAgendaItem } = useAdvanceAction('meeting:nextAgendaItem');
+  const { fire: handleNextSpeaker, disabled: nextSpeakerDisabled } = useAdvanceAction('queue:next');
 
   // Drag-and-drop sensors with keyboard support for accessibility
   const sensors = useSensors(
@@ -341,8 +341,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           {isChair && (currentSpeaker || queuedSpeakers.length > 0) && (
             <button
               onClick={handleNextSpeaker}
-              className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+              disabled={nextSpeakerDisabled}
+              className={`text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                         transition-colors presentation-hidden ${
+                           nextSpeakerDisabled
+                             ? 'opacity-50 cursor-not-allowed text-stone-400 dark:text-stone-500'
+                             : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer'
+                         }`}
             >
               Next Speaker
             </button>

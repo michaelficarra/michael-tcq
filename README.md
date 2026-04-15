@@ -48,7 +48,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 ### Technical and developer experience
 
-- **Race condition prevention** — advancement events use precondition checks (current speaker/agenda item ID) to prevent double-advancement when two chairs click simultaneously. Reordering uses UUID-based positioning instead of array indices.
+- **Race condition prevention** — advancement events use precondition checks (current speaker/agenda item ID) to prevent double-advancement when two chairs click simultaneously. On the client side, the "Next Speaker" action is debounced and enters a brief cooldown after every speaker change, so chairs cannot accidentally skip a speaker via double-clicks, double-keypresses, or clicking just as a prior advancement arrives. Reordering uses UUID-based positioning instead of array indices.
 - **Admin dashboard** — admins (configured via `ADMIN_USERNAMES` env var) see a list of all active meetings on the home page with connection statistics, and can delete meetings.
 - **Mock auth mode** — a built-in dev user-switcher allows testing with multiple identities without configuring GitHub OAuth.
 - **Modern, familiar tech stack** — built with React, Vite, Tailwind CSS, Express, and Socket.IO — widely known technologies that lower the contribution barrier. TypeScript throughout with strict mode.

@@ -187,6 +187,15 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
             </li>
           </ol>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            The <strong>Next Speaker</strong> button (and the{' '}
+            <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+              s
+            </kbd>{' '}
+            keyboard shortcut) is briefly disabled after each use to prevent accidental double-advancement. It is also
+            disabled for a longer period when another chair advances the speaker, giving you time to see who is now
+            speaking before advancing again.
+          </p>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             You can drag queue entries to reorder them manually. When an entry is moved, its type adjusts to stay
             consistent with the priority ordering of its neighbours. You can also click the type label to cycle through
             legal types, and edit or delete any entry.

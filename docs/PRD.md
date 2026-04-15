@@ -164,6 +164,7 @@ The user's own queue entries are visually distinguished with a coloured left bor
 - **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue.
 - If the queue is empty when advancement occurs, the current speaker is cleared.
 - If two chairs attempt to advance the speaker or agenda item simultaneously, the second action is rejected to prevent conflicts.
+- The Next Speaker action (button and keyboard shortcut) is debounced to ignore rapid repeated activations. After any speaker change is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing chairs from accidentally skipping a speaker.
 
 ### Queue Reordering
 
