@@ -5,7 +5,7 @@
  * Used in both the NavBar (meeting page) and the HomePage header.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { UserBadge } from './UserBadge.js';
 
@@ -42,6 +42,14 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   const [username, setUsername] = useState('');
   const [switching, setSwitching] = useState(false);
 
+  // Callback ref: focus and select the input text on mount.
+  const inputRef = useCallback((node: HTMLInputElement | null) => {
+    if (node) {
+      node.focus();
+      node.select();
+    }
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = username.trim();
@@ -59,7 +67,10 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
     return (
       <span className="inline-flex items-center gap-3">
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setUsername(user.ghUsername);
+            setOpen(true);
+          }}
           className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
           title="Click to switch user (dev mode)"
         >
@@ -75,11 +86,17 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
       <input
+        ref={inputRef}
         type="text"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false);
+            setUsername('');
+          }
+        }}
         placeholder="username"
-        autoFocus
         className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
                    dark:bg-stone-700 dark:text-stone-100
                    focus:outline-none focus:ring-1 focus:ring-teal-500"
