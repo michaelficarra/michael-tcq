@@ -73,6 +73,7 @@ e2e/        — Playwright end-to-end tests
 | `npm run format:check` | Check formatting without making changes                |
 | `npm test`             | Run all unit and integration tests                     |
 | `npm run test:e2e`     | Run Playwright end-to-end tests                        |
+| `npm run ci`           | Run all CI checks locally                              |
 
 ### Per-workspace scripts
 
@@ -169,12 +170,10 @@ npm run test:e2e -- --debug
 
 ## Validating Changes
 
-Run these checks locally before pushing (CI will run them too):
+Run all CI checks locally before pushing:
 
 ```sh
-npm run typecheck
-npm run format:check
-npm run lint
-npm test
-npm run test:e2e
+npm run ci
 ```
+
+This runs `format:check`, `typecheck`, `lint`, and `build` concurrently, then runs `test` and `test:e2e` concurrently once the first group succeeds.

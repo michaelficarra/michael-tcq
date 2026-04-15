@@ -13,6 +13,7 @@
     "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
     "test": "npm run test -w packages/server -w packages/client",
     "test:e2e": "npx playwright test",
+    "ci": "concurrently -g -n format,typecheck,lint,build -c cyan,blue,magenta,yellow \"npm run format:check\" \"npm run typecheck\" \"npm run lint\" \"npm run build\" && concurrently -g -n test,test:e2e -c green,red \"npm test\" \"npm run test:e2e\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "npm run lint -w packages/server -w packages/client",

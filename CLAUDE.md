@@ -18,6 +18,7 @@ Read `docs/PRD.md` to understand the product requirements and expected behaviour
 | Format (check)         | `npm run format:check` |
 | Unit/integration tests | `npm test`             |
 | E2E tests (Playwright) | `npm run test:e2e`     |
+| Full CI check locally  | `npm run ci`           |
 
 Lint and typecheck are per-workspace. To run them individually:
 
