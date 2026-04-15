@@ -6,9 +6,11 @@
 interface LogoProps {
   /** Text size class. Defaults to "text-xl sm:text-2xl". */
   className?: string;
+  /** When true, hide the "TCQ" text on small screens (below `sm`). */
+  hideTextOnSmallScreens?: boolean;
 }
 
-export function Logo({ className = 'text-xl sm:text-2xl' }: LogoProps) {
+export function Logo({ className = 'text-xl sm:text-2xl', hideTextOnSmallScreens = false }: LogoProps) {
   return (
     <span
       className={`${className} font-semibold text-stone-800 dark:text-stone-200 select-none inline-flex items-center gap-1.5`}
@@ -20,7 +22,7 @@ export function Logo({ className = 'text-xl sm:text-2xl' }: LogoProps) {
         <rect x="2" y="20" width="22" height="8" rx="3" fill="#f26522" />
         <polygon points="6,28 10,28 7,32" fill="#f26522" />
       </svg>
-      TCQ
+      <span className={hideTextOnSmallScreens ? 'hidden sm:inline' : undefined}>TCQ</span>
     </span>
   );
 }

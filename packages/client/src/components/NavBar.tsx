@@ -49,16 +49,16 @@ function TabButton({
 export function NavBar({ activeTab, onTabChange }: NavBarProps) {
   return (
     <nav
-      className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 py-3"
+      className="scrollbar-hide sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 py-3 overflow-x-auto"
       aria-label="Main navigation"
     >
       {/* Branding */}
-      <Link to="/">
-        <Logo />
+      <Link to="/" className="shrink-0">
+        <Logo hideTextOnSmallScreens />
       </Link>
 
       {/* Tab toggles — active tab has a teal underline */}
-      <div className="flex gap-4" role="tablist" aria-label="Meeting views">
+      <div className="flex shrink-0 gap-4" role="tablist" aria-label="Meeting views">
         <TabButton tab="agenda" activeTab={activeTab} onTabChange={onTabChange} label="Agenda" />
         <TabButton tab="queue" activeTab={activeTab} onTabChange={onTabChange} label="Queue" />
         <TabButton tab="log" activeTab={activeTab} onTabChange={onTabChange} label="Log" />
@@ -69,7 +69,9 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
       <div className="flex-1" />
 
       {/* User menu: Log Out in real OAuth, user-switcher in dev mode */}
-      <UserMenu />
+      <div className="shrink-0">
+        <UserMenu />
+      </div>
     </nav>
   );
 }
