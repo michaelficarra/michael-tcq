@@ -782,7 +782,7 @@ function SortableQueueEntry({
 
       <div className="flex-1 min-w-0">
         {/* Type badge and topic — chairs can click to cycle through legal types */}
-        {(isChair || isOwnEntry) && legalTypes.length > 1 ? (
+        {isChair && legalTypes.length > 1 ? (
           <button
             onClick={handleCycleType}
             className={`text-sm font-semibold cursor-pointer hover:underline ${entryTypeColor(entry.type)}`}

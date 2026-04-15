@@ -171,7 +171,7 @@ This ensures the entry's type remains consistent with the priority ordering of i
 
 ### Queue Type Cycling
 
-Chairs can click the type badge (e.g. "New Topic:") on any queue entry, and participants can click the type badge on their own entries, to cycle through the types that are legal at that position. A type is legal if changing to it would not break the priority ordering — it must be at least as low-priority as the lowest-priority item above and at least as high-priority as the highest-priority item below. When only one type is legal, the badge is not clickable.
+Chairs can click the type badge (e.g. "New Topic:") on any queue entry to cycle through the types that are legal at that position. A type is legal if changing to it would not break the priority ordering — it must be at least as low-priority as the lowest-priority item above and at least as high-priority as the highest-priority item below. When only one type is legal, the badge is not clickable. Participants cannot change entry types.
 
 ### Queue Editing
 

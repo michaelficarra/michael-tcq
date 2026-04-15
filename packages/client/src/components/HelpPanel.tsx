@@ -51,7 +51,8 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
         <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
           <li>
             <strong className="text-red-600 dark:text-red-400">Point of Order</strong> — for procedural matters that
-            need immediate attention (e.g. "the notes document isn't working", "remote attendees cannot hear the presenter"). Use sparingly.
+            need immediate attention (e.g. "the notes document isn't working", "remote attendees cannot hear the
+            presenter"). Use sparingly.
           </li>
           <li>
             <strong className="text-green-600">Clarifying Question</strong> — for brief factual questions about what was
@@ -74,9 +75,8 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing Your Entries</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          You can <strong>edit</strong> or <strong>delete</strong> your own queue entries at any time. Click the type
-          label (e.g. "New Topic:") to cycle through the types that are legal at that position. You can also drag your
-          own entries <em>downward</em> to defer your position in the queue (e.g. to let someone else speak first).
+          You can <strong>edit</strong> or <strong>delete</strong> your own queue entries at any time. You can also drag
+          your own entries <em>downward</em> to defer your position in the queue (e.g. to let someone else speak first).
         </p>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           Queue topics and agenda item names support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,{' '}
@@ -132,8 +132,8 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
           <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
             ?
           </kbd>{' '}
-          at any time to see all available keyboard shortcuts, including keys for entering the queue and switching
-          tabs. Shortcuts can also be disabled from the same dialogue.
+          at any time to see all available keyboard shortcuts, including keys for entering the queue and switching tabs.
+          Shortcuts can also be disabled from the same dialogue.
         </p>
       </section>
 

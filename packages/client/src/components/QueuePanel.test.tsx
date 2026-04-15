@@ -454,6 +454,32 @@ describe('QueuePanel', () => {
     expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'q1' });
   });
 
+  // -- Type badge (cycling) --
+
+  it('shows a clickable type badge for chairs', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
+      queuedSpeakerIds: ['q1'],
+    });
+    renderQueue(meeting, chairUser);
+
+    expect(screen.getByRole('button', { name: /change type/i })).toBeInTheDocument();
+  });
+
+  it('does not show a clickable type badge for participants on their own entries', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My entry', userId: 'bob' } },
+      queuedSpeakerIds: ['q1'],
+    });
+    renderQueue(meeting, otherUser);
+
+    expect(screen.queryByRole('button', { name: /change type/i })).not.toBeInTheDocument();
+  });
+
   // -- Drag-and-drop reorder handles --
 
   it('shows drag handles for chairs', () => {

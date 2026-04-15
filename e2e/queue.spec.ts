@@ -234,12 +234,12 @@ test.describe('Queue Type Cycling', () => {
     await setupStartedMeeting(page);
   });
 
-  test('clicking the type badge cycles through legal types', async ({ page }) => {
+  test('chairs can click the type badge to cycle through legal types', async ({ page }) => {
     await addQueueEntry(page, 'New Topic', 'Cycle test');
 
     const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
 
-    // The type badge should be a clickable button
+    // The type badge should be a clickable button for chairs
     const typeBadge = item.getByRole('button', { name: /Change type/ });
     await expect(typeBadge).toBeVisible();
     await expect(typeBadge).toContainText('New Topic');
@@ -248,6 +248,18 @@ test.describe('Queue Type Cycling', () => {
     await typeBadge.click();
     // Should cycle to the next type
     await expect(typeBadge).not.toContainText('New Topic');
+  });
+
+  test('participants cannot click the type badge on their own entries', async ({ page }) => {
+    // Switch to a non-chair user and add an entry
+    await switchUser(page, 'bob');
+    await addQueueEntry(page, 'New Topic', 'Participant entry');
+
+    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+
+    // The type badge should be a plain span, not a button
+    await expect(item.getByRole('button', { name: /Change type/ })).not.toBeVisible();
+    await expect(item.getByText('New Topic:')).toBeVisible();
   });
 });
 

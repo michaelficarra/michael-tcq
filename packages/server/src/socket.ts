@@ -477,6 +477,10 @@ export function registerSocketHandlers(
         updates.topic = trimmed;
       }
       if (payload.type !== undefined) {
+        if (!isChairUser) {
+          socket.emit('error', 'Only chairs can change entry types');
+          return;
+        }
         updates.type = payload.type;
       }
 

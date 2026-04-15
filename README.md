@@ -9,9 +9,9 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 ### Queue interaction
 
 - **Inline editing** — agenda items and queue entries can be edited in place without needing to delete and re-create.
-- **Type cycling** — chairs (and entry owners) can click the type badge on a queue entry to cycle through the types that are legal at that position without moving the entry.
+- **Type cycling** — chairs can click the type badge on a queue entry to cycle through the types that are legal at that position without moving the entry.
 - **Instant queue entry** ([bterlson/tcq#65](https://github.com/bterlson/tcq/issues/65)) — clicking a queue type button immediately adds you to the queue with a placeholder topic, then opens inline editing. No modal form to fill out before joining.
-- **Participant queue self-management** ([bterlson/tcq#69](https://github.com/bterlson/tcq/issues/69)) — participants can drag their own entries downward to defer, edit their own topics inline, and click the type badge to cycle through legal types at their position.
+- **Participant queue self-management** ([bterlson/tcq#69](https://github.com/bterlson/tcq/issues/69)) — participants can drag their own entries downward to defer and edit their own topics inline.
 - **Directional type changes** — when dragging entries, the type adjusts based on direction: moving down adopts the lowest priority of items above, moving up adopts the highest priority of items below.
 - **Visual queue indicators** — point-of-order entries are highlighted with a red border and background. A user's own queue entries are shown with a teal left border.
 - **Live timers** — the Queue tab shows count-up timers on the current agenda item, current topic, and current speaker. The agenda item timer turns bold red when the timebox is exceeded.

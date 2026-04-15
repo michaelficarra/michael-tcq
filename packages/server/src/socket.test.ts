@@ -732,6 +732,42 @@ describe('Socket.IO integration', () => {
       ).toBe('Not yours');
     });
 
+    it('rejects type change from non-chair owner', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const meeting = ctx.meetingManager.create([chair]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'My topic', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:edit', { id: entry.id, type: 'question' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      // Type should be unchanged
+      expect(ctx.meetingManager.get(meeting.id)!.queueEntries[entry.id].type).toBe('topic');
+    });
+
+    it('allows chair to change entry type', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Test', {
+        ghid: 99,
+        ghUsername: 'other',
+        name: 'Other',
+        organisation: '',
+      })!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:edit', { id: entry.id, type: 'question' });
+      const state = await statePromise;
+
+      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('question');
+    });
+
     it('allows chair to edit any entry', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
