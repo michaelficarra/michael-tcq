@@ -248,7 +248,7 @@ function MeetingPageInner() {
             />
           )}
           {activeTab === 'log' && <LogPanel />}
-          {activeTab === 'help' && <HelpPanel />}
+          {activeTab === 'help' && <HelpPanel showChairHelp={isChair} />}
         </main>
 
         {/* Connection status indicator */}

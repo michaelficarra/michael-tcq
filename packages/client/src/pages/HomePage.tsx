@@ -63,7 +63,7 @@ export function HomePage() {
 
       <main>
         {activeTab === 'join' && <JoinTab />}
-        {activeTab === 'help' && <HelpPanel />}
+        {activeTab === 'help' && <HelpPanel showChairHelp={true} />}
       </main>
     </div>
   );
