@@ -7,7 +7,7 @@
  * speaker (no replies/clarifications) use a compact inline format.
  */
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
 import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
@@ -58,15 +58,32 @@ function relativeTime(iso: string, now: number): string {
   return `${days}d ago`;
 }
 
+// -- Shared clock for relative timestamps --
+// A single 15-second interval drives all RelativeTime instances via
+// useSyncExternalStore, instead of each instance creating its own setInterval.
+// getNow returns Date.now() directly so the value is always fresh.
+
+const _listeners = new Set<() => void>();
+
+setInterval(() => {
+  for (const listener of _listeners) listener();
+}, 15_000);
+
+function subscribeNow(listener: () => void) {
+  _listeners.add(listener);
+  return () => {
+    _listeners.delete(listener);
+  };
+}
+
+function getNow() {
+  return Date.now();
+}
+
 // -- Relative time component --
 
 function RelativeTime({ timestamp }: { timestamp: string }) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = useSyncExternalStore(subscribeNow, getNow);
 
   return (
     <time
