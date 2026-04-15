@@ -42,6 +42,7 @@ describe('LogPanel', () => {
       }],
     }));
     expect(screen.getByText('Meeting started')).toBeTruthy();
+    expect(screen.getByText('Alice')).toBeTruthy();
   });
 
   it('renders an agenda-item-started entry with "Started:" prefix', () => {
@@ -56,16 +57,16 @@ describe('LogPanel', () => {
     }));
     expect(screen.getByText('Started:')).toBeTruthy();
     expect(screen.getByText('Proposal A')).toBeTruthy();
-    // Item owner badge should be shown
-    expect(screen.getByText('Bob')).toBeTruthy();
+    // Chair badge should be shown (not the item owner)
+    expect(screen.getByText('Alice')).toBeTruthy();
   });
 
-  it('renders an agenda-item-finished entry with duration and participants', () => {
+  it('renders an agenda-item-finished entry with duration, chair, and participants', () => {
     renderLog(makeMeeting({
       log: [{
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'carol',
         itemName: 'Proposal A',
         duration: 15 * 60 * 1000, // 15 min
         participantIds: ['alice', 'bob'],
@@ -74,6 +75,9 @@ describe('LogPanel', () => {
     expect(screen.getByText('Finished:')).toBeTruthy();
     expect(screen.getByText('Proposal A')).toBeTruthy();
     expect(screen.getByText('15 min')).toBeTruthy();
+    // Chair badge
+    expect(screen.getByText('Carol')).toBeTruthy();
+    // Participants
     expect(screen.getByText('Alice')).toBeTruthy();
     expect(screen.getByText('Bob')).toBeTruthy();
   });

@@ -119,13 +119,14 @@ function SpeakerRow({ speaker, users }: { speaker: TopicSpeaker; users: Record<s
 
 // -- Individual log entry renderers --
 
-function MeetingStartedEntry({ entry }: { entry: LogEntry & { type: 'meeting-started' } }) {
+function MeetingStartedEntry({ entry, users }: { entry: LogEntry & { type: 'meeting-started' }; users: Record<string, User> }) {
   return (
     <div className="flex items-center gap-2">
       <RelativeTime timestamp={entry.timestamp} />
       <span className="text-sm font-medium text-stone-800 dark:text-stone-200">
         Meeting started
       </span>
+      <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
     </div>
   );
 }
@@ -138,7 +139,7 @@ function AgendaItemStartedEntry({ entry, users }: { entry: LogEntry & { type: 'a
         <span className="text-sm text-stone-800 dark:text-stone-200">
           <span className="font-medium">Started:</span> <InlineMarkdown>{entry.itemName}</InlineMarkdown>
         </span>
-        <UserBadge user={users[entry.itemOwnerId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
+        <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
       </div>
     </div>
   );
@@ -156,6 +157,7 @@ function AgendaItemFinishedEntry({ entry, users }: { entry: LogEntry & { type: '
           <span className="text-xs text-stone-400 dark:text-stone-500">
             {formatDuration(entry.duration)}
           </span>
+          <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
         </div>
         <ParticipantList participantIds={entry.participantIds} users={users} />
         {entry.remainingQueue && (
@@ -309,7 +311,7 @@ function CurrentTopicGroup({ speakers, users }: { speakers: TopicSpeaker[]; user
 function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, User> }) {
   switch (entry.type) {
     case 'meeting-started':
-      return <MeetingStartedEntry entry={entry} />;
+      return <MeetingStartedEntry entry={entry} users={users} />;
     case 'agenda-item-started':
       return <AgendaItemStartedEntry entry={entry} users={users} />;
     case 'agenda-item-finished':
