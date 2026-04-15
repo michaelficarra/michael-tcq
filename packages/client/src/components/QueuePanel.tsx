@@ -39,6 +39,14 @@ import { PollReactions } from './PollReactions.js';
 const PollSetup = lazy(() => import('./PollSetup.js').then((m) => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
 
+// Stable references so useSensor's internal useMemo doesn't invalidate every render.
+const POINTER_SENSOR_OPTIONS = {
+  activationConstraint: { distance: 5 },
+};
+const KEYBOARD_SENSOR_OPTIONS = {
+  coordinateGetter: sortableKeyboardCoordinates,
+};
+
 interface QueuePanelProps {
   /** ID of a newly added queue entry that should open in edit mode. */
   autoEditEntryId: string | null;
@@ -84,16 +92,12 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const { fire: handleNextSpeaker, disabled: nextSpeakerDisabled } = useAdvanceAction('queue:next');
   const { fire: handleDoneSpeaking, disabled: doneSpeakingDisabled } = useAdvanceAction('queue:next');
 
-  // Drag-and-drop sensors with keyboard support for accessibility
+  // Drag-and-drop sensors with keyboard support for accessibility.
+  // Options are hoisted to module scope so useSensor's internal useMemo
+  // sees stable references and doesn't recreate descriptors every render.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      // Require a small drag distance before activating, so that clicks
-      // on buttons (e.g. delete) inside the draggable row work normally.
-      activationConstraint: { distance: 5 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
   // Track whether the current drag is a non-chair self-drag (downward only).

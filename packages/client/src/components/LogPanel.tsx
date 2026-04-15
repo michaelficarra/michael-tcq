@@ -7,7 +7,7 @@
  * speaker (no replies/clarifications) use a compact inline format.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
 import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
@@ -540,10 +540,10 @@ function downloadFile(text: string, filename: string) {
 
 export function LogPanel() {
   const { meeting } = useMeetingState();
+  const reversedLog = useMemo(() => (meeting ? [...meeting.log].reverse() : []), [meeting]);
 
   if (!meeting) return null;
 
-  const reversedLog = [...meeting.log].reverse();
   const hasCurrentTopic = meeting.currentTopicSpeakers.length > 0;
   const isEmpty = reversedLog.length === 0 && !hasCurrentTopic;
 
