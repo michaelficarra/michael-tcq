@@ -4,7 +4,9 @@
 import { join } from 'node:path';
 import dotenv from 'dotenv';
 const projectRoot = join(import.meta.dirname, '../../..');
-const envSuffix = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+const envSuffix = process.env.NODE_ENV === 'production' ? 'production'
+  : process.env.NODE_ENV === 'test' ? 'test'
+  : 'development';
 dotenv.config({ path: join(projectRoot, `.env.${envSuffix}`) });
 
 import express from 'express';
@@ -27,10 +29,17 @@ const app = express();
 const httpServer = createServer(app);
 
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  // In development, the Vite dev server proxies Socket.IO requests to Express,
-  // so we need to allow the Vite origin for CORS.
+  // In development/test, the Vite dev server proxies Socket.IO requests to
+  // Express on a different port, so we need to allow its origin for CORS.
+  // Accept any localhost origin to avoid coupling to specific port numbers.
   cors: {
-    origin: ['http://localhost:5173'],
+    origin: (origin, callback) => {
+      if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   },
 });
@@ -67,7 +76,7 @@ if (STORE_TYPE === 'firestore') {
   });
 } else {
   // File-based store for local development
-  const dataDir = join(process.cwd(), '.data', 'meetings');
+  const dataDir = process.env.DATA_DIR ?? join(process.cwd(), '.data', 'meetings');
   console.log(`Using file store: ${dataDir}`);
   const fileStore = new FileMeetingStore(dataDir);
   await fileStore.init();

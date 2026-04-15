@@ -18,6 +18,9 @@ function logProxyError(err: NodeJS.ErrnoException) {
   console.log(`Proxy error: ${err.message || err} (${hint})`);
 }
 
+const serverPort = process.env.PORT ?? '3000';
+const serverTarget = `http://localhost:${serverPort}`;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
@@ -26,15 +29,15 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: serverTarget,
         configure: (proxy) => { proxy.on('error', logProxyError); },
       },
       '/auth': {
-        target: 'http://localhost:3000',
+        target: serverTarget,
         configure: (proxy) => { proxy.on('error', logProxyError); },
       },
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: serverTarget,
         ws: true,
         configure: (proxy) => {
           proxy.on('error', logProxyError);
