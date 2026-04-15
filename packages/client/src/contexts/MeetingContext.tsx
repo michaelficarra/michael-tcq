@@ -32,7 +32,9 @@ export type MeetingAction =
   | { type: 'state'; meeting: MeetingState }
   | { type: 'setUser'; user: User }
   | { type: 'setConnected'; connected: boolean }
-  | { type: 'setError'; error: string };
+  | { type: 'setError'; error: string }
+  | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
+  | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number };
 
 function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
   switch (action.type) {
@@ -45,6 +47,20 @@ function meetingReducer(state: MeetingContextState, action: MeetingAction): Meet
       return { ...state, connected: action.connected };
     case 'setError':
       return { ...state, error: action.error };
+    case 'optimisticAgendaReorder': {
+      if (!state.meeting) return state;
+      const agenda = [...state.meeting.agenda];
+      const [item] = agenda.splice(action.oldIndex, 1);
+      agenda.splice(action.newIndex, 0, item);
+      return { ...state, meeting: { ...state.meeting, agenda } };
+    }
+    case 'optimisticQueueReorder': {
+      if (!state.meeting) return state;
+      const queuedSpeakerIds = [...state.meeting.queuedSpeakerIds];
+      const [id] = queuedSpeakerIds.splice(action.oldIndex, 1);
+      queuedSpeakerIds.splice(action.newIndex, 0, id);
+      return { ...state, meeting: { ...state.meeting, queuedSpeakerIds } };
+    }
   }
 }
 

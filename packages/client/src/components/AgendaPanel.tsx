@@ -30,7 +30,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaItem } from '@tcq/shared';
 import { userKey } from '@tcq/shared';
-import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
+import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { AgendaForm } from './AgendaForm.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
@@ -38,6 +38,7 @@ import { UserBadge } from './UserBadge.js';
 
 export function AgendaPanel() {
   const { meeting, user } = useMeetingState();
+  const dispatch = useMeetingDispatch();
   const isChair = useIsChair();
   const socket = useSocket();
   const [showForm, setShowForm] = useState(false);
@@ -87,6 +88,7 @@ export function AgendaPanel() {
       afterId = items[newIndex - 1]?.id ?? null;
     }
 
+    dispatch({ type: 'optimisticAgendaReorder', oldIndex, newIndex });
     socket?.emit('agenda:reorder', { id: active.id as string, afterId });
   }
 

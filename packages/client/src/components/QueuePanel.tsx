@@ -29,7 +29,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { QueueEntry, QueueEntryType } from '@tcq/shared';
 import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
-import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
+import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
@@ -50,6 +50,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: QueuePanelProps) {
   const { meeting, user } = useMeetingState();
+  const dispatch = useMeetingDispatch();
   const isChair = useIsChair();
   const socket = useSocket();
 
@@ -208,6 +209,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
       afterId = items[newIndex - 1]?.id ?? null;
     }
 
+    dispatch({ type: 'optimisticQueueReorder', oldIndex, newIndex });
     socket?.emit('queue:reorder', { id: active.id as string, afterId });
   }
 
