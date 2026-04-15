@@ -6,11 +6,17 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = {
-  ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME',
+  ghid: 1,
+  ghUsername: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
 };
 
 const otherUser: User = {
-  ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'Corp',
+  ghid: 2,
+  ghUsername: 'bob',
+  name: 'Bob',
+  organisation: 'Corp',
 };
 
 /** Create a minimal meeting state for testing. */
@@ -26,26 +32,21 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     reactions: [],
-    trackPoll: false, pollOptions: [], version: 0,
-    log: [], currentTopicSpeakers: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
     ...overrides,
   };
 }
 
 /** Render the QueuePanel with meeting context and optional socket. */
-function renderQueue(
-  meeting: MeetingState,
-  user: User | null = null,
-  socket: TypedSocket | null = null,
-) {
+function renderQueue(meeting: MeetingState, user: User | null = null, socket: TypedSocket | null = null) {
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
       <SocketContext value={socket}>
-        <QueuePanel
-          autoEditEntryId={null}
-          onAddEntry={() => {}}
-          onAutoEditConsumed={() => {}}
-        />
+        <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
       </SocketContext>
     </TestMeetingProvider>,
   );
@@ -62,12 +63,14 @@ describe('QueuePanel', () => {
   it('shows the current agenda item when set', () => {
     const meeting = makeMeeting({
       users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' } },
-      agenda: [{
-        id: 'item-1',
-        name: 'Discussion of proposal',
-        ownerId: 'alice',
-        timebox: 20,
-      }],
+      agenda: [
+        {
+          id: 'item-1',
+          name: 'Discussion of proposal',
+          ownerId: 'alice',
+          timebox: 20,
+        },
+      ],
       currentAgendaItemId: 'item-1',
     });
     renderQueue(meeting);
@@ -218,10 +221,14 @@ describe('QueuePanel', () => {
       users: { alice: chairUser },
       queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'alice' } },
       currentSpeakerEntryId: 's1',
-      currentTopicSpeakers: [{
-        userId: 'alice', type: 'topic', topic: 'Test',
-        startTime: new Date(Date.now() - 65_000).toISOString(),
-      }],
+      currentTopicSpeakers: [
+        {
+          userId: 'alice',
+          type: 'topic',
+          topic: 'Test',
+          startTime: new Date(Date.now() - 65_000).toISOString(),
+        },
+      ],
     });
     renderQueue(meeting);
     expect(screen.getByText('1:05')).toBeInTheDocument();
@@ -379,11 +386,7 @@ describe('QueuePanel', () => {
     const { unmount } = render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
         <SocketContext value={mockSocket}>
-          <QueuePanel
-            autoEditEntryId="q1"
-            onAddEntry={() => {}}
-            onAutoEditConsumed={() => {}}
-          />
+          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
         </SocketContext>
       </TestMeetingProvider>,
     );
@@ -413,11 +416,7 @@ describe('QueuePanel', () => {
     render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
         <SocketContext value={mockSocket}>
-          <QueuePanel
-            autoEditEntryId="q1"
-            onAddEntry={() => {}}
-            onAutoEditConsumed={() => {}}
-          />
+          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
         </SocketContext>
       </TestMeetingProvider>,
     );
@@ -444,11 +443,7 @@ describe('QueuePanel', () => {
     render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
         <SocketContext value={mockSocket}>
-          <QueuePanel
-            autoEditEntryId="q1"
-            onAddEntry={() => {}}
-            onAutoEditConsumed={() => {}}
-          />
+          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
         </SocketContext>
       </TestMeetingProvider>,
     );

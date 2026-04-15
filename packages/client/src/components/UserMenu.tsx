@@ -65,10 +65,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
         >
           <UserBadge user={user} size={20} />
         </button>
-        <a
-          href="/auth/logout"
-          className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
-        >
+        <a href="/auth/logout" className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
           Log Out
         </a>
       </span>
@@ -97,7 +94,10 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
       </button>
       <button
         type="button"
-        onClick={() => { setOpen(false); setUsername(''); }}
+        onClick={() => {
+          setOpen(false);
+          setUsername('');
+        }}
         className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
       >
         Cancel

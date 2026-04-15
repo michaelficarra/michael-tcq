@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  createMeeting,
-  goToAgendaTab,
-  goToQueueTab,
-  addAgendaItem,
-  startMeeting,
-} from './helpers.js';
+import { createMeeting, goToAgendaTab, goToQueueTab, addAgendaItem, startMeeting } from './helpers.js';
 
 /** Set up a started meeting with one agenda item. */
 async function setupStartedMeeting(page: import('@playwright/test').Page) {
@@ -23,9 +17,7 @@ test.describe('Poll Configuration', () => {
   test('"Create Poll" button appears for chairs when there is a current agenda item and no active poll', async ({
     page,
   }) => {
-    await expect(
-      page.getByRole('button', { name: 'Create Poll' }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create Poll' })).toBeVisible();
   });
 
   test('clicking "Create Poll" opens a setup form modal', async ({ page }) => {
@@ -38,37 +30,22 @@ test.describe('Poll Configuration', () => {
     await expect(dialog.getByLabel('Poll topic')).toBeVisible();
 
     // "Allow selecting multiple options" checkbox, checked by default
-    const multiSelectCheckbox = dialog.getByLabel(
-      'Allow selecting multiple options',
-    );
+    const multiSelectCheckbox = dialog.getByLabel('Allow selecting multiple options');
     await expect(multiSelectCheckbox).toBeVisible();
     await expect(multiSelectCheckbox).toBeChecked();
 
     // Start Poll and Cancel buttons
-    await expect(
-      dialog.getByRole('button', { name: 'Start Poll' }),
-    ).toBeVisible();
-    await expect(
-      dialog.getByRole('button', { name: 'Cancel' }),
-    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Start Poll' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible();
   });
 
-  test('the setup form shows the 6 default options with emoji and label', async ({
-    page,
-  }) => {
+  test('the setup form shows the 6 default options with emoji and label', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Poll' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Create poll' });
 
     // Each default option should have its label visible
-    const expectedLabels = [
-      'Strong Positive',
-      'Positive',
-      'Following',
-      'Confused',
-      'Indifferent',
-      'Unconvinced',
-    ];
+    const expectedLabels = ['Strong Positive', 'Positive', 'Following', 'Confused', 'Indifferent', 'Unconvinced'];
 
     const labelInputs = dialog.getByLabel('Option label');
     await expect(labelInputs).toHaveCount(6);
@@ -82,9 +59,7 @@ test.describe('Poll Configuration', () => {
     await expect(emojiButtons).toHaveCount(6);
   });
 
-  test('chairs can remove options but minimum 2 are required', async ({
-    page,
-  }) => {
+  test('chairs can remove options but minimum 2 are required', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Poll' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Create poll' });
@@ -112,9 +87,7 @@ test.describe('Poll Configuration', () => {
     }
   });
 
-  test('"Cancel" closes the setup form without starting a poll', async ({
-    page,
-  }) => {
+  test('"Cancel" closes the setup form without starting a poll', async ({ page }) => {
     await page.getByRole('button', { name: 'Create Poll' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Create poll' });
@@ -124,9 +97,7 @@ test.describe('Poll Configuration', () => {
 
     await expect(dialog).not.toBeVisible();
     // No active poll modal should appear
-    await expect(
-      page.getByRole('dialog', { name: 'Active poll' }),
-    ).not.toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Active poll' })).not.toBeVisible();
   });
 
   test('"Start Poll" begins the poll', async ({ page }) => {
@@ -139,9 +110,7 @@ test.describe('Poll Configuration', () => {
     await expect(setupDialog).not.toBeVisible();
 
     // The active poll dialog should appear
-    await expect(
-      page.getByRole('dialog', { name: 'Active poll' }),
-    ).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Active poll' })).toBeVisible();
   });
 });
 
@@ -153,28 +122,17 @@ test.describe('Reactions', () => {
     await page.getByRole('button', { name: 'Create Poll' }).click();
     const setupDialog = page.getByRole('dialog', { name: 'Create poll' });
     await setupDialog.getByRole('button', { name: 'Start Poll' }).click();
-    await expect(
-      page.getByRole('dialog', { name: 'Active poll' }),
-    ).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Active poll' })).toBeVisible();
   });
 
-  test('active poll modal shows reaction buttons with emoji, label, and count', async ({
-    page,
-  }) => {
+  test('active poll modal shows reaction buttons with emoji, label, and count', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
     const reactionsGroup = dialog.getByRole('group', {
       name: 'Poll reactions',
     });
 
     // All 6 default options should be present as buttons
-    const expectedLabels = [
-      'Strong Positive',
-      'Positive',
-      'Following',
-      'Confused',
-      'Indifferent',
-      'Unconvinced',
-    ];
+    const expectedLabels = ['Strong Positive', 'Positive', 'Following', 'Confused', 'Indifferent', 'Unconvinced'];
 
     for (const label of expectedLabels) {
       // Each button has aria-label "Label: count"
@@ -185,9 +143,7 @@ test.describe('Reactions', () => {
     }
   });
 
-  test('clicking a reaction button toggles the selection and updates the count', async ({
-    page,
-  }) => {
+  test('clicking a reaction button toggles the selection and updates the count', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
 
     // Click "Strong Positive" — count should go from 0 to 1
@@ -207,9 +163,7 @@ test.describe('Reactions', () => {
     await expect(button).toHaveAccessibleName('Strong Positive: 0');
   });
 
-  test('user can select multiple reactions when multi-select is enabled', async ({
-    page,
-  }) => {
+  test('user can select multiple reactions when multi-select is enabled', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
 
     const positiveBtn = dialog.getByRole('button', { name: /^Positive:/ });
@@ -232,40 +186,26 @@ test.describe('Termination', () => {
     await page.getByRole('button', { name: 'Create Poll' }).click();
     const setupDialog = page.getByRole('dialog', { name: 'Create poll' });
     await setupDialog.getByRole('button', { name: 'Start Poll' }).click();
-    await expect(
-      page.getByRole('dialog', { name: 'Active poll' }),
-    ).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Active poll' })).toBeVisible();
   });
 
-  test('"Stop Poll" button is visible for chairs during an active poll', async ({
-    page,
-  }) => {
+  test('"Stop Poll" button is visible for chairs during an active poll', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
-    await expect(
-      dialog.getByRole('button', { name: 'Stop Poll' }),
-    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Stop Poll' })).toBeVisible();
   });
 
-  test('"Copy Results" button is visible for chairs during an active poll', async ({
-    page,
-  }) => {
+  test('"Copy Results" button is visible for chairs during an active poll', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
-    await expect(
-      dialog.getByRole('button', { name: 'Copy Results' }),
-    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Copy Results' })).toBeVisible();
   });
 
-  test('clicking "Stop Poll" closes the active poll modal', async ({
-    page,
-  }) => {
+  test('clicking "Stop Poll" closes the active poll modal', async ({ page }) => {
     const dialog = page.getByRole('dialog', { name: 'Active poll' });
     await dialog.getByRole('button', { name: 'Stop Poll' }).click();
 
     await expect(dialog).not.toBeVisible();
 
     // "Create Poll" button should reappear since there is no active poll
-    await expect(
-      page.getByRole('button', { name: 'Create Poll' }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create Poll' })).toBeVisible();
   });
 });

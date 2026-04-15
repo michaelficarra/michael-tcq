@@ -140,16 +140,11 @@ describe('AdminPanel', () => {
     });
 
     // Confirm deletion — click the red "Delete" button in the modal
-    const confirmButton = screen.getAllByText('Delete').find(
-      (el) => el.className.includes('bg-red'),
-    )!;
+    const confirmButton = screen.getAllByText('Delete').find((el) => el.className.includes('bg-red'))!;
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/admin/meetings/bright-pine-lake',
-        { method: 'DELETE' },
-      );
+      expect(mockFetch).toHaveBeenCalledWith('/api/admin/meetings/bright-pine-lake', { method: 'DELETE' });
       // Meeting should be removed from the list
       expect(screen.queryByText('bright-pine-lake')).not.toBeInTheDocument();
     });

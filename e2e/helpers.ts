@@ -33,7 +33,7 @@ export async function switchUser(page: Page, username: string) {
   // Click the username in the nav bar to open the switcher
   const userMenu = nav.getByRole('textbox');
   // If the form isn't visible, click the user button to show it
-  if (!await userMenu.isVisible()) {
+  if (!(await userMenu.isVisible())) {
     await nav.getByRole('button').filter({ hasText: /\w/ }).last().click();
   }
   await userMenu.fill(username);
@@ -63,12 +63,7 @@ export async function goToHelpTab(page: Page) {
 }
 
 /** Add an agenda item (must be on the Agenda tab as a chair). */
-export async function addAgendaItem(
-  page: Page,
-  name: string,
-  owner?: string,
-  timebox?: number,
-) {
+export async function addAgendaItem(page: Page, name: string, owner?: string, timebox?: number) {
   // Click the "New Agenda Item" button to show the form
   const addButton = page.getByRole('button', { name: /New Agenda Item/i });
   if (await addButton.isVisible()) {
@@ -86,7 +81,10 @@ export async function addAgendaItem(
 
   // Count items before adding by checking visible item text
   const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
-  const countBefore = await agendaPanel.locator('li').count().catch(() => 0);
+  const countBefore = await agendaPanel
+    .locator('li')
+    .count()
+    .catch(() => 0);
 
   await page.getByRole('button', { name: 'Create' }).click();
 

@@ -20,17 +20,13 @@ test.describe('Creating a Meeting', () => {
     await page.waitForURL(/\/meeting\//);
 
     // Meeting ID should be word-based (e.g. "bright-pine-lake")
-    const id = decodeURIComponent(
-      new URL(page.url()).pathname.split('/meeting/')[1],
-    );
+    const id = decodeURIComponent(new URL(page.url()).pathname.split('/meeting/')[1]);
     expect(id).toMatch(/^[a-z]+-[a-z]+-[a-z]+$/);
   });
 });
 
 test.describe('Joining a Meeting', () => {
-  test('a user can join a meeting by entering its ID on the home page', async ({
-    page,
-  }) => {
+  test('a user can join a meeting by entering its ID on the home page', async ({ page }) => {
     // First create a meeting to get a valid ID
     const meetingId = await createMeeting(page);
 
@@ -48,14 +44,10 @@ test.describe('Joining a Meeting', () => {
 
     // Navigate directly
     await page.goto(`/meeting/${encodeURIComponent(meetingId)}`);
-    await expect(
-      page.getByText('Waiting for the meeting to start'),
-    ).toBeVisible();
+    await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
   });
 
-  test('navigating to a non-existent meeting shows an error page with "Back to home" link', async ({
-    page,
-  }) => {
+  test('navigating to a non-existent meeting shows an error page with "Back to home" link', async ({ page }) => {
     await page.goto('/meeting/nonexistent-fake-meeting');
 
     await expect(page.getByText('Back to home')).toBeVisible();
@@ -63,9 +55,7 @@ test.describe('Joining a Meeting', () => {
     // Clicking "Back to home" navigates to the home page
     await page.getByText('Back to home').click();
     await page.waitForURL('/');
-    await expect(
-      page.getByRole('heading', { name: 'Join Meeting' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
   });
 });
 
@@ -80,26 +70,18 @@ test.describe('Meeting Flow', () => {
     await addAgendaItem(page, 'First Topic', 'admin');
     await goToQueueTab(page);
 
-    await expect(
-      page.getByText('Waiting for the meeting to start'),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Start Meeting' }),
-    ).toBeVisible();
+    await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start Meeting' })).toBeVisible();
   });
 
-  test('clicking "Start Meeting" advances to the first agenda item', async ({
-    page,
-  }) => {
+  test('clicking "Start Meeting" advances to the first agenda item', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Opening Remarks', 'admin');
     await startMeeting(page);
 
     // The current agenda item should appear in the queue panel
-    await expect(
-      page.getByText('Opening Remarks', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('Opening Remarks', { exact: true })).toBeVisible();
   });
 
   test('"Next Agenda Item" advances to the next item', async ({ page }) => {
@@ -111,30 +93,22 @@ test.describe('Meeting Flow', () => {
 
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
 
-    await expect(
-      page.getByText('Item Two', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('Item Two', { exact: true })).toBeVisible();
   });
 
-  test('"Next Agenda Item" button is hidden on the last agenda item', async ({
-    page,
-  }) => {
+  test('"Next Agenda Item" button is hidden on the last agenda item', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Only Item', 'admin');
     await startMeeting(page);
 
     // Only one agenda item, so "Next Agenda Item" should not be visible
-    await expect(
-      page.getByRole('button', { name: 'Next Agenda Item' }),
-    ).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next Agenda Item' })).not.toBeVisible();
   });
 });
 
 test.describe('Navigation', () => {
-  test('meeting page has four tabs: Agenda, Queue, Log, Help', async ({
-    page,
-  }) => {
+  test('meeting page has four tabs: Agenda, Queue, Log, Help', async ({ page }) => {
     await createMeeting(page);
 
     await expect(page.getByRole('tab', { name: 'Agenda' })).toBeVisible();
@@ -146,31 +120,19 @@ test.describe('Navigation', () => {
   test('the Queue tab is the default active tab', async ({ page }) => {
     await createMeeting(page);
 
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('the active tab has aria-selected="true"', async ({ page }) => {
     await createMeeting(page);
 
     // Queue is default
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
 
     // Switch to Agenda
     await goToAgendaTab(page);
-    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute(
-      'aria-selected',
-      'false',
-    );
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'false');
   });
 
   test('clicking each tab shows the corresponding panel', async ({ page }) => {
@@ -197,9 +159,7 @@ test.describe('Navigation', () => {
     await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
   });
 
-  test('top navigation bar shows the TCQ logo linking to home, tabs, and user menu', async ({
-    page,
-  }) => {
+  test('top navigation bar shows the TCQ logo linking to home, tabs, and user menu', async ({ page }) => {
     await createMeeting(page);
 
     const nav = page.getByRole('navigation');
@@ -212,9 +172,7 @@ test.describe('Navigation', () => {
     // Clicking the logo navigates to home
     await logoLink.click();
     await page.waitForURL('/');
-    await expect(
-      page.getByRole('heading', { name: 'Join Meeting' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
   });
 
   test('the Help tab is available on the home page', async ({ page }) => {

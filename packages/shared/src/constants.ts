@@ -1,12 +1,7 @@
 import type { QueueEntryType, PollOption } from './types.js';
 
 /** Queue entry types in priority order (highest first). */
-export const QUEUE_ENTRY_TYPES: readonly QueueEntryType[] = [
-  'point-of-order',
-  'question',
-  'reply',
-  'topic',
-] as const;
+export const QUEUE_ENTRY_TYPES: readonly QueueEntryType[] = ['point-of-order', 'question', 'reply', 'topic'] as const;
 
 /** Human-readable labels for each queue entry type. */
 export const QUEUE_ENTRY_LABELS: Record<QueueEntryType, string> = {

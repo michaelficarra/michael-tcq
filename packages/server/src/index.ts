@@ -4,9 +4,8 @@
 import { join } from 'node:path';
 import dotenv from 'dotenv';
 const projectRoot = join(import.meta.dirname, '../../..');
-const envSuffix = process.env.NODE_ENV === 'production' ? 'production'
-  : process.env.NODE_ENV === 'test' ? 'test'
-  : 'development';
+const envSuffix =
+  process.env.NODE_ENV === 'production' ? 'production' : process.env.NODE_ENV === 'test' ? 'test' : 'development';
 dotenv.config({ path: join(projectRoot, `.env.${envSuffix}`) });
 
 import express from 'express';

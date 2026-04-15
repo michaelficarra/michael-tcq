@@ -79,21 +79,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Switch to a different mock user — calls the dev endpoint,
   // then refreshes auth state so the whole app updates.
-  const switchUser = useCallback(async (username: string) => {
-    const res = await fetch('/api/dev/switch-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username }),
-    });
-    if (res.ok) {
-      // Re-fetch /api/me to update the whole auth state
-      await fetchMe();
-    }
-  }, [fetchMe]);
-
-  return (
-    <AuthContext value={{ user, loading, mockAuth, isAdmin: adminFlag, switchUser }}>
-      {children}
-    </AuthContext>
+  const switchUser = useCallback(
+    async (username: string) => {
+      const res = await fetch('/api/dev/switch-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      if (res.ok) {
+        // Re-fetch /api/me to update the whole auth state
+        await fetchMe();
+      }
+    },
+    [fetchMe],
   );
+
+  return <AuthContext value={{ user, loading, mockAuth, isAdmin: adminFlag, switchUser }}>{children}</AuthContext>;
 }

@@ -36,7 +36,7 @@ import { InlineMarkdown } from './InlineMarkdown.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
-const PollSetup = lazy(() => import('./PollSetup.js').then(m => ({ default: m.PollSetup })));
+const PollSetup = lazy(() => import('./PollSetup.js').then((m) => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
 
 interface QueuePanelProps {
@@ -58,9 +58,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.currentAgendaItemId);
 
   // Derive queue-related values from normalised IDs + maps
-  const currentSpeaker = meeting?.currentSpeakerEntryId ? meeting.queueEntries[meeting.currentSpeakerEntryId] : undefined;
+  const currentSpeaker = meeting?.currentSpeakerEntryId
+    ? meeting.queueEntries[meeting.currentSpeakerEntryId]
+    : undefined;
   const currentTopic = meeting?.currentTopicEntryId ? meeting.queueEntries[meeting.currentTopicEntryId] : undefined;
-  const queuedSpeakers = meeting?.queuedSpeakerIds.map(id => meeting.queueEntries[id]).filter(Boolean) ?? [];
+  const queuedSpeakers = meeting?.queuedSpeakerIds.map((id) => meeting.queueEntries[id]).filter(Boolean) ?? [];
 
   // Derive start times for count-up timers
   const agendaItemStartTime = meeting?.currentAgendaItemStartTime;
@@ -218,9 +220,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
     if (!currentAgendaItem) {
       return meeting.agenda.length > 0;
     }
-    const currentIndex = meeting.agenda.findIndex(
-      (item) => item.id === currentAgendaItem.id,
-    );
+    const currentIndex = meeting.agenda.findIndex((item) => item.id === currentAgendaItem.id);
     return currentIndex < meeting.agenda.length - 1;
   })();
 
@@ -277,19 +277,21 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
               <UserBadge user={meeting.users[currentAgendaItem.ownerId]} size={18} />
               {currentAgendaItem.timebox != null && currentAgendaItem.timebox > 0 && (
                 <span className="ml-2">
-                  {currentAgendaItem.timebox}{' '}
-                  {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
+                  {currentAgendaItem.timebox} {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
                 </span>
               )}
-              {agendaItemStartTime && <CountUpTimer since={agendaItemStartTime} className="ml-2 text-xs text-stone-400 dark:text-stone-500 tabular-nums" overAfterMinutes={currentAgendaItem.timebox} />}
+              {agendaItemStartTime && (
+                <CountUpTimer
+                  since={agendaItemStartTime}
+                  className="ml-2 text-xs text-stone-400 dark:text-stone-500 tabular-nums"
+                  overAfterMinutes={currentAgendaItem.timebox}
+                />
+              )}
             </div>
-
           </div>
         ) : (
           <div className="pl-3">
-            <p className="text-stone-500 dark:text-stone-400">
-              Waiting for the meeting to start&hellip;
-            </p>
+            <p className="text-stone-500 dark:text-stone-400">Waiting for the meeting to start&hellip;</p>
             {/* Start Meeting button — chair only */}
             {isChair && meeting.agenda.length > 0 && (
               <button
@@ -314,7 +316,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             Topic
           </h2>
           <div className="pl-3">
-            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentTopic.topic}</InlineMarkdown></p>
+            <p className="text-stone-800 dark:text-stone-200">
+              <InlineMarkdown>{currentTopic.topic}</InlineMarkdown>
+            </p>
             <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
               <UserBadge user={meeting.users[currentTopic.userId]} size={18} />
               {currentTopicStartTime && <CountUpTimer since={currentTopicStartTime} />}
@@ -347,7 +351,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
 
         {currentSpeaker ? (
           <div className="pl-3">
-            <p className="text-stone-800 dark:text-stone-200"><InlineMarkdown>{currentSpeaker.topic}</InlineMarkdown></p>
+            <p className="text-stone-800 dark:text-stone-200">
+              <InlineMarkdown>{currentSpeaker.topic}</InlineMarkdown>
+            </p>
             <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
               <UserBadge user={meeting.users[currentSpeaker.userId]} size={18} />
               {currentSpeakerStartTime && <CountUpTimer since={currentSpeakerStartTime} />}
@@ -399,14 +405,19 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         {/* Restore queue textarea — chairs only */}
         {isChair && showRestore && (
           <div className="mb-3 border border-stone-200 dark:border-stone-700 rounded-lg p-3 bg-white dark:bg-stone-900">
-            <label htmlFor="restore-queue" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+            <label
+              htmlFor="restore-queue"
+              className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+            >
               Paste queue items (one per line: "Type: topic")
             </label>
             <textarea
               id="restore-queue"
               value={restoreText}
               onChange={(e) => setRestoreText(e.target.value)}
-              placeholder={'New Topic: My discussion point\nClarifying Question: How does this work?\nReply: I agree with the previous speaker\nPoint of Order: We should timebox this'}
+              placeholder={
+                'New Topic: My discussion point\nClarifying Question: How does this work?\nReply: I agree with the previous speaker\nPoint of Order: We should timebox this'
+              }
               rows={5}
               className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-2
                          dark:bg-stone-700 dark:text-stone-100
@@ -436,10 +447,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext
-              items={meeting.queuedSpeakerIds}
-              strategy={verticalListSortingStrategy}
-            >
+            <SortableContext items={meeting.queuedSpeakerIds} strategy={verticalListSortingStrategy}>
               <ol aria-label="Queued speakers">
                 {queuedSpeakers.map((entry, index) => (
                   <SortableQueueEntry
@@ -474,14 +482,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
-              Next Agenda Item
-            </h3>
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Next Agenda Item</h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
-              Advancing to the next agenda item will clear the speaker queue
-              ({queuedSpeakers.length}{' '}
-              {queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
-              Continue?
+              Advancing to the next agenda item will clear the speaker queue ({queuedSpeakers.length}{' '}
+              {queuedSpeakers.length === 1 ? 'entry' : 'entries'}). Continue?
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -522,10 +526,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
             onClick={(e) => e.stopPropagation()}
           >
             <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
-              <PollSetup
-                onCancel={() => setShowPollSetup(false)}
-                onStarted={() => setShowPollSetup(false)}
-              />
+              <PollSetup onCancel={() => setShowPollSetup(false)} onStarted={() => setShowPollSetup(false)} />
             </Suspense>
           </div>
         </div>
@@ -539,9 +540,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
           aria-label="Active poll"
           aria-modal="true"
         >
-          <div
-            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[calc(100vw-2rem)]"
-          >
+          <div className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[calc(100vw-2rem)]">
             <PollReactions />
           </div>
         </div>
@@ -567,8 +566,14 @@ interface SortableQueueEntryProps {
 }
 
 function SortableQueueEntry({
-  entry, index, queue, isChair, isOwnEntry, onDelete,
-  initialEditing = false, onEditingStarted,
+  entry,
+  index,
+  queue,
+  isChair,
+  isOwnEntry,
+  onDelete,
+  initialEditing = false,
+  onEditingStarted,
 }: SortableQueueEntryProps) {
   const { meeting } = useMeetingState();
   const socket = useSocket();
@@ -632,9 +637,9 @@ function SortableQueueEntry({
 
     // Build the list in low-to-high priority order (topic first) so
     // clicking cycles toward higher priority naturally.
-    return QUEUE_ENTRY_TYPES
-      .filter((t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority)
-      .reverse();
+    return QUEUE_ENTRY_TYPES.filter(
+      (t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority,
+    ).reverse();
   })();
 
   /** Cycle to the next legal type when the type badge is clicked. */
@@ -645,14 +650,10 @@ function SortableQueueEntry({
     socket?.emit('queue:edit', { id: entry.id, type: nextType });
   }
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: entry.id, disabled: !canDrag || editing });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entry.id,
+    disabled: !canDrag || editing,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -696,11 +697,10 @@ function SortableQueueEntry({
         ref={setNodeRef}
         style={style}
         className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-          entry.type === 'point-of-order' ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
+          entry.type === 'point-of-order'
+            ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-        } ${
-          entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
-        }`}
+        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
       >
         {/* Placeholder for drag handle column */}
         {canDrag && <span className="w-4" />}
@@ -718,7 +718,9 @@ function SortableQueueEntry({
             type="text"
             value={editTopic}
             onChange={(e) => setEditTopic(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') handleEditCancel(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') handleEditCancel();
+            }}
             required
             aria-label="Topic description"
             // Focus and select all text on mount so the user can
@@ -753,12 +755,12 @@ function SortableQueueEntry({
       ref={setNodeRef}
       style={style}
       className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-        isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
-          : entry.type === 'point-of-order' ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
-          : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-      } ${
-        entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''
-      }`}
+        isDragging
+          ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
+          : entry.type === 'point-of-order'
+            ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
+            : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
+      } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500' : ''}`}
     >
       {/* Drag handle — chairs can drag any entry, participants their own */}
       {canDrag && (
@@ -790,9 +792,7 @@ function SortableQueueEntry({
             {entryTypeLabel(entry.type)}:
           </button>
         ) : (
-          <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>
-            {entryTypeLabel(entry.type)}:
-          </span>
+          <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>{entryTypeLabel(entry.type)}:</span>
         )}
         <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
 
@@ -839,21 +839,31 @@ function entryTypeLabel(type: string): string {
 /** Map a display label back to a queue entry type. Case-insensitive. */
 function parseEntryType(label: string): QueueEntryType | null {
   switch (label.toLowerCase()) {
-    case 'new topic': return 'topic';
-    case 'reply': return 'reply';
-    case 'clarifying question': return 'question';
-    case 'point of order': return 'point-of-order';
-    default: return null;
+    case 'new topic':
+      return 'topic';
+    case 'reply':
+      return 'reply';
+    case 'clarifying question':
+      return 'question';
+    case 'point of order':
+      return 'point-of-order';
+    default:
+      return null;
   }
 }
 
 /** Map a queue entry type to a Tailwind text colour class. */
 function entryTypeColor(type: string): string {
   switch (type) {
-    case 'topic': return 'text-blue-600';
-    case 'reply': return 'text-cyan-600';
-    case 'question': return 'text-green-600';
-    case 'point-of-order': return 'text-red-600 dark:text-red-400';
-    default: return 'text-stone-600 dark:text-stone-400';
+    case 'topic':
+      return 'text-blue-600';
+    case 'reply':
+      return 'text-cyan-600';
+    case 'question':
+      return 'text-green-600';
+    case 'point-of-order':
+      return 'text-red-600 dark:text-red-400';
+    default:
+      return 'text-stone-600 dark:text-stone-400';
   }
 }

@@ -13,7 +13,10 @@ import type { User } from '@tcq/shared';
 function getAdminUsernames(): Set<string> {
   const raw = process.env.ADMIN_USERNAMES ?? '';
   return new Set(
-    raw.split(',').map((u) => u.trim().toLowerCase()).filter((u) => u.length > 0),
+    raw
+      .split(',')
+      .map((u) => u.trim().toLowerCase())
+      .filter((u) => u.length > 0),
   );
 }
 

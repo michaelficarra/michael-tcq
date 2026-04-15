@@ -28,8 +28,7 @@ describe('stripMarkdown', () => {
   });
 
   it('handles combined formatting', () => {
-    expect(stripMarkdown('[**bold link**](url) and *italic*'))
-      .toBe('bold link and italic');
+    expect(stripMarkdown('[**bold link**](url) and *italic*')).toBe('bold link and italic');
   });
 });
 
@@ -165,7 +164,9 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(1);
-    expect(items[0].name).toBe('[Iterator Includes](https://github.com/michaelficarra/proposal-iterator-includes) for Stage 1, 2, or 2.7 ([slides](https://example.com))');
+    expect(items[0].name).toBe(
+      '[Iterator Includes](https://github.com/michaelficarra/proposal-iterator-includes) for Stage 1, 2, or 2.7 ([slides](https://example.com))',
+    );
     expect(items[0].presenter).toBe('Michael Ficarra');
   });
 

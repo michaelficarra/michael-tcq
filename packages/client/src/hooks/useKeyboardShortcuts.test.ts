@@ -104,9 +104,7 @@ describe('useKeyboardShortcuts', () => {
 
   it('fires alwaysActive shortcuts even when disabled', () => {
     const action = vi.fn();
-    const shortcuts: Shortcut[] = [
-      { key: '?', description: 'Help', action, alwaysActive: true },
-    ];
+    const shortcuts: Shortcut[] = [{ key: '?', description: 'Help', action, alwaysActive: true }];
 
     renderHook(() => useKeyboardShortcuts(shortcuts, false));
 

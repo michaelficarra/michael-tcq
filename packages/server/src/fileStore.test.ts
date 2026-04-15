@@ -18,8 +18,11 @@ function makeMeeting(id: string): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     reactions: [],
-    trackPoll: false, pollOptions: [], version: 0,
-    log: [], currentTopicSpeakers: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
   };
 }
 

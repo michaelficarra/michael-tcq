@@ -13,14 +13,10 @@ test.describe('Log Tab', () => {
   test('shows empty state before meeting starts', async ({ page }) => {
     await createMeeting(page);
     await goToLogTab(page);
-    await expect(
-      page.getByText('No events yet'),
-    ).toBeVisible();
+    await expect(page.getByText('No events yet')).toBeVisible();
   });
 
-  test('"Meeting started" entry appears when meeting starts', async ({
-    page,
-  }) => {
+  test('"Meeting started" entry appears when meeting starts', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'First Item', 'admin');
@@ -30,9 +26,7 @@ test.describe('Log Tab', () => {
     await expect(page.getByText('Meeting started')).toBeVisible();
   });
 
-  test('"Started: Item Name" appears when an agenda item begins', async ({
-    page,
-  }) => {
+  test('"Started: Item Name" appears when an agenda item begins', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'My Agenda Item', 'admin');
@@ -67,9 +61,7 @@ test.describe('Log Tab', () => {
     expect(betaIndex).toBeLessThan(alphaIndex);
   });
 
-  test('each entry shows a relative time with a full timestamp on hover', async ({
-    page,
-  }) => {
+  test('each entry shows a relative time with a full timestamp on hover', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Timed Item', 'admin');
@@ -92,9 +84,7 @@ test.describe('Log Tab', () => {
     expect(titleAttr).toMatch(/\d{4}/);
   });
 
-  test('entries are grouped by agenda item with separators', async ({
-    page,
-  }) => {
+  test('entries are grouped by agenda item with separators', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Group One', 'admin');
@@ -114,9 +104,7 @@ test.describe('Log Tab', () => {
     await expect(logContent.getByText('Group Two', { exact: true }).first()).toBeVisible();
   });
 
-  test('"topic discussed" entries appear when advancing past a speaker with a new topic', async ({
-    page,
-  }) => {
+  test('"topic discussed" entries appear when advancing past a speaker with a new topic', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Discussion Item', 'admin');
@@ -156,9 +144,7 @@ test.describe('Log Tab', () => {
 
     // Should already see the meeting started and first agenda item
     await expect(logContent.getByText('Meeting started')).toBeVisible();
-    await expect(
-      logContent.getByText('Real-Time Item', { exact: true }),
-    ).toBeVisible();
+    await expect(logContent.getByText('Real-Time Item', { exact: true })).toBeVisible();
 
     // Now advance to next item while staying on the log tab
     // Need to go to queue tab to click the button, then back to log
@@ -169,8 +155,6 @@ test.describe('Log Tab', () => {
     await goToLogTab(page);
 
     // The new agenda item should appear in the log without a page refresh
-    await expect(
-      logContent.getByText('Second RT Item', { exact: true }),
-    ).toBeVisible();
+    await expect(logContent.getByText('Second RT Item', { exact: true })).toBeVisible();
   });
 });

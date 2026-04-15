@@ -17,13 +17,15 @@ import type { User } from '@tcq/shared';
  * Data URI for a generic person silhouette fallback avatar.
  * Used when the GitHub avatar fails to load (e.g. nonexistent username).
  */
-const FALLBACK_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
-  '<rect width="32" height="32" rx="16" fill="#d6d3d1"/>' +
-  '<circle cx="16" cy="12" r="5" fill="#a8a29e"/>' +
-  '<path d="M6,28 Q6,20 16,20 Q26,20 26,28" fill="#a8a29e"/>' +
-  '</svg>',
-);
+const FALLBACK_AVATAR =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+      '<rect width="32" height="32" rx="16" fill="#d6d3d1"/>' +
+      '<circle cx="16" cy="12" r="5" fill="#a8a29e"/>' +
+      '<path d="M6,28 Q6,20 16,20 Q26,20 26,28" fill="#a8a29e"/>' +
+      '</svg>',
+  );
 
 interface UserBadgeProps {
   user: User | undefined;
@@ -71,9 +73,7 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
       />
       <span>
         {user.name}
-        {user.organisation && (
-          <span className="text-stone-400 dark:text-stone-500"> ({user.organisation})</span>
-        )}
+        {user.organisation && <span className="text-stone-400 dark:text-stone-500"> ({user.organisation})</span>}
       </span>
     </span>
   );

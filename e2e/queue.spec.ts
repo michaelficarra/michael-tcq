@@ -155,7 +155,7 @@ test.describe('Queue Display', () => {
     const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
     // Point of Order entries have a visible border (red-themed)
     // Check that the item has a border — normal entries don't
-    const borderWidth = await item.evaluate(el => getComputedStyle(el).borderWidth);
+    const borderWidth = await item.evaluate((el) => getComputedStyle(el).borderWidth);
     expect(borderWidth).not.toBe('0px');
   });
 });

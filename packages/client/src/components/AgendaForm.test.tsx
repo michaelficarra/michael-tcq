@@ -6,21 +6,31 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = {
-  ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME',
+  ghid: 1,
+  ghUsername: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
 };
 
 const baseMeeting: MeetingState = {
-  id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
-  currentAgendaItemId: undefined, currentSpeakerEntryId: undefined, currentTopicEntryId: undefined,
-  queueEntries: {}, queuedSpeakerIds: [], reactions: [], trackPoll: false, pollOptions: [], version: 0,
-  log: [], currentTopicSpeakers: [],
+  id: 'test',
+  users: { alice: chairUser },
+  chairIds: ['alice'],
+  agenda: [],
+  currentAgendaItemId: undefined,
+  currentSpeakerEntryId: undefined,
+  currentTopicEntryId: undefined,
+  queueEntries: {},
+  queuedSpeakerIds: [],
+  reactions: [],
+  trackPoll: false,
+  pollOptions: [],
+  version: 0,
+  log: [],
+  currentTopicSpeakers: [],
 };
 
-function renderForm(
-  socket: TypedSocket | null = null,
-  onCancel = () => {},
-  onSubmit = () => {},
-) {
+function renderForm(socket: TypedSocket | null = null, onCancel = () => {}, onSubmit = () => {}) {
   return render(
     <TestMeetingProvider meeting={baseMeeting} user={chairUser}>
       <SocketContext value={socket}>

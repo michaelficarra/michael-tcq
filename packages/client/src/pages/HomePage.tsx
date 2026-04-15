@@ -133,7 +133,9 @@ function JoinMeetingCard() {
 
         {/* Error message */}
         {error && (
-          <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">{error}</p>
+          <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">
+            {error}
+          </p>
         )}
 
         <button
@@ -190,13 +192,14 @@ function NewMeetingCard() {
       <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-4">New Meeting</h2>
 
       <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
-        You will be the initial chair. Additional chairs can be added
-        from the Agenda tab after the meeting is created.
+        You will be the initial chair. Additional chairs can be added from the Agenda tab after the meeting is created.
       </p>
 
       {/* Error message */}
       {error && (
-        <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">{error}</p>
+        <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">
+          {error}
+        </p>
       )}
 
       <button

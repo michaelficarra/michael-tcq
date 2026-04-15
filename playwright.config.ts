@@ -12,11 +12,19 @@ const dataDir = mkdtempSync(join(tmpdir(), 'tcq-test-'));
 
 // Clean up the temp directory on exit, even if tests are aborted.
 function cleanup() {
-  try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(dataDir, { recursive: true, force: true });
+  } catch {}
 }
 process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
-process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(143);
+});
 
 export default defineConfig({
   testDir: './e2e',

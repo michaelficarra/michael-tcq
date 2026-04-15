@@ -10,10 +10,18 @@ import './session.js';
 /** A no-op in-memory store for unit tests. */
 class InMemoryStore implements MeetingStore {
   private data = new Map<string, MeetingState>();
-  async save(meeting: MeetingState) { this.data.set(meeting.id, structuredClone(meeting)); }
-  async load(meetingId: string) { return this.data.get(meetingId) ?? null; }
-  async loadAll() { return [...this.data.values()]; }
-  async remove(meetingId: string) { this.data.delete(meetingId); }
+  async save(meeting: MeetingState) {
+    this.data.set(meeting.id, structuredClone(meeting));
+  }
+  async load(meetingId: string) {
+    return this.data.get(meetingId) ?? null;
+  }
+  async loadAll() {
+    return [...this.data.values()];
+  }
+  async remove(meetingId: string) {
+    this.data.delete(meetingId);
+  }
 }
 
 /**

@@ -217,9 +217,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      const usernames = payload.usernames
-        ?.map((u: string) => u.trim())
-        .filter((u: string) => u.length > 0);
+      const usernames = payload.usernames?.map((u: string) => u.trim()).filter((u: string) => u.length > 0);
 
       if (!Array.isArray(usernames)) {
         socket.emit('error', 'Invalid chair list');
@@ -233,9 +231,7 @@ export function registerSocketHandlers(
           return;
         }
 
-        const selfIncluded = usernames.some(
-          (u: string) => u.toLowerCase() === user.ghUsername.toLowerCase(),
-        );
+        const selfIncluded = usernames.some((u: string) => u.toLowerCase() === user.ghUsername.toLowerCase());
         if (!selfIncluded) {
           socket.emit('error', 'You cannot remove yourself from the chair list');
           return;
@@ -301,10 +297,13 @@ export function registerSocketHandlers(
       // meeting, use their full profile. Otherwise, create a placeholder.
       const meeting = meetingManager.get(joinedMeetingId);
       const key = ownerUsername.toLowerCase();
-      const owner: User =
-        meeting?.users[key] ??
-        (user.ghUsername.toLowerCase() === key ? user : undefined) ??
-        { ghid: 0, ghUsername: ownerUsername, name: ownerUsername, organisation: '' };
+      const owner: User = meeting?.users[key] ??
+        (user.ghUsername.toLowerCase() === key ? user : undefined) ?? {
+          ghid: 0,
+          ghUsername: ownerUsername,
+          name: ownerUsername,
+          organisation: '',
+        };
 
       // Parse timebox: treat 0, negative, and NaN as "no timebox"
       const timebox = payload.timebox && payload.timebox > 0 ? payload.timebox : undefined;
@@ -353,9 +352,7 @@ export function registerSocketHandlers(
 
       if (payload.timebox !== undefined) {
         // null clears the timebox; 0 or negative also clears it
-        updates.timebox = payload.timebox === null || payload.timebox <= 0
-          ? null
-          : payload.timebox;
+        updates.timebox = payload.timebox === null || payload.timebox <= 0 ? null : payload.timebox;
       }
 
       const edited = meetingManager.editAgendaItem(joinedMeetingId, payload.id, updates);
@@ -394,11 +391,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      const reordered = meetingManager.reorderAgendaItem(
-        joinedMeetingId,
-        payload.id,
-        payload.afterId,
-      );
+      const reordered = meetingManager.reorderAgendaItem(joinedMeetingId, payload.id, payload.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid reorder indices');
         return;
@@ -561,11 +554,7 @@ export function registerSocketHandlers(
         }
       }
 
-      const reordered = meetingManager.reorderQueueEntry(
-        joinedMeetingId,
-        payload.id,
-        payload.afterId,
-      );
+      const reordered = meetingManager.reorderQueueEntry(joinedMeetingId, payload.id, payload.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid queue reorder');
         return;
@@ -701,11 +690,13 @@ export function registerSocketHandlers(
         }
 
         // Build results sorted by count descending
-        const results = meeting.pollOptions.map((opt) => ({
-          emoji: opt.emoji,
-          label: opt.label,
-          count: meeting.reactions.filter((r) => r.optionId === opt.id).length,
-        })).sort((a, b) => b.count - a.count);
+        const results = meeting.pollOptions
+          .map((opt) => ({
+            emoji: opt.emoji,
+            label: opt.label,
+            count: meeting.reactions.filter((r) => r.optionId === opt.id).length,
+          }))
+          .sort((a, b) => b.count - a.count);
 
         meeting.log.push({
           type: 'poll-ran',
@@ -787,15 +778,16 @@ export function registerSocketHandlers(
         const participantIds = collectParticipantIds(meeting, outgoingStartTime);
 
         // Serialise the remaining queue if non-empty
-        const remainingQueue = meeting.queuedSpeakerIds.length > 0
-          ? meeting.queuedSpeakerIds
-              .map((id) => {
-                const e = meeting.queueEntries[id];
-                const u = meeting.users[e.userId];
-                return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.ghUsername ?? e.userId})`;
-              })
-              .join('\n')
-          : undefined;
+        const remainingQueue =
+          meeting.queuedSpeakerIds.length > 0
+            ? meeting.queuedSpeakerIds
+                .map((id) => {
+                  const e = meeting.queueEntries[id];
+                  const u = meeting.users[e.userId];
+                  return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.ghUsername ?? e.userId})`;
+                })
+                .join('\n')
+            : undefined;
 
         // Append agenda-item-finished
         meeting.log.push({
@@ -836,12 +828,14 @@ export function registerSocketHandlers(
       meeting.currentAgendaItemStartTime = now;
 
       // Start the introductory topic group with the item owner
-      meeting.currentTopicSpeakers = [{
-        userId: nextItem.ownerId,
-        type: 'topic',
-        topic: `Introducing: ${nextItem.name}`,
-        startTime: now,
-      }];
+      meeting.currentTopicSpeakers = [
+        {
+          userId: nextItem.ownerId,
+          type: 'topic',
+          topic: `Introducing: ${nextItem.name}`,
+          startTime: now,
+        },
+      ];
 
       meetingManager.markDirty(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);

@@ -172,9 +172,7 @@ export function createMeetingRoutes(
     // Transform GitHub blob URLs to raw.githubusercontent.com URLs
     // e.g. https://github.com/tc39/agendas/blob/main/2026/03.md
     //   → https://raw.githubusercontent.com/tc39/agendas/refs/heads/main/2026/03.md
-    const blobMatch = url.match(
-      /^https:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/([^/]+)\/(.+)$/,
-    );
+    const blobMatch = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/([^/]+)\/(.+)$/);
     if (blobMatch) {
       url = `https://raw.githubusercontent.com/${blobMatch[1]}/refs/heads/${blobMatch[2]}/${blobMatch[3]}`;
     }
@@ -263,9 +261,7 @@ export function createMeetingRoutes(
         queuedSpeakerCount: meeting.queuedSpeakerIds.length,
         maxConcurrent: s?.maxConcurrent ?? 0,
         currentConnections: current,
-        lastConnection: current > 0
-          ? 'now'
-          : s?.lastConnection ?? '',
+        lastConnection: current > 0 ? 'now' : (s?.lastConnection ?? ''),
       });
     }
 

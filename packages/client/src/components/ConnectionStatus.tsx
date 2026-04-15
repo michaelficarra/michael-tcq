@@ -43,9 +43,7 @@ export function ConnectionStatus({ connected }: ConnectionStatusProps) {
         </button>
       )}
       <div
-        className={`w-2.5 h-2.5 rounded-full transition-colors ${
-          connected ? 'bg-green-500' : 'bg-red-500'
-        }`}
+        className={`w-2.5 h-2.5 rounded-full transition-colors ${connected ? 'bg-green-500' : 'bg-red-500'}`}
         title={connected ? 'Connected' : 'Disconnected'}
         aria-label={connected ? 'Connected to server' : 'Disconnected from server'}
       />

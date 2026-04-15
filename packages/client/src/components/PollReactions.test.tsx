@@ -18,20 +18,26 @@ const sampleOptions: PollOption[] = [
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test', users: {}, chairIds: [], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
-    reactions: [], trackPoll: false, pollOptions: [],
-    version: 0, log: [], currentTopicSpeakers: [],
+    id: 'test',
+    users: {},
+    chairIds: [],
+    agenda: [],
+    currentAgendaItemId: undefined,
+    currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined,
+    queueEntries: {},
+    queuedSpeakerIds: [],
+    reactions: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
     ...overrides,
   };
 }
 
-function renderPoll(
-  meeting: MeetingState,
-  user: User | null = alice,
-  socket: TypedSocket | null = null,
-) {
+function renderPoll(meeting: MeetingState, user: User | null = alice, socket: TypedSocket | null = null) {
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
       <SocketContext value={socket}>
@@ -48,10 +54,12 @@ describe('PollReactions', () => {
   });
 
   it('renders a button for each poll option', () => {
-    renderPoll(makeMeeting({
-      trackPoll: true,
-      pollOptions: sampleOptions,
-    }));
+    renderPoll(
+      makeMeeting({
+        trackPoll: true,
+        pollOptions: sampleOptions,
+      }),
+    );
 
     expect(screen.getByLabelText(/strong positive/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^positive/i)).toBeInTheDocument();
@@ -76,7 +84,7 @@ describe('PollReactions', () => {
     expect(screen.getByLabelText(/following: 0/i)).toBeInTheDocument();
   });
 
-  it('highlights the current user\'s selected reactions', () => {
+  it("highlights the current user's selected reactions", () => {
     const meeting = makeMeeting({
       trackPoll: true,
       pollOptions: sampleOptions,
@@ -95,10 +103,14 @@ describe('PollReactions', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
-    renderPoll(makeMeeting({
-      trackPoll: true,
-      pollOptions: sampleOptions,
-    }), alice, mockSocket);
+    renderPoll(
+      makeMeeting({
+        trackPoll: true,
+        pollOptions: sampleOptions,
+      }),
+      alice,
+      mockSocket,
+    );
 
     fireEvent.click(screen.getByLabelText(/confused/i));
     expect(emit).toHaveBeenCalledWith('poll:react', { optionId: 'opt-4' });
@@ -121,10 +133,12 @@ describe('PollReactions', () => {
   });
 
   it('has an accessible group label', () => {
-    renderPoll(makeMeeting({
-      trackPoll: true,
-      pollOptions: sampleOptions,
-    }));
+    renderPoll(
+      makeMeeting({
+        trackPoll: true,
+        pollOptions: sampleOptions,
+      }),
+    );
     expect(screen.getByRole('group', { name: /poll reactions/i })).toBeInTheDocument();
   });
 

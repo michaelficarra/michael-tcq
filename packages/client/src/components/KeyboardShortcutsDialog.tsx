@@ -14,7 +14,10 @@ interface KeyboardShortcutsDialogProps {
 }
 
 export function KeyboardShortcutsDialog({
-  shortcuts, enabled, onToggleEnabled, onClose,
+  shortcuts,
+  enabled,
+  onToggleEnabled,
+  onClose,
 }: KeyboardShortcutsDialogProps) {
   return (
     // Backdrop
@@ -32,9 +35,7 @@ export function KeyboardShortcutsDialog({
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">
-              Keyboard Shortcuts
-            </h2>
+            <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">Keyboard Shortcuts</h2>
             <button
               onClick={onToggleEnabled}
               className={`text-xs border rounded px-2 py-0.5 cursor-pointer transition-colors ${
@@ -60,14 +61,14 @@ export function KeyboardShortcutsDialog({
             {shortcuts.map((shortcut) => (
               <tr key={shortcut.key} className="border-b border-stone-100 dark:border-stone-700 last:border-b-0">
                 <td className="py-1.5 pr-4">
-                  <kbd className="inline-block bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                                  font-mono text-xs text-stone-700 dark:text-stone-300 min-w-[1.5rem] text-center">
+                  <kbd
+                    className="inline-block bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                                  font-mono text-xs text-stone-700 dark:text-stone-300 min-w-[1.5rem] text-center"
+                  >
                     {shortcut.key === ' ' ? '␣' : shortcut.key}
                   </kbd>
                 </td>
-                <td className="py-1.5 text-stone-600 dark:text-stone-400">
-                  {shortcut.description}
-                </td>
+                <td className="py-1.5 text-stone-600 dark:text-stone-400">{shortcut.description}</td>
               </tr>
             ))}
           </tbody>

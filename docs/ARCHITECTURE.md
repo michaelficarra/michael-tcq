@@ -131,16 +131,16 @@ Express is the most widely known Node.js server framework. For an application wi
 
 The server exposes a small number of REST endpoints:
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/auth/github` | GET | Redirect to GitHub OAuth |
-| `/auth/github/callback` | GET | Handle OAuth callback, create session |
-| `/auth/logout` | GET | Destroy session |
-| `/api/health` | GET | Health check |
-| `/api/me` | GET | Return current authenticated user (includes `mockAuth` flag) |
-| `/api/meetings` | POST | Create a new meeting |
-| `/api/meetings/:id` | GET | Get a meeting's current state |
-| `/api/dev/switch-user` | POST | Switch mock auth identity (dev mode only) |
+| Route                   | Method | Purpose                                                      |
+| ----------------------- | ------ | ------------------------------------------------------------ |
+| `/auth/github`          | GET    | Redirect to GitHub OAuth                                     |
+| `/auth/github/callback` | GET    | Handle OAuth callback, create session                        |
+| `/auth/logout`          | GET    | Destroy session                                              |
+| `/api/health`           | GET    | Health check                                                 |
+| `/api/me`               | GET    | Return current authenticated user (includes `mockAuth` flag) |
+| `/api/meetings`         | POST   | Create a new meeting                                         |
+| `/api/meetings/:id`     | GET    | Get a meeting's current state                                |
+| `/api/dev/switch-user`  | POST   | Switch mock auth identity (dev mode only)                    |
 
 All other interaction happens over Socket.IO. The server also serves the Vite-built client assets in production and has a catch-all for client-side routing.
 
@@ -277,14 +277,14 @@ GitHub OAuth is optional for local development — when `GITHUB_CLIENT_ID` is no
 
 **How local differs from production:**
 
-| Concern | Local Development | Production (Cloud Run) |
-|---------|-------------------|------------------------|
-| **Frontend** | Vite dev server with HMR on a separate port; proxies API/WebSocket requests to the Express server | Pre-built static files served directly by Express |
-| **Server** | Runs via `tsx --watch` (or similar) for automatic restart on file changes | Compiled JavaScript, run directly with `node` |
-| **Persistence** | Meeting state and sessions written to JSON files on the local filesystem (the `file` persistence adapter) | Firestore (the `firestore` persistence adapter) |
-| **OAuth** | A separate GitHub OAuth App configured with `http://localhost:<port>` as the callback URL | A GitHub OAuth App configured with the production URL |
-| **HTTPS** | Not used; plain HTTP on localhost | Terminated by Cloud Run's load balancer |
-| **WebSocket timeout** | None; connections persist indefinitely | Cloud Run enforces a 60-minute maximum; Socket.IO reconnects transparently |
+| Concern               | Local Development                                                                                         | Production (Cloud Run)                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Frontend**          | Vite dev server with HMR on a separate port; proxies API/WebSocket requests to the Express server         | Pre-built static files served directly by Express                          |
+| **Server**            | Runs via `tsx --watch` (or similar) for automatic restart on file changes                                 | Compiled JavaScript, run directly with `node`                              |
+| **Persistence**       | Meeting state and sessions written to JSON files on the local filesystem (the `file` persistence adapter) | Firestore (the `firestore` persistence adapter)                            |
+| **OAuth**             | A separate GitHub OAuth App configured with `http://localhost:<port>` as the callback URL                 | A GitHub OAuth App configured with the production URL                      |
+| **HTTPS**             | Not used; plain HTTP on localhost                                                                         | Terminated by Cloud Run's load balancer                                    |
+| **WebSocket timeout** | None; connections persist indefinitely                                                                    | Cloud Run enforces a 60-minute maximum; Socket.IO reconnects transparently |
 
 **Persistence adapter:** The persistence layer is behind a simple interface:
 
@@ -298,6 +298,7 @@ interface MeetingStore {
 ```
 
 Two implementations are provided:
+
 - **`FileMeetingStore`** — Writes each meeting as a JSON file in a local directory (e.g. `.data/meetings/`). Used in development. Simple, inspectable, no dependencies.
 - **`FirestoreMeetingStore`** — Reads and writes meeting documents in a Firestore collection. Used in production.
 

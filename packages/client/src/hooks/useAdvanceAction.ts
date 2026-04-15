@@ -25,11 +25,15 @@ export function useAdvanceAction(event: AdvanceEvent): () => void {
     if (!socket || !meeting) return;
 
     if (event === 'queue:next') {
-      socket.emit(event, { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, (response: AdvanceResponse) => {
-        if (!response.ok && response.error) {
-          console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
-        }
-      });
+      socket.emit(
+        event,
+        { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null },
+        (response: AdvanceResponse) => {
+          if (!response.ok && response.error) {
+            console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
+          }
+        },
+      );
     } else {
       socket.emit(event, { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, (response: AdvanceResponse) => {
         if (!response.ok && response.error) {

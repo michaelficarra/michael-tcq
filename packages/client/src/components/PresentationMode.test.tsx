@@ -12,11 +12,21 @@ const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation:
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
-    reactions: [], trackPoll: false, pollOptions: [],
-    version: 0, log: [], currentTopicSpeakers: [],
+    id: 'test',
+    users: { alice: chairUser },
+    chairIds: ['alice'],
+    agenda: [],
+    currentAgendaItemId: undefined,
+    currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined,
+    queueEntries: {},
+    queuedSpeakerIds: [],
+    reactions: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
     ...overrides,
   };
 }
@@ -27,11 +37,7 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
  * hiding rules for elements tagged with `.presentation-hidden`.
  */
 function renderInPresentationMode(ui: React.ReactElement) {
-  return render(
-    <div className="presentation-mode">
-      {ui}
-    </div>,
-  );
+  return render(<div className="presentation-mode">{ui}</div>);
 }
 
 function wrapWithProviders(
@@ -42,9 +48,7 @@ function wrapWithProviders(
 ) {
   return (
     <TestMeetingProvider meeting={meeting} user={user}>
-      <SocketContext value={socket}>
-        {ui}
-      </SocketContext>
+      <SocketContext value={socket}>{ui}</SocketContext>
     </TestMeetingProvider>
   );
 }
@@ -204,9 +208,7 @@ describe('Presentation mode', () => {
   describe('AgendaPanel', () => {
     it('hides the + New Agenda Item button', () => {
       const meeting = makeMeeting();
-      renderInPresentationMode(
-        wrapWithProviders(<AgendaPanel />, meeting),
-      );
+      renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
       // The button should exist but have presentation-hidden
       const btn = screen.queryByText('+ New Agenda Item');
@@ -219,9 +221,7 @@ describe('Presentation mode', () => {
       const meeting = makeMeeting({
         agenda: [{ id: '1', name: 'Test Item', ownerId: 'alice' }],
       });
-      renderInPresentationMode(
-        wrapWithProviders(<AgendaPanel />, meeting),
-      );
+      renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
       const deleteBtn = screen.getByLabelText(/delete test item/i);
       expect(deleteBtn.closest('.presentation-hidden')).not.toBeNull();
@@ -232,9 +232,7 @@ describe('Presentation mode', () => {
         users: { alice: chairUser, bob: otherUser },
         agenda: [{ id: '1', name: 'Visible Item', ownerId: 'bob', timebox: 15 }],
       });
-      renderInPresentationMode(
-        wrapWithProviders(<AgendaPanel />, meeting),
-      );
+      renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
       expect(screen.getByText('Visible Item')).toBeInTheDocument();
       expect(screen.getByText('Bob')).toBeInTheDocument();
@@ -243,9 +241,7 @@ describe('Presentation mode', () => {
 
     it('keeps the chairs list visible', () => {
       const meeting = makeMeeting();
-      renderInPresentationMode(
-        wrapWithProviders(<AgendaPanel />, meeting),
-      );
+      renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
       expect(screen.getByText('Chairs')).toBeInTheDocument();
       expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -262,9 +258,7 @@ describe('Presentation mode', () => {
         trackPoll: true,
         pollOptions: options,
       });
-      renderInPresentationMode(
-        wrapWithProviders(<PollReactions />, meeting),
-      );
+      renderInPresentationMode(wrapWithProviders(<PollReactions />, meeting));
 
       // Reaction buttons should be visible
       expect(screen.getByLabelText(/positive/i)).toBeInTheDocument();
@@ -280,9 +274,7 @@ describe('Presentation mode', () => {
         trackPoll: true,
         pollOptions: options,
       });
-      renderInPresentationMode(
-        wrapWithProviders(<PollReactions />, meeting, chairUser),
-      );
+      renderInPresentationMode(wrapWithProviders(<PollReactions />, meeting, chairUser));
 
       expect(screen.getByText('Copy Results')).toBeInTheDocument();
       expect(screen.getByText('Stop Poll')).toBeInTheDocument();

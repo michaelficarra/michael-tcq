@@ -101,37 +101,51 @@ function SpeakerRow({ speaker, users }: { speaker: TopicSpeaker; users: Record<s
 
   return (
     <div className="flex items-start gap-2 py-1 pl-4 border-l-2 border-stone-200 dark:border-stone-700">
-      <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-        {label}:
-      </span>
+      <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">{label}:</span>
       <span className="text-sm text-stone-600 dark:text-stone-300">
         <InlineMarkdown>{speaker.topic}</InlineMarkdown>
       </span>
       {speaker.duration !== undefined && (
-        <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-          {formatDuration(speaker.duration)}
-        </span>
+        <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">{formatDuration(speaker.duration)}</span>
       )}
-      <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+      <UserBadge
+        user={users[speaker.userId]}
+        size={18}
+        className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+      />
     </div>
   );
 }
 
 // -- Individual log entry renderers --
 
-function MeetingStartedEntry({ entry, users }: { entry: LogEntry & { type: 'meeting-started' }; users: Record<string, User> }) {
+function MeetingStartedEntry({
+  entry,
+  users,
+}: {
+  entry: LogEntry & { type: 'meeting-started' };
+  users: Record<string, User>;
+}) {
   return (
     <div className="flex items-center gap-2">
       <RelativeTime timestamp={entry.timestamp} />
-      <span className="text-sm font-medium text-stone-800 dark:text-stone-200">
-        Meeting started
-      </span>
-      <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
+      <span className="text-sm font-medium text-stone-800 dark:text-stone-200">Meeting started</span>
+      <UserBadge
+        user={users[entry.chairId]}
+        size={18}
+        className="text-xs text-stone-500 dark:text-stone-400 shrink-0"
+      />
     </div>
   );
 }
 
-function AgendaItemStartedEntry({ entry, users }: { entry: LogEntry & { type: 'agenda-item-started' }; users: Record<string, User> }) {
+function AgendaItemStartedEntry({
+  entry,
+  users,
+}: {
+  entry: LogEntry & { type: 'agenda-item-started' };
+  users: Record<string, User>;
+}) {
   return (
     <div>
       <div className="flex items-center gap-2 flex-wrap">
@@ -139,13 +153,23 @@ function AgendaItemStartedEntry({ entry, users }: { entry: LogEntry & { type: 'a
         <span className="text-sm text-stone-800 dark:text-stone-200">
           <span className="font-medium">Started:</span> <InlineMarkdown>{entry.itemName}</InlineMarkdown>
         </span>
-        <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
+        <UserBadge
+          user={users[entry.chairId]}
+          size={18}
+          className="text-xs text-stone-500 dark:text-stone-400 shrink-0"
+        />
       </div>
     </div>
   );
 }
 
-function AgendaItemFinishedEntry({ entry, users }: { entry: LogEntry & { type: 'agenda-item-finished' }; users: Record<string, User> }) {
+function AgendaItemFinishedEntry({
+  entry,
+  users,
+}: {
+  entry: LogEntry & { type: 'agenda-item-finished' };
+  users: Record<string, User>;
+}) {
   return (
     <div className="flex items-start gap-2">
       <RelativeTime timestamp={entry.timestamp} />
@@ -154,10 +178,12 @@ function AgendaItemFinishedEntry({ entry, users }: { entry: LogEntry & { type: '
           <span className="text-sm text-stone-800 dark:text-stone-200">
             <span className="font-medium">Finished:</span> <InlineMarkdown>{entry.itemName}</InlineMarkdown>
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">
-            {formatDuration(entry.duration)}
-          </span>
-          <UserBadge user={users[entry.chairId]} size={18} className="text-xs text-stone-500 dark:text-stone-400 shrink-0" />
+          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+          <UserBadge
+            user={users[entry.chairId]}
+            size={18}
+            className="text-xs text-stone-500 dark:text-stone-400 shrink-0"
+          />
         </div>
         <ParticipantList participantIds={entry.participantIds} users={users} />
         {entry.remainingQueue && (
@@ -175,7 +201,13 @@ function AgendaItemFinishedEntry({ entry, users }: { entry: LogEntry & { type: '
   );
 }
 
-function TopicDiscussedEntry({ entry, users }: { entry: LogEntry & { type: 'topic-discussed' }; users: Record<string, User> }) {
+function TopicDiscussedEntry({
+  entry,
+  users,
+}: {
+  entry: LogEntry & { type: 'topic-discussed' };
+  users: Record<string, User>;
+}) {
   const isSingleSpeaker = entry.speakers.length === 1;
   const speaker = entry.speakers[0];
 
@@ -188,10 +220,12 @@ function TopicDiscussedEntry({ entry, users }: { entry: LogEntry & { type: 'topi
           <span className="text-sm text-stone-600 dark:text-stone-300">
             <InlineMarkdown>{entry.topicName}</InlineMarkdown>
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">
-            {formatDuration(entry.duration)}
-          </span>
-          <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+          <UserBadge
+            user={users[speaker.userId]}
+            size={18}
+            className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+          />
         </div>
       </div>
     );
@@ -208,10 +242,12 @@ function TopicDiscussedEntry({ entry, users }: { entry: LogEntry & { type: 'topi
         <span className="text-sm text-stone-600 dark:text-stone-300">
           <InlineMarkdown>{entry.topicName}</InlineMarkdown>
         </span>
-        <span className="text-xs text-stone-400 dark:text-stone-500">
-          {formatDuration(entry.duration)}
-        </span>
-        <UserBadge user={users[firstSpeaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+        <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+        <UserBadge
+          user={users[firstSpeaker.userId]}
+          size={18}
+          className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+        />
       </div>
       <div className="mt-1 space-y-0.5">
         {remainingSpeakers.map((s, i) => (
@@ -233,18 +269,28 @@ function PollRanEntry({ entry, users }: { entry: LogEntry & { type: 'poll-ran' }
           <span className="text-sm text-stone-800 dark:text-stone-200">
             {entry.topic ? <>Ran a poll: {entry.topic}</> : 'Ran a poll'}
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">
-            {formatDuration(entry.duration)}
-          </span>
+          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
           <span className="text-xs text-stone-500 dark:text-stone-400">
             {entry.totalVoters} voter{entry.totalVoters !== 1 ? 's' : ''}
           </span>
           {sameChair ? (
-            <UserBadge user={users[entry.startChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+            <UserBadge
+              user={users[entry.startChairId]}
+              size={18}
+              className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+            />
           ) : (
             <>
-              <UserBadge user={users[entry.startChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
-              <UserBadge user={users[entry.endChairId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+              <UserBadge
+                user={users[entry.startChairId]}
+                size={18}
+                className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+              />
+              <UserBadge
+                user={users[entry.endChairId]}
+                size={18}
+                className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+              />
             </>
           )}
         </div>
@@ -278,7 +324,11 @@ function CurrentTopicGroup({ speakers, users }: { speakers: TopicSpeaker[]; user
             <InlineMarkdown>{speaker.topic}</InlineMarkdown>
           </span>
           <span className="text-xs text-teal-500 font-medium">ongoing</span>
-          <UserBadge user={users[speaker.userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+          <UserBadge
+            user={users[speaker.userId]}
+            size={18}
+            className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+          />
         </div>
       </div>
     );
@@ -295,7 +345,11 @@ function CurrentTopicGroup({ speakers, users }: { speakers: TopicSpeaker[]; user
           <InlineMarkdown>{speakers[0].topic}</InlineMarkdown>
         </span>
         <span className="text-xs text-teal-500 font-medium">ongoing</span>
-        <UserBadge user={users[speakers[0].userId]} size={18} className="text-sm text-stone-700 dark:text-stone-200 shrink-0" />
+        <UserBadge
+          user={users[speakers[0].userId]}
+          size={18}
+          className="text-sm text-stone-700 dark:text-stone-200 shrink-0"
+        />
       </div>
       <div className="mt-1 space-y-0.5">
         {remainingSpeakers.map((s, i) => (

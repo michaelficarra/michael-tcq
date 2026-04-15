@@ -118,8 +118,11 @@ describe('MeetingManager', () => {
       queueEntries: {},
       queuedSpeakerIds: [],
       reactions: [],
-      trackPoll: false, pollOptions: [], version: 0,
-      log: [], currentTopicSpeakers: [],
+      trackPoll: false,
+      pollOptions: [],
+      version: 0,
+      log: [],
+      currentTopicSpeakers: [],
     });
 
     // Create a new manager and restore from the store
@@ -941,7 +944,10 @@ describe('MeetingManager', () => {
 
     it('in single-select mode, removes previous reaction when selecting a new option', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, [{ emoji: '👍', label: 'Yes' }, { emoji: '👎', label: 'No' }]);
+      manager.startPoll(meeting.id, [
+        { emoji: '👍', label: 'Yes' },
+        { emoji: '👎', label: 'No' },
+      ]);
       meeting.pollMultiSelect = false;
 
       const opt1 = meeting.pollOptions[0].id;
@@ -959,7 +965,10 @@ describe('MeetingManager', () => {
 
     it('in multi-select mode, allows multiple reactions from the same user', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, [{ emoji: '👍', label: 'Yes' }, { emoji: '👎', label: 'No' }]);
+      manager.startPoll(meeting.id, [
+        { emoji: '👍', label: 'Yes' },
+        { emoji: '👎', label: 'No' },
+      ]);
       meeting.pollMultiSelect = true;
 
       manager.toggleReaction(meeting.id, meeting.pollOptions[0].id, testUser);

@@ -11,9 +11,7 @@ import {
 } from './helpers.js';
 
 test.describe('Keyboard Shortcuts', () => {
-  test('pressing "?" opens the keyboard shortcuts dialog', async ({
-    page,
-  }) => {
+  test('pressing "?" opens the keyboard shortcuts dialog', async ({ page }) => {
     await createMeeting(page);
     await page.keyboard.press('?');
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -53,15 +51,11 @@ test.describe('Keyboard Shortcuts', () => {
 
     // Click to disable
     await toggleButton.click();
-    await expect(
-      dialog.getByRole('button', { name: 'Enable' }),
-    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Enable' })).toBeVisible();
 
     // Click to re-enable
     await dialog.getByRole('button', { name: 'Enable' }).click();
-    await expect(
-      dialog.getByRole('button', { name: 'Disable' }),
-    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Disable' })).toBeVisible();
   });
 
   test('pressing Escape closes the shortcuts dialog', async ({ page }) => {
@@ -78,49 +72,35 @@ test.describe('Keyboard Shortcuts', () => {
   test('pressing "1" switches to Agenda tab', async ({ page }) => {
     await createMeeting(page);
     // Default tab is Queue
-    await expect(
-      page.getByRole('tab', { name: 'Queue' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
 
     await page.keyboard.press('1');
-    await expect(
-      page.getByRole('tab', { name: 'Agenda' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "2" switches to Queue tab', async ({ page }) => {
     await createMeeting(page);
     // Switch away from Queue first
     await goToAgendaTab(page);
-    await expect(
-      page.getByRole('tab', { name: 'Agenda' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
 
     await page.keyboard.press('2');
-    await expect(
-      page.getByRole('tab', { name: 'Queue' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "3" switches to Log tab', async ({ page }) => {
     await createMeeting(page);
     await page.keyboard.press('3');
-    await expect(
-      page.getByRole('tab', { name: 'Log' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Log' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "4" switches to Help tab', async ({ page }) => {
     await createMeeting(page);
     await page.keyboard.press('4');
-    await expect(
-      page.getByRole('tab', { name: 'Help' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('shortcuts are disabled when typing in a text field', async ({
-    page,
-  }) => {
+  test('shortcuts are disabled when typing in a text field', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
 
@@ -135,16 +115,12 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(nameInput).toHaveValue('1');
 
     // The Queue tab should still not be the active one (we're on Agenda)
-    await expect(
-      page.getByRole('tab', { name: 'Agenda' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
   });
 });
 
 test.describe('Error Handling', () => {
-  test('non-existent meeting shows error page with "Back to home" link', async ({
-    page,
-  }) => {
+  test('non-existent meeting shows error page with "Back to home" link', async ({ page }) => {
     await page.goto('/meeting/does-not-exist-at-all');
 
     await expect(page.getByText('Back to home')).toBeVisible();
@@ -152,14 +128,10 @@ test.describe('Error Handling', () => {
     // The link navigates back to the home page
     await page.getByText('Back to home').click();
     await page.waitForURL('/');
-    await expect(
-      page.getByRole('heading', { name: 'Join Meeting' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
   });
 
-  test('error banner is not visible when there is no error', async ({
-    page,
-  }) => {
+  test('error banner is not visible when there is no error', async ({ page }) => {
     await createMeeting(page);
 
     // No error initially — no alert banner should be visible
@@ -168,9 +140,7 @@ test.describe('Error Handling', () => {
 });
 
 test.describe('Real-Time Updates', () => {
-  test('connection status indicator is visible when connected', async ({
-    page,
-  }) => {
+  test('connection status indicator is visible when connected', async ({ page }) => {
     await createMeeting(page);
 
     // The connection status indicator shows "Connected" on hover
@@ -178,25 +148,18 @@ test.describe('Real-Time Updates', () => {
     await expect(statusDot).toBeVisible();
   });
 
-  test('connection status indicator has accessible label', async ({
-    page,
-  }) => {
+  test('connection status indicator has accessible label', async ({ page }) => {
     await createMeeting(page);
 
     const statusDot = page.getByTitle('Connected');
     await expect(statusDot).toBeVisible();
     // Verify it's accessible to screen readers
-    await expect(statusDot).toHaveAttribute(
-      'aria-label',
-      'Connected to server',
-    );
+    await expect(statusDot).toHaveAttribute('aria-label', 'Connected to server');
   });
 });
 
 test.describe('User Identity Display', () => {
-  test('user names are shown with avatars in the meeting', async ({
-    page,
-  }) => {
+  test('user names are shown with avatars in the meeting', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Avatar Test Item', 'admin');

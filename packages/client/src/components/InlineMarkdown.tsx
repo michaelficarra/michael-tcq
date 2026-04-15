@@ -21,11 +21,7 @@ interface InlineMarkdownProps {
 
 /** Escape HTML special characters to prevent XSS. */
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /**
@@ -38,7 +34,9 @@ function markdownToHtml(text: string): string {
   const codeSpans: string[] = [];
   let processed = text.replace(/`([^`]+)`/g, (_match, code: string) => {
     const idx = codeSpans.length;
-    codeSpans.push(`<code class="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`);
+    codeSpans.push(
+      `<code class="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`,
+    );
     return `\uE000CODE${idx}\uE000`;
   });
 
@@ -77,10 +75,5 @@ export function InlineMarkdown({ children, className }: InlineMarkdownProps) {
     return <span className={className}>{children}</span>;
   }
 
-  return (
-    <span
-      className={className}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }

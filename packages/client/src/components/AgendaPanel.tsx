@@ -108,7 +108,10 @@ export function AgendaPanel() {
           <p className="text-stone-400 dark:text-stone-500 italic mb-2">No agenda items yet.</p>
           {isChair && !showImport && (
             <button
-              onClick={() => { setShowImport(true); setImportError(null); }}
+              onClick={() => {
+                setShowImport(true);
+                setImportError(null);
+              }}
               className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
                          text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
                          cursor-pointer presentation-hidden"
@@ -170,23 +173,25 @@ export function AgendaPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowImport(false); setImportUrl(''); setImportError(null); }}
+                onClick={() => {
+                  setShowImport(false);
+                  setImportUrl('');
+                  setImportError(null);
+                }}
                 className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               {importError && (
-                <p className="text-red-600 dark:text-red-400 text-sm w-full" role="alert">{importError}</p>
+                <p className="text-red-600 dark:text-red-400 text-sm w-full" role="alert">
+                  {importError}
+                </p>
               )}
             </form>
           )}
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={meeting.agenda.map((i) => i.id)}
             strategy={verticalListSortingStrategy}
@@ -209,12 +214,9 @@ export function AgendaPanel() {
       )}
 
       {/* Add agenda item — chairs only */}
-      {isChair && (
-        showForm ? (
-          <AgendaForm
-            onCancel={() => setShowForm(false)}
-            onSubmit={() => setShowForm(false)}
-          />
+      {isChair &&
+        (showForm ? (
+          <AgendaForm onCancel={() => setShowForm(false)} onSubmit={() => setShowForm(false)} />
         ) : (
           <button
             onClick={() => setShowForm(true)}
@@ -224,8 +226,7 @@ export function AgendaPanel() {
           >
             New Agenda Item
           </button>
-        )
-      )}
+        ))}
     </div>
   );
 }
@@ -249,14 +250,10 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
   const [editOwner, setEditOwner] = useState('');
   const [editTimebox, setEditTimebox] = useState('');
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.id, disabled: !isChair || editing });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !isChair || editing,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -361,7 +358,11 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
       ref={setNodeRef}
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
-        isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'
+        isDragging
+          ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
+          : index % 2 === 0
+            ? 'bg-white dark:bg-stone-900'
+            : 'bg-stone-100/50 dark:bg-stone-800/50'
       } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
@@ -373,10 +374,16 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
 
       <div className="flex-1 min-w-0">
         {/* Item name */}
-        <InlineMarkdown className="font-medium text-stone-800 dark:text-stone-200 align-middle">{item.name}</InlineMarkdown>
+        <InlineMarkdown className="font-medium text-stone-800 dark:text-stone-200 align-middle">
+          {item.name}
+        </InlineMarkdown>
 
         {/* Owner info */}
-        <UserBadge user={meeting?.users[item.ownerId]} size={16} className="ml-2 text-sm text-stone-500 dark:text-stone-400" />
+        <UserBadge
+          user={meeting?.users[item.ownerId]}
+          size={16}
+          className="ml-2 text-sm text-stone-500 dark:text-stone-400"
+        />
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (
@@ -458,14 +465,15 @@ function ChairsSection() {
   return (
     <section className="mb-5" aria-label="Meeting chairs">
       <div className="flex flex-wrap items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-          Chairs
-        </h2>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">Chairs</h2>
 
         {meeting.chairIds.map((chairId) => {
           const chair = meeting.users[chairId];
           return (
-            <span key={chairId} className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chairId) ? 'pr-1' : 'pr-2'}`}>
+            <span
+              key={chairId}
+              className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chairId) ? 'pr-1' : 'pr-2'}`}
+            >
               <UserBadge user={chair} size={18} />
               {canRemove(chairId) && (
                 <button
@@ -475,7 +483,11 @@ function ChairsSection() {
                   aria-label={`Remove chair ${chair?.ghUsername ?? chairId}`}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </button>
               )}
@@ -491,7 +503,11 @@ function ChairsSection() {
             aria-label="Add chair"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clipRule="evenodd" />
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z"
+                clipRule="evenodd"
+              />
             </svg>
           </button>
         )}
@@ -518,7 +534,10 @@ function ChairsSection() {
             </button>
             <button
               type="button"
-              onClick={() => { setAdding(false); setAddValue(''); }}
+              onClick={() => {
+                setAdding(false);
+                setAddValue('');
+              }}
               className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
@@ -539,9 +558,7 @@ function ChairsSection() {
             className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 p-6 max-w-sm mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
-              Remove Chair
-            </h3>
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Remove Chair</h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Remove <strong>{removeConfirm}</strong> from the chair list?
             </p>

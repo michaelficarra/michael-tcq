@@ -5,11 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
-import {
-  MeetingStateContext,
-  MeetingDispatchContext,
-  type MeetingContextState,
-} from '../contexts/MeetingContext.js';
+import { MeetingStateContext, MeetingDispatchContext, type MeetingContextState } from '../contexts/MeetingContext.js';
 
 interface TestMeetingProviderProps {
   meeting: MeetingState | null;
@@ -22,19 +18,12 @@ interface TestMeetingProviderProps {
  * Wraps children with MeetingContext populated with the given state.
  * Dispatch is a no-op since tests verify rendered output, not dispatches.
  */
-export function TestMeetingProvider({
-  meeting,
-  user = null,
-  connected = true,
-  children,
-}: TestMeetingProviderProps) {
+export function TestMeetingProvider({ meeting, user = null, connected = true, children }: TestMeetingProviderProps) {
   const state: MeetingContextState = { meeting, user, connected, error: null };
 
   return (
     <MeetingStateContext value={state}>
-      <MeetingDispatchContext value={() => {}}>
-        {children}
-      </MeetingDispatchContext>
+      <MeetingDispatchContext value={() => {}}>{children}</MeetingDispatchContext>
     </MeetingStateContext>
   );
 }

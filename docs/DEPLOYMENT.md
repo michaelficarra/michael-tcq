@@ -8,10 +8,10 @@ Deployment is done via the `scripts/deploy.sh` script, which reads configuration
 
 TCQ uses environment-specific `.env` files:
 
-| File | Purpose | Committed to git? |
-|------|---------|-------------------|
-| `.env.development` | Local development defaults (no secrets) | Yes |
-| `.env.production` | Production config and secrets | No (gitignored) |
+| File               | Purpose                                 | Committed to git? |
+| ------------------ | --------------------------------------- | ----------------- |
+| `.env.development` | Local development defaults (no secrets) | Yes               |
+| `.env.production`  | Production config and secrets           | No (gitignored)   |
 
 The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In development (`npm run dev`), `NODE_ENV` is unset so `.env.development` is used. In production (`NODE_ENV=production`), `.env.production` is used.
 

@@ -305,9 +305,7 @@ export class MeetingManager {
       nextIndex = 0;
     } else {
       // Find the current item's position and advance to the next
-      const currentIndex = meeting.agenda.findIndex(
-        (item) => item.id === meeting.currentAgendaItemId,
-      );
+      const currentIndex = meeting.agenda.findIndex((item) => item.id === meeting.currentAgendaItemId);
       nextIndex = currentIndex + 1;
     }
 
@@ -346,12 +344,7 @@ export class MeetingManager {
    *
    * Returns the created entry, or null if the meeting doesn't exist.
    */
-  addQueueEntry(
-    meetingId: string,
-    type: QueueEntryType,
-    topic: string,
-    user: User,
-  ): QueueEntry | null {
+  addQueueEntry(meetingId: string, type: QueueEntryType, topic: string, user: User): QueueEntry | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
@@ -389,11 +382,7 @@ export class MeetingManager {
    * omitted fields are left unchanged. Returns true if the entry was
    * found and updated.
    */
-  editQueueEntry(
-    meetingId: string,
-    entryId: string,
-    updates: { topic?: string; type?: QueueEntryType },
-  ): boolean {
+  editQueueEntry(meetingId: string, entryId: string, updates: { topic?: string; type?: QueueEntryType }): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
@@ -615,9 +604,7 @@ export class MeetingManager {
     const key = ensureUser(meeting, user);
 
     // Check if the user already reacted to this option
-    const existingIndex = meeting.reactions.findIndex(
-      (r) => r.optionId === optionId && r.userId === key,
-    );
+    const existingIndex = meeting.reactions.findIndex((r) => r.optionId === optionId && r.userId === key);
 
     if (existingIndex !== -1) {
       // Remove it (toggle off)
@@ -862,7 +849,11 @@ function migrateLogEntry(entry: any, eu: (u: User) => string): void {
       }
       break;
     case 'agenda-item-finished':
-      if (Array.isArray(entry.participants) && entry.participants.length > 0 && typeof entry.participants[0] === 'object') {
+      if (
+        Array.isArray(entry.participants) &&
+        entry.participants.length > 0 &&
+        typeof entry.participants[0] === 'object'
+      ) {
         entry.participantIds = entry.participants.map((p: User) => eu(p));
         delete entry.participants;
       }

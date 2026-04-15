@@ -24,14 +24,14 @@ npm run test:e2e     # in another
 
 Each test file corresponds to a section of the PRD:
 
-| File | PRD sections |
-|------|-------------|
-| `auth-and-home.spec.ts` | Authentication, Home Page |
-| `meetings-and-navigation.spec.ts` | Meetings, Meeting Flow, Navigation |
-| `agenda.spec.ts` | Agenda (including Chair Management) |
-| `queue.spec.ts` | Queue, Current Speaker and Topic, Timers |
-| `polls.spec.ts` | Polls |
-| `log.spec.ts` | Log |
+| File                                | PRD sections                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------------- |
+| `auth-and-home.spec.ts`             | Authentication, Home Page                                                    |
+| `meetings-and-navigation.spec.ts`   | Meetings, Meeting Flow, Navigation                                           |
+| `agenda.spec.ts`                    | Agenda (including Chair Management)                                          |
+| `queue.spec.ts`                     | Queue, Current Speaker and Topic, Timers                                     |
+| `polls.spec.ts`                     | Polls                                                                        |
+| `log.spec.ts`                       | Log                                                                          |
 | `keyboard-shortcuts-and-ui.spec.ts` | Keyboard Shortcuts, Error Handling, Real-Time Updates, User Identity Display |
 
 `helpers.ts` contains shared utilities (creating meetings, adding agenda items, etc.).

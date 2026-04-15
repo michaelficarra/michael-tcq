@@ -60,12 +60,12 @@ packages/
 
 ## Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start both servers in development mode with hot reload |
-| `npm run build` | Build all packages for production |
-| `npm test` | Run all tests |
-| `npm run typecheck` | Type-check all packages |
+| Command             | Description                                            |
+| ------------------- | ------------------------------------------------------ |
+| `npm run dev`       | Start both servers in development mode with hot reload |
+| `npm run build`     | Build all packages for production                      |
+| `npm test`          | Run all tests                                          |
+| `npm run typecheck` | Type-check all packages                                |
 
 ## Running Tests
 

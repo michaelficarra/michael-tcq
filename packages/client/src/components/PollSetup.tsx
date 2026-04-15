@@ -36,11 +36,17 @@ function createDefaults(): DraftOption[] {
   }));
 }
 
-interface EmojiEntry { skins: { native: string }[] }
-interface EmojiData { emojis: Record<string, EmojiEntry>; categories: { id: string; emojis: string[] }[] }
+interface EmojiEntry {
+  skins: { native: string }[];
+}
+interface EmojiData {
+  emojis: Record<string, EmojiEntry>;
+  categories: { id: string; emojis: string[] }[];
+}
 
 /** IDs matching this pattern are multi-person family/couple combinations. */
-const FAMILY_COMBO_RE = /^(?:family|man-|woman-|two_(?:wo)?men_|man_and_woman_|people_holding|couplekiss|couple_with_heart|woman-(?:kiss|heart)-|man-(?:kiss|heart)-)/;
+const FAMILY_COMBO_RE =
+  /^(?:family|man-|woman-|two_(?:wo)?men_|man_and_woman_|people_holding|couplekiss|couple_with_heart|woman-(?:kiss|heart)-|man-(?:kiss|heart)-)/;
 
 /** Check whether an emoji is acceptable for random selection (no flags, no skin tone modifiers, no family combos). */
 function acceptableRandomEmoji(id: string, emoji: EmojiEntry, flagIds: Set<string>): boolean {
@@ -79,26 +85,27 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
   /** Open the picker positioned relative to the clicked button. */
-  const openPicker = useCallback((key: number, button: HTMLButtonElement) => {
-    if (pickerOpenFor === key) {
-      setPickerOpenFor(null);
-      return;
-    }
-    const rect = button.getBoundingClientRect();
-    const pickerHeight = 435; // emoji-mart default height
-    const margin = 8;
-    // Open to the right of the button, aligned to its top, shifted up if needed to fit
-    const top = Math.min(rect.top, window.innerHeight - pickerHeight - margin);
-    const left = rect.right + 4;
-    setPickerPos({ top, left });
-    setPickerOpenFor(key);
-  }, [pickerOpenFor]);
+  const openPicker = useCallback(
+    (key: number, button: HTMLButtonElement) => {
+      if (pickerOpenFor === key) {
+        setPickerOpenFor(null);
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      const pickerHeight = 435; // emoji-mart default height
+      const margin = 8;
+      // Open to the right of the button, aligned to its top, shifted up if needed to fit
+      const top = Math.min(rect.top, window.innerHeight - pickerHeight - margin);
+      const left = rect.right + 4;
+      setPickerPos({ top, left });
+      setPickerOpenFor(key);
+    },
+    [pickerOpenFor],
+  );
 
   /** Update a single option's field. */
   function updateOption(key: number, field: 'emoji' | 'label', value: string) {
-    setOptions((prev) =>
-      prev.map((opt) => (opt.key === key ? { ...opt, [field]: value } : opt)),
-    );
+    setOptions((prev) => prev.map((opt) => (opt.key === key ? { ...opt, [field]: value } : opt)));
   }
 
   /** Remove an option by its key. */
@@ -116,9 +123,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
     e.preventDefault();
 
     // Filter to valid options (non-empty emoji and label)
-    const validOptions = options.filter(
-      (opt) => opt.emoji.trim() && opt.label.trim(),
-    );
+    const validOptions = options.filter((opt) => opt.emoji.trim() && opt.label.trim());
 
     if (validOptions.length < 2) return;
 
@@ -135,15 +140,11 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
   }
 
   // Count valid options for the minimum-2 check
-  const validCount = options.filter(
-    (opt) => opt.emoji.trim() && opt.label.trim(),
-  ).length;
+  const validCount = options.filter((opt) => opt.emoji.trim() && opt.label.trim()).length;
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
-      <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3">
-        Create Poll
-      </h3>
+      <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3">Create Poll</h3>
 
       {/* Poll topic (optional) */}
       <input

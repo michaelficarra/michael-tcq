@@ -8,9 +8,8 @@ export function HelpPanel() {
       <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-4">How to Use TCQ</h2>
 
       <p className="text-stone-600 dark:text-stone-400 mb-6">
-        TCQ is a discussion queue for agenda-driven meetings. It helps structure
-        conversation by letting participants line up to speak, organised by topic
-        type and priority, while chairs control the flow of the meeting.
+        TCQ is a discussion queue for agenda-driven meetings. It helps structure conversation by letting participants
+        line up to speak, organised by topic type and priority, while chairs control the flow of the meeting.
       </p>
 
       {/* --- For Everyone --- */}
@@ -21,77 +20,73 @@ export function HelpPanel() {
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Joining a Meeting</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          Enter the meeting ID on the home page or follow a direct link. Once
-          joined, you'll see the meeting's agenda and speaker queue in real time.
-          A small dot in the bottom-right corner shows your connection status:
-          green when connected, red when disconnected.
+          Enter the meeting ID on the home page or follow a direct link. Once joined, you'll see the meeting's agenda
+          and speaker queue in real time. A small dot in the bottom-right corner shows your connection status: green
+          when connected, red when disconnected.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Entering the Queue</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          On the <strong>Queue</strong> tab, click one of the entry type buttons
-          to join the speaker queue. You'll be added immediately with a
-          placeholder topic, and the topic field will open for editing so you
-          can type a more specific description. Your entry appears in the queue
-          for everyone to see in real time. Queue topics and agenda item names
-          support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,
-          {' '}<code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">~~strikethrough~~</code>,
-          {' '}<code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">`code`</code>,
-          {' '}and <code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">[links](url)</code>.
+          On the <strong>Queue</strong> tab, click one of the entry type buttons to join the speaker queue. You'll be
+          added immediately with a placeholder topic, and the topic field will open for editing so you can type a more
+          specific description. Your entry appears in the queue for everyone to see in real time. Queue topics and
+          agenda item names support basic markdown: <strong>**bold**</strong>, <em>*italic*</em>,{' '}
+          <code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">
+            ~~strikethrough~~
+          </code>
+          ,{' '}
+          <code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">
+            `code`
+          </code>
+          , and{' '}
+          <code className="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">
+            [links](url)
+          </code>
+          .
         </p>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
           There are four entry types, listed from highest to lowest priority:
         </p>
         <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
           <li>
-            <strong className="text-red-600 dark:text-red-400">Point of Order</strong> — for
-            procedural matters that need immediate attention (e.g. "we're over
-            time", "the presenter should share their screen"). Use sparingly.
+            <strong className="text-red-600 dark:text-red-400">Point of Order</strong> — for procedural matters that
+            need immediate attention (e.g. "we're over time", "the presenter should share their screen"). Use sparingly.
           </li>
           <li>
-            <strong className="text-green-600">Clarifying Question</strong> — for
-            brief factual questions about what was just said. Not for expressing
-            opinions or raising new discussion points.
+            <strong className="text-green-600">Clarifying Question</strong> — for brief factual questions about what was
+            just said. Not for expressing opinions or raising new discussion points.
           </li>
           <li>
-            <strong className="text-cyan-600">Reply</strong> — to respond
-            directly to the current topic being discussed. Only available when
-            there is an active topic. Use this to stay on-topic rather than
-            raising a new thread.
+            <strong className="text-cyan-600">Reply</strong> — to respond directly to the current topic being discussed.
+            Only available when there is an active topic. Use this to stay on-topic rather than raising a new thread.
           </li>
           <li>
-            <strong className="text-blue-600">New Topic</strong> — to raise a
-            new line of discussion. This has the lowest priority, so points of
-            order, questions, and replies will be addressed first.
+            <strong className="text-blue-600">New Topic</strong> — to raise a new line of discussion. This has the
+            lowest priority, so points of order, questions, and replies will be addressed first.
           </li>
         </ul>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          You can edit or delete your own queue entries at any time by clicking
-          the <strong>Edit</strong> or <strong>Delete</strong> buttons on your entry.
-          You can also click the type label (e.g. "New Topic:") to cycle
+          You can edit or delete your own queue entries at any time by clicking the <strong>Edit</strong> or{' '}
+          <strong>Delete</strong> buttons on your entry. You can also click the type label (e.g. "New Topic:") to cycle
           through the types that are legal at that position.
         </p>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          You can drag your own entries downward to defer your position in
-          the queue (e.g. to let someone else speak first). You cannot drag
-          upward — only chairs can promote entries.
+          You can drag your own entries downward to defer your position in the queue (e.g. to let someone else speak
+          first). You cannot drag upward — only chairs can promote entries.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Polls</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          When a chair starts a poll, a panel of reaction buttons
-          appears. Click any button to indicate your sentiment — click it again
-          to remove your reaction. You can select multiple options. Hover over a
-          button to see who else has reacted.
+          When a chair starts a poll, a panel of reaction buttons appears. Click any button to indicate your sentiment —
+          click it again to remove your reaction. You can select multiple options. Hover over a button to see who else
+          has reacted.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Meeting Log</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          The <strong>Log</strong> tab shows a timeline of meeting events: when
-          agenda items started and finished, who spoke on each topic (with
-          replies and clarifying questions grouped under their topic), and poll
-          results. Each event shows a relative time that you can hover over to
-          see the full timestamp in your local time zone.
+          The <strong>Log</strong> tab shows a timeline of meeting events: when agenda items started and finished, who
+          spoke on each topic (with replies and clarifying questions grouped under their topic), and poll results. Each
+          event shows a relative time that you can hover over to see the full timestamp in your local time zone.
         </p>
       </section>
 
@@ -103,18 +98,15 @@ export function HelpPanel() {
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Creating a Meeting</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          On the home page, enter the GitHub usernames of the chairs
-          (comma-separated) and click <strong>Start a New Meeting</strong>. Share
-          the resulting meeting ID or URL with participants.
+          On the home page, enter the GitHub usernames of the chairs (comma-separated) and click{' '}
+          <strong>Start a New Meeting</strong>. Share the resulting meeting ID or URL with participants.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          On the <strong>Agenda</strong> tab, click <strong>New Agenda
-          Item</strong> to add items. Each item has a name, an owner (the person
-          who will present it), and an optional timebox in minutes. Drag items to
-          reorder them. Click <strong>edit</strong> or <strong>delete</strong> to
-          modify or remove items.
+          On the <strong>Agenda</strong> tab, click <strong>New Agenda Item</strong> to add items. Each item has a name,
+          an owner (the person who will present it), and an optional timebox in minutes. Drag items to reorder them.
+          Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items.
         </p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Running the Meeting</h4>
@@ -123,72 +115,60 @@ export function HelpPanel() {
         </p>
         <ol className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-decimal">
           <li>
-            Click <strong>Start Meeting</strong> to advance to the first agenda
-            item. The item's owner becomes the current speaker.
+            Click <strong>Start Meeting</strong> to advance to the first agenda item. The item's owner becomes the
+            current speaker.
           </li>
           <li>
             As participants enter the queue, click <strong>Next Speaker</strong>
-            to advance through them. The queue automatically orders entries by
-            priority.
+            to advance through them. The queue automatically orders entries by priority.
           </li>
           <li>
-            When discussion on an item is complete, click <strong>Next Agenda
-            Item</strong> to move on. The queue is cleared and the next item's
-            owner becomes the speaker.
+            When discussion on an item is complete, click <strong>Next Agenda Item</strong> to move on. The queue is
+            cleared and the next item's owner becomes the speaker.
           </li>
         </ol>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          You can also drag queue entries to reorder them manually. When an
-          entry is moved, its type adjusts to stay consistent with the
-          priority ordering of its neighbours.
+          You can also drag queue entries to reorder them manually. When an entry is moved, its type adjusts to stay
+          consistent with the priority ordering of its neighbours.
         </p>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          You (or the entry's author) can click the type label
-          (e.g. "New Topic:") on a queue entry to cycle through the types
-          that are legal at that position. This lets you change an entry's
-          type without moving it — for example, changing a "New Topic" to a
-          "Clarifying Question" if the ordering allows it.
+          You (or the entry's author) can click the type label (e.g. "New Topic:") on a queue entry to cycle through the
+          types that are legal at that position. This lets you change an entry's type without moving it — for example,
+          changing a "New Topic" to a "Clarifying Question" if the ordering allows it.
         </p>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          You can edit or delete any queue entry.
-        </p>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">You can edit or delete any queue entry.</p>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Copy and Restore Queue</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          Next to the "Speaker Queue" heading, you'll find <strong>Copy
-          Queue</strong> and <strong>Restore Queue</strong> buttons.
+          Next to the "Speaker Queue" heading, you'll find <strong>Copy Queue</strong> and{' '}
+          <strong>Restore Queue</strong> buttons.
         </p>
         <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
           <li>
-            <strong>Copy Queue</strong> copies the queue to your clipboard in a
-            text format (one entry per line, including the author's username).
+            <strong>Copy Queue</strong> copies the queue to your clipboard in a text format (one entry per line,
+            including the author's username).
           </li>
           <li>
-            <strong>Restore Queue</strong> lets you paste entries in the same
-            format to bulk-add them. Entries that include a username in
-            parentheses are added as that user, preserving the original author.
+            <strong>Restore Queue</strong> lets you paste entries in the same format to bulk-add them. Entries that
+            include a username in parentheses are added as that user, preserving the original author.
           </li>
         </ul>
 
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Polls</h4>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-          To gauge the room's sentiment on a topic:
-        </p>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">To gauge the room's sentiment on a topic:</p>
         <ol className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-decimal">
           <li>
             Click <strong>Poll</strong> in the agenda item section.
           </li>
           <li>
-            A setup form appears with default response options. You can add,
-            remove, or customise the options (each has an emoji and a label).
+            A setup form appears with default response options. You can add, remove, or customise the options (each has
+            an emoji and a label).
           </li>
           <li>
-            Click <strong>Start Poll</strong>. All participants see
-            the reaction buttons and can respond.
+            Click <strong>Start Poll</strong>. All participants see the reaction buttons and can respond.
           </li>
           <li>
-            Click <strong>Copy Results</strong> to copy a summary to your
-            clipboard.
+            Click <strong>Copy Results</strong> to copy a summary to your clipboard.
           </li>
           <li>
             Click <strong>Stop Poll</strong> when done.
@@ -202,21 +182,97 @@ export function HelpPanel() {
           Keyboard Shortcuts
         </h3>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          Press <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5
-          font-mono text-xs">?</kbd> at any time to see all keyboard shortcuts.
+          Press{' '}
+          <kbd
+            className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5
+          font-mono text-xs"
+          >
+            ?
+          </kbd>{' '}
+          at any time to see all keyboard shortcuts.
         </p>
         <table className="text-sm text-stone-600 dark:text-stone-400">
           <tbody>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">n</kbd></td><td>New Topic</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">r</kbd></td><td>Reply to current topic</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">c</kbd></td><td>Clarifying Question</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">p</kbd></td><td>Point of Order</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">s</kbd></td><td>Next Speaker (chair only)</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">f</kbd></td><td>Toggle presentation mode (fullscreen, controls hidden)</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">1</kbd></td><td>Switch to Agenda tab</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">2</kbd></td><td>Switch to Queue tab</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">3</kbd></td><td>Switch to Log tab</td></tr>
-            <tr><td className="pr-4 py-0.5"><kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">4</kbd></td><td>Switch to Help tab</td></tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  n
+                </kbd>
+              </td>
+              <td>New Topic</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  r
+                </kbd>
+              </td>
+              <td>Reply to current topic</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  c
+                </kbd>
+              </td>
+              <td>Clarifying Question</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  p
+                </kbd>
+              </td>
+              <td>Point of Order</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  s
+                </kbd>
+              </td>
+              <td>Next Speaker (chair only)</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  f
+                </kbd>
+              </td>
+              <td>Toggle presentation mode (fullscreen, controls hidden)</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  1
+                </kbd>
+              </td>
+              <td>Switch to Agenda tab</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  2
+                </kbd>
+              </td>
+              <td>Switch to Queue tab</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  3
+                </kbd>
+              </td>
+              <td>Switch to Log tab</td>
+            </tr>
+            <tr>
+              <td className="pr-4 py-0.5">
+                <kbd className="bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1.5 py-0.5 font-mono text-xs">
+                  4
+                </kbd>
+              </td>
+              <td>Switch to Help tab</td>
+            </tr>
           </tbody>
         </table>
       </section>
@@ -228,23 +284,19 @@ export function HelpPanel() {
         </h3>
         <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 space-y-2 list-disc">
           <li>
-            Use <strong>Reply</strong> to stay on the current topic rather than
-            opening a new thread with <strong>New Topic</strong>. This keeps
-            discussions focused.
+            Use <strong>Reply</strong> to stay on the current topic rather than opening a new thread with{' '}
+            <strong>New Topic</strong>. This keeps discussions focused.
           </li>
           <li>
-            Reserve <strong>Point of Order</strong> for procedural matters, not
-            for expressing opinions. It jumps to the front of the queue.
+            Reserve <strong>Point of Order</strong> for procedural matters, not for expressing opinions. It jumps to the
+            front of the queue.
           </li>
           <li>
-            Use <strong>Clarifying Question</strong> only for brief factual
-            questions. If your question will lead to extended discussion, use
+            Use <strong>Clarifying Question</strong> only for brief factual questions. If your question will lead to
+            extended discussion, use
             <strong> New Topic</strong> instead.
           </li>
-          <li>
-            All changes are synced in real time — there's no need to refresh the
-            page.
-          </li>
+          <li>All changes are synced in real time — there's no need to refresh the page.</li>
         </ul>
       </section>
     </div>

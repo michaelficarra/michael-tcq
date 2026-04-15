@@ -30,11 +30,15 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: serverTarget,
-        configure: (proxy) => { proxy.on('error', logProxyError); },
+        configure: (proxy) => {
+          proxy.on('error', logProxyError);
+        },
       },
       '/auth': {
         target: serverTarget,
-        configure: (proxy) => { proxy.on('error', logProxyError); },
+        configure: (proxy) => {
+          proxy.on('error', logProxyError);
+        },
       },
       '/socket.io': {
         target: serverTarget,

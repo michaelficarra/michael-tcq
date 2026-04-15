@@ -13,11 +13,15 @@
     "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
     "test": "npm run test -w packages/server -w packages/client",
     "test:e2e": "npx playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "npm run lint -w packages/server -w packages/client",
     "typecheck": "npm run typecheck -w packages/shared -w packages/server -w packages/client"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3"
   }
 }

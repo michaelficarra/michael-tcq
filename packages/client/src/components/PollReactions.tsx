@@ -37,14 +37,14 @@ export function PollReactions() {
     if (!meeting) return;
 
     // Build a sorted summary: count reactions per option, sort descending
-    const results = meeting.pollOptions.map((option) => {
-      const count = meeting.reactions.filter((r) => r.optionId === option.id).length;
-      return { emoji: option.emoji, label: option.label, count };
-    }).sort((a, b) => b.count - a.count);
+    const results = meeting.pollOptions
+      .map((option) => {
+        const count = meeting.reactions.filter((r) => r.optionId === option.id).length;
+        return { emoji: option.emoji, label: option.label, count };
+      })
+      .sort((a, b) => b.count - a.count);
 
-    const text = results
-      .map((r) => `${r.emoji} ${r.label}: ${r.count}`)
-      .join('\n');
+    const text = results.map((r) => `${r.emoji} ${r.label}: ${r.count}`).join('\n');
 
     navigator.clipboard.writeText(text).catch(() => {
       // Silently fail if clipboard access is denied
@@ -58,28 +58,18 @@ export function PollReactions() {
         {meeting.pollTopic && (
           <p className="text-stone-800 dark:text-stone-200 font-medium max-w-[50vw]">{meeting.pollTopic}</p>
         )}
-        {meeting.pollStartTime && (
-          <CountUpTimer since={meeting.pollStartTime} />
-        )}
+        {meeting.pollStartTime && <CountUpTimer since={meeting.pollStartTime} />}
       </div>
 
       {/* Reaction buttons */}
-      <div
-        className="flex flex-wrap gap-3 justify-center"
-        role="group"
-        aria-label="Poll reactions"
-      >
+      <div className="flex flex-wrap gap-3 justify-center" role="group" aria-label="Poll reactions">
         {meeting.pollOptions.map((option) => {
           // Count how many users reacted to this option
-          const reactionsForOption = meeting.reactions.filter(
-            (r) => r.optionId === option.id,
-          );
+          const reactionsForOption = meeting.reactions.filter((r) => r.optionId === option.id);
           const count = reactionsForOption.length;
 
           // Check if the current user has reacted to this option
-          const isSelected = user && reactionsForOption.some(
-            (r) => r.userId === userKey(user),
-          );
+          const isSelected = user && reactionsForOption.some((r) => r.userId === userKey(user));
 
           // Build the tooltip showing who reacted
           const names = reactionsForOption.map((r) => meeting.users[r.userId]?.name ?? r.userId).join(', ');
@@ -93,9 +83,10 @@ export function PollReactions() {
               aria-pressed={!!isSelected}
               className={`flex flex-col items-center px-3 py-2 rounded-lg border
                          transition-colors cursor-pointer min-w-[5rem]
-                         ${isSelected
-                           ? 'border-teal-400 dark:border-teal-600 bg-teal-50 dark:bg-teal-900/30'
-                           : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800'
+                         ${
+                           isSelected
+                             ? 'border-teal-400 dark:border-teal-600 bg-teal-50 dark:bg-teal-900/30'
+                             : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800'
                          }`}
             >
               {/* Label above the emoji */}
@@ -103,12 +94,8 @@ export function PollReactions() {
                 {option.label}
               </span>
               {/* Emoji and count */}
-              <span className="text-lg leading-none">
-                {option.emoji}
-              </span>
-              <span className="text-xs font-semibold text-stone-600 dark:text-stone-400 mt-0.5">
-                {count}
-              </span>
+              <span className="text-lg leading-none">{option.emoji}</span>
+              <span className="text-xs font-semibold text-stone-600 dark:text-stone-400 mt-0.5">{count}</span>
             </button>
           );
         })}

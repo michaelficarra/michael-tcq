@@ -114,7 +114,7 @@ For regular chairs: they cannot remove themselves from the list (no remove icon 
 
 ### Markdown in Item Names and Queue Topics
 
-Agenda item names and queue entry topics support a limited subset of inline markdown: **bold**, *italic*, ~~strikethrough~~, `code`, and [links](). This formatting is preserved when importing agendas and rendered in the UI. Other markdown syntax is displayed as plain text.
+Agenda item names and queue entry topics support a limited subset of inline markdown: **bold**, _italic_, ~~strikethrough~~, `code`, and [links](). This formatting is preserved when importing agendas and rendered in the UI. Other markdown syntax is displayed as plain text.
 
 ### Agenda Display
 
@@ -163,6 +163,7 @@ The user's own queue entries are visually distinguished with a coloured left bor
 Chairs can drag-and-drop any queue entry to reorder it. Participants can drag their own entries, but only downward (deferring their position — they cannot jump ahead of others).
 
 When an entry is moved, its type changes based on direction:
+
 - **Moving down:** the entry adopts the lowest priority of the items at or above it (including itself).
 - **Moving up:** the entry adopts the highest priority of the items at or below it (including itself).
 
@@ -213,14 +214,14 @@ A poll is a lightweight, real-time sentiment check that allows the chair to gaug
 
 When a chair clicks **Poll**, a setup form appears with an optional topic/question field at the top, followed by a list of response options. Each option has an emoji and a label. The six default options are:
 
-| Emoji | Label |
-|-------|-------|
-| ❤️ | Strong Positive |
-| 👍 | Positive |
-| 👀 | Following |
-| ❓ | Confused |
-| 🤷 | Indifferent |
-| 😕 | Unconvinced |
+| Emoji | Label           |
+| ----- | --------------- |
+| ❤️    | Strong Positive |
+| 👍    | Positive        |
+| 👀    | Following       |
+| ❓    | Confused        |
+| 🤷    | Indifferent     |
+| 😕    | Unconvinced     |
 
 Chairs can add, remove, and edit options before starting the poll. Each option's emoji is selected via a dedicated emoji picker with search and categories. A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin.
 
@@ -252,13 +253,13 @@ Each log entry records:
 
 The following events are logged:
 
-| Event | Logged when | Description format | Additional data |
-|-------|-------------|-------------------|-----------------|
-| **Meeting started** | Chair advances to the first agenda item | "Meeting started" | — |
-| **Agenda item started** | Chair advances to a new agenda item | "Started: *item name*" | Item owner (initial speaker) |
-| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one) | "Finished: *item name*" | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
-| **Topic discussed** | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the agenda item owner's introductory turn | Topic name with speaker's user badge inline | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below) |
-| **Poll ran** | Chair stops a poll | "Ran a poll" (or "Ran a poll: *topic*" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count) |
+| Event                    | Logged when                                                                                                              | Description format                                              | Additional data                                                                                                                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Meeting started**      | Chair advances to the first agenda item                                                                                  | "Meeting started"                                               | —                                                                                                                                                                                                                                                        |
+| **Agenda item started**  | Chair advances to a new agenda item                                                                                      | "Started: _item name_"                                          | Item owner (initial speaker)                                                                                                                                                                                                                             |
+| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one)                              | "Finished: _item name_"                                         | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
+| **Topic discussed**      | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the agenda item owner's introductory turn | Topic name with speaker's user badge inline                     | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below)                                                                                                                                             |
+| **Poll ran**             | Chair stops a poll                                                                                                       | "Ran a poll" (or "Ran a poll: _topic_" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count)                                                           |
 
 ### Speaker Grouping
 
@@ -292,18 +293,18 @@ Wherever a user's name is shown (agenda item owners, queue entry speakers, curre
 
 Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes a toggle button to enable or disable shortcuts; this preference is persisted to `localStorage` and defaults to enabled. Shortcuts are always disabled when the user is typing in a text field. The `?` and `Escape` keys work even when shortcuts are globally disabled. Available shortcuts:
 
-| Key | Action |
-|-----|--------|
-| `n` | New Topic |
-| `r` | Reply to current topic |
-| `c` | Clarifying Question |
-| `p` | Point of Order |
+| Key | Action                    |
+| --- | ------------------------- |
+| `n` | New Topic                 |
+| `r` | Reply to current topic    |
+| `c` | Clarifying Question       |
+| `p` | Point of Order            |
 | `s` | Next Speaker (chair only) |
-| `f` | Toggle presentation mode |
-| `1` | Switch to Agenda tab |
-| `2` | Switch to Queue tab |
-| `3` | Switch to Log tab |
-| `4` | Switch to Help tab |
+| `f` | Toggle presentation mode  |
+| `1` | Switch to Agenda tab      |
+| `2` | Switch to Queue tab       |
+| `3` | Switch to Log tab         |
+| `4` | Switch to Help tab        |
 | `?` | Toggle shortcuts dialogue |
 
 ## Presentation Mode

@@ -9,18 +9,24 @@ import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 
 const baseMeeting: MeetingState = {
-  id: 'test', users: { alice: chairUser }, chairIds: ['alice'], agenda: [],
-  currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
-  currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
-  reactions: [], trackPoll: false, pollOptions: [],
-  version: 0, log: [], currentTopicSpeakers: [],
+  id: 'test',
+  users: { alice: chairUser },
+  chairIds: ['alice'],
+  agenda: [],
+  currentAgendaItemId: undefined,
+  currentSpeakerEntryId: undefined,
+  currentTopicEntryId: undefined,
+  queueEntries: {},
+  queuedSpeakerIds: [],
+  reactions: [],
+  trackPoll: false,
+  pollOptions: [],
+  version: 0,
+  log: [],
+  currentTopicSpeakers: [],
 };
 
-function renderSetup(
-  socket: TypedSocket | null = null,
-  onCancel = () => {},
-  onStarted = () => {},
-) {
+function renderSetup(socket: TypedSocket | null = null, onCancel = () => {}, onStarted = () => {}) {
   return render(
     <TestMeetingProvider meeting={baseMeeting} user={chairUser}>
       <SocketContext value={socket}>
@@ -73,9 +79,7 @@ describe('PollSetup', () => {
     // Remove options one at a time until only 2 remain (default is 6)
     while (screen.getAllByLabelText('Choose emoji').length > 2) {
       // Find the first enabled remove button and click it
-      const btn = screen.getAllByLabelText('Remove option').find(
-        (b) => !(b as HTMLButtonElement).disabled,
-      );
+      const btn = screen.getAllByLabelText('Remove option').find((b) => !(b as HTMLButtonElement).disabled);
       if (!btn) break;
       fireEvent.click(btn);
     }
@@ -121,9 +125,7 @@ describe('PollSetup', () => {
 
     // Remove until only 2 remain, then clear both labels to make them invalid
     while (screen.getAllByLabelText('Choose emoji').length > 2) {
-      const btn = screen.getAllByLabelText('Remove option').find(
-        (b) => !(b as HTMLButtonElement).disabled,
-      );
+      const btn = screen.getAllByLabelText('Remove option').find((b) => !(b as HTMLButtonElement).disabled);
       if (!btn) break;
       fireEvent.click(btn);
     }
@@ -148,9 +150,12 @@ describe('PollSetup', () => {
 
     fireEvent.click(screen.getByText('Start Poll'));
 
-    expect(emit).toHaveBeenCalledWith('poll:start', expect.objectContaining({
-      topic: 'Should we advance?',
-    }));
+    expect(emit).toHaveBeenCalledWith(
+      'poll:start',
+      expect.objectContaining({
+        topic: 'Should we advance?',
+      }),
+    );
   });
 
   it('sends multiSelect: false when checkbox is unchecked', () => {
@@ -164,9 +169,12 @@ describe('PollSetup', () => {
 
     fireEvent.click(screen.getByText('Start Poll'));
 
-    expect(emit).toHaveBeenCalledWith('poll:start', expect.objectContaining({
-      multiSelect: false,
-    }));
+    expect(emit).toHaveBeenCalledWith(
+      'poll:start',
+      expect.objectContaining({
+        multiSelect: false,
+      }),
+    );
   });
 
   it('omits topic from payload when left empty', () => {

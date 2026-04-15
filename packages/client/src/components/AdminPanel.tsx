@@ -107,9 +107,7 @@ export function AdminPanel() {
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.agendaItemCount}</td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.queuedSpeakerCount}</td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.maxConcurrent}</td>
-                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">
-                    {formatLastConnection(m)}
-                  </td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{formatLastConnection(m)}</td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => setDeleteConfirm(m.id)}
@@ -139,12 +137,9 @@ export function AdminPanel() {
             className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">
-              Delete Meeting
-            </h3>
+            <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Delete Meeting</h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
-              Are you sure you want to delete meeting{' '}
-              <strong>{deleteConfirm}</strong>? This will disconnect all
+              Are you sure you want to delete meeting <strong>{deleteConfirm}</strong>? This will disconnect all
               participants and cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">

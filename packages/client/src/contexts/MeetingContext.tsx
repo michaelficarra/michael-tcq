@@ -98,9 +98,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
 
   return (
     <MeetingStateContext.Provider value={state}>
-      <MeetingDispatchContext.Provider value={dispatch}>
-        {children}
-      </MeetingDispatchContext.Provider>
+      <MeetingDispatchContext.Provider value={dispatch}>{children}</MeetingDispatchContext.Provider>
     </MeetingStateContext.Provider>
   );
 }

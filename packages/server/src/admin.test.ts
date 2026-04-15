@@ -11,10 +11,18 @@ import './session.js';
 /** A no-op in-memory store for tests. */
 class InMemoryStore implements MeetingStore {
   private data = new Map<string, MeetingState>();
-  async save(meeting: MeetingState) { this.data.set(meeting.id, structuredClone(meeting)); }
-  async load(meetingId: string) { return this.data.get(meetingId) ?? null; }
-  async loadAll() { return [...this.data.values()]; }
-  async remove(meetingId: string) { this.data.delete(meetingId); }
+  async save(meeting: MeetingState) {
+    this.data.set(meeting.id, structuredClone(meeting));
+  }
+  async load(meetingId: string) {
+    return this.data.get(meetingId) ?? null;
+  }
+  async loadAll() {
+    return [...this.data.values()];
+  }
+  async remove(meetingId: string) {
+    this.data.delete(meetingId);
+  }
 }
 
 /** The admin user for these tests. */
@@ -91,7 +99,12 @@ describe('Admin endpoints', () => {
       ]);
       manager.addAgendaItem(meeting.id, 'Item 1', { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' });
       manager.addAgendaItem(meeting.id, 'Item 2', { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' });
-      manager.addQueueEntry(meeting.id, 'topic', 'Topic', { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' });
+      manager.addQueueEntry(meeting.id, 'topic', 'Topic', {
+        ghid: 1,
+        ghUsername: 'testuser',
+        name: 'Test',
+        organisation: '',
+      });
 
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
       const body = await res.json();
@@ -156,9 +169,14 @@ describe('Admin endpoints', () => {
   describe('Admin chair editing privileges', () => {
     it('admin can edit chairs for a meeting they do not chair', async () => {
       // Create a meeting where testuser is NOT a chair
-      const meeting = manager.create([{
-        ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '',
-      }]);
+      const meeting = manager.create([
+        {
+          ghid: 99,
+          ghUsername: 'chairperson',
+          name: 'Chair',
+          organisation: '',
+        },
+      ]);
 
       // Create via REST: switch user to testuser (admin), then update chairs
       // We test via the socket tests (socket.test.ts), but verify the manager accepts it
@@ -170,9 +188,14 @@ describe('Admin endpoints', () => {
     });
 
     it('admin can set an empty chair list', async () => {
-      const meeting = manager.create([{
-        ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '',
-      }]);
+      const meeting = manager.create([
+        {
+          ghid: 1,
+          ghUsername: 'testuser',
+          name: 'Test',
+          organisation: '',
+        },
+      ]);
 
       const result = manager.updateChairs(meeting.id, []);
       expect(result).toBe(true);

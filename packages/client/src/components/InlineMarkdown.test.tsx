@@ -61,9 +61,7 @@ describe('InlineMarkdown', () => {
   });
 
   it('accepts a className prop', () => {
-    const { container } = render(
-      <InlineMarkdown className="text-red-500">plain</InlineMarkdown>,
-    );
+    const { container } = render(<InlineMarkdown className="text-red-500">plain</InlineMarkdown>);
     expect(container.firstElementChild).toHaveClass('text-red-500');
   });
 });

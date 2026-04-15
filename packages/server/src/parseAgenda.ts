@@ -22,24 +22,26 @@ export interface ParsedAgendaItem {
  * - Emoji shortcodes from the agenda key (❄️, 🔒, ⌛️, 🔁) → removed
  */
 export function stripMarkdown(text: string): string {
-  return text
-    // Remove markdown links: [text](url)
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // Remove inline code
-    .replace(/`([^`]*)`/g, '$1')
-    // Remove bold: **text** or __text__
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/__(.+?)__/g, '$1')
-    // Remove italic: *text* or _text_ (but not mid-word underscores)
-    .replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')
-    .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, '')
-    // Remove agenda key emoji prefixes
-    .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
-    // Collapse whitespace
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    text
+      // Remove markdown links: [text](url)
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // Remove inline code
+      .replace(/`([^`]*)`/g, '$1')
+      // Remove bold: **text** or __text__
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      // Remove italic: *text* or _text_ (but not mid-word underscores)
+      .replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')
+      .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
+      // Remove HTML tags
+      .replace(/<[^>]+>/g, '')
+      // Remove agenda key emoji prefixes
+      .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
+      // Collapse whitespace
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 /**
@@ -48,14 +50,16 @@ export function stripMarkdown(text: string): string {
  * HTML tags and agenda key emoji prefixes.
  */
 export function cleanName(text: string): string {
-  return text
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, '')
-    // Remove agenda key emoji prefixes
-    .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
-    // Collapse whitespace
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    text
+      // Remove HTML tags
+      .replace(/<[^>]+>/g, '')
+      // Remove agenda key emoji prefixes
+      .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
+      // Collapse whitespace
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 /**
@@ -82,7 +86,10 @@ function parseTimebox(text: string): number | undefined {
  */
 function parseParenthetical(paren: string): { presenter: string; timebox?: number } {
   // Split on commas and classify each part
-  const parts = paren.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  const parts = paren
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   let presenter = '';
   let timebox: number | undefined;
@@ -227,7 +234,11 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
       const plainText = stripMarkdown(listMatch[1]);
 
       // Skip purely structural items
-      if (/^(find volunteers|adoption of the agenda|approval of the minutes|next meeting|overflow from|other business|adjournment)/i.test(plainText)) {
+      if (
+        /^(find volunteers|adoption of the agenda|approval of the minutes|next meeting|overflow from|other business|adjournment)/i.test(
+          plainText,
+        )
+      ) {
         continue;
       }
 

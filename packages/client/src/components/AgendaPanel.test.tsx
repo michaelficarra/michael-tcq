@@ -6,7 +6,13 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 // Mock useAuth so we can control isAdmin flag
-let mockAuthState = { user: null as User | null, isAdmin: false, loading: false, mockAuth: false, switchUser: async () => {} };
+let mockAuthState = {
+  user: null as User | null,
+  isAdmin: false,
+  loading: false,
+  mockAuth: false,
+  switchUser: async () => {},
+};
 vi.mock('../contexts/AuthContext.js', () => ({
   useAuth: () => mockAuthState,
 }));
@@ -24,22 +30,24 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     reactions: [],
-    trackPoll: false, pollOptions: [], version: 0,
-    log: [], currentTopicSpeakers: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
     ...overrides,
   };
 }
 
 const chairUser: User = {
-  ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME',
+  ghid: 1,
+  ghUsername: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
 };
 
 /** Render the AgendaPanel with meeting context and optional socket. */
-function renderAgenda(
-  meeting: MeetingState,
-  user: User | null = null,
-  socket: TypedSocket | null = null,
-) {
+function renderAgenda(meeting: MeetingState, user: User | null = null, socket: TypedSocket | null = null) {
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
       <SocketContext value={socket}>
@@ -104,9 +112,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [
-        { id: '1', name: 'Deletable item', ownerId: 'alice' },
-      ],
+      agenda: [{ id: '1', name: 'Deletable item', ownerId: 'alice' }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -117,9 +123,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }, alice: chairUser },
       chairIds: ['other'],
-      agenda: [
-        { id: '1', name: 'Item', ownerId: 'alice' },
-      ],
+      agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -133,9 +137,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [
-        { id: 'item-1', name: 'To delete', ownerId: 'alice' },
-      ],
+      agenda: [{ id: 'item-1', name: 'To delete', ownerId: 'alice' }],
     });
     renderAgenda(meeting, chairUser, mockSocket);
 
@@ -146,11 +148,13 @@ describe('AgendaPanel', () => {
   it('shows owner organisation in parentheses', () => {
     const meeting = makeMeeting({
       users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' } },
-      agenda: [{
-        id: '1',
-        name: 'Test',
-        ownerId: 'alice',
-      }],
+      agenda: [
+        {
+          id: '1',
+          name: 'Test',
+          ownerId: 'alice',
+        },
+      ],
     });
     renderAgenda(meeting);
 

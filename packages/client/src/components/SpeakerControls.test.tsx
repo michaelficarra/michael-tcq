@@ -5,29 +5,42 @@ import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 
 const testUser: User = {
-  ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME',
+  ghid: 1,
+  ghUsername: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
 };
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return {
-    id: 'test-meeting', users: {}, chairIds: [], agenda: [],
-    currentAgendaItemId: undefined, currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined, queueEntries: {}, queuedSpeakerIds: [],
-    reactions: [], trackPoll: false, pollOptions: [],
-    version: 0, log: [], currentTopicSpeakers: [],
+    id: 'test-meeting',
+    users: {},
+    chairIds: [],
+    agenda: [],
+    currentAgendaItemId: undefined,
+    currentSpeakerEntryId: undefined,
+    currentTopicEntryId: undefined,
+    queueEntries: {},
+    queuedSpeakerIds: [],
+    reactions: [],
+    trackPoll: false,
+    pollOptions: [],
+    version: 0,
+    log: [],
+    currentTopicSpeakers: [],
     ...overrides,
   };
 }
 
-function renderControls(
-  meeting: MeetingState,
-  onAddEntry = vi.fn(),
-) {
-  return { onAddEntry, ...render(
-    <TestMeetingProvider meeting={meeting} user={testUser}>
-      <SpeakerControls onAddEntry={onAddEntry} />
-    </TestMeetingProvider>,
-  ) };
+function renderControls(meeting: MeetingState, onAddEntry = vi.fn()) {
+  return {
+    onAddEntry,
+    ...render(
+      <TestMeetingProvider meeting={meeting} user={testUser}>
+        <SpeakerControls onAddEntry={onAddEntry} />
+      </TestMeetingProvider>,
+    ),
+  };
 }
 
 describe('SpeakerControls', () => {

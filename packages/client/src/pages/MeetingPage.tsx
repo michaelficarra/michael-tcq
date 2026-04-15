@@ -13,7 +13,12 @@ import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
-import { useKeyboardShortcuts, getShortcutsEnabled, setShortcutsEnabled, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
+import {
+  useKeyboardShortcuts,
+  getShortcutsEnabled,
+  setShortcutsEnabled,
+  type Shortcut,
+} from '../hooks/useKeyboardShortcuts.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
 
 const TABS: readonly Tab[] = ['agenda', 'queue', 'log', 'help'];
@@ -103,21 +108,24 @@ function MeetingPageInner() {
    * the new entry. Used by both keyboard shortcuts and the SpeakerControls
    * buttons. Listens for the next state broadcast to identify the new entry.
    */
-  const addQueueEntry = useCallback((type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
-    if (!socket || !meeting) return;
-    setActiveTab('queue');
+  const addQueueEntry = useCallback(
+    (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
+      if (!socket || !meeting) return;
+      setActiveTab('queue');
 
-    // Capture current entry IDs so we can identify the new one
-    const currentIds = new Set(meeting.queuedSpeakerIds);
-    socket.once('state', (newState) => {
-      const newId = newState.queuedSpeakerIds.find((id: string) => !currentIds.has(id));
-      if (newId) {
-        setAutoEditEntryId(newId);
-      }
-    });
+      // Capture current entry IDs so we can identify the new one
+      const currentIds = new Set(meeting.queuedSpeakerIds);
+      socket.once('state', (newState) => {
+        const newId = newState.queuedSpeakerIds.find((id: string) => !currentIds.has(id));
+        if (newId) {
+          setAutoEditEntryId(newId);
+        }
+      });
 
-    socket.emit('queue:add', { type, topic: placeholder });
-  }, [socket, meeting]);
+      socket.emit('queue:add', { type, topic: placeholder });
+    },
+    [socket, meeting],
+  );
 
   // --- Keyboard shortcuts ---
 
@@ -130,20 +138,28 @@ function MeetingPageInner() {
     socket.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
   }, [socket, meeting, isChair]);
 
-  const shortcuts = useMemo<Shortcut[]>(() => [
-    { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic') },
-    { key: 'r', description: 'Reply to current topic', action: () => addQueueEntry('reply', 'Reply') },
-    { key: 'c', description: 'Clarifying Question', action: () => addQueueEntry('question', 'Clarifying question') },
-    { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
-    { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
-    { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode },
-    { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
-    { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
-    { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log') },
-    { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help') },
-    { key: '?', description: 'Toggle shortcuts dialogue', action: () => setShowShortcuts((v) => !v), alwaysActive: true },
-    { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
-  ], [addQueueEntry, advanceNextSpeaker, togglePresentationMode]);
+  const shortcuts = useMemo<Shortcut[]>(
+    () => [
+      { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic') },
+      { key: 'r', description: 'Reply to current topic', action: () => addQueueEntry('reply', 'Reply') },
+      { key: 'c', description: 'Clarifying Question', action: () => addQueueEntry('question', 'Clarifying question') },
+      { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
+      { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
+      { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode },
+      { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
+      { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
+      { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log') },
+      { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help') },
+      {
+        key: '?',
+        description: 'Toggle shortcuts dialogue',
+        action: () => setShowShortcuts((v) => !v),
+        alwaysActive: true,
+      },
+      { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
+    ],
+    [addQueueEntry, advanceNextSpeaker, togglePresentationMode],
+  );
 
   useKeyboardShortcuts(shortcuts, shortcutsEnabled);
 
@@ -163,9 +179,7 @@ function MeetingPageInner() {
       <div className="min-h-screen bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="p-6 max-w-xl mx-auto text-center mt-12">
-          <h1 className="text-xl font-semibold text-stone-800 dark:text-stone-200 mb-2">
-            {error}
-          </h1>
+          <h1 className="text-xl font-semibold text-stone-800 dark:text-stone-200 mb-2">{error}</h1>
           <p className="text-stone-500 dark:text-stone-400 mb-4">
             The meeting you're looking for doesn't exist or is no longer available.
           </p>
