@@ -47,6 +47,7 @@ Keep docs up to date alongside code changes:
 - **`docs/ARCHITECTURE.md`** — architectural changes.
 - **`docs/CONTRIBUTING.md`** — development process changes.
 - **`docs/DEPLOYMENT.md`** — deployment process changes.
+- **`.github/workflows/ci.yml`** — development process changes (kept in sync with validation steps).
 
 ## Testing
 
