@@ -38,8 +38,8 @@ export async function switchUser(page: Page, username: string) {
   }
   await userMenu.fill(username);
   await userMenu.press('Enter');
-  // Wait for the page to update with the new user
-  await page.waitForTimeout(500);
+  // The form submission triggers a full page reload — wait for it
+  await expect(userMenu).not.toBeVisible();
 }
 
 /** Navigate to the Agenda tab. */

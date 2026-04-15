@@ -7,6 +7,7 @@ import {
   addAgendaItem,
   startMeeting,
   addQueueEntry,
+  queueSection,
 } from './helpers.js';
 
 test.describe('Log Tab', () => {
@@ -46,7 +47,7 @@ test.describe('Log Tab', () => {
 
     // Advance to the second agenda item
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Beta Item', { exact: true })).toBeVisible();
 
     await goToLogTab(page);
 
@@ -93,7 +94,7 @@ test.describe('Log Tab', () => {
 
     // Advance to second item
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Group Two', { exact: true })).toBeVisible();
 
     await goToLogTab(page);
 
@@ -117,11 +118,11 @@ test.describe('Log Tab', () => {
 
     // Advance to make this speaker the current speaker
     await page.getByRole('button', { name: 'Next Speaker' }).click();
-    await page.waitForTimeout(500);
+    await expect(queueSection(page, 'Speaking')).toContainText('My important topic');
 
     // Advance past this speaker to finalise the topic
     await page.getByRole('button', { name: 'Next Speaker' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Nobody speaking yet')).toBeVisible();
 
     await goToLogTab(page);
 
@@ -146,9 +147,9 @@ test.describe('Log Tab', () => {
     await addQueueEntry(page, 'New Topic', 'Exported topic');
     await expect(page.getByText('Exported topic')).toBeVisible();
     await page.getByRole('button', { name: 'Next Speaker' }).click();
-    await page.waitForTimeout(500);
+    await expect(queueSection(page, 'Speaking')).toContainText('Exported topic');
     await page.getByRole('button', { name: 'Next Speaker' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Nobody speaking yet')).toBeVisible();
 
     await goToLogTab(page);
     await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
@@ -191,7 +192,7 @@ test.describe('Log Tab', () => {
     // Need to go to queue tab to click the button, then back to log
     await goToQueueTab(page);
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
-    await page.waitForTimeout(500);
+    await expect(page.getByText('Second RT Item', { exact: true })).toBeVisible();
 
     await goToLogTab(page);
 
