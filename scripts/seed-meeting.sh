@@ -293,7 +293,7 @@ selectedAgenda.forEach((item, i) => {
 
 // Start the meeting (advance to the first agenda item)
 actions.push((state) =>
-  socket.emit('meeting:nextAgendaItem', { version: state.version }, () => {})
+  socket.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {})
 );
 
 // Assign a random author to each queue entry and add them as that user
