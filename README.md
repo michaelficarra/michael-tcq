@@ -17,6 +17,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Live timers** — the Queue tab shows count-up timers on the current agenda item, current topic, and current speaker. The agenda item timer turns bold red when the timebox is exceeded.
 - **Queue copy and restore** — chairs can copy the entire queue as text and paste it back later, preserving the original authors. Useful for saving and restoring queue state across breaks.
 - **Confirmation on agenda advancement** — advancing to the next agenda item prompts for confirmation when the queue is non-empty, preventing accidental queue loss.
+- **"I'm done speaking"** — when a non-chair participant is the active speaker, an "I'm done speaking" button lets them voluntarily yield without waiting for a chair to click "Next Speaker". This uses the same race condition prevention strategies as the chairs' "Next Speaker" button.
 - **Queue close/open** — chairs can close the queue to prevent participants from adding new entries, then reopen it when ready. The queue is closed by default before the meeting starts and automatically reopens when advancing to a new agenda item.
 
 ### Agenda and meeting structure

@@ -592,33 +592,41 @@ export function registerSocketHandlers(
     });
 
     // --- queue:next ---
-    // Chair advances to the next speaker. Uses a precondition check on the
-    // current speaker entry ID to prevent double-advancement from concurrent
-    // chair clicks. Uses an ack callback so the client can detect conflicts.
+    // Advances to the next speaker. Allowed for chairs and the current speaker
+    // ("I'm done speaking"). Uses a precondition check on the current speaker
+    // entry ID to prevent double-advancement. Uses an ack callback so the
+    // client can detect conflicts.
     socket.on('queue:next', (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
 
       if (!joinedMeetingId) return;
-      if (!meetingManager.isChair(joinedMeetingId, user)) {
-        respond({ ok: false, error: 'Only chairs can advance the speaker' });
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+
+      // Allow chairs and the current speaker to advance.
+      const actorId = userKey(user);
+      const isChair = meetingManager.isChair(joinedMeetingId, user);
+      const isCurrentSpeaker =
+        meeting.currentSpeakerEntryId != null &&
+        meeting.queueEntries[meeting.currentSpeakerEntryId]?.userId === actorId;
+      if (!isChair && !isCurrentSpeaker) {
+        respond({ ok: false, error: 'Only chairs or the current speaker can advance' });
         return;
       }
 
-      // Precondition check: reject if another chair already advanced the speaker.
+      // Precondition check: reject if someone already advanced the speaker.
       // The client sends the currentSpeakerEntryId it sees; if it doesn't match
-      // the server's current speaker, another chair has already acted.
-      const meeting = meetingManager.get(joinedMeetingId);
-      if (!meeting) return;
+      // the server's current speaker, the view is stale.
       if (payload.currentSpeakerEntryId !== (meeting.currentSpeakerEntryId ?? null)) {
         // Client's view is stale — send current state so it can update
         socket.emit('state', meeting);
-        respond({ ok: false, error: 'Another chair already advanced the speaker' });
+        respond({ ok: false, error: 'Speaker already advanced' });
         return;
       }
 
       const now = new Date().toISOString();
-      const chairId = ensureUser(meeting, user);
+      ensureUser(meeting, user);
 
       // Peek at the next speaker before advancing (to decide on topic grouping)
       const nextEntryId = meeting.queuedSpeakerIds[0];
@@ -629,7 +637,7 @@ export function registerSocketHandlers(
 
       // If the next speaker starts a new topic, finalise the current topic group
       if (nextEntry && nextEntry.type === 'topic') {
-        finaliseTopicGroup(meeting, chairId, now);
+        finaliseTopicGroup(meeting, actorId, now);
       }
 
       const newSpeaker = meetingManager.nextSpeaker(joinedMeetingId);
@@ -645,7 +653,7 @@ export function registerSocketHandlers(
         meetingManager.markDirty(joinedMeetingId);
       }
 
-      meeting.lastSpeakerAdvancementAttributedTo = chairId;
+      meeting.lastSpeakerAdvancementAttributedTo = actorId;
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
 

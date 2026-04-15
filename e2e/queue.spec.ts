@@ -472,3 +472,67 @@ test.describe('Queue Close / Open', () => {
     await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
   });
 });
+
+test.describe("I'm Done Speaking", () => {
+  test('non-chair active speaker sees the "I\'m done speaking" button', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Switch to bob (non-chair), add a queue entry
+    await switchUser(page, 'bob');
+    await addQueueEntry(page, 'New Topic');
+
+    // Switch back to admin (chair) and advance bob to speaker
+    await switchUser(page, 'admin');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+
+    // Switch to bob — should see "I'm done speaking"
+    await switchUser(page, 'bob');
+    await expect(page.getByRole('button', { name: /done speaking/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next Speaker' })).not.toBeVisible();
+  });
+
+  test('clicking "I\'m done speaking" advances the queue', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Bob adds entry, admin advances bob to speaker
+    await switchUser(page, 'bob');
+    await addQueueEntry(page, 'New Topic', "Bob's topic");
+    await switchUser(page, 'admin');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking').getByText("Bob's topic")).toBeVisible();
+
+    // Admin adds another entry while bob is speaking
+    await addQueueEntry(page, 'New Topic', "Admin's topic");
+
+    // Switch to bob, click "I'm done speaking"
+    await switchUser(page, 'bob');
+    await page.getByRole('button', { name: /done speaking/i }).click();
+
+    // Admin's topic should now be the current speaker
+    await expect(queueSection(page, 'Speaking').getByText("Admin's topic")).toBeVisible();
+  });
+
+  test('non-chair non-speaker does not see the button', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Admin adds a queue entry and advances to become the speaker
+    await addQueueEntry(page, 'New Topic');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+
+    // Switch to bob — should NOT see "I'm done speaking"
+    await switchUser(page, 'bob');
+    await expect(page.getByRole('button', { name: /done speaking/i })).not.toBeVisible();
+  });
+
+  test('chair does not see "I\'m done speaking" (sees "Next Speaker" instead)', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Admin adds a queue entry and advances to become the speaker
+    await addQueueEntry(page, 'New Topic');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+
+    // Admin (chair) should see "Next Speaker", not "I'm done speaking"
+    await expect(page.getByRole('button', { name: 'Next Speaker' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /done speaking/i })).not.toBeVisible();
+  });
+});

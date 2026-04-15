@@ -162,9 +162,10 @@ The user's own queue entries are visually distinguished with a coloured left bor
 ### Queue Advancement
 
 - **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue.
+- **I'm done speaking** (current speaker action) — when a non-chair participant is the active speaker, an "I'm done speaking" button appears next to the "Speaking" heading. Clicking it advances the queue using the same mechanism as the chair's "Next Speaker" button, allowing the speaker to voluntarily yield without waiting for a chair. The `s` keyboard shortcut is never available to non-chairs.
 - If the queue is empty when advancement occurs, the current speaker is cleared.
-- If two chairs attempt to advance the speaker or agenda item simultaneously, the second action is rejected to prevent conflicts.
-- The Next Speaker action (button and keyboard shortcut) is debounced to ignore rapid repeated activations. After any speaker change is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing chairs from accidentally skipping a speaker.
+- If two users attempt to advance the speaker simultaneously, the second action is rejected to prevent conflicts.
+- The Next Speaker and "I'm done speaking" actions are debounced to ignore rapid repeated activations. After a speaker change triggered by another user is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing accidental double-advancement.
 
 ### Queue Reordering
 
