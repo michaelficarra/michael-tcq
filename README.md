@@ -55,34 +55,34 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 ## Screenshots
 
-![Home page](screenshots/home-page.png)
+![Home page](docs/screenshots/home-page.png)
 Join or create a meeting from the home page.
 
-![Queue tab](screenshots/queue-participant.png)
+![Queue tab](docs/screenshots/queue-participant.png)
 The speaker queue with priority-ordered entries from a particpant's perspective.
 
-![Queue tab with chair controls](screenshots/queue-chair.png)
+![Queue tab with chair controls](docs/screenshots/queue-chair.png)
 The speaker queue with chair controls.
 
-![Dark mode](screenshots/dark-mode.png)
+![Dark mode](docs/screenshots/dark-mode.png)
 Dark mode follows the system colour scheme automatically.
 
-![Agenda tab](screenshots/agenda.png)
+![Agenda tab](docs/screenshots/agenda.png)
 The agenda tab with chairs, numbered items, and drag-to-reorder.
 
-![Keyboard shortcuts](screenshots/keyboard-shortcuts.png)
+![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png)
 Press `?` to view all keyboard shortcuts.
 
-![Create poll](screenshots/create-poll.png)
+![Create poll](docs/screenshots/create-poll.png)
 Configuring a poll with customisable emoji and label options.
 
-![Active poll](screenshots/active-poll.png)
+![Active poll](docs/screenshots/active-poll.png)
 An active poll showing reaction buttons with counts.
 
-![Meeting log](screenshots/meeting-log.png)
+![Meeting log](docs/screenshots/meeting-log.png)
 The log tab showing a timeline of meeting events with speaker topics and durations.
 
-![Help tab](screenshots/help.png)
+![Help tab](docs/screenshots/help.png)
 Built-in help page explaining the tool for participants and chairs.
 
 ## Quick Start
