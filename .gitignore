@@ -1,9 +1,10 @@
-node_modules/
-dist/
-.env.production
-.data/
-*.swp
 *.swo
+*.swp
 *~
 .DS_Store
+.data/
+.env.production
+dist/
+node_modules/
 service-account.json
+test-results/
