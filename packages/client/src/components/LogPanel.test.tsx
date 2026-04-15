@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { MeetingState, User, LogEntry, TopicSpeaker } from '@tcq/shared';
-import { LogsPanel } from './LogsPanel.js';
+import { LogPanel } from './LogPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
@@ -22,12 +22,12 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
 function renderLog(meeting: MeetingState) {
   return render(
     <TestMeetingProvider meeting={meeting}>
-      <LogsPanel />
+      <LogPanel />
     </TestMeetingProvider>,
   );
 }
 
-describe('LogsPanel', () => {
+describe('LogPanel', () => {
   it('shows empty state message when there are no log entries', () => {
     renderLog(makeMeeting());
     expect(screen.getByText(/no events yet/i)).toBeTruthy();

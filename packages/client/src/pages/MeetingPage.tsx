@@ -20,7 +20,7 @@ const TABS: readonly Tab[] = ['agenda', 'queue', 'log', 'help'];
 import { AgendaPanel } from '../components/AgendaPanel.js';
 import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
-import { LogsPanel } from '../components/LogsPanel.js';
+import { LogPanel } from '../components/LogPanel.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
 
@@ -233,7 +233,7 @@ function MeetingPageInner() {
               onAutoEditConsumed={() => setAutoEditEntryId(null)}
             />
           )}
-          {activeTab === 'log' && <LogsPanel />}
+          {activeTab === 'log' && <LogPanel />}
           {activeTab === 'help' && <HelpPanel />}
         </main>
 

@@ -323,7 +323,7 @@ function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, 
 
 // -- Main component --
 
-export function LogsPanel() {
+export function LogPanel() {
   const { meeting } = useMeetingState();
 
   if (!meeting) return null;
