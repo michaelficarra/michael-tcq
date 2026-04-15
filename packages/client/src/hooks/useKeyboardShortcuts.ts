@@ -17,6 +17,10 @@ export interface Shortcut {
   /** If true, this shortcut fires even when shortcuts are globally disabled.
    *  Used for '?' (to re-open the dialog) and Escape. */
   alwaysActive?: boolean;
+  /** Category label for grouping in the help dialog. */
+  category?: string;
+  /** If true, this shortcut is only shown to chairs. */
+  chairOnly?: boolean;
 }
 
 /**

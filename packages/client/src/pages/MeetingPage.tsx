@@ -143,21 +143,37 @@ function MeetingPageInner() {
 
   const shortcuts = useMemo<Shortcut[]>(
     () => [
-      { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic') },
-      { key: 'r', description: 'Reply to current topic', action: () => addQueueEntry('reply', 'Reply') },
-      { key: 'c', description: 'Clarifying Question', action: () => addQueueEntry('question', 'Clarifying question') },
-      { key: 'p', description: 'Point of Order', action: () => addQueueEntry('point-of-order', 'Point of order') },
-      { key: 's', description: 'Next Speaker (chair only)', action: advanceNextSpeaker },
-      { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode },
-      { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda') },
-      { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue') },
-      { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log') },
-      { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help') },
+      { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic'), category: 'Queue' },
+      {
+        key: 'r',
+        description: 'Reply to current topic',
+        action: () => addQueueEntry('reply', 'Reply'),
+        category: 'Queue',
+      },
+      {
+        key: 'c',
+        description: 'Clarifying Question',
+        action: () => addQueueEntry('question', 'Clarifying question'),
+        category: 'Queue',
+      },
+      {
+        key: 'p',
+        description: 'Point of Order',
+        action: () => addQueueEntry('point-of-order', 'Point of order'),
+        category: 'Queue',
+      },
+      { key: 's', description: 'Next speaker (chair only)', action: advanceNextSpeaker, category: 'Queue', chairOnly: true },
+      { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode, category: 'Display' },
+      { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda'), category: 'Navigation' },
+      { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue'), category: 'Navigation' },
+      { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log'), category: 'Navigation' },
+      { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help'), category: 'Navigation' },
       {
         key: '?',
         description: 'Toggle shortcuts dialogue',
         action: () => setShowShortcuts((v) => !v),
         alwaysActive: true,
+        category: 'General',
       },
       { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
     ],
@@ -173,8 +189,8 @@ function MeetingPageInner() {
     setShortcutsEnabled(next);
   }
 
-  // Filter Escape from the displayed shortcuts list
-  const displayedShortcuts = shortcuts.filter((s) => s.key !== 'Escape');
+  // Filter Escape from the displayed list, and hide chair shortcuts for non-chairs
+  const displayedShortcuts = shortcuts.filter((s) => s.key !== 'Escape' && (isChair || !s.chairOnly));
 
   // Error state — show error message with a link back to the home page
   if (error && !meeting) {

@@ -13,12 +13,29 @@ interface KeyboardShortcutsDialogProps {
   onClose: () => void;
 }
 
+/** Group shortcuts by category, preserving insertion order. */
+function groupByCategory(shortcuts: Shortcut[]): [string, Shortcut[]][] {
+  const groups = new Map<string, Shortcut[]>();
+  for (const shortcut of shortcuts) {
+    const category = shortcut.category ?? '';
+    let group = groups.get(category);
+    if (!group) {
+      group = [];
+      groups.set(category, group);
+    }
+    group.push(shortcut);
+  }
+  return [...groups.entries()];
+}
+
 export function KeyboardShortcutsDialog({
   shortcuts,
   enabled,
   onToggleEnabled,
   onClose,
 }: KeyboardShortcutsDialogProps) {
+  const groups = groupByCategory(shortcuts);
+
   return (
     // Backdrop
     <div
@@ -58,18 +75,32 @@ export function KeyboardShortcutsDialog({
 
         <table className={`w-full text-sm select-none ${enabled ? '' : 'opacity-40'}`}>
           <tbody>
-            {shortcuts.map((shortcut) => (
-              <tr key={shortcut.key} className="border-b border-stone-100 dark:border-stone-700 last:border-b-0">
-                <td className="py-1.5 pr-4">
-                  <kbd
-                    className="inline-block bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                                  font-mono text-xs text-stone-700 dark:text-stone-300 min-w-[1.5rem] text-center"
-                  >
-                    {shortcut.key === ' ' ? '␣' : shortcut.key}
-                  </kbd>
-                </td>
-                <td className="py-1.5 text-stone-600 dark:text-stone-400">{shortcut.description}</td>
-              </tr>
+            {groups.map(([category, groupShortcuts], groupIndex) => (
+              <>
+                {category && (
+                  <tr key={`heading-${category}`}>
+                    <td
+                      colSpan={2}
+                      className={`text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wide pb-1 ${groupIndex === 0 ? 'pt-0' : 'pt-4'}`}
+                    >
+                      {category}
+                    </td>
+                  </tr>
+                )}
+                {groupShortcuts.map((shortcut) => (
+                  <tr key={shortcut.key} className="border-b border-stone-100 dark:border-stone-700 last:border-b-0">
+                    <td className="py-1.5 pr-3 pl-3 w-0">
+                      <kbd
+                        className="inline-block bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                                      font-mono text-xs text-stone-700 dark:text-stone-300 min-w-[1.5rem] text-center"
+                      >
+                        {shortcut.key === ' ' ? '␣' : shortcut.key}
+                      </kbd>
+                    </td>
+                    <td className="py-1.5 text-stone-600 dark:text-stone-400">{shortcut.description}</td>
+                  </tr>
+                ))}
+              </>
             ))}
           </tbody>
         </table>
