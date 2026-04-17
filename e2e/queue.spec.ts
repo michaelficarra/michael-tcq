@@ -471,6 +471,38 @@ test.describe('Queue Close / Open', () => {
     await expect(page.getByRole('button', { name: 'Close Queue' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
   });
+
+  test('non-chair can raise a Point of Order when the queue is closed', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Chair closes the queue
+    await page.getByRole('button', { name: 'Close Queue' }).click();
+    await expect(page.getByRole('button', { name: 'Open Queue' })).toBeVisible();
+
+    // Switch to a non-chair user
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    // The other entry buttons are disabled, but Point of Order stays enabled
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+
+    // The closed-queue message mentions the Point of Order exemption
+    await expect(page.getByText('The queue is closed. You can still raise a Point of Order.')).toBeVisible();
+
+    // Raising a Point of Order succeeds — entry appears in the queue
+    await addQueueEntry(page, 'Point of Order', 'We are off-topic');
+    await expect(page.getByText('We are off-topic')).toBeVisible();
+
+    // The new entry carries the Point of Order red-border styling
+    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    const borderWidth = await item.evaluate((el) => getComputedStyle(el).borderWidth);
+    expect(borderWidth).not.toBe('0px');
+
+    // Queue remains closed after adding the Point of Order
+    await expect(page.getByText('The queue is closed. You can still raise a Point of Order.')).toBeVisible();
+  });
 });
 
 test.describe("I'm Done Speaking", () => {

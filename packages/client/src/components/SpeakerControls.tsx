@@ -66,8 +66,6 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
 
   if (!meeting) return null;
 
-  const disabled = meeting.queueClosed && !isChair;
-
   return (
     <div>
       {/* Entry type buttons */}
@@ -75,6 +73,10 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
         {ENTRY_TYPES.map((config) => {
           // Hide the Reply button when there's no current topic
           if (config.requiresTopic && !meeting.currentTopicEntryId) return null;
+
+          // Point of Order is a procedural interruption and is always
+          // permitted, even when the queue is closed to non-chairs.
+          const disabled = meeting.queueClosed && !isChair && config.type !== 'point-of-order';
 
           return (
             <button

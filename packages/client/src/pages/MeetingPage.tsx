@@ -114,7 +114,9 @@ function MeetingPageInner() {
   const addQueueEntry = useCallback(
     (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
       if (!socket || !meeting) return;
-      if (meeting.queueClosed && !isChair) return;
+      // Point of Order is always permitted — procedural interruptions bypass
+      // the queue-closed gate for non-chairs.
+      if (meeting.queueClosed && !isChair && type !== 'point-of-order') return;
       setActiveTab('queue');
 
       // Capture current entry IDs so we can identify the new one

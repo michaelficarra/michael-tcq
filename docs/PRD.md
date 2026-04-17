@@ -138,9 +138,9 @@ When a participant enters the queue, their entry is automatically inserted at th
 
 ### Queue Open / Close
 
-The queue can be open or closed. When the queue is closed, non-chair participants cannot add new entries — the entry type buttons are disabled and a "The queue is closed." message is shown. Chairs can still add entries when the queue is closed (e.g. via Restore Queue or on behalf of others).
+The queue can be open or closed. When the queue is closed, non-chair participants cannot add new New Topic, Reply, or Clarifying Question entries — those entry type buttons are disabled and a "The queue is closed. You can still raise a Point of Order." message is shown. Point of Order entries remain available to all participants even when the queue is closed, because they are procedural interruptions that must never be suppressed. Chairs can still add any entry type when the queue is closed (e.g. via Restore Queue or on behalf of others).
 
-The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries (n, r, c, p) are also blocked for non-chairs when the queue is closed.
+The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries are also blocked for non-chairs when the queue is closed, with the exception of `p` (Point of Order), which remains active.
 
 ### Entering the Queue
 

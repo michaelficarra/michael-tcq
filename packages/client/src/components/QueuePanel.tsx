@@ -503,7 +503,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
         )}
 
         {meeting.queueClosed && !isChair && (
-          <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">The queue is closed.</p>
+          <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">
+            The queue is closed. You can still raise a Point of Order.
+          </p>
         )}
       </section>
 

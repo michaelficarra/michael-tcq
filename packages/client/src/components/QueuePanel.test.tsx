@@ -560,13 +560,13 @@ describe('QueuePanel', () => {
 
   // -- Queue closed message --
 
-  it('shows "The queue is closed." at the bottom of the speaker queue for non-chairs', () => {
+  it('shows the queue-closed message at the bottom of the speaker queue for non-chairs', () => {
     renderQueue(makeMeeting({ queueClosed: true }), otherUser);
-    expect(screen.getByText('The queue is closed.')).toBeInTheDocument();
+    expect(screen.getByText('The queue is closed. You can still raise a Point of Order.')).toBeInTheDocument();
   });
 
   it('does not show closed message when user is a chair', () => {
     renderQueue(makeMeeting({ queueClosed: true, chairIds: ['alice'] }), chairUser);
-    expect(screen.queryByText('The queue is closed.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/queue is closed/i)).not.toBeInTheDocument();
   });
 });

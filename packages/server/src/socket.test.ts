@@ -1779,6 +1779,42 @@ describe('Socket.IO integration', () => {
       expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
     });
 
+    it('non-chair can add a Point of Order when queue is closed', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+      // Close the queue — the joining user (testuser, ghid: 1) is not a chair
+      ctx.meetingManager.setQueueClosed(meeting.id, true);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('queue:add', { type: 'point-of-order', topic: 'Point of order' });
+      const state = await statePromise;
+
+      expect(state.queuedSpeakerIds).toHaveLength(1);
+      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(entry.type).toBe('point-of-order');
+      expect(entry.topic).toBe('Point of order');
+    });
+
+    it('non-chair queue:add still rejected for non-POO types when queue is closed', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+      ctx.meetingManager.setQueueClosed(meeting.id, true);
+
+      const client = await joinMeeting(meeting.id);
+
+      for (const type of ['topic', 'reply', 'question'] as const) {
+        const errorPromise = waitForEvent<string>(client, 'error');
+        client.emit('queue:add', { type, topic: 'Should fail' });
+        const error = await errorPromise;
+        expect(error).toMatch(/queue is closed/i);
+      }
+      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
+    });
+
     it('chair can add entries when queue is closed', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);

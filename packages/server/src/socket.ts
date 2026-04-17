@@ -422,9 +422,15 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Reject if queue is closed and user is not a chair
+      // Reject if queue is closed and user is not a chair. Point of Order is
+      // exempt — procedural interruptions are always permitted regardless of
+      // queue state.
       const addMeeting = meetingManager.get(joinedMeetingId);
-      if (addMeeting?.queueClosed && !meetingManager.isChair(joinedMeetingId, user)) {
+      if (
+        addMeeting?.queueClosed &&
+        !meetingManager.isChair(joinedMeetingId, user) &&
+        payload.type !== 'point-of-order'
+      ) {
         socket.emit('error', 'The queue is closed');
         return;
       }

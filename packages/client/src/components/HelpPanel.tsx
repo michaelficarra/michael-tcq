@@ -238,6 +238,10 @@ export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
               Participants' entry type buttons are disabled and keyboard shortcuts for adding entries are blocked.
             </li>
             <li>
+              Participants can still raise a <strong>Point of Order</strong> — procedural interruptions are always
+              permitted, even when the queue is closed.
+            </li>
+            <li>
               Chairs can still add entries — both directly and via <strong>Restore Queue</strong>.
             </li>
             <li>Existing entries remain in the queue and can still be edited, reordered, or removed.</li>

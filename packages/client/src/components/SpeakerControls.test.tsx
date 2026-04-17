@@ -87,13 +87,14 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('group', { name: 'Queue entry types' })).toBeInTheDocument();
   });
 
-  it('disables buttons when queue is closed and user is not a chair', () => {
+  it('disables buttons when queue is closed and user is not a chair, except Point of Order', () => {
     const meeting = makeMeeting({ queueClosed: true });
     renderControls(meeting);
 
     expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeDisabled();
+    // Point of Order is always permitted — procedural interruptions bypass the closed-queue gate.
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
   });
 
   it('enables buttons when queue is closed and user IS a chair', () => {
