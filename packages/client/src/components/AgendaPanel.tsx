@@ -170,8 +170,8 @@ export function AgendaPanel() {
                 type="submit"
                 disabled={importing}
                 className="bg-teal-500 text-white px-3 py-1 rounded text-sm font-medium
-                           hover:bg-teal-600 transition-colors cursor-pointer
-                           disabled:opacity-50"
+                           enabled:hover:bg-teal-600 transition-colors cursor-pointer
+                           disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {importing ? 'Importing…' : 'Import'}
               </button>

@@ -206,7 +206,7 @@ function NewMeetingCard() {
         onClick={handleCreate}
         disabled={loading || !user}
         className="bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                   hover:bg-teal-600 transition-colors cursor-pointer disabled:opacity-50
+                   enabled:hover:bg-teal-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
                    focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-800"
       >
         {loading ? 'Creating…' : 'Start a New Meeting'}

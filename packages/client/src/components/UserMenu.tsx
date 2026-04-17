@@ -111,8 +111,8 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
       <button
         type="submit"
         disabled={switching}
-        className="text-sm text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium
-                   transition-colors disabled:opacity-50 cursor-pointer"
+        className="text-sm text-teal-600 dark:text-teal-400 enabled:hover:text-teal-800 dark:enabled:hover:text-teal-300 font-medium
+                   transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
       >
         {switching ? '…' : 'Switch'}
       </button>
