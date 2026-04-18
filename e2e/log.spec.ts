@@ -192,11 +192,17 @@ test.describe('Log Tab', () => {
     // Need to go to queue tab to click the button, then back to log
     await goToQueueTab(page);
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
-    await expect(page.getByText('Second RT Item', { exact: true })).toBeVisible();
+    // Wait for the state broadcast to be applied — current agenda item updates to the new one
+    await expect(queueSection(page, 'Agenda Item')).toContainText('Second RT Item');
 
     await goToLogTab(page);
 
-    // The new agenda item should appear in the log without a page refresh
-    await expect(logContent.getByText('Second RT Item', { exact: true })).toBeVisible();
+    // Re-scope to the LogPanel's tabpanel after the tab switch so the assertion
+    // only succeeds once the Log tab has actually mounted (not while the Queue
+    // panel — which also shows "Second RT Item" as the current agenda item —
+    // is still rendered mid-switch).
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+    await expect(logPanel).toBeVisible();
+    await expect(logPanel.getByText('Second RT Item', { exact: true })).toBeVisible();
   });
 });
