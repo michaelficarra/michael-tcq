@@ -86,15 +86,19 @@ describe('UserMenu (logout hamburger dropdown)', () => {
     expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
   });
 
-  it('clicking outside the dropdown dismisses it', () => {
-    render(<UserMenu />);
+  it('pointerdown outside the dropdown dismisses it', () => {
+    render(
+      <div>
+        <button>other</button>
+        <UserMenu />
+      </div>,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
 
-    // The dropdown is portaled to document.body, so query it there.
-    const backdrop = document.body.querySelector('div.fixed.inset-0[class*="z-["]');
-    expect(backdrop).not.toBeNull();
-    fireEvent.click(backdrop!);
+    // Simulate a pointerdown on another element in the document. The menu
+    // should dismiss without blocking the underlying target.
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'other' }));
 
     expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
   });

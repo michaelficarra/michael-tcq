@@ -50,6 +50,8 @@ function HamburgerMenu() {
   // Menu item ref — since the dropdown is portaled to <body>, natural tab order
   // skips past it. We route Tab from the button to this link manually.
   const menuItemRef = useRef<HTMLAnchorElement | null>(null);
+  // Dropdown container ref for outside-click detection.
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   function toggleMenu() {
@@ -72,6 +74,23 @@ function HamburgerMenu() {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // Dismiss on pointerdown anywhere outside the button or dropdown. Using
+  // pointerdown (rather than a blocking overlay) lets the same gesture both
+  // close the menu and reach the underlying element — e.g. clicking a tab
+  // switches tabs and dismisses the menu in one click.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (buttonRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
   return (
@@ -106,35 +125,31 @@ function HamburgerMenu() {
       {open &&
         pos &&
         createPortal(
-          <>
-            {/* Invisible backdrop: any click outside the dropdown lands here and closes the menu.
-                Sits above the nav (which has `z-50`) so clicks inside the nav bar also dismiss. */}
-            <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
-            <div
-              role="menu"
-              className="fixed z-[70] min-w-32 rounded border border-stone-200 dark:border-stone-700
-                         bg-white dark:bg-stone-800 shadow-lg py-1"
-              style={{ top: pos.top, right: pos.right }}
+          <div
+            ref={dropdownRef}
+            role="menu"
+            className="fixed z-[70] min-w-32 rounded border border-stone-200 dark:border-stone-700
+                       bg-white dark:bg-stone-800 shadow-lg py-1"
+            style={{ top: pos.top, right: pos.right }}
+          >
+            <a
+              ref={menuItemRef}
+              href="/auth/logout"
+              role="menuitem"
+              onKeyDown={(e) => {
+                // Route Tab/Shift+Tab back to the button to pair the menu
+                // item with its trigger in tab order. Escape still closes.
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  buttonRef.current?.focus();
+                }
+              }}
+              className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
             >
-              <a
-                ref={menuItemRef}
-                href="/auth/logout"
-                role="menuitem"
-                onKeyDown={(e) => {
-                  // Route Tab/Shift+Tab back to the button to pair the menu
-                  // item with its trigger in tab order. Escape still closes.
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    buttonRef.current?.focus();
-                  }
-                }}
-                className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
-                           hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
-              >
-                Log Out
-              </a>
-            </div>
-          </>,
+              Log Out
+            </a>
+          </div>,
           document.body,
         )}
     </>
