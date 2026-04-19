@@ -5,7 +5,8 @@
  * Used in both the NavBar (meeting page) and the HomePage header.
  */
 
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { UserBadge } from './UserBadge.js';
 
@@ -23,13 +24,87 @@ export function UserMenu() {
           <UserBadge user={user} size={20} />
         </span>
       )}
-      <a
-        href="/auth/logout"
-        className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
-      >
-        Log Out
-      </a>
+      <HamburgerMenu />
     </span>
+  );
+}
+
+// -- Hamburger dropdown with the Log Out action --
+
+/**
+ * Renders a hamburger icon button that opens a small dropdown anchored
+ * beneath it. The dropdown currently holds a single Log Out link. Clicking
+ * outside the dropdown or pressing Escape dismisses it.
+ */
+function HamburgerMenu() {
+  const [open, setOpen] = useState(false);
+  // The nav has `overflow-x-auto` (which clips descendants) and `sticky + z-50`
+  // (which creates a stacking context that caps descendant z-indices). Render
+  // the dropdown into a portal on <body> with measured fixed coordinates so it
+  // escapes both.
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+
+  function toggleMenu() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    setOpen(true);
+  }
+
+  // Dismiss the menu when the user presses Escape anywhere in the document.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={toggleMenu}
+        aria-label="Open menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center text-lg leading-none cursor-pointer"
+      >
+        <span aria-hidden="true">🍔</span>
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            {/* Invisible backdrop: any click outside the dropdown lands here and closes the menu.
+                Sits above the nav (which has `z-50`) so clicks inside the nav bar also dismiss. */}
+            <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+            <div
+              role="menu"
+              className="fixed z-[70] min-w-32 rounded border border-stone-200 dark:border-stone-700
+                         bg-white dark:bg-stone-800 shadow-lg py-1"
+              style={{ top: pos.top, right: pos.right }}
+            >
+              <a
+                href="/auth/logout"
+                role="menuitem"
+                className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                           hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+              >
+                Log Out
+              </a>
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -83,9 +158,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
         >
           <UserBadge user={user} size={20} />
         </button>
-        <a href="/auth/logout" className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
-          Log Out
-        </a>
+        <HamburgerMenu />
       </span>
     );
   }

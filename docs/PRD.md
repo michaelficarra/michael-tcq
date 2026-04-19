@@ -86,7 +86,7 @@ The meeting view has four tabs:
 - **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
 - **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
-The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and Log Out link in OAuth mode, or a clickable user badge with user-switcher form and Log Out link in mock auth mode). The Help tab is also available on the home page.
+The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown whose only entry is Log Out; clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
 ## Agenda
 

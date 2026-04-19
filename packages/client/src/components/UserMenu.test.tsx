@@ -42,3 +42,60 @@ describe('UserMenu (dev user-switcher)', () => {
     expect(screen.getByRole('button', { name: /admin/i })).toBeInTheDocument();
   });
 });
+
+describe('UserMenu (logout hamburger dropdown)', () => {
+  it('does not show the Log Out link until the hamburger is clicked', () => {
+    render(<UserMenu />);
+    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+  });
+
+  it('clicking the hamburger reveals the Log Out link with the correct href', () => {
+    render(<UserMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const logOut = screen.getByRole('menuitem', { name: 'Log Out' });
+    expect(logOut).toHaveAttribute('href', '/auth/logout');
+  });
+
+  it('the hamburger button reflects the open state via aria-expanded', () => {
+    render(<UserMenu />);
+    const button = screen.getByRole('button', { name: 'Open menu' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('clicking the hamburger again while open closes the dropdown', () => {
+    render(<UserMenu />);
+    const button = screen.getByRole('button', { name: 'Open menu' });
+    fireEvent.click(button);
+    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+
+    fireEvent.click(button);
+
+    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('pressing Escape dismisses the dropdown', () => {
+    render(<UserMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+  });
+
+  it('clicking outside the dropdown dismisses it', () => {
+    render(<UserMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+
+    // The dropdown is portaled to document.body, so query it there.
+    const backdrop = document.body.querySelector('div.fixed.inset-0[class*="z-["]');
+    expect(backdrop).not.toBeNull();
+    fireEvent.click(backdrop!);
+
+    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+  });
+});
