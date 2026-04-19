@@ -39,6 +39,9 @@ export function UserMenu() {
  */
 function HamburgerMenu() {
   const { openPreferences } = usePreferences();
+  // Dev (mock-auth) and production (real OAuth) get different icons: a playful
+  // 🍔 emoji for local hacking, a conventional three-line SVG for real users.
+  const { mockAuth } = useAuth();
   const [open, setOpen] = useState(false);
   // The nav has `overflow-x-auto` (which clips descendants) and `sticky + z-50`
   // (which creates a stacking context that caps descendant z-indices). Render
@@ -116,15 +119,41 @@ function HamburgerMenu() {
         aria-expanded={open}
         className="group self-stretch inline-flex items-center text-3xl leading-none cursor-pointer"
       >
-        <span
-          ref={iconRef}
-          aria-hidden="true"
-          className={`inline-block transition duration-300 ease-out ${
-            open ? 'saturate-100' : 'saturate-[.5] group-hover:saturate-100'
-          }`}
-        >
-          🍔
-        </span>
+        {mockAuth ? (
+          <span
+            ref={iconRef}
+            aria-hidden="true"
+            className={`inline-block transition duration-300 ease-out ${
+              open ? 'saturate-100' : 'saturate-[.5] group-hover:saturate-100'
+            }`}
+          >
+            🍔
+          </span>
+        ) : (
+          <span
+            ref={iconRef}
+            aria-hidden="true"
+            className={`inline-flex items-center transition-colors duration-200 ease-out ${
+              open
+                ? 'text-teal-500 dark:text-teal-400'
+                : 'text-stone-500 dark:text-stone-400 group-hover:text-teal-500 dark:group-hover:text-teal-400'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              className="h-7 w-7"
+            >
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </span>
+        )}
       </button>
       {open &&
         pos &&
