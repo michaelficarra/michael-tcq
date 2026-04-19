@@ -6,7 +6,14 @@
  * to chair a meeting); the meeting page passes the result of `useIsChair()`.
  */
 
-export function HelpPanel({ showChairHelp }: { showChairHelp: boolean }) {
+export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: boolean; hidden?: boolean }) {
+  // When hidden (not the active tab), render only the empty tabpanel shell —
+  // the stable DOM root is enough to avoid tab-switch mount/unmount races
+  // without paying the cost of rendering the full help tree.
+  if (hidden) {
+    return <div id="panel-help" role="tabpanel" aria-label="Help" hidden className="p-6 max-w-3xl" />;
+  }
+
   return (
     <div id="panel-help" role="tabpanel" aria-label="Help" className="p-6 max-w-3xl">
       <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-4">How to Use TCQ</h2>

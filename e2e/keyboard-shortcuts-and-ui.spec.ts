@@ -14,8 +14,10 @@ test.describe('Keyboard Shortcuts', () => {
   test('pressing "?" opens the keyboard shortcuts dialog', async ({ page }) => {
     await createMeeting(page);
     await page.keyboard.press('?');
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByText('Keyboard Shortcuts')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // Scope to the dialog; Help prose also contains "Keyboard Shortcuts".
+    await expect(dialog.getByRole('heading', { name: 'Keyboard Shortcuts' })).toBeVisible();
   });
 
   test('the dialog lists all shortcuts', async ({ page }) => {

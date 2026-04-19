@@ -44,7 +44,7 @@ const KEYBOARD_SENSOR_OPTIONS = {
   coordinateGetter: sortableKeyboardCoordinates,
 };
 
-export function AgendaPanel() {
+export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const { meeting, user } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const isChair = useIsChair();
@@ -63,7 +63,14 @@ export function AgendaPanel() {
     useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
-  if (!meeting) return null;
+  // When hidden (not the active tab) or meeting state not yet loaded, render
+  // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
+  // mount/unmount race on tab switch that caused Firefox CI flakes; skipping
+  // the inner content avoids re-rendering the whole panel on every state
+  // broadcast for tabs the user isn't looking at.
+  if (hidden || !meeting) {
+    return <div id="panel-agenda" role="tabpanel" aria-label="Agenda" hidden={hidden} className="p-6" />;
+  }
 
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {

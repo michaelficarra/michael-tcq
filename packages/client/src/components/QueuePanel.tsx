@@ -54,9 +54,11 @@ interface QueuePanelProps {
   onAddEntry: (type: import('@tcq/shared').QueueEntryType, placeholder: string) => void;
   /** Called when the auto-edit has been consumed by the entry component. */
   onAutoEditConsumed: () => void;
+  /** Hide the panel when not the active tab (rendered but excluded from a11y tree). */
+  hidden?: boolean;
 }
 
-export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: QueuePanelProps) {
+export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hidden = false }: QueuePanelProps) {
   const { meeting, user } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const isChair = useIsChair();
@@ -131,7 +133,14 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed }: 
   const [showRestore, setShowRestore] = useState(false);
   const [restoreText, setRestoreText] = useState('');
 
-  if (!meeting) return null;
+  // When hidden (not the active tab) or meeting state not yet loaded, render
+  // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
+  // mount/unmount race on tab switch; skipping the inner content avoids
+  // re-rendering the whole panel on every state broadcast while the user is
+  // on another tab.
+  if (hidden || !meeting) {
+    return <div id="panel-queue" role="tabpanel" aria-label="Queue" hidden={hidden} className="p-6 space-y-6" />;
+  }
 
   /** Remove a queue entry (own entry, or any entry if chair). */
   function handleRemoveEntry(entryId: string) {

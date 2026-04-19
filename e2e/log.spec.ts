@@ -194,11 +194,14 @@ test.describe('Log Tab', () => {
     await startMeeting(page);
     await goToLogTab(page);
 
-    const logContent = page.getByRole('main');
+    // Scope to the Log tabpanel; the Agenda and Queue panels are always
+    // rendered (with `hidden`) and also contain the agenda item names.
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+    await expect(logPanel).toBeVisible();
 
     // Should already see the meeting started and first agenda item
-    await expect(logContent.getByText('Meeting started')).toBeVisible();
-    await expect(logContent.getByText('Real-Time Item', { exact: true })).toBeVisible();
+    await expect(logPanel.getByText('Meeting started')).toBeVisible();
+    await expect(logPanel.getByText('Real-Time Item', { exact: true })).toBeVisible();
 
     // Now advance to next item while staying on the log tab
     // Need to go to queue tab to click the button, then back to log
@@ -208,12 +211,6 @@ test.describe('Log Tab', () => {
     await expect(queueSection(page, 'Agenda Item')).toContainText('Second RT Item');
 
     await goToLogTab(page);
-
-    // Re-scope to the LogPanel's tabpanel after the tab switch so the assertion
-    // only succeeds once the Log tab has actually mounted (not while the Queue
-    // panel — which also shows "Second RT Item" as the current agenda item —
-    // is still rendered mid-switch).
-    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
     await expect(logPanel).toBeVisible();
     await expect(logPanel.getByText('Second RT Item', { exact: true })).toBeVisible();
   });

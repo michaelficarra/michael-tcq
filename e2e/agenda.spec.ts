@@ -7,10 +7,13 @@ test.describe('Agenda tab', () => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      // The chairs section should show the heading and the current user
-      await expect(page.getByText('Chairs')).toBeVisible();
+      // The chairs section should show the heading and the current user.
+      // Scoped to the Agenda tabpanel because other panels (e.g. Help) also
+      // contain the word "Chairs" in prose.
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByRole('heading', { name: 'Chairs' })).toBeVisible();
       // The meeting creator (Admin) is shown as a chair
-      await expect(page.getByRole('tabpanel', { name: 'Agenda' })).toContainText('Admin');
+      await expect(agendaPanel).toContainText('Admin');
     });
 
     test('add chair button opens inline username input', async ({ page }) => {
@@ -120,9 +123,11 @@ test.describe('Agenda tab', () => {
 
       await addAgendaItem(page, 'First agenda item');
 
-      await expect(page.getByText('First agenda item')).toBeVisible();
+      // Scope to the Agenda tabpanel since Help prose mentions "first agenda item".
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('First agenda item')).toBeVisible();
       // Should show the item number
-      await expect(page.getByText('1')).toBeVisible();
+      await expect(agendaPanel.getByText('1')).toBeVisible();
     });
 
     test('items show number, name, owner with avatar, and timebox if set', async ({ page }) => {
@@ -143,8 +148,8 @@ test.describe('Agenda tab', () => {
 
       await addAgendaItem(page, 'Editable item');
 
-      // Click edit
-      await page.getByText('edit', { exact: true }).click();
+      // Click edit (button with accessible label; Help prose also contains "edit")
+      await page.getByRole('button', { name: 'Edit Editable item' }).click();
 
       // Inline edit fields should appear
       await expect(page.getByLabel('Agenda item name')).toBeVisible();
@@ -165,14 +170,15 @@ test.describe('Agenda tab', () => {
 
       await addAgendaItem(page, 'Original name');
 
-      // Edit the item
-      await page.getByText('edit', { exact: true }).click();
+      // Edit the item (button with accessible label; Help prose also contains "edit")
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await page.getByRole('button', { name: 'Edit Original name' }).click();
       await page.getByLabel('Agenda item name').fill('Updated name');
       await page.getByRole('button', { name: 'Save' }).click();
 
       // The updated name should appear
-      await expect(page.getByText('Updated name')).toBeVisible();
-      await expect(page.getByText('Original name')).not.toBeVisible();
+      await expect(agendaPanel.getByText('Updated name')).toBeVisible();
+      await expect(agendaPanel.getByText('Original name')).not.toBeVisible();
     });
 
     test('clicking delete removes the item', async ({ page }) => {
@@ -181,13 +187,14 @@ test.describe('Agenda tab', () => {
 
       await addAgendaItem(page, 'Delete me');
 
-      await expect(page.getByText('Delete me')).toBeVisible();
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Delete me')).toBeVisible();
 
-      // Delete the item
-      await page.getByText('delete', { exact: true }).click();
+      // Delete the item (button with accessible label; Help prose also contains "delete")
+      await page.getByRole('button', { name: 'Delete Delete me' }).click();
 
       // The item should be removed
-      await expect(page.getByText('Delete me')).not.toBeVisible();
+      await expect(agendaPanel.getByText('Delete me')).not.toBeVisible();
     });
 
     test('empty agenda shows "Import Agenda from URL" button for chairs', async ({ page }) => {

@@ -55,7 +55,7 @@ function MeetingPageInner() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { shortcutsEnabled, setShortcutsEnabled, togglePreferences } = usePreferences();
   const [presentationMode, setPresentationMode] = useState(false);
-  const { meeting, connected, error } = useMeetingState();
+  const { meeting, connected, activeConnections, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
   const socket = useSocketConnection(meetingId ?? '');
@@ -261,21 +261,28 @@ function MeetingPageInner() {
           </>
         )}
 
+        {/*
+          All four tab panels are always rendered; the inactive ones carry the
+          `hidden` attribute, which both visually hides them and excludes them
+          from the accessibility tree. Rendering them unconditionally avoids a
+          mount/unmount race on tab switch that caused `getByRole('tabpanel',
+          { name: 'Log' })` to intermittently fail to resolve in Firefox CI —
+          see the `log updates in real time as events occur` e2e test.
+        */}
         <main>
-          {activeTab === 'agenda' && <AgendaPanel />}
-          {activeTab === 'queue' && (
-            <QueuePanel
-              autoEditEntryId={presentationMode ? null : autoEditEntryId}
-              onAddEntry={addQueueEntry}
-              onAutoEditConsumed={() => setAutoEditEntryId(null)}
-            />
-          )}
-          {activeTab === 'log' && <LogPanel />}
-          {activeTab === 'help' && <HelpPanel showChairHelp={isChair} />}
+          <AgendaPanel hidden={activeTab !== 'agenda'} />
+          <QueuePanel
+            hidden={activeTab !== 'queue'}
+            autoEditEntryId={presentationMode ? null : autoEditEntryId}
+            onAddEntry={addQueueEntry}
+            onAutoEditConsumed={() => setAutoEditEntryId(null)}
+          />
+          <LogPanel hidden={activeTab !== 'log'} />
+          <HelpPanel hidden={activeTab !== 'help'} showChairHelp={isChair} />
         </main>
 
         {/* Connection status indicator */}
-        <ConnectionStatus connected={connected} />
+        <ConnectionStatus connected={connected} activeConnections={activeConnections} />
 
         {/* Keyboard shortcuts dialog */}
         {showShortcuts && (

@@ -538,17 +538,26 @@ function downloadFile(text: string, filename: string) {
 
 // -- Main component --
 
-export function LogPanel() {
+export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const { meeting } = useMeetingState();
   const reversedLog = useMemo(() => (meeting ? [...meeting.log].reverse() : []), [meeting]);
 
-  if (!meeting) return null;
+  // When hidden (not the active tab) or meeting state not yet loaded, render
+  // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
+  // mount/unmount race on tab switch that motivated this refactor; skipping
+  // the inner content avoids re-rendering every log entry on every state
+  // broadcast for tabs the user isn't currently looking at.
+  if (hidden || !meeting) {
+    return (
+      <div id="panel-log" role="tabpanel" aria-label="Log" hidden={hidden} className="p-4 sm:p-6 max-w-3xl mx-auto" />
+    );
+  }
 
   const hasCurrentTopic = meeting.currentTopicSpeakers.length > 0;
   const isEmpty = reversedLog.length === 0 && !hasCurrentTopic;
 
   return (
-    <div role="tabpanel" aria-label="Log" className="p-4 sm:p-6 max-w-3xl mx-auto">
+    <div id="panel-log" role="tabpanel" aria-label="Log" className="p-4 sm:p-6 max-w-3xl mx-auto">
       {isEmpty && (
         <p className="text-stone-500 dark:text-stone-400 text-sm">
           No events yet. The log will populate as the meeting progresses.

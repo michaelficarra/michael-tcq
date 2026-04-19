@@ -80,8 +80,11 @@ test.describe('Meeting Flow', () => {
     await addAgendaItem(page, 'Opening Remarks', 'admin');
     await startMeeting(page);
 
-    // The current agenda item should appear in the queue panel
-    await expect(page.getByText('Opening Remarks', { exact: true })).toBeVisible();
+    // The current agenda item should appear in the Queue panel's Agenda
+    // Item section. Scope the assertion because the Agenda panel (always
+    // rendered) also contains the item name.
+    const queuePanel = page.getByRole('tabpanel', { name: 'Queue' });
+    await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Opening Remarks');
   });
 
   test('"Next Agenda Item" advances to the next item', async ({ page }) => {
@@ -93,7 +96,8 @@ test.describe('Meeting Flow', () => {
 
     await page.getByRole('button', { name: 'Next Agenda Item' }).click();
 
-    await expect(page.getByText('Item Two', { exact: true })).toBeVisible();
+    const queuePanel = page.getByRole('tabpanel', { name: 'Queue' });
+    await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Item Two');
   });
 
   test('"Next Agenda Item" button is hidden on the last agenda item', async ({ page }) => {

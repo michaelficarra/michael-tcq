@@ -42,24 +42,37 @@ export async function switchUser(page: Page, username: string) {
   await expect(userMenu).not.toBeVisible();
 }
 
+/**
+ * Click a tab by name and wait for it to become the active one. We wait for
+ * `aria-selected="true"` rather than returning immediately after click so
+ * that callers that assert against the newly-active panel don't race React's
+ * state commit — this has been a source of Firefox-only CI flakiness in the
+ * past.
+ */
+async function switchToTab(page: Page, name: string) {
+  const tab = page.getByRole('tab', { name });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 /** Navigate to the Agenda tab. */
 export async function goToAgendaTab(page: Page) {
-  await page.getByRole('tab', { name: 'Agenda' }).click();
+  await switchToTab(page, 'Agenda');
 }
 
 /** Navigate to the Queue tab. */
 export async function goToQueueTab(page: Page) {
-  await page.getByRole('tab', { name: 'Queue' }).click();
+  await switchToTab(page, 'Queue');
 }
 
 /** Navigate to the Log tab. */
 export async function goToLogTab(page: Page) {
-  await page.getByRole('tab', { name: 'Log' }).click();
+  await switchToTab(page, 'Log');
 }
 
 /** Navigate to the Help tab. */
 export async function goToHelpTab(page: Page) {
-  await page.getByRole('tab', { name: 'Help' }).click();
+  await switchToTab(page, 'Help');
 }
 
 /** Add an agenda item (must be on the Agenda tab as a chair). */
