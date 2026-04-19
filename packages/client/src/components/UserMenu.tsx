@@ -47,6 +47,9 @@ function HamburgerMenu() {
   // the dropdown to the emoji's bottom rather than the button's to keep the
   // dropdown close to the visible icon.
   const iconRef = useRef<HTMLSpanElement | null>(null);
+  // Menu item ref — since the dropdown is portaled to <body>, natural tab order
+  // skips past it. We route Tab from the button to this link manually.
+  const menuItemRef = useRef<HTMLAnchorElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   function toggleMenu() {
@@ -77,6 +80,14 @@ function HamburgerMenu() {
         ref={buttonRef}
         type="button"
         onClick={toggleMenu}
+        onKeyDown={(e) => {
+          // When the menu is open, Tab should route into the dropdown (which
+          // lives in a body-level portal and is otherwise skipped).
+          if (open && e.key === 'Tab' && !e.shiftKey) {
+            e.preventDefault();
+            menuItemRef.current?.focus();
+          }
+        }}
         aria-label="Open menu"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -106,8 +117,17 @@ function HamburgerMenu() {
               style={{ top: pos.top, right: pos.right }}
             >
               <a
+                ref={menuItemRef}
                 href="/auth/logout"
                 role="menuitem"
+                onKeyDown={(e) => {
+                  // Route Tab/Shift+Tab back to the button to pair the menu
+                  // item with its trigger in tab order. Escape still closes.
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    buttonRef.current?.focus();
+                  }
+                }}
                 className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
                            hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
               >
