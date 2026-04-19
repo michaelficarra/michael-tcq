@@ -20,37 +20,55 @@ export function HomePage() {
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
       <nav
-        className="sticky top-0 z-50 flex items-center gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 py-3"
+        className="sticky top-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6"
         aria-label="Main navigation"
       >
         {/* Branding */}
-        <Logo />
+        <span className="flex items-center py-3">
+          <Logo />
+        </span>
 
         {/* Tab toggles */}
-        <div className="flex gap-4" role="tablist" aria-label="Home views">
+        <div className="flex items-stretch gap-4" role="tablist" aria-label="Home views">
           <button
             role="tab"
             aria-selected={activeTab === 'join'}
-            className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
+            className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
               activeTab === 'join'
-                ? 'text-stone-900 dark:text-stone-100 border-teal-500'
-                : 'text-stone-400 dark:text-stone-500 border-transparent hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600'
+                ? 'text-stone-900 dark:text-stone-100'
+                : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
             onClick={() => setActiveTab('join')}
           >
-            Join Meeting
+            <span
+              className={`pb-1 border-b-2 transition-colors ${
+                activeTab === 'join'
+                  ? 'border-teal-500'
+                  : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
+              }`}
+            >
+              Join Meeting
+            </span>
           </button>
           <button
             role="tab"
             aria-selected={activeTab === 'help'}
-            className={`text-base font-medium transition-colors cursor-pointer pb-1 border-b-2 ${
+            className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
               activeTab === 'help'
-                ? 'text-stone-900 dark:text-stone-100 border-teal-500'
-                : 'text-stone-400 dark:text-stone-500 border-transparent hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600'
+                ? 'text-stone-900 dark:text-stone-100'
+                : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
             onClick={() => setActiveTab('help')}
           >
-            Help
+            <span
+              className={`pb-1 border-b-2 transition-colors ${
+                activeTab === 'help'
+                  ? 'border-teal-500'
+                  : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
+              }`}
+            >
+              Help
+            </span>
           </button>
         </div>
 
@@ -58,7 +76,9 @@ export function HomePage() {
         <div className="flex-1" />
 
         {/* User menu */}
-        <UserMenu />
+        <div className="flex items-stretch">
+          <UserMenu />
+        </div>
       </nav>
 
       <main>

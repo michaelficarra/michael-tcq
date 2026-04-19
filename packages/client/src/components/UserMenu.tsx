@@ -43,6 +43,10 @@ function HamburgerMenu() {
   // the dropdown into a portal on <body> with measured fixed coordinates so it
   // escapes both.
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // Inner icon ref — the button stretches to the full nav height so we anchor
+  // the dropdown to the emoji's bottom rather than the button's to keep the
+  // dropdown close to the visible icon.
+  const iconRef = useRef<HTMLSpanElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   function toggleMenu() {
@@ -50,9 +54,10 @@ function HamburgerMenu() {
       setOpen(false);
       return;
     }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    const iconRect = iconRef.current?.getBoundingClientRect();
+    const buttonRect = buttonRef.current?.getBoundingClientRect();
+    if (!iconRect || !buttonRect) return;
+    setPos({ top: iconRect.bottom + 8, right: window.innerWidth - buttonRect.right });
     setOpen(true);
   }
 
@@ -75,9 +80,11 @@ function HamburgerMenu() {
         aria-label="Open menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center text-lg leading-none cursor-pointer"
+        className="self-stretch inline-flex items-center text-lg leading-none cursor-pointer"
       >
-        <span aria-hidden="true">🍔</span>
+        <span ref={iconRef} aria-hidden="true">
+          🍔
+        </span>
       </button>
       {open &&
         pos &&
@@ -153,7 +160,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
             setUsername(user.ghUsername);
             setOpen(true);
           }}
-          className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
+          className="self-stretch inline-flex items-center text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
           title="Click to switch user (dev mode)"
         >
           <UserBadge user={user} size={20} />
