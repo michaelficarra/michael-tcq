@@ -80,9 +80,15 @@ function HamburgerMenu() {
         aria-label="Open menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="self-stretch inline-flex items-center text-lg leading-none cursor-pointer"
+        className="group self-stretch inline-flex items-center text-3xl leading-none cursor-pointer"
       >
-        <span ref={iconRef} aria-hidden="true">
+        <span
+          ref={iconRef}
+          aria-hidden="true"
+          className={`inline-block transition duration-300 ease-out ${
+            open ? 'saturate-100' : 'saturate-[.5] group-hover:saturate-100'
+          }`}
+        >
           🍔
         </span>
       </button>
