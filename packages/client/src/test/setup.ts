@@ -17,6 +17,18 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom doesn't implement the Notification API. Provide a minimal stub so the
+// PreferencesContext / useMeetingNotifications code paths execute. Individual
+// tests can override via `vi.stubGlobal('Notification', ...)` when they need
+// to assert on constructor calls or drive specific permission states.
+if (typeof globalThis.Notification === 'undefined') {
+  class NotificationStub {
+    static permission: NotificationPermission = 'default';
+    static requestPermission = vi.fn(async () => NotificationStub.permission);
+  }
+  globalThis.Notification = NotificationStub as unknown as typeof Notification;
+}
+
 // Automatically unmount and clean up DOM after each test
 afterEach(() => {
   cleanup();

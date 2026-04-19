@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { useKeyboardShortcuts, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
+import { useMeetingNotifications } from '../hooks/useMeetingNotifications.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
 
@@ -185,6 +186,7 @@ function MeetingPageInner() {
   );
 
   useKeyboardShortcuts(shortcuts, shortcutsEnabled);
+  useMeetingNotifications();
 
   /** Toggle shortcuts on/off — the context persists to localStorage. */
   function handleToggleShortcuts() {

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { PreferencesModal } from './PreferencesModal.js';
 import { PreferencesProvider, usePreferences } from '../contexts/PreferencesContext.js';
 
@@ -22,6 +22,10 @@ function renderWithModal() {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.classList.remove('dark');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('PreferencesModal', () => {
@@ -108,5 +112,107 @@ describe('PreferencesModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(screen.queryByRole('dialog', { name: 'Preferences' })).not.toBeInTheDocument();
+  });
+});
+
+describe('PreferencesModal — notifications section', () => {
+  function stubNotification(permission: NotificationPermission, requested: NotificationPermission = permission) {
+    const ctor = vi.fn();
+    vi.stubGlobal(
+      'Notification',
+      Object.assign(ctor, {
+        permission,
+        requestPermission: vi.fn(async () => requested),
+      }),
+    );
+    return ctor;
+  }
+
+  it('shows the Notifications checkbox unchecked by default', () => {
+    stubNotification('default');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+    const checkbox = screen.getByRole('checkbox', { name: /^Notifications$/ });
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it('shows sub-toggles as disabled when Notifications is off', () => {
+    stubNotification('default');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+    const subToggle = screen.getByRole('checkbox', { name: 'When your queue entry is next' });
+    expect(subToggle).toBeInTheDocument();
+    expect(subToggle).toBeDisabled();
+  });
+
+  it('enabling Notifications when permission is granted persists and activates sub-toggles', async () => {
+    stubNotification('default', 'granted');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    const checkbox = screen.getByRole('checkbox', { name: /^Notifications$/ });
+    fireEvent.click(checkbox);
+
+    await waitFor(() => expect(checkbox).toBeChecked());
+    expect(localStorage.getItem('tcq-notifications-enabled')).toBe('true');
+    const subToggle = screen.getByRole('checkbox', { name: 'When your queue entry is next' });
+    expect(subToggle).not.toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'When a point of order is raised' })).not.toBeDisabled();
+  });
+
+  it('enabling Notifications when permission is denied leaves the toggle off', async () => {
+    stubNotification('default', 'denied');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    const checkbox = screen.getByRole('checkbox', { name: /^Notifications$/ });
+    fireEvent.click(checkbox);
+
+    // Wait a tick for the async permission flow to resolve.
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(localStorage.getItem('tcq-notifications-enabled')).toBe('false');
+  });
+
+  it('toggling a sub-pref persists to tcq-notification-prefs', async () => {
+    stubNotification('granted');
+    localStorage.setItem('tcq-notifications-enabled', 'true');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    // Point of order defaults to off; check that toggling it on persists.
+    const pooCheckbox = screen.getByRole('checkbox', { name: 'When a point of order is raised' });
+    expect(pooCheckbox).not.toBeChecked();
+    fireEvent.click(pooCheckbox);
+
+    expect(pooCheckbox).toBeChecked();
+    const persisted = JSON.parse(localStorage.getItem('tcq-notification-prefs') ?? '{}');
+    expect(persisted.onPointOfOrder).toBe(true);
+  });
+
+  it('reconciles the top-level preference to off on load when permission was revoked', () => {
+    // Previous session: notifications were enabled.
+    localStorage.setItem('tcq-notifications-enabled', 'true');
+    // Since then, the user revoked permission in browser settings.
+    stubNotification('denied');
+
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    const checkbox = screen.getByRole('checkbox', { name: /^Notifications$/ });
+    expect(checkbox).not.toBeChecked();
+    expect(localStorage.getItem('tcq-notifications-enabled')).toBe('false');
+  });
+
+  it('leaves the toggle off when permission is already denied and no hint is shown', async () => {
+    stubNotification('denied');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    const checkbox = screen.getByRole('checkbox', { name: /^Notifications$/ });
+    expect(checkbox).not.toBeDisabled();
+    // Clicking tries to enable, but permission is already denied, so it stays off.
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(screen.queryByText(/Permission blocked/)).not.toBeInTheDocument();
   });
 });

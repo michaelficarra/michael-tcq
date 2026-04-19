@@ -326,7 +326,25 @@ Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes 
 The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut. Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
 
 - **Keyboard shortcuts** — enable or disable global keyboard shortcuts. Mirrors the toggle inside the `?` dialog; both locations read and write the same value.
+- **Notifications** — a top-level toggle plus four per-event toggles (see the Notifications section below).
 - **Colour scheme** — choose Light, Dark, or System. System (the default) follows the operating system's `prefers-color-scheme`; Light and Dark override it.
+
+## Notifications
+
+Browser-native notifications can be enabled from the Preferences modal. The top-level **Notifications** toggle is off by default; the first time the user switches it on, the browser prompts for permission. If permission is granted, the toggle stays on. Per-event sub-toggles default to on, except for the two chair-oriented ones (point of order and agenda-item overrun) which default to off:
+
+- **When your queue entry is next** — a queue entry you authored has reached the head of the queue.
+- **When your agenda item is next** — the agenda item immediately after the current one is owned by you.
+- **When the meeting has started** — fires once when the first agenda item becomes active. Mutually exclusive with "agenda advances" — only the meeting-started notification fires on the initial transition.
+- **When the agenda advances** — the current agenda item has changed after the meeting is already underway.
+- **When a poll has started** — a chair has opened a new poll. The chair who started the poll is not notified about their own action.
+- **When a clarifying question is raised on your topic** — you are the current topic author, and someone else has queued a clarifying question. You are not notified about your own questions.
+- **When a point of order is raised** — another participant has added a point-of-order entry. The author of a point of order is not notified about their own. Off by default.
+- **When the current agenda item exceeds its time estimate** — a time-based notification that fires once, the moment the current agenda item crosses its timebox. Skipped if the item was already overrun when the page loaded. Off by default.
+
+If the user denies permission at the browser prompt (or permission was already denied for the site), the top-level toggle silently stays off. If permission is later revoked through browser settings, the next in-page transition detects the change, self-heals the preference back to off, and no notification is fired. Notifications fire regardless of whether the tab is in the foreground.
+
+All settings persist to `localStorage`.
 
 ## Presentation Mode
 
