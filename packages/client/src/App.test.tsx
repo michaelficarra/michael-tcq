@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.js';
+import { PreferencesProvider } from './contexts/PreferencesContext.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { HomePage } from './pages/HomePage.js';
 
@@ -30,11 +31,13 @@ function renderHomePage() {
   });
 
   return render(
-    <MemoryRouter>
-      <AuthProvider>
-        <HomePage />
-      </AuthProvider>
-    </MemoryRouter>,
+    <PreferencesProvider>
+      <MemoryRouter>
+        <AuthProvider>
+          <HomePage />
+        </AuthProvider>
+      </MemoryRouter>
+    </PreferencesProvider>,
   );
 }
 

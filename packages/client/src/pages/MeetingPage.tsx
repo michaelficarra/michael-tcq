@@ -12,13 +12,9 @@ import { useParams, Link } from 'react-router-dom';
 import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
+import { usePreferences } from '../contexts/PreferencesContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
-import {
-  useKeyboardShortcuts,
-  getShortcutsEnabled,
-  setShortcutsEnabled,
-  type Shortcut,
-} from '../hooks/useKeyboardShortcuts.js';
+import { useKeyboardShortcuts, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
 
@@ -56,7 +52,7 @@ function MeetingPageInner() {
   }, []);
 
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [shortcutsEnabled, setShortcutsEnabledState] = useState(getShortcutsEnabled);
+  const { shortcutsEnabled, setShortcutsEnabled, togglePreferences } = usePreferences();
   const [presentationMode, setPresentationMode] = useState(false);
   const { meeting, connected, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
@@ -180,21 +176,19 @@ function MeetingPageInner() {
         key: '?',
         description: 'Toggle shortcuts dialogue',
         action: () => setShowShortcuts((v) => !v),
-        alwaysActive: true,
         category: 'General',
       },
+      { key: ',', description: 'Toggle preferences dialogue', action: () => togglePreferences(), category: 'General' },
       { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
     ],
-    [addQueueEntry, advanceNextSpeaker, togglePresentationMode],
+    [addQueueEntry, advanceNextSpeaker, togglePresentationMode, togglePreferences],
   );
 
   useKeyboardShortcuts(shortcuts, shortcutsEnabled);
 
-  /** Toggle shortcuts on/off and persist to localStorage. */
+  /** Toggle shortcuts on/off — the context persists to localStorage. */
   function handleToggleShortcuts() {
-    const next = !shortcutsEnabled;
-    setShortcutsEnabledState(next);
-    setShortcutsEnabled(next);
+    setShortcutsEnabled(!shortcutsEnabled);
   }
 
   // Filter Escape from the displayed list, and hide chair shortcuts for non-chairs

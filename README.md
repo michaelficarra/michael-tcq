@@ -40,9 +40,10 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 - **Memorable meeting IDs** — meetings use human-readable word-based IDs (e.g. `bright-pine-lake`) instead of opaque random strings.
 - **Presentation mode** ([bterlson/tcq#22](https://github.com/bterlson/tcq/issues/22)) — press `f` to enter fullscreen with all controls hidden, ideal for projecting the queue during a meeting.
-- **Keyboard shortcuts** — press `?` to see all shortcuts. Quick keys for entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`1`, `2`, `3`, `4`), and toggling presentation mode (`f`).
+- **Keyboard shortcuts** — press `?` to see the full list. Quick keys cover entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`1`–`4`), toggling presentation mode (`f`), and opening Preferences (`,`). Can be disabled in the Preferences modal for users who find the key bindings intrusive.
 - **In-app help page** — a Help tab explains how the tool works for both chairs and participants, with guidance on when to use each queue entry type.
-- **Dark mode** — automatically follows the system colour scheme via `prefers-color-scheme`. No manual toggle needed.
+- **Preferences** — a Preferences modal (in the hamburger menu or via `,`) lets users enable/disable keyboard shortcuts and choose a colour scheme. Settings persist to `localStorage`.
+- **Dark mode** — a full dark colour palette across every view. Follows the operating system's `prefers-color-scheme` by default (switching live when the OS setting changes), and can be forced to Light or Dark via the Preferences modal.
 - **Sticky navigation** ([bterlson/tcq#23](https://github.com/bterlson/tcq/issues/23)) — the navigation bar stays fixed at the top of the page when scrolling long agendas or queues.
 - **Connection status indicator** — a small dot in the bottom-right corner shows green when connected to the server and red when disconnected.
 - **Error display** — server errors are shown as a dismissible banner or a full-page error (e.g. "Meeting not found") rather than silently failing.
@@ -68,7 +69,7 @@ The speaker queue with priority-ordered entries from a particpant's perspective.
 The speaker queue with chair controls.
 
 ![Dark mode](docs/screenshots/dark-mode.png)
-Dark mode follows the system colour scheme automatically.
+Dark mode follows the system colour scheme by default, and can be overridden in the Preferences modal.
 
 ![Agenda tab](docs/screenshots/agenda.png)
 The agenda tab with chairs, numbered items, and drag-to-reorder.

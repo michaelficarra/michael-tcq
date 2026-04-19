@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { MeetingState, User } from '@tcq/shared';
 import { MeetingPage } from './MeetingPage.js';
+import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 
 // -- Mocks --
 
@@ -68,11 +69,13 @@ vi.mock('../contexts/MeetingContext.js', async () => {
 function renderMeetingPage(hash = '') {
   window.location.hash = hash;
   return render(
-    <MemoryRouter initialEntries={[`/meeting/test${hash}`]}>
-      <Routes>
-        <Route path="/meeting/:id" element={<MeetingPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <PreferencesProvider>
+      <MemoryRouter initialEntries={[`/meeting/test${hash}`]}>
+        <Routes>
+          <Route path="/meeting/:id" element={<MeetingPage />} />
+        </Routes>
+      </MemoryRouter>
+    </PreferencesProvider>,
   );
 }
 

@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
+import { PreferencesProvider } from './contexts/PreferencesContext.js';
+import { PreferencesModal } from './components/PreferencesModal.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { HomePage } from './pages/HomePage.js';
 import { MeetingPage } from './pages/MeetingPage.js';
@@ -10,11 +12,14 @@ import { MeetingPage } from './pages/MeetingPage.js';
  */
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <PreferencesProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+      <PreferencesModal />
+    </PreferencesProvider>
   );
 }
 

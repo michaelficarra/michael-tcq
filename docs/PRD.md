@@ -86,7 +86,7 @@ The meeting view has four tabs:
 - **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
 - **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
 
-The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown whose only entry is Log Out; clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
+The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown with Preferences and Log Out entries; clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
 ## Agenda
 
@@ -304,21 +304,29 @@ Wherever a user's name is shown (agenda item owners, queue entry speakers, curre
 
 ## Keyboard Shortcuts
 
-Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes a toggle button to enable or disable shortcuts; this preference is persisted to `localStorage` and defaults to enabled. Shortcuts are always disabled when the user is typing in a text field. The `?` and `Escape` keys work even when shortcuts are globally disabled. Available shortcuts:
+Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes a toggle button to enable or disable shortcuts; this preference is persisted to `localStorage` and defaults to enabled. Shortcuts are always disabled when the user is typing in a text field. The `Escape` key works even when shortcuts are globally disabled, so that any open dialog can always be dismissed. Available shortcuts:
 
-| Key | Action                    |
-| --- | ------------------------- |
-| `n` | New Topic                 |
-| `r` | Reply to current topic    |
-| `c` | Clarifying Question       |
-| `p` | Point of Order            |
-| `s` | Next Speaker (chair only) |
-| `f` | Toggle presentation mode  |
-| `1` | Switch to Agenda tab      |
-| `2` | Switch to Queue tab       |
-| `3` | Switch to Log tab         |
-| `4` | Switch to Help tab        |
-| `?` | Toggle shortcuts dialogue |
+| Key | Action                      |
+| --- | --------------------------- |
+| `n` | New Topic                   |
+| `r` | Reply to current topic      |
+| `c` | Clarifying Question         |
+| `p` | Point of Order              |
+| `s` | Next Speaker (chair only)   |
+| `f` | Toggle presentation mode    |
+| `1` | Switch to Agenda tab        |
+| `2` | Switch to Queue tab         |
+| `3` | Switch to Log tab           |
+| `4` | Switch to Help tab          |
+| `?` | Toggle shortcuts dialogue   |
+| `,` | Toggle preferences dialogue |
+
+## Preferences
+
+The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut. Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
+
+- **Keyboard shortcuts** — enable or disable global keyboard shortcuts. Mirrors the toggle inside the `?` dialog; both locations read and write the same value.
+- **Colour scheme** — choose Light, Dark, or System. System (the default) follows the operating system's `prefers-color-scheme`; Light and Dark override it.
 
 ## Presentation Mode
 
@@ -333,7 +341,7 @@ Pressing `f` again (or exiting fullscreen via the browser) returns to normal mod
 
 ## Dark Mode
 
-The application supports dark mode via `prefers-color-scheme: dark`. When the user's operating system is set to a dark colour scheme, the UI automatically switches to a dark palette. There is no manual toggle — it follows the system preference.
+The application supports light and dark palettes, controlled by the **Colour scheme** setting in the Preferences modal. The default is `System`, which follows the operating system's `prefers-color-scheme` and switches live when the OS setting changes. Users can override by selecting `Light` or `Dark`, and the choice is persisted to `localStorage`.
 
 ## Real-Time Updates
 

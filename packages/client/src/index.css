@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* Class-based dark mode — the PreferencesContext toggles `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html {
   overflow-x: hidden;
 }
@@ -13,10 +16,8 @@ body {
   background-color: var(--color-white);
 }
 
-@media (prefers-color-scheme: dark) {
-  #root {
-    background-color: var(--color-stone-900);
-  }
+.dark #root {
+  background-color: var(--color-stone-900);
 }
 
 /*

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext.js';
+import { usePreferences } from '../contexts/PreferencesContext.js';
 import { UserBadge } from './UserBadge.js';
 
 export function UserMenu() {
@@ -37,6 +38,7 @@ export function UserMenu() {
  * outside the dropdown or pressing Escape dismisses it.
  */
 function HamburgerMenu() {
+  const { openPreferences } = usePreferences();
   const [open, setOpen] = useState(false);
   // The nav has `overflow-x-auto` (which clips descendants) and `sticky + z-50`
   // (which creates a stacking context that caps descendant z-indices). Render
@@ -47,9 +49,11 @@ function HamburgerMenu() {
   // the dropdown to the emoji's bottom rather than the button's to keep the
   // dropdown close to the visible icon.
   const iconRef = useRef<HTMLSpanElement | null>(null);
-  // Menu item ref — since the dropdown is portaled to <body>, natural tab order
-  // skips past it. We route Tab from the button to this link manually.
-  const menuItemRef = useRef<HTMLAnchorElement | null>(null);
+  // Menu item refs — since the dropdown is portaled to <body>, natural tab
+  // order skips past it. We route Tab from the button through the items
+  // manually so Preferences → Log Out → button forms a cycle.
+  const prefsItemRef = useRef<HTMLButtonElement | null>(null);
+  const logoutItemRef = useRef<HTMLAnchorElement | null>(null);
   // Dropdown container ref for outside-click detection.
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -104,7 +108,7 @@ function HamburgerMenu() {
           // lives in a body-level portal and is otherwise skipped).
           if (open && e.key === 'Tab' && !e.shiftKey) {
             e.preventDefault();
-            menuItemRef.current?.focus();
+            prefsItemRef.current?.focus();
           }
         }}
         aria-label="Open menu"
@@ -132,16 +136,37 @@ function HamburgerMenu() {
                        bg-white dark:bg-stone-800 shadow-lg py-1"
             style={{ top: pos.top, right: pos.right }}
           >
+            <button
+              ref={prefsItemRef}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                openPreferences();
+              }}
+              onKeyDown={(e) => {
+                // Tab → Log Out (next item); Shift+Tab → trigger button.
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  if (e.shiftKey) buttonRef.current?.focus();
+                  else logoutItemRef.current?.focus();
+                }
+              }}
+              className="block w-full text-left px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors cursor-pointer"
+            >
+              Preferences
+            </button>
             <a
-              ref={menuItemRef}
+              ref={logoutItemRef}
               href="/auth/logout"
               role="menuitem"
               onKeyDown={(e) => {
-                // Route Tab/Shift+Tab back to the button to pair the menu
-                // item with its trigger in tab order. Escape still closes.
+                // Tab → cycle back to trigger button; Shift+Tab → Preferences.
                 if (e.key === 'Tab') {
                   e.preventDefault();
-                  buttonRef.current?.focus();
+                  if (e.shiftKey) prefsItemRef.current?.focus();
+                  else buttonRef.current?.focus();
                 }
               }}
               className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
