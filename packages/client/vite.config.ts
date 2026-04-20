@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { createLogger, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -18,11 +18,38 @@ function logProxyError(err: NodeJS.ErrnoException) {
   console.log(`Proxy error: ${err.message || err} (${hint})`);
 }
 
+// Safety net: http-proxy's WebSocket tunnel can throw EPIPE/ECONNRESET on a
+// raw socket write path that isn't routed through proxy.on('error'), so the
+// error escapes as an uncaught exception. Filter those here and let
+// everything else propagate as a real crash.
+process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+    logProxyError(err);
+    return;
+  }
+  throw err;
+});
+
+// Vite's built-in proxy middleware logs WS proxy errors through its own
+// logger (not console.error), so patching console.error doesn't catch them.
+// Wrap the default logger and drop error messages that contain an EPIPE or
+// ECONNRESET stack trace — our proxy.on('error') handler above already logs
+// a single-line summary, so Vite's duplicate is pure noise.
+const filteredLogger = createLogger();
+const originalLoggerError = filteredLogger.error.bind(filteredLogger);
+filteredLogger.error = (msg, options) => {
+  if (typeof msg === 'string' && /\bwrite EPIPE\b|\bread ECONNRESET\b/.test(msg)) {
+    return;
+  }
+  originalLoggerError(msg, options);
+};
+
 const serverPort = process.env.PORT ?? '3000';
 const serverTarget = `http://localhost:${serverPort}`;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  customLogger: filteredLogger,
   build: {
     chunkSizeWarningLimit: 600,
   },
