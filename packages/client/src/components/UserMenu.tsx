@@ -136,7 +136,7 @@ function HamburgerMenu() {
             className={`inline-flex items-center transition-colors duration-200 ease-out ${
               open
                 ? 'text-teal-500 dark:text-teal-400'
-                : 'text-stone-500 dark:text-stone-400 group-hover:text-teal-500 dark:group-hover:text-teal-400'
+                : 'text-stone-500 dark:text-stone-400 group-hover:text-stone-900 dark:group-hover:text-stone-100'
             }`}
           >
             <svg
