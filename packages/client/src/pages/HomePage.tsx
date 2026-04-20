@@ -18,9 +18,9 @@ export function HomePage() {
   const [activeTab, setActiveTab] = useState<'join' | 'help'>('join');
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
+    <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
       <nav
-        className="sticky top-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6"
+        className="shrink-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 shadow-md"
         aria-label="Main navigation"
       >
         {/* Branding */}
@@ -81,7 +81,7 @@ export function HomePage() {
         </div>
       </nav>
 
-      <main>
+      <main className="flex-1 overflow-y-auto min-h-0">
         {activeTab === 'join' && <JoinTab />}
         {activeTab === 'help' && <HelpPanel showChairHelp={true} />}
       </main>

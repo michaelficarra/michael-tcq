@@ -199,9 +199,9 @@ function MeetingPageInner() {
   // Error state — show error message with a link back to the home page
   if (error && !meeting) {
     return (
-      <div className="min-h-screen bg-stone-50 dark:bg-stone-900">
+      <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main className="p-6 max-w-xl mx-auto text-center mt-12">
+        <main className="flex-1 overflow-y-auto min-h-0 p-6 max-w-xl mx-auto text-center mt-12">
           <h1 className="text-xl font-semibold text-stone-800 dark:text-stone-200 mb-2">{error}</h1>
           <p className="text-stone-500 dark:text-stone-400 mb-4">
             The meeting you're looking for doesn't exist or is no longer available.
@@ -220,9 +220,9 @@ function MeetingPageInner() {
   // Loading state — haven't received meeting data yet
   if (!meeting) {
     return (
-      <div className="min-h-screen bg-stone-50 dark:bg-stone-900">
+      <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main className="p-6">
+        <main className="flex-1 overflow-y-auto min-h-0 p-6">
           {!connected ? (
             <p className="text-stone-500 dark:text-stone-400">Connecting&hellip;</p>
           ) : (
@@ -235,7 +235,9 @@ function MeetingPageInner() {
 
   return (
     <SocketContext value={socket}>
-      <div className={`min-h-screen bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}>
+      <div
+        className={`h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}
+      >
         {/* Navigation and controls are hidden in presentation mode */}
         {!presentationMode && (
           <>
@@ -244,7 +246,7 @@ function MeetingPageInner() {
             {/* Dismissible error banner for non-fatal errors */}
             {error && (
               <div
-                className="bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-2 text-sm text-red-700 dark:text-red-300
+                className="shrink-0 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-2 text-sm text-red-700 dark:text-red-300
                            flex items-center justify-between"
                 role="alert"
               >
@@ -269,7 +271,7 @@ function MeetingPageInner() {
           { name: 'Log' })` to intermittently fail to resolve in Firefox CI —
           see the `log updates in real time as events occur` e2e test.
         */}
-        <main>
+        <main className="flex-1 overflow-y-auto min-h-0">
           <AgendaPanel hidden={activeTab !== 'agenda'} />
           <QueuePanel
             hidden={activeTab !== 'queue'}

@@ -59,7 +59,7 @@ function TabButton({
 export function NavBar({ activeTab, onTabChange }: NavBarProps) {
   return (
     <nav
-      className="scrollbar-hide sticky top-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 overflow-x-auto"
+      className="scrollbar-hide shrink-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 overflow-x-auto shadow-md"
       aria-label="Main navigation"
     >
       {/* Branding */}

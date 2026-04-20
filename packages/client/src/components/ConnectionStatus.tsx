@@ -56,10 +56,15 @@ export function ConnectionStatus({ connected, activeConnections }: ConnectionSta
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      // bottom-1/right-1 + p-2 keeps the dot visually at ~12px from the
-      // viewport edge (same as the previous bottom-3 right-3) while
-      // giving the invisible container an extra 8px of hit area on every
-      // side of the dot.
+      // bottom-1/left-1 + p-2 keeps the dot visually at ~12px from the
+      // viewport edge while giving the invisible container an extra 8px
+      // of hit area on every side of the dot. Anchored on the left so the
+      // dot doesn't overlap the vertical scrollbar on the right.
+      //
+      // flex-row-reverse so the dot sits on the left edge and the pills
+      // grow rightward into the visible area; with plain row, the pills
+      // (which precede the dot in DOM order) would extend off-screen to
+      // the left.
       //
       // items-end (not items-center) so that when the taller pill appears,
       // the container grows upward while the dot stays pinned to the
@@ -71,7 +76,7 @@ export function ConnectionStatus({ connected, activeConnections }: ConnectionSta
       // rather than flipping back to the default when the cursor moves
       // off the 10px dot. The "Connection lost" button overrides with
       // cursor-pointer via its own className.
-      className={`fixed bottom-1 right-1 p-2 flex items-end gap-2 ${connected ? 'cursor-help' : ''}`}
+      className={`fixed bottom-1 left-1 p-2 flex flex-row-reverse items-end gap-2 ${connected ? 'cursor-help' : ''}`}
     >
       {state.tooltipVisible && (
         <button
