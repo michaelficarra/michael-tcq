@@ -11,6 +11,7 @@ interface TestMeetingProviderProps {
   meeting: MeetingState | null;
   user?: User | null;
   connected?: boolean;
+  activeConnections?: number;
   children: ReactNode;
 }
 
@@ -18,8 +19,14 @@ interface TestMeetingProviderProps {
  * Wraps children with MeetingContext populated with the given state.
  * Dispatch is a no-op since tests verify rendered output, not dispatches.
  */
-export function TestMeetingProvider({ meeting, user = null, connected = true, children }: TestMeetingProviderProps) {
-  const state: MeetingContextState = { meeting, user, connected, error: null };
+export function TestMeetingProvider({
+  meeting,
+  user = null,
+  connected = true,
+  activeConnections = 1,
+  children,
+}: TestMeetingProviderProps) {
+  const state: MeetingContextState = { meeting, user, connected, activeConnections, error: null };
 
   return (
     <MeetingStateContext value={state}>

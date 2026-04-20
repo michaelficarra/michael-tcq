@@ -372,7 +372,7 @@ All meeting state changes are broadcast to all connected participants in real ti
 - Poll state, options, and reactions
 - Log entries for significant meeting events
 
-A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state.
+A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state. While connected, hovering the indicator reveals the current number of active connections to the meeting.
 
 ## Error Handling
 

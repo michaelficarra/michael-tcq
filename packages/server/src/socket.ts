@@ -184,13 +184,13 @@ export function registerSocketHandlers(
           }
         }
         socket.leave(joinedMeetingId);
-        decrementClientCount(joinedMeetingId);
+        decrementClientCount(io, joinedMeetingId);
       }
 
       // Join the new meeting room
       joinedMeetingId = meetingId;
       socket.join(meetingId);
-      incrementClientCount(meetingId, meetingManager);
+      incrementClientCount(io, meetingId, meetingManager);
 
       // Track connection stats for admin dashboard (non-admin only)
       if (!isAdmin(user)) {
@@ -903,7 +903,7 @@ export function registerSocketHandlers(
           }
         }
 
-        decrementClientCount(joinedMeetingId);
+        decrementClientCount(io, joinedMeetingId);
       }
     });
   });
@@ -921,7 +921,11 @@ function getSocketUser(socket: TypedSocket): User | undefined {
 }
 
 /** Increment the count of connected clients for a meeting and record the connection time. */
-function incrementClientCount(meetingId: string, meetingManager: MeetingManager): void {
+function incrementClientCount(
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+  meetingId: string,
+  meetingManager: MeetingManager,
+): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
   meetingClientCounts.set(meetingId, current + 1);
 
@@ -932,10 +936,12 @@ function incrementClientCount(meetingId: string, meetingManager: MeetingManager)
     meeting.lastConnectionTime = new Date().toISOString();
     meetingManager.markDirty(meetingId);
   }
+
+  broadcastActiveConnections(io, meetingId);
 }
 
 /** Decrement the count of connected clients for a meeting. */
-function decrementClientCount(meetingId: string): void {
+function decrementClientCount(io: Server<ClientToServerEvents, ServerToClientEvents>, meetingId: string): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
   const next = Math.max(0, current - 1);
 
@@ -944,4 +950,17 @@ function decrementClientCount(meetingId: string): void {
   } else {
     meetingClientCounts.set(meetingId, next);
   }
+
+  broadcastActiveConnections(io, meetingId);
+}
+
+/**
+ * Emit the current active-connection count to all sockets in a meeting's room.
+ * Called after every increment/decrement so hover tooltips stay up to date.
+ * Safe to call after the room has been emptied — socket.io silently
+ * no-ops when the room has no members.
+ */
+function broadcastActiveConnections(io: Server<ClientToServerEvents, ServerToClientEvents>, meetingId: string): void {
+  const count = meetingClientCounts.get(meetingId) ?? 0;
+  io.to(meetingId).emit('activeConnections', count);
 }

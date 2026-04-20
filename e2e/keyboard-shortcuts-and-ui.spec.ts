@@ -155,8 +155,9 @@ test.describe('Real-Time Updates', () => {
 
     const statusDot = page.getByTitle('Connected');
     await expect(statusDot).toBeVisible();
-    // Verify it's accessible to screen readers
-    await expect(statusDot).toHaveAttribute('aria-label', 'Connected to server');
+    // Verify it's accessible to screen readers. The aria-label mirrors
+    // the title/pill copy: "Connected — N active connection(s)".
+    await expect(statusDot).toHaveAttribute('aria-label', /^Connected — \d+ active connection/);
   });
 });
 

@@ -53,6 +53,13 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
       dispatch({ type: 'state', meeting });
     });
 
+    // The server broadcasts the current socket-connection count for
+    // this meeting after each join/disconnect so the connection-status
+    // dot can show the count on hover.
+    socket.on('activeConnections', (count) => {
+      dispatch({ type: 'setActiveConnections', count });
+    });
+
     // Server-side validation errors (e.g. "Meeting not found",
     // "Only chairs can..." etc.)
     socket.on('error', (message) => {

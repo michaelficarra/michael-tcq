@@ -231,6 +231,49 @@ describe('Socket.IO integration', () => {
     return client;
   }
 
+  describe('activeConnections broadcast', () => {
+    it('reports 1 to the first client that joins', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const client = makeClient();
+      // Register the listener before `join` so we don't miss the event.
+      const countPromise = waitForEvent<number>(client, 'activeConnections');
+      await new Promise<void>((r) => client.on('connect', r));
+      client.emit('join', meeting.id);
+      expect(await countPromise).toBe(1);
+    });
+
+    it('reports 2 to both clients when a second client joins', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      // First client joins and drains its initial activeConnections=1 event
+      // inside the joinMeeting helper flow (it will have fired by the time
+      // the 'state' event resolves the helper).
+      const client1 = await joinMeeting(meeting.id);
+
+      // Listeners for the NEXT activeConnections event on each client.
+      const client1Update = waitForEvent<number>(client1, 'activeConnections');
+      const client2 = makeClient();
+      const client2Initial = waitForEvent<number>(client2, 'activeConnections');
+
+      await new Promise<void>((r) => client2.on('connect', r));
+      client2.emit('join', meeting.id);
+
+      expect(await client1Update).toBe(2);
+      expect(await client2Initial).toBe(2);
+    });
+
+    it('reports the decremented count to remaining clients on disconnect', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const client1 = await joinMeeting(meeting.id);
+      const client2 = await joinMeeting(meeting.id);
+
+      // Register a listener on client1 for the NEXT activeConnections event
+      // (the one triggered by client2 disconnecting).
+      const client1Update = waitForEvent<number>(client1, 'activeConnections');
+      client2.disconnect();
+      expect(await client1Update).toBe(1);
+    });
+  });
+
   describe('agenda:add', () => {
     it('adds an agenda item and broadcasts updated state', async () => {
       // Mock user (ghid: 1, ghUsername: testuser) is a chair

@@ -53,6 +53,7 @@ const mockMeetingState = {
   meeting: null as MeetingState | null,
   user: chairUser,
   connected: true,
+  activeConnections: 1,
   error: null,
 };
 vi.mock('../contexts/MeetingContext.js', async () => {

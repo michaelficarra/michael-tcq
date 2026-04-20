@@ -15,6 +15,13 @@ export interface MeetingContextState {
   /** Whether the socket is connected to the server. */
   connected: boolean;
 
+  /**
+   * Current number of socket connections in the meeting room, as reported
+   * by the server. Tabs from the same user count separately. 0 before the
+   * first `activeConnections` event arrives.
+   */
+  activeConnections: number;
+
   /** Error message from the server (e.g. "Meeting not found"). */
   error: string | null;
 }
@@ -23,6 +30,7 @@ const initialState: MeetingContextState = {
   meeting: null,
   user: null,
   connected: false,
+  activeConnections: 0,
   error: null,
 };
 
@@ -32,6 +40,7 @@ export type MeetingAction =
   | { type: 'state'; meeting: MeetingState }
   | { type: 'setUser'; user: User }
   | { type: 'setConnected'; connected: boolean }
+  | { type: 'setActiveConnections'; count: number }
   | { type: 'setError'; error: string }
   | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
   | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number };
@@ -45,6 +54,8 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
       return { ...state, user: action.user };
     case 'setConnected':
       return { ...state, connected: action.connected };
+    case 'setActiveConnections':
+      return { ...state, activeConnections: action.count };
     case 'setError':
       return { ...state, error: action.error };
     case 'optimisticAgendaReorder': {

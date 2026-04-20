@@ -153,6 +153,14 @@ export interface ServerToClientEvents {
 
   /** Error message — sent when a client action fails validation. */
   error: (message: string) => void;
+
+  /**
+   * Current socket-connection count for the meeting room. Sent to every
+   * socket in the room after a join or disconnect. Counts socket
+   * connections (not unique users), so multiple tabs from the same user
+   * each contribute 1.
+   */
+  activeConnections: (count: number) => void;
 }
 
 /** Events clients send to the server. */
