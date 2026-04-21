@@ -1,9 +1,11 @@
 import type { Server, Socket } from 'socket.io';
 import type { ZodType } from 'zod';
-import type { ClientToServerEvents, ServerToClientEvents, User, MeetingState } from '@tcq/shared';
+import type { ClientToServerEvents, ServerToClientEvents, User, UserKey, MeetingState } from '@tcq/shared';
+import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
   userKey,
+  asUserKey,
   AgendaAddPayloadSchema,
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
@@ -23,7 +25,6 @@ import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import { isAdmin } from './admin.js';
 
 /**
  * Validate a wire payload against its Zod schema. On failure, emit an
@@ -63,7 +64,7 @@ function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
  * Finalise the current topic group into a TopicDiscussedLog entry
  * and append it to the meeting log. Resets the topic-group accumulator.
  */
-function finaliseTopicGroup(meeting: MeetingState, chairId: string, now: string): void {
+function finaliseTopicGroup(meeting: MeetingState, chairId: UserKey, now: string): void {
   if (meeting.current.topicSpeakers.length === 0) return;
 
   finaliseLastSpeakerDuration(meeting, now);
@@ -89,8 +90,8 @@ function finaliseTopicGroup(meeting: MeetingState, chairId: string, now: string)
  * that occurred after a given timestamp (the agenda item start).
  * Excludes Point of Order speakers.
  */
-function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): string[] {
-  const seen = new Set<string>();
+function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): UserKey[] {
+  const seen = new Set<UserKey>();
 
   // Gather from finalised topic groups
   for (const entry of meeting.log) {
@@ -212,7 +213,7 @@ export function registerSocketHandlers(
 
       // Leave any previously joined meeting room
       if (joinedMeetingId) {
-        if (!isAdmin(user)) {
+        if (!user.isAdmin) {
           const prevStats = getStats(joinedMeetingId);
           prevStats.currentConnections = Math.max(0, prevStats.currentConnections - 1);
           if (prevStats.currentConnections === 0) {
@@ -229,7 +230,7 @@ export function registerSocketHandlers(
       incrementClientCount(io, meetingId, meetingManager);
 
       // Track connection stats for admin dashboard (non-admin only)
-      if (!isAdmin(user)) {
+      if (!user.isAdmin) {
         const stats = getStats(meetingId);
         stats.currentConnections++;
         stats.lastConnection = 'now';
@@ -250,7 +251,7 @@ export function registerSocketHandlers(
     socket.on('meeting:updateChairs', async (payload) => {
       if (!joinedMeetingId) return;
 
-      const userIsAdmin = isAdmin(user);
+      const userIsAdmin = user.isAdmin;
       const userIsChair = meetingManager.isChair(joinedMeetingId, user);
 
       if (!userIsChair && !userIsAdmin) {
@@ -281,7 +282,7 @@ export function registerSocketHandlers(
       const chairs: User[] = [];
 
       for (const username of usernames) {
-        const key = username.toLowerCase();
+        const key = asUserKey(username.toLowerCase());
 
         // Check if this user is already known in the meeting
         const known = meeting?.users[key];
@@ -326,9 +327,9 @@ export function registerSocketHandlers(
       // Build the owner User object. If the owner is a known user in the
       // meeting, use their full profile. Otherwise, create a placeholder.
       const meeting = meetingManager.get(joinedMeetingId);
-      const key = ownerUsername.toLowerCase();
+      const key = asUserKey(ownerUsername.toLowerCase());
       const owner: User = meeting?.users[key] ??
-        (user.ghUsername.toLowerCase() === key ? user : undefined) ?? {
+        (userKey(user) === key ? user : undefined) ?? {
           ghid: 0,
           ghUsername: ownerUsername,
           name: ownerUsername,
@@ -359,7 +360,7 @@ export function registerSocketHandlers(
       if (parsed.ownerUsername !== undefined) {
         // Resolve owner from known users or create placeholder
         const meeting = meetingManager.get(joinedMeetingId);
-        const key = parsed.ownerUsername.toLowerCase();
+        const key = asUserKey(parsed.ownerUsername.toLowerCase());
         updates.owner = meeting?.users[key] ?? {
           ghid: 0,
           ghUsername: parsed.ownerUsername,
@@ -448,14 +449,15 @@ export function registerSocketHandlers(
       }
 
       // Determine who the entry is for: the current user, or a specified
-      // user if the chair provided asUsername.
-      let entryUser = user;
+      // user if the chair provided asUsername. Typed as User (not SessionUser)
+      // so the placeholder / looked-up branches don't need an isAdmin flag.
+      let entryUser: User = user;
       if (parsed.asUsername) {
         if (!meetingManager.isChair(joinedMeetingId, user)) {
           socket.emit('error', 'Only chairs can add entries on behalf of others');
           return;
         }
-        const key = parsed.asUsername.toLowerCase();
+        const key = asUserKey(parsed.asUsername.toLowerCase());
         // Look up the user from known meeting participants or create a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
         entryUser = meeting?.users[key] ?? {
@@ -894,7 +896,7 @@ export function registerSocketHandlers(
     socket.on('disconnect', () => {
       if (joinedMeetingId) {
         // Update connection stats for admin dashboard (non-admin only)
-        if (!isAdmin(user)) {
+        if (!user.isAdmin) {
           const stats = getStats(joinedMeetingId);
           stats.currentConnections = Math.max(0, stats.currentConnections - 1);
           if (stats.currentConnections === 0) {
@@ -912,7 +914,7 @@ export function registerSocketHandlers(
  * Extract the authenticated user from a socket's handshake session.
  * Returns undefined if no user is set (unauthenticated connection).
  */
-function getSocketUser(socket: TypedSocket): User | undefined {
+function getSocketUser(socket: TypedSocket): SessionUser | undefined {
   // The session is attached to the handshake by the shared session middleware.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = (socket.request as any).session;

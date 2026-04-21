@@ -7,6 +7,7 @@
  * poll?, ... }`.
  */
 import type { ActivePoll, MeetingState } from '@tcq/shared';
+import { asUserKey } from '@tcq/shared';
 
 export interface MakeMeetingDefaults {
   id?: string;
@@ -37,7 +38,7 @@ export function makePoll(overrides?: Partial<ActivePoll>): ActivePoll {
     options: [],
     reactions: [],
     startTime: '2026-01-01T00:00:00.000Z',
-    startChairId: '',
+    startChairId: asUserKey(''),
     multiSelect: true,
     ...overrides,
   };

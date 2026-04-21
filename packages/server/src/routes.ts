@@ -5,10 +5,9 @@ import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema }
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import { isAdmin } from './admin.js';
 import { getAllMeetingStats, removeMeetingStats, broadcastMeetingState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
-import './session.js';
+import { toSessionUser } from './session.js';
 
 /**
  * REST routes for meeting management.
@@ -33,7 +32,7 @@ export function createMeetingRoutes(
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    res.json({ ...user, mockAuth: !isOAuthConfigured(), isAdmin: isAdmin(user) });
+    res.json({ ...user, mockAuth: !isOAuthConfigured() });
   });
 
   // --- Dev-only: switch the mock user ---
@@ -66,9 +65,9 @@ export function createMeetingRoutes(
       organisation: '',
     };
 
-    req.session.user = user;
+    req.session.user = toSessionUser(user);
     delete req.session.mockLoggedOut;
-    res.json(user);
+    res.json(req.session.user);
   });
 
   // Create a new meeting. The request body should contain a `chairs` array
@@ -152,7 +151,7 @@ export function createMeetingRoutes(
     }
 
     // Only chairs (and admins) can import an agenda
-    if (!meetingManager.isChair(meetingId, user) && !isAdmin(user)) {
+    if (!meetingManager.isChair(meetingId, user) && !user.isAdmin) {
       res.status(403).json({
         error: 'Only chairs can import an agenda',
         user: user.ghUsername,
@@ -261,7 +260,7 @@ export function createMeetingRoutes(
   // List all active meetings with connection statistics.
   router.get('/admin/meetings', (req, res) => {
     const user = req.session.user;
-    if (!user || !isAdmin(user)) {
+    if (!user || !user.isAdmin) {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }
@@ -299,7 +298,7 @@ export function createMeetingRoutes(
   // Delete a meeting (admin only).
   router.delete('/admin/meetings/:id', async (req, res) => {
     const user = req.session.user;
-    if (!user || !isAdmin(user)) {
+    if (!user || !user.isAdmin) {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }

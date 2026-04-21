@@ -15,6 +15,7 @@
 
 import { Router } from 'express';
 import type { User } from '@tcq/shared';
+import { toSessionUser } from './session.js';
 
 // OAuth configuration from environment variables
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
@@ -134,7 +135,7 @@ export function createAuthRoutes(): Router {
         organisation: userData.company ?? '',
       };
 
-      req.session.user = user;
+      req.session.user = toSessionUser(user);
 
       // Redirect to the app's home page (the Vite dev server in development)
       const redirectTo = req.session.returnTo ?? '/';

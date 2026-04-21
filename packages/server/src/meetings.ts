@@ -7,6 +7,7 @@ import type {
   QueueEntryType,
   TopicSpeaker,
   User,
+  UserKey,
 } from '@tcq/shared';
 import { QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
@@ -16,7 +17,7 @@ import { generateMeetingId } from './meetingId.js';
  * Register a user in a meeting's users map, returning their canonical key.
  * Always updates the stored user so name/organisation changes are picked up.
  */
-export function ensureUser(meeting: MeetingState, user: User): string {
+export function ensureUser(meeting: MeetingState, user: User): UserKey {
   const key = userKey(user);
   meeting.users[key] = user;
   return key;
@@ -599,7 +600,7 @@ export class MeetingManager {
   startPoll(
     meetingId: string,
     options: { emoji: string; label: string }[],
-    startChairId: string,
+    startChairId: UserKey,
     topic: string | undefined,
     multiSelect: boolean,
   ): boolean {

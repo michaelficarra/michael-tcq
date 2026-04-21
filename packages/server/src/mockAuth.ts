@@ -12,8 +12,7 @@
 
 import type { RequestHandler } from 'express';
 import type { User } from '@tcq/shared';
-// Import session augmentation for the User type on SessionData
-import './session.js';
+import { toSessionUser } from './session.js';
 
 export const MOCK_USER: User = {
   ghid: 1,
@@ -36,7 +35,7 @@ export function isOAuthConfigured(): boolean {
  */
 export const mockAuth: RequestHandler = (req, _res, next) => {
   if (!isOAuthConfigured() && !req.session.user && !req.session.mockLoggedOut) {
-    req.session.user = MOCK_USER;
+    req.session.user = toSessionUser(MOCK_USER);
   }
   next();
 };

@@ -6,7 +6,7 @@ import { userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
-import './session.js';
+import { toSessionUser } from './session.js';
 
 /** A no-op in-memory store for tests. */
 class InMemoryStore implements MeetingStore {
@@ -34,7 +34,7 @@ function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) 
   app.use(express.json());
   app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
   app.use((req, _res, next) => {
-    if (!req.session.user) req.session.user = user;
+    if (!req.session.user) req.session.user = toSessionUser(user);
     next();
   });
   app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));

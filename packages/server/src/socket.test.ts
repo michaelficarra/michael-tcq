@@ -5,10 +5,11 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import type { MeetingState, ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shared';
+import { asUserKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { registerSocketHandlers } from './socket.js';
-import './session.js';
+import { toSessionUser } from './session.js';
 
 // --- Helpers ---
 
@@ -46,7 +47,7 @@ const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', or
 function sessionAs(user: User): express.RequestHandler {
   return (req, _res, next) => {
     if (!req.session.user) {
-      req.session.user = user;
+      req.session.user = toSessionUser(user);
     }
     next();
   };
@@ -869,7 +870,7 @@ describe('Socket.IO integration', () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       // Set a current speaker and topic but leave queue empty
-      const ownerKey = 'testuser';
+      const ownerKey = asUserKey('testuser');
       meeting.current.speaker = {
         id: 'old-speaker',
         type: 'topic',
@@ -1271,7 +1272,7 @@ describe('Socket.IO integration', () => {
     it('stops a poll by clearing meeting.poll', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1287,7 +1288,7 @@ describe('Socket.IO integration', () => {
     it('adds a reaction and broadcasts', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
       const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);
@@ -1304,7 +1305,7 @@ describe('Socket.IO integration', () => {
     it('toggles off an existing reaction', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
       const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);

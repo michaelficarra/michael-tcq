@@ -7,10 +7,19 @@ export interface User {
   organisation: string;
 }
 
+/**
+ * Nominal (branded) string type for a canonical user key — the
+ * lowercased `ghUsername`. Produced by `userKey(user)` or `asUserKey(s)`;
+ * consumed as a Record key and as cross-references throughout
+ * `MeetingState`. The brand prevents a plain `string` or a non-lowercased
+ * `ghUsername` from being passed where a user key is expected.
+ */
+export type UserKey = string & { readonly __brand: 'UserKey' };
+
 export interface AgendaItem {
   id: string;
   name: string;
-  ownerId: string; // user key (lowercase ghUsername)
+  ownerId: UserKey;
   timebox?: number; // duration in minutes
 }
 
@@ -26,7 +35,7 @@ export interface QueueEntry {
   id: string;
   type: QueueEntryType;
   topic: string;
-  userId: string; // user key
+  userId: UserKey;
 }
 
 /**
@@ -47,14 +56,14 @@ export interface PollOption {
 export interface Reaction {
   /** The ID of the PollOption this reaction is for. */
   optionId: string;
-  userId: string; // user key
+  userId: UserKey;
 }
 
 // -- Log entry types --
 
 /** A speaker turn within a topic group. */
 export interface TopicSpeaker {
-  userId: string; // user key
+  userId: UserKey;
   type: QueueEntryType;
   topic: string;
   /** ISO timestamp when this speaker started. */
@@ -70,24 +79,24 @@ interface LogEntryBase {
 
 export interface MeetingStartedLog extends LogEntryBase {
   type: 'meeting-started';
-  chairId: string;
+  chairId: UserKey;
 }
 
 export interface AgendaItemStartedLog extends LogEntryBase {
   type: 'agenda-item-started';
-  chairId: string;
+  chairId: UserKey;
   itemName: string;
-  itemOwnerId: string;
+  itemOwnerId: UserKey;
 }
 
 export interface AgendaItemFinishedLog extends LogEntryBase {
   type: 'agenda-item-finished';
-  chairId: string;
+  chairId: UserKey;
   itemName: string;
   /** Duration in ms from when the item started to when it was advanced. */
   duration: number;
   /** Distinct users who spoke during this item (excluding Point of Order speakers). */
-  participantIds: string[];
+  participantIds: UserKey[];
   /**
    * Text serialisation of the remaining queue entries at the time the
    * agenda item was advanced, if the queue was non-empty.
@@ -98,7 +107,7 @@ export interface AgendaItemFinishedLog extends LogEntryBase {
 
 export interface TopicDiscussedLog extends LogEntryBase {
   type: 'topic-discussed';
-  chairId: string;
+  chairId: UserKey;
   topicName: string;
   speakers: TopicSpeaker[];
   /** Duration in ms from the first speaker to when the topic was finalised. */
@@ -107,8 +116,8 @@ export interface TopicDiscussedLog extends LogEntryBase {
 
 export interface PollRanLog extends LogEntryBase {
   type: 'poll-ran';
-  startChairId: string;
-  endChairId: string;
+  startChairId: UserKey;
+  endChairId: UserKey;
   /** The poll topic/question, if one was provided. */
   topic?: string;
   /** Duration in ms from poll start to poll stop. */
@@ -138,7 +147,7 @@ export interface ActivePoll {
   /** ISO timestamp when the poll was started. */
   startTime: string;
   /** The user key of the chair who started the poll. */
-  startChairId: string;
+  startChairId: UserKey;
   /** The topic/question for the poll, if one was provided. */
   topic?: string;
   /** Whether the poll allows selecting multiple options. */
@@ -155,7 +164,7 @@ export interface CurrentSpeaker {
   /** Unique ID for this speaker turn. Used for advancement preconditions. */
   id: string;
   /** User key of the speaker. */
-  userId: string;
+  userId: UserKey;
   /** Entry type describing the speaker turn. Agenda-sourced turns are always 'topic'. */
   type: QueueEntryType;
   /** The topic / message for this speaker turn. */
@@ -182,7 +191,7 @@ export interface CurrentTopic {
    */
   speakerId: string;
   /** User key of the topic owner (whoever introduced the topic). */
-  userId: string;
+  userId: UserKey;
   /** The topic name. */
   topic: string;
   /** ISO timestamp when this topic was introduced. */
@@ -233,7 +242,7 @@ export interface OperationalState {
    * advancement. Clients use this to distinguish self-initiated advances
    * (no cooldown) from those triggered by another chair (cooldown applied).
    */
-  lastAdvancementBy?: string;
+  lastAdvancementBy?: UserKey;
   /**
    * ISO timestamp of the most recent client connection. Used to determine
    * when to expire stale meetings (90 days after the last connection).
@@ -243,9 +252,9 @@ export interface OperationalState {
 
 export interface MeetingState {
   id: string;
-  /** Lookup map of all users who have participated in this meeting, keyed by lowercase ghUsername. */
-  users: Record<string, User>;
-  chairIds: string[];
+  /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
+  users: Record<UserKey, User>;
+  chairIds: UserKey[];
   agenda: AgendaItem[];
   /** Queue state: entries, ordering, and the closed flag. */
   queue: MeetingQueueState;

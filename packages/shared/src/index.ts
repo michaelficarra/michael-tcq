@@ -1,5 +1,6 @@
 export type {
   User,
+  UserKey,
   AgendaItem,
   QueueEntry,
   QueueEntryType,
@@ -63,4 +64,4 @@ export {
   ImportAgendaBodySchema,
 } from './messages.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
-export { userKey } from './helpers.js';
+export { userKey, asUserKey } from './helpers.js';

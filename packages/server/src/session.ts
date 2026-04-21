@@ -7,11 +7,24 @@
  */
 
 import type { User } from '@tcq/shared';
+import { isAdmin } from './admin.js';
+
+/**
+ * The authenticated user as stored on the session. `User` plus a cached
+ * `isAdmin` flag — computed once on login (`toSessionUser`) so request
+ * handlers read a typed property instead of re-parsing the admin env var.
+ */
+export type SessionUser = User & { isAdmin: boolean };
+
+/** Attach `isAdmin` to a User to produce the session-shaped record. */
+export function toSessionUser(user: User): SessionUser {
+  return { ...user, isAdmin: isAdmin(user) };
+}
 
 declare module 'express-session' {
   interface SessionData {
     /** The authenticated GitHub user, set after OAuth callback. */
-    user?: User;
+    user?: SessionUser;
 
     /**
      * URL to redirect to after authentication. Set when an
