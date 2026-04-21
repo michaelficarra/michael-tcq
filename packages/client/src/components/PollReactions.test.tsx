@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { ActivePoll, MeetingState, User, PollOption } from '@tcq/shared';
 import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
@@ -27,22 +28,8 @@ function makePoll(overrides?: Partial<ActivePoll>): ActivePoll {
   };
 }
 
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test',
-    users: {},
-    chairIds: [],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides, { id: 'test' });
 }
 
 function renderPoll(meeting: MeetingState, user: User | null = alice, socket: TypedSocket | null = null) {

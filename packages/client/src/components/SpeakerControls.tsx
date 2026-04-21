@@ -72,11 +72,11 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
       <div className="flex flex-wrap gap-2 mb-3 presentation-hidden" role="group" aria-label="Queue entry types">
         {ENTRY_TYPES.map((config) => {
           // Hide the Reply button when there's no current topic
-          if (config.requiresTopic && !meeting.currentTopicEntryId) return null;
+          if (config.requiresTopic && !meeting.current.topic) return null;
 
           // Point of Order is a procedural interruption and is always
           // permitted, even when the queue is closed to non-chairs.
-          const disabled = meeting.queueClosed && !isChair && config.type !== 'point-of-order';
+          const disabled = meeting.queue.closed && !isChair && config.type !== 'point-of-order';
 
           return (
             <button

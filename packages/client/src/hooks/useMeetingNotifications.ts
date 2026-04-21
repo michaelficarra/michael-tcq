@@ -19,8 +19,8 @@ import { showNotification } from '../lib/notifications.js';
 /** The agenda item immediately after the current one, or `undefined` if none. */
 function nextAgendaItem(state: MeetingState) {
   if (state.agenda.length === 0) return undefined;
-  if (!state.currentAgendaItemId) return state.agenda[0];
-  const currentIdx = state.agenda.findIndex((item) => item.id === state.currentAgendaItemId);
+  if (!state.current.agendaItemId) return state.agenda[0];
+  const currentIdx = state.agenda.findIndex((item) => item.id === state.current.agendaItemId);
   if (currentIdx === -1) return undefined;
   return state.agenda[currentIdx + 1];
 }
@@ -28,8 +28,8 @@ function nextAgendaItem(state: MeetingState) {
 /** IDs of queue entries with type 'point-of-order'. */
 function pointOfOrderIds(state: MeetingState): Set<string> {
   const ids = new Set<string>();
-  for (const id of state.queuedSpeakerIds) {
-    if (state.queueEntries[id]?.type === 'point-of-order') ids.add(id);
+  for (const id of state.queue.orderedIds) {
+    if (state.queue.entries[id]?.type === 'point-of-order') ids.add(id);
   }
   return ids;
 }
@@ -59,10 +59,10 @@ export function useMeetingNotifications(): void {
 
     // 1. Your queue entry is now next (head of the queue changed, and it's yours).
     if (notificationPrefs.onMyTurnToSpeak) {
-      const prevHead = prev.queuedSpeakerIds[0];
-      const nextHead = meeting.queuedSpeakerIds[0];
+      const prevHead = prev.queue.orderedIds[0];
+      const nextHead = meeting.queue.orderedIds[0];
       if (prevHead !== nextHead && nextHead) {
-        const entry = meeting.queueEntries[nextHead];
+        const entry = meeting.queue.entries[nextHead];
         if (entry && entry.userId === me) {
           showNotification("You're up next", { body: entry.topic });
         }
@@ -78,14 +78,14 @@ export function useMeetingNotifications(): void {
       }
     }
 
-    // 3. Meeting started / agenda advanced. Both are currentAgendaItemId
+    // 3. Meeting started / agenda advanced. Both are current.agendaItemId
     //    transitions, but the first one (from undefined → set) is treated as
     //    "meeting started" and subsequent changes are "agenda advanced" — they
     //    are mutually exclusive so the user never gets both for one event.
-    if (prev.currentAgendaItemId !== meeting.currentAgendaItemId && meeting.currentAgendaItemId) {
-      const current = meeting.agenda.find((item) => item.id === meeting.currentAgendaItemId);
+    if (prev.current.agendaItemId !== meeting.current.agendaItemId && meeting.current.agendaItemId) {
+      const current = meeting.agenda.find((item) => item.id === meeting.current.agendaItemId);
       if (current) {
-        if (!prev.currentAgendaItemId) {
+        if (!prev.current.agendaItemId) {
           if (notificationPrefs.onMeetingStarted) {
             showNotification('Meeting started', { body: `First item: ${current.name}` });
           }
@@ -104,18 +104,15 @@ export function useMeetingNotifications(): void {
     }
 
     // 3b. A clarifying question was raised while you are the current topic author.
-    if (notificationPrefs.onClarifyingQuestionOnMyTopic && meeting.currentTopicEntryId) {
-      const topic = meeting.queueEntries[meeting.currentTopicEntryId];
-      if (topic && topic.userId === me) {
-        // Find any newly-added 'question' entries that aren't yours.
-        const prevIds = new Set(Object.keys(prev.queueEntries));
-        for (const id of meeting.queuedSpeakerIds) {
-          if (prevIds.has(id)) continue;
-          const entry = meeting.queueEntries[id];
-          if (!entry || entry.type !== 'question' || entry.userId === me) continue;
-          const authorName = meeting.users[entry.userId]?.name ?? entry.userId;
-          showNotification('Clarifying question', { body: `${authorName} · ${entry.topic}` });
-        }
+    if (notificationPrefs.onClarifyingQuestionOnMyTopic && meeting.current.topic?.userId === me) {
+      // Find any newly-added 'question' entries that aren't yours.
+      const prevIds = new Set(Object.keys(prev.queue.entries));
+      for (const id of meeting.queue.orderedIds) {
+        if (prevIds.has(id)) continue;
+        const entry = meeting.queue.entries[id];
+        if (!entry || entry.type !== 'question' || entry.userId === me) continue;
+        const authorName = meeting.users[entry.userId]?.name ?? entry.userId;
+        showNotification('Clarifying question', { body: `${authorName} · ${entry.topic}` });
       }
     }
 
@@ -124,7 +121,7 @@ export function useMeetingNotifications(): void {
       const prevIds = pointOfOrderIds(prev);
       for (const id of pointOfOrderIds(meeting)) {
         if (prevIds.has(id)) continue;
-        const entry = meeting.queueEntries[id];
+        const entry = meeting.queue.entries[id];
         if (!entry || entry.userId === me) continue;
         const authorName = meeting.users[entry.userId]?.name ?? entry.userId;
         showNotification('Point of order', { body: `${authorName} · ${entry.topic}` });
@@ -137,11 +134,11 @@ export function useMeetingNotifications(): void {
   //    time-based event rather than a state diff, so it uses setTimeout. Any
   //    change to the item id, its name, its timebox, or the start time tears
   //    down and reschedules; permission / preference changes do the same.
-  const currentAgendaId = meeting?.currentAgendaItemId;
+  const currentAgendaId = meeting?.current.agendaItemId;
   const currentAgendaItem = currentAgendaId ? meeting?.agenda.find((a) => a.id === currentAgendaId) : undefined;
   const currentTimebox = currentAgendaItem?.timebox;
   const currentItemName = currentAgendaItem?.name;
-  const currentItemStartTime = meeting?.currentAgendaItemStartTime;
+  const currentItemStartTime = meeting?.current.agendaItemStartTime;
 
   useEffect(() => {
     if (!notificationsEnabled) return;

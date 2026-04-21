@@ -3,27 +3,14 @@ import { render, screen } from '@testing-library/react';
 import type { MeetingState, User, LogEntry, TopicSpeaker } from '@tcq/shared';
 import { LogPanel } from './LogPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'ACME' };
 const carol: User = { ghid: 3, ghUsername: 'carol', name: 'Carol', organisation: 'ACME' };
 
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test',
-    users: { alice, bob, carol },
-    chairIds: ['alice'],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides, { id: 'test', users: { alice, bob, carol }, chairIds: ['alice'] });
 }
 
 function renderLog(meeting: MeetingState) {

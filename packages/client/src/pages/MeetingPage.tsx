@@ -113,13 +113,13 @@ function MeetingPageInner() {
       if (!socket || !meeting) return;
       // Point of Order is always permitted — procedural interruptions bypass
       // the queue-closed gate for non-chairs.
-      if (meeting.queueClosed && !isChair && type !== 'point-of-order') return;
+      if (meeting.queue.closed && !isChair && type !== 'point-of-order') return;
       setActiveTab('queue');
 
       // Capture current entry IDs so we can identify the new one
-      const currentIds = new Set(meeting.queuedSpeakerIds);
+      const currentIds = new Set(meeting.queue.orderedIds);
       socket.once('state', (newState) => {
-        const newId = newState.queuedSpeakerIds.find((id: string) => !currentIds.has(id));
+        const newId = newState.queue.orderedIds.find((id: string) => !currentIds.has(id));
         if (newId) {
           setAutoEditEntryId(newId);
         }

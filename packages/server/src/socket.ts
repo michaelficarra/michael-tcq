@@ -14,7 +14,7 @@ import { isAdmin } from './admin.js';
  * Called before advancing to the next speaker or changing agenda items.
  */
 function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
-  const speakers = meeting.currentTopicSpeakers;
+  const speakers = meeting.current.topicSpeakers;
   if (speakers.length > 0) {
     const last = speakers[speakers.length - 1];
     if (last.duration === undefined) {
@@ -25,14 +25,14 @@ function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
 
 /**
  * Finalise the current topic group into a TopicDiscussedLog entry
- * and append it to the meeting log. Resets currentTopicSpeakers.
+ * and append it to the meeting log. Resets the topic-group accumulator.
  */
 function finaliseTopicGroup(meeting: MeetingState, chairId: string, now: string): void {
-  if (meeting.currentTopicSpeakers.length === 0) return;
+  if (meeting.current.topicSpeakers.length === 0) return;
 
   finaliseLastSpeakerDuration(meeting, now);
 
-  const speakers = meeting.currentTopicSpeakers;
+  const speakers = meeting.current.topicSpeakers;
   const firstStart = new Date(speakers[0].startTime).getTime();
   const duration = new Date(now).getTime() - firstStart;
 
@@ -45,7 +45,7 @@ function finaliseTopicGroup(meeting: MeetingState, chairId: string, now: string)
     duration,
   });
 
-  meeting.currentTopicSpeakers = [];
+  meeting.current.topicSpeakers = [];
 }
 
 /**
@@ -67,7 +67,7 @@ function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): s
   }
 
   // Also include speakers from the current (not yet finalised) topic group
-  for (const speaker of meeting.currentTopicSpeakers) {
+  for (const speaker of meeting.current.topicSpeakers) {
     if (speaker.type === 'point-of-order') continue;
     seen.add(speaker.userId);
   }
@@ -132,8 +132,8 @@ export function broadcastMeetingState(
     // Clear after broadcasting so it only applies to the broadcast that
     // immediately follows the handler that set it. Without this, a stale
     // value could be misattributed if a future code path changes the
-    // current speaker without explicitly setting lastSpeakerAdvancementAttributedTo.
-    delete meeting.lastSpeakerAdvancementAttributedTo;
+    // current speaker without explicitly setting operational.lastAdvancementBy.
+    delete meeting.operational.lastAdvancementBy;
   }
 }
 
@@ -427,7 +427,7 @@ export function registerSocketHandlers(
       // queue state.
       const addMeeting = meetingManager.get(joinedMeetingId);
       if (
-        addMeeting?.queueClosed &&
+        addMeeting?.queue.closed &&
         !meetingManager.isChair(joinedMeetingId, user) &&
         payload.type !== 'point-of-order'
       ) {
@@ -561,13 +561,13 @@ export function registerSocketHandlers(
       if (isOwner && !isChairUser) {
         const meeting = meetingManager.get(joinedMeetingId);
         if (meeting) {
-          const currentIndex = meeting.queuedSpeakerIds.indexOf(payload.id);
+          const currentIndex = meeting.queue.orderedIds.indexOf(payload.id);
           if (payload.afterId === null) {
             // Moving to the beginning — that's moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
             return;
           }
-          const afterIndex = meeting.queuedSpeakerIds.indexOf(payload.afterId);
+          const afterIndex = meeting.queue.orderedIds.indexOf(payload.afterId);
           if (afterIndex < currentIndex) {
             // Target is above current position — moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
@@ -613,18 +613,16 @@ export function registerSocketHandlers(
       // Allow chairs and the current speaker to advance.
       const actorId = userKey(user);
       const isChair = meetingManager.isChair(joinedMeetingId, user);
-      const isCurrentSpeaker =
-        meeting.currentSpeakerEntryId != null &&
-        meeting.queueEntries[meeting.currentSpeakerEntryId]?.userId === actorId;
+      const isCurrentSpeaker = meeting.current.speaker?.userId === actorId;
       if (!isChair && !isCurrentSpeaker) {
         respond({ ok: false, error: 'Only chairs or the current speaker can advance' });
         return;
       }
 
       // Precondition check: reject if someone already advanced the speaker.
-      // The client sends the currentSpeakerEntryId it sees; if it doesn't match
+      // The client sends the CurrentSpeaker id it saw; if it doesn't match
       // the server's current speaker, the view is stale.
-      if (payload.currentSpeakerEntryId !== (meeting.currentSpeakerEntryId ?? null)) {
+      if (payload.currentSpeakerEntryId !== (meeting.current.speaker?.id ?? null)) {
         // Client's view is stale — send current state so it can update
         socket.emit('state', meeting);
         respond({ ok: false, error: 'Speaker already advanced' });
@@ -635,8 +633,8 @@ export function registerSocketHandlers(
       ensureUser(meeting, user);
 
       // Peek at the next speaker before advancing (to decide on topic grouping)
-      const nextEntryId = meeting.queuedSpeakerIds[0];
-      const nextEntry = nextEntryId ? meeting.queueEntries[nextEntryId] : undefined;
+      const nextEntryId = meeting.queue.orderedIds[0];
+      const nextEntry = nextEntryId ? meeting.queue.entries[nextEntryId] : undefined;
 
       // Finalise the previous speaker's duration
       finaliseLastSpeakerDuration(meeting, now);
@@ -650,7 +648,7 @@ export function registerSocketHandlers(
 
       // Add the new speaker to the current topic group (skip point-of-order)
       if (newSpeaker && newSpeaker.type !== 'point-of-order') {
-        meeting.currentTopicSpeakers.push({
+        meeting.current.topicSpeakers.push({
           userId: newSpeaker.userId,
           type: newSpeaker.type,
           topic: newSpeaker.topic,
@@ -659,7 +657,7 @@ export function registerSocketHandlers(
         meetingManager.markDirty(joinedMeetingId);
       }
 
-      meeting.lastSpeakerAdvancementAttributedTo = actorId;
+      meeting.operational.lastAdvancementBy = actorId;
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
 
@@ -790,7 +788,7 @@ export function registerSocketHandlers(
       // the server's current agenda item, another chair has already acted.
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
-      if (payload.currentAgendaItemId !== (meeting.currentAgendaItemId ?? null)) {
+      if (payload.currentAgendaItemId !== (meeting.current.agendaItemId ?? null)) {
         socket.emit('state', meeting);
         respond({ ok: false, error: 'Another chair already advanced the agenda' });
         return;
@@ -798,9 +796,9 @@ export function registerSocketHandlers(
 
       const now = new Date().toISOString();
       const chairId = ensureUser(meeting, user);
-      const isFirstItem = !meeting.currentAgendaItemId;
+      const isFirstItem = !meeting.current.agendaItemId;
       const outgoingItem = meetingManager.getCurrentAgendaItem(joinedMeetingId);
-      const outgoingStartTime = meeting.currentAgendaItemStartTime;
+      const outgoingStartTime = meeting.current.agendaItemStartTime;
 
       // Finalise log entries for the outgoing agenda item
       if (outgoingItem && outgoingStartTime) {
@@ -812,10 +810,10 @@ export function registerSocketHandlers(
 
         // Serialise the remaining queue if non-empty
         const remainingQueue =
-          meeting.queuedSpeakerIds.length > 0
-            ? meeting.queuedSpeakerIds
+          meeting.queue.orderedIds.length > 0
+            ? meeting.queue.orderedIds
                 .map((id) => {
-                  const e = meeting.queueEntries[id];
+                  const e = meeting.queue.entries[id];
                   const u = meeting.users[e.userId];
                   return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.ghUsername ?? e.userId})`;
                 })
@@ -834,6 +832,10 @@ export function registerSocketHandlers(
         });
       }
 
+      // nextAgendaItem seeds current.speaker, current.topicSpeakers (with the
+      // introducing owner), and resets the queue. Its internal timestamp may
+      // be a few ms off from `now` captured above — acceptable for display /
+      // duration purposes.
       const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
       if (!nextItem) {
         respond({ ok: false, error: 'No more agenda items' });
@@ -857,20 +859,7 @@ export function registerSocketHandlers(
         itemOwnerId: nextItem.ownerId,
       });
 
-      // Track when this agenda item started
-      meeting.currentAgendaItemStartTime = now;
-
-      // Start the introductory topic group with the item owner
-      meeting.currentTopicSpeakers = [
-        {
-          userId: nextItem.ownerId,
-          type: 'topic',
-          topic: `Introducing: ${nextItem.name}`,
-          startTime: now,
-        },
-      ];
-
-      meeting.lastSpeakerAdvancementAttributedTo = chairId;
+      meeting.operational.lastAdvancementBy = chairId;
       meetingManager.markDirty(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
       respond({ ok: true });
@@ -923,7 +912,7 @@ function incrementClientCount(
   // sweep knows when the meeting was last active.
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
-    meeting.lastConnectionTime = new Date().toISOString();
+    meeting.operational.lastConnectionTime = new Date().toISOString();
     meetingManager.markDirty(meetingId);
   }
 

@@ -6,22 +6,15 @@ import { PollSetup } from './PollSetup.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
+
 const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 
-const baseMeeting: MeetingState = {
+const baseMeeting: MeetingState = buildMeeting(undefined, {
   id: 'test',
   users: { alice: chairUser },
   chairIds: ['alice'],
-  agenda: [],
-  currentAgendaItemId: undefined,
-  currentSpeakerEntryId: undefined,
-  currentTopicEntryId: undefined,
-  queueEntries: {},
-  queuedSpeakerIds: [],
-  queueClosed: false,
-  log: [],
-  currentTopicSpeakers: [],
-};
+});
 
 function renderSetup(socket: TypedSocket | null = null, onCancel = () => {}, onStarted = () => {}) {
   return render(

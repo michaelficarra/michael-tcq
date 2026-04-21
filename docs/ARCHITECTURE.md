@@ -115,6 +115,8 @@ The server is the single source of truth for meeting state. The client receives 
 
 No external state library (Redux, Zustand, Jotai) is needed. The state shape is small and well-defined, and there is only one source of state updates (the server).
 
+`MeetingState` is grouped into domain subobjects: `queue` (entries, ordering, closed flag), `current` (agenda item, speaker, topic, topic-group accumulator), `poll` (present when a poll is running), and `operational` (advancement attribution and last-connection timestamp) — alongside the durable top-level fields `users`, `chairIds`, `agenda`, and `log`. The current speaker is a first-class struct on `current.speaker` rather than a reference into the queue entries map.
+
 ## Backend
 
 ### Framework: Express

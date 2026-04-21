@@ -12,14 +12,10 @@ function makeMeeting(id: string): MeetingState {
     users: {},
     chairIds: [],
     agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
+    queue: { entries: {}, orderedIds: [], closed: false },
+    current: { topicSpeakers: [] },
+    operational: {},
     log: [],
-    currentTopicSpeakers: [],
   };
 }
 
@@ -85,10 +81,10 @@ describe('FileMeetingStore', () => {
     await store.save(meeting);
 
     // Modify and re-save
-    meeting.queueClosed = true;
+    meeting.queue.closed = true;
     await store.save(meeting);
 
     const loaded = await store.load('bright-pine');
-    expect(loaded?.queueClosed).toBe(true);
+    expect(loaded?.queue.closed).toBe(true);
   });
 });

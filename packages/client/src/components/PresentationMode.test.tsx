@@ -5,27 +5,14 @@ import { QueuePanel } from './QueuePanel.js';
 import { AgendaPanel } from './AgendaPanel.js';
 import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test',
-    users: { alice: chairUser },
-    chairIds: ['alice'],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides, { id: 'test', users: { alice: chairUser }, chairIds: ['alice'] });
 }
 
 /**

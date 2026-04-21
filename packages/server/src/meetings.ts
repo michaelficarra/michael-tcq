@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { MeetingState, AgendaItem, QueueEntry, QueueEntryType, User } from '@tcq/shared';
+import type {
+  AgendaItem,
+  CurrentSpeaker,
+  MeetingState,
+  QueueEntry,
+  QueueEntryType,
+  TopicSpeaker,
+  User,
+} from '@tcq/shared';
 import { QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
@@ -80,15 +88,18 @@ export class MeetingManager {
       users,
       chairIds,
       agenda: [],
-      currentAgendaItemId: undefined,
-      currentSpeakerEntryId: undefined,
-      currentTopicEntryId: undefined,
-      queueEntries: {},
-      queuedSpeakerIds: [],
-      queueClosed: true,
-      lastConnectionTime: new Date().toISOString(),
+      queue: {
+        entries: {},
+        orderedIds: [],
+        closed: true,
+      },
+      current: {
+        topicSpeakers: [],
+      },
+      operational: {
+        lastConnectionTime: new Date().toISOString(),
+      },
       log: [],
-      currentTopicSpeakers: [],
     };
 
     this.meetings.set(id, meeting);
@@ -104,8 +115,9 @@ export class MeetingManager {
   /** Look up the current agenda item for a meeting, or undefined if none is set. */
   getCurrentAgendaItem(meetingId: string): AgendaItem | undefined {
     const meeting = this.meetings.get(meetingId);
-    if (!meeting?.currentAgendaItemId) return undefined;
-    return meeting.agenda.find((item) => item.id === meeting.currentAgendaItemId);
+    const currentId = meeting?.current.agendaItemId;
+    if (!currentId) return undefined;
+    return meeting!.agenda.find((item) => item.id === currentId);
   }
 
   /** List all active meetings. Used by the admin dashboard. */
@@ -220,8 +232,8 @@ export class MeetingManager {
     meeting.agenda.splice(index, 1);
 
     // If the deleted item was the current agenda item, clear the reference
-    if (meeting.currentAgendaItemId === itemId) {
-      meeting.currentAgendaItemId = undefined;
+    if (meeting.current.agendaItemId === itemId) {
+      meeting.current.agendaItemId = undefined;
     }
 
     this.markDirty(meetingId);
@@ -288,12 +300,12 @@ export class MeetingManager {
 
     let nextIndex: number;
 
-    if (!meeting.currentAgendaItemId) {
+    if (!meeting.current.agendaItemId) {
       // No current item — start with the first one
       nextIndex = 0;
     } else {
       // Find the current item's position and advance to the next
-      const currentIndex = meeting.agenda.findIndex((item) => item.id === meeting.currentAgendaItemId);
+      const currentIndex = meeting.agenda.findIndex((item) => item.id === meeting.current.agendaItemId);
       nextIndex = currentIndex + 1;
     }
 
@@ -301,26 +313,43 @@ export class MeetingManager {
     if (nextIndex >= meeting.agenda.length) return null;
 
     const nextItem = meeting.agenda[nextIndex];
-    meeting.currentAgendaItemId = nextItem.id;
+    const now = new Date().toISOString();
 
-    // The item owner becomes the current speaker
-    const speakerEntry: QueueEntry = {
+    // The item owner becomes the current speaker. No synthesised queue entry:
+    // the CurrentSpeaker struct is the sole representation of this turn.
+    const speaker: CurrentSpeaker = {
       id: randomUUID(),
       type: 'topic',
       topic: `Introducing: ${nextItem.name}`,
       userId: nextItem.ownerId,
+      source: 'agenda',
+      startTime: now,
     };
 
-    // Clear queue entries and start fresh for the new agenda item
-    meeting.queueEntries = { [speakerEntry.id]: speakerEntry };
-    meeting.queuedSpeakerIds = [];
-    meeting.currentSpeakerEntryId = speakerEntry.id;
+    // Topic group for this agenda item starts with the owner's introduction.
+    const introSpeaker: TopicSpeaker = {
+      userId: nextItem.ownerId,
+      type: 'topic',
+      topic: `Introducing: ${nextItem.name}`,
+      startTime: now,
+    };
 
-    // Clear the current topic for the new agenda item
-    meeting.currentTopicEntryId = undefined;
+    meeting.current = {
+      agendaItemId: nextItem.id,
+      agendaItemStartTime: now,
+      speaker,
+      // Topic is cleared on agenda advance — "reply" isn't available until
+      // someone actually introduces a topic via the queue.
+      topic: undefined,
+      topicSpeakers: [introSpeaker],
+    };
 
-    // Re-open the queue for the new agenda item
-    meeting.queueClosed = false;
+    // Queue is wiped (new agenda item) and re-opened.
+    meeting.queue = {
+      entries: {},
+      orderedIds: [],
+      closed: false,
+    };
 
     this.markDirty(meetingId);
     return nextItem;
@@ -346,15 +375,14 @@ export class MeetingManager {
       userId: ensureUser(meeting, user),
     };
 
-    // Add to the lookup map
-    meeting.queueEntries[entry.id] = entry;
+    meeting.queue.entries[entry.id] = entry;
 
     // Find the correct insertion position: after all entries of the same
     // or higher priority type, maintaining FIFO within each type.
     const entryPriority = QUEUE_ENTRY_PRIORITY[type];
-    let insertIndex = meeting.queuedSpeakerIds.length; // default: end
-    for (let i = 0; i < meeting.queuedSpeakerIds.length; i++) {
-      const existing = meeting.queueEntries[meeting.queuedSpeakerIds[i]];
+    let insertIndex = meeting.queue.orderedIds.length; // default: end
+    for (let i = 0; i < meeting.queue.orderedIds.length; i++) {
+      const existing = meeting.queue.entries[meeting.queue.orderedIds[i]];
       const existingPriority = QUEUE_ENTRY_PRIORITY[existing.type];
       if (existingPriority > entryPriority) {
         // Found an entry with lower priority — insert before it
@@ -363,7 +391,7 @@ export class MeetingManager {
       }
     }
 
-    meeting.queuedSpeakerIds.splice(insertIndex, 0, entry.id);
+    meeting.queue.orderedIds.splice(insertIndex, 0, entry.id);
     this.markDirty(meetingId);
     return entry;
   }
@@ -377,7 +405,7 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const entry = meeting.queueEntries[entryId];
+    const entry = meeting.queue.entries[entryId];
     if (!entry) return false;
 
     if (updates.topic !== undefined) entry.topic = updates.topic;
@@ -395,11 +423,11 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const index = meeting.queuedSpeakerIds.indexOf(entryId);
+    const index = meeting.queue.orderedIds.indexOf(entryId);
     if (index === -1) return false;
 
-    meeting.queuedSpeakerIds.splice(index, 1);
-    delete meeting.queueEntries[entryId];
+    meeting.queue.orderedIds.splice(index, 1);
+    delete meeting.queue.entries[entryId];
 
     this.markDirty(meetingId);
     return true;
@@ -409,7 +437,7 @@ export class MeetingManager {
   setQueueClosed(meetingId: string, closed: boolean): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
-    meeting.queueClosed = closed;
+    meeting.queue.closed = closed;
     this.markDirty(meetingId);
     return true;
   }
@@ -421,41 +449,59 @@ export class MeetingManager {
   getQueueEntry(meetingId: string, entryId: string): QueueEntry | undefined {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return undefined;
-    return meeting.queueEntries[entryId];
+    return meeting.queue.entries[entryId];
   }
 
   /**
-   * Advance to the next speaker. Pops the first entry from the queue
-   * and makes that person the current speaker.
+   * Advance to the next speaker. Pops the first entry from the queue,
+   * snapshots it into `current.speaker`, and removes it from `queue.entries`
+   * (the struct is now the sole reference).
    *
-   * - If the entry type is "topic", it also becomes the currentTopic.
+   * - If the entry type is "topic", it also becomes the current topic.
    * - If the queue is empty, clears the current speaker (returns null).
    *
-   * Returns the new current speaker entry, or null if queue was empty.
+   * Returns the new current speaker struct, or null if the queue was empty.
    */
-  nextSpeaker(meetingId: string): QueueEntry | null {
+  nextSpeaker(meetingId: string): CurrentSpeaker | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
-    if (meeting.queuedSpeakerIds.length === 0) {
+    if (meeting.queue.orderedIds.length === 0) {
       // Queue is empty — clear the current speaker
-      meeting.currentSpeakerEntryId = undefined;
+      meeting.current.speaker = undefined;
       this.markDirty(meetingId);
       return null;
     }
 
-    // Pop the first entry from the queue
-    const entryId = meeting.queuedSpeakerIds.shift()!;
-    const entry = meeting.queueEntries[entryId];
-    meeting.currentSpeakerEntryId = entryId;
+    // Pop the first entry from the queue and remove it from the entries map —
+    // the CurrentSpeaker struct now holds all the info we need.
+    const entryId = meeting.queue.orderedIds.shift()!;
+    const entry = meeting.queue.entries[entryId];
+    delete meeting.queue.entries[entryId];
+
+    const now = new Date().toISOString();
+    const speaker: CurrentSpeaker = {
+      id: entryId,
+      type: entry.type,
+      topic: entry.topic,
+      userId: entry.userId,
+      source: 'queue',
+      startTime: now,
+    };
+
+    meeting.current.speaker = speaker;
 
     // If this is a new topic, update the current topic
     if (entry.type === 'topic') {
-      meeting.currentTopicEntryId = entryId;
+      meeting.current.topic = {
+        userId: entry.userId,
+        topic: entry.topic,
+        startTime: now,
+      };
     }
 
     this.markDirty(meetingId);
-    return entry;
+    return speaker;
   }
 
   /**
@@ -478,29 +524,29 @@ export class MeetingManager {
     if (!meeting) return false;
 
     // Find and remove the entry being moved
-    const entryIndex = meeting.queuedSpeakerIds.indexOf(entryId);
+    const entryIndex = meeting.queue.orderedIds.indexOf(entryId);
     if (entryIndex === -1) return false;
 
-    const entry = meeting.queueEntries[entryId];
-    meeting.queuedSpeakerIds.splice(entryIndex, 1);
+    const entry = meeting.queue.entries[entryId];
+    meeting.queue.orderedIds.splice(entryIndex, 1);
 
     if (afterId === null) {
       // Move to the beginning of the queue
-      meeting.queuedSpeakerIds.unshift(entryId);
+      meeting.queue.orderedIds.unshift(entryId);
     } else {
       // Find the "after" entry in the (now shorter) array
-      const afterIndex = meeting.queuedSpeakerIds.indexOf(afterId);
+      const afterIndex = meeting.queue.orderedIds.indexOf(afterId);
       if (afterIndex === -1) {
         // afterId not found — put the entry back and report failure
-        meeting.queuedSpeakerIds.splice(entryIndex, 0, entryId);
+        meeting.queue.orderedIds.splice(entryIndex, 0, entryId);
         return false;
       }
       // Insert immediately after the "after" entry
-      meeting.queuedSpeakerIds.splice(afterIndex + 1, 0, entryId);
+      meeting.queue.orderedIds.splice(afterIndex + 1, 0, entryId);
     }
 
     // Determine the new position and whether the entry moved up or down
-    const newIndex = meeting.queuedSpeakerIds.indexOf(entryId);
+    const newIndex = meeting.queue.orderedIds.indexOf(entryId);
     const movedDown = newIndex > entryIndex;
 
     // Change the entry's type based on its direction of movement:
@@ -510,14 +556,14 @@ export class MeetingManager {
     // - Moving up: adopt the highest priority (lowest number) of the
     //   items at or below it (including itself), so it doesn't underrank
     //   what's after it.
-    if (meeting.queuedSpeakerIds.length > 1) {
+    if (meeting.queue.orderedIds.length > 1) {
       if (movedDown) {
         // Items at and above the new position (indices 0..newIndex)
-        const idsAtAndAbove = meeting.queuedSpeakerIds.slice(0, newIndex + 1);
+        const idsAtAndAbove = meeting.queue.orderedIds.slice(0, newIndex + 1);
         // Lowest priority = highest priority number
         let lowestType = entry.type;
         for (const id of idsAtAndAbove) {
-          const e = meeting.queueEntries[id];
+          const e = meeting.queue.entries[id];
           if (QUEUE_ENTRY_PRIORITY[e.type] > QUEUE_ENTRY_PRIORITY[lowestType]) {
             lowestType = e.type;
           }
@@ -525,11 +571,11 @@ export class MeetingManager {
         entry.type = lowestType;
       } else {
         // Items at and below the new position (indices newIndex..end)
-        const idsAtAndBelow = meeting.queuedSpeakerIds.slice(newIndex);
+        const idsAtAndBelow = meeting.queue.orderedIds.slice(newIndex);
         // Highest priority = lowest priority number
         let highestType = entry.type;
         for (const id of idsAtAndBelow) {
-          const e = meeting.queueEntries[id];
+          const e = meeting.queue.entries[id];
           if (QUEUE_ENTRY_PRIORITY[e.type] < QUEUE_ENTRY_PRIORITY[highestType]) {
             highestType = e.type;
           }
@@ -704,11 +750,12 @@ export class MeetingManager {
   /**
    * Check whether a meeting has expired. A meeting expires 90 days after
    * its most recent connection. Meetings without a lastConnectionTime
-   * (created before this feature) are not considered expired.
+   * are not considered expired.
    */
   private isExpired(meeting: MeetingState, now: number): boolean {
-    if (!meeting.lastConnectionTime) return false;
-    const lastConnection = new Date(meeting.lastConnectionTime).getTime();
+    const lastConnectionTime = meeting.operational.lastConnectionTime;
+    if (!lastConnectionTime) return false;
+    const lastConnection = new Date(lastConnectionTime).getTime();
     return now - lastConnection > MEETING_EXPIRY_MS;
   }
 }

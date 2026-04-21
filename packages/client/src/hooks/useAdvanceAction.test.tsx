@@ -5,26 +5,23 @@ import type { MeetingState, User } from '@tcq/shared';
 import { useAdvanceAction } from './useAdvanceAction.js';
 import { MeetingStateContext, MeetingDispatchContext, type MeetingContextState } from '../contexts/MeetingContext.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
 
+interface MakeMeetingOverrides {
+  /** Convenience: set current.speaker to a minimal struct with this id. */
+  speakerId?: string;
+  /** Convenience: set operational.lastAdvancementBy. */
+  lastAdvancementBy?: string;
+}
+
 /** Create a minimal meeting state for testing. */
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test-meeting',
-    users: {},
-    chairIds: [],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting({
+    currentSpeakerEntryId: overrides?.speakerId,
+    lastSpeakerAdvancementAttributedTo: overrides?.lastAdvancementBy,
+  });
 }
 
 function makeSocket(): TypedSocket {
@@ -66,7 +63,7 @@ describe('useAdvanceAction', () => {
   it('emits queue:next on fire()', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: null },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: null },
     };
 
     const { result } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -117,7 +114,7 @@ describe('useAdvanceAction', () => {
   it('enters cooldown when currentSpeakerEntryId changes and attributed to another user', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: alice },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: alice },
     };
 
     const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -128,7 +125,7 @@ describe('useAdvanceAction', () => {
 
     // Another chair (bob) advanced — triggers cooldown
     stateRef.current = {
-      meeting: makeMeeting({ currentSpeakerEntryId: 'entry-2', lastSpeakerAdvancementAttributedTo: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
       user: alice,
     };
     rerender();
@@ -144,7 +141,7 @@ describe('useAdvanceAction', () => {
   it('skips cooldown when the speaker change is attributed to the current user', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: alice },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: alice },
     };
 
     const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -153,7 +150,7 @@ describe('useAdvanceAction', () => {
 
     // Server responds with speaker change attributed to us
     stateRef.current = {
-      meeting: makeMeeting({ currentSpeakerEntryId: 'entry-2', lastSpeakerAdvancementAttributedTo: 'alice' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'alice' }),
       user: alice,
     };
     rerender();
@@ -166,7 +163,7 @@ describe('useAdvanceAction', () => {
   it('clears cooldown after 2000ms', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: alice },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: alice },
     };
 
     const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -174,7 +171,7 @@ describe('useAdvanceAction', () => {
     });
 
     stateRef.current = {
-      meeting: makeMeeting({ currentSpeakerEntryId: 'entry-2', lastSpeakerAdvancementAttributedTo: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
       user: alice,
     };
     rerender();
@@ -192,7 +189,7 @@ describe('useAdvanceAction', () => {
   it('does not trigger cooldown on initial render', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: null },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: null },
     };
 
     const { result } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -206,7 +203,7 @@ describe('useAdvanceAction', () => {
   it('does not trigger cooldown for meeting:nextAgendaItem when speaker changes', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: alice },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: alice },
     };
 
     const { result, rerender } = renderHook(() => useAdvanceAction('meeting:nextAgendaItem'), {
@@ -214,7 +211,7 @@ describe('useAdvanceAction', () => {
     });
 
     stateRef.current = {
-      meeting: makeMeeting({ currentSpeakerEntryId: 'entry-2', lastSpeakerAdvancementAttributedTo: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
       user: alice,
     };
     rerender();
@@ -225,7 +222,7 @@ describe('useAdvanceAction', () => {
   it('enters cooldown when speaker changes with no attribution', () => {
     const socket = makeSocket();
     const stateRef = {
-      current: { meeting: makeMeeting({ currentSpeakerEntryId: 'entry-1' }), user: alice },
+      current: { meeting: makeMeeting({ speakerId: 'entry-1' }), user: alice },
     };
 
     const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
@@ -234,7 +231,7 @@ describe('useAdvanceAction', () => {
 
     // Speaker changes with no attribution (e.g. reconnection state sync)
     stateRef.current = {
-      meeting: makeMeeting({ currentSpeakerEntryId: 'entry-2' }),
+      meeting: makeMeeting({ speakerId: 'entry-2' }),
       user: alice,
     };
     rerender();

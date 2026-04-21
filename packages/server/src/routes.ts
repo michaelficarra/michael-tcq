@@ -287,7 +287,7 @@ export function createMeetingRoutes(
         id: meeting.id,
         chairCount: meeting.chairIds.length,
         agendaItemCount: meeting.agenda.length,
-        queuedSpeakerCount: meeting.queuedSpeakerIds.length,
+        queuedSpeakerCount: meeting.queue.orderedIds.length,
         maxConcurrent: s?.maxConcurrent ?? 0,
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : (s?.lastConnection ?? ''),

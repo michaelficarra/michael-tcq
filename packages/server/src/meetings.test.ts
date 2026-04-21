@@ -50,9 +50,9 @@ describe('MeetingManager', () => {
     expect(meeting.chairIds).toEqual([userKey(testUser)]);
     expect(meeting.users[userKey(testUser)]).toEqual(testUser);
     expect(meeting.agenda).toEqual([]);
-    expect(meeting.queuedSpeakerIds).toEqual([]);
-    expect(meeting.currentAgendaItemId).toBeUndefined();
-    expect(meeting.currentSpeakerEntryId).toBeUndefined();
+    expect(meeting.queue.orderedIds).toEqual([]);
+    expect(meeting.current.agendaItemId).toBeUndefined();
+    expect(meeting.current.speaker).toBeUndefined();
     expect(meeting.poll).toBeUndefined();
   });
 
@@ -112,14 +112,10 @@ describe('MeetingManager', () => {
       users: { [testUserKey]: testUser },
       chairIds: [testUserKey],
       agenda: [],
-      currentAgendaItemId: undefined,
-      currentSpeakerEntryId: undefined,
-      currentTopicEntryId: undefined,
-      queueEntries: {},
-      queuedSpeakerIds: [],
-      queueClosed: false,
+      queue: { entries: {}, orderedIds: [], closed: false },
+      current: { topicSpeakers: [] },
+      operational: {},
       log: [],
-      currentTopicSpeakers: [],
     });
 
     // Create a new manager and restore from the store
@@ -222,9 +218,9 @@ describe('MeetingManager', () => {
       manager.addAgendaItem(meeting.id, 'Current', testUser);
       manager.nextAgendaItem(meeting.id);
 
-      const itemId = meeting.currentAgendaItemId!;
+      const itemId = meeting.current.agendaItemId!;
       manager.editAgendaItem(meeting.id, itemId, { name: 'Updated' });
-      const currentItem = meeting.agenda.find((i) => i.id === meeting.currentAgendaItemId);
+      const currentItem = meeting.agenda.find((i) => i.id === meeting.current.agendaItemId);
       expect(currentItem!.name).toBe('Updated');
     });
 
@@ -262,10 +258,10 @@ describe('MeetingManager', () => {
       manager.addAgendaItem(meeting.id, 'First', testUser);
       manager.addAgendaItem(meeting.id, 'Second', testUser);
       manager.nextAgendaItem(meeting.id);
-      expect(meeting.currentAgendaItemId).toBeDefined();
+      expect(meeting.current.agendaItemId).toBeDefined();
 
-      manager.deleteAgendaItem(meeting.id, meeting.currentAgendaItemId!);
-      expect(meeting.currentAgendaItemId).toBeUndefined();
+      manager.deleteAgendaItem(meeting.id, meeting.current.agendaItemId!);
+      expect(meeting.current.agendaItemId).toBeUndefined();
     });
 
     it('preserves other items when deleting one', () => {
@@ -348,7 +344,7 @@ describe('MeetingManager', () => {
       const result = manager.nextAgendaItem(meeting.id);
       expect(result).not.toBeNull();
       expect(result!.name).toBe('First');
-      expect(meeting.agenda.find((i) => i.id === meeting.currentAgendaItemId)?.name).toBe('First');
+      expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('First');
     });
 
     it('sets the item owner as the current speaker', () => {
@@ -357,11 +353,12 @@ describe('MeetingManager', () => {
 
       manager.nextAgendaItem(meeting.id);
 
-      expect(meeting.currentSpeakerEntryId).toBeDefined();
-      const currentEntry = meeting.queueEntries[meeting.currentSpeakerEntryId!];
-      expect(meeting.users[currentEntry.userId].ghid).toBe(otherUser.ghid);
-      expect(currentEntry.topic).toBe('Introducing: Proposal');
-      expect(currentEntry.type).toBe('topic');
+      expect(meeting.current.speaker).toBeDefined();
+      const speaker = meeting.current.speaker!;
+      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+      expect(speaker.topic).toBe('Introducing: Proposal');
+      expect(speaker.type).toBe('topic');
+      expect(speaker.source).toBe('agenda');
     });
 
     it('advances to the next agenda item', () => {
@@ -371,14 +368,14 @@ describe('MeetingManager', () => {
 
       // Start meeting (first item)
       manager.nextAgendaItem(meeting.id);
-      expect(meeting.agenda.find((i) => i.id === meeting.currentAgendaItemId)?.name).toBe('First');
+      expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('First');
 
       // Advance to second item
       const result = manager.nextAgendaItem(meeting.id);
       expect(result?.name).toBe('Second');
-      expect(meeting.agenda.find((i) => i.id === meeting.currentAgendaItemId)?.name).toBe('Second');
-      const currentEntry = meeting.queueEntries[meeting.currentSpeakerEntryId!];
-      expect(meeting.users[currentEntry.userId].ghid).toBe(otherUser.ghid);
+      expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('Second');
+      const speaker = meeting.current.speaker!;
+      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
     });
 
     it('returns null when advancing past the last item', () => {
@@ -408,16 +405,14 @@ describe('MeetingManager', () => {
       manager.nextAgendaItem(meeting.id);
       const otherKey = ensureUser(meeting, otherUser);
       const q1Entry = { id: 'q1', type: 'topic' as const, topic: 'old topic', userId: otherKey };
-      meeting.queueEntries['q1'] = q1Entry;
-      meeting.queuedSpeakerIds = ['q1'];
-      const ct1Entry = { id: 'ct1', type: 'topic' as const, topic: 'old topic', userId: otherKey };
-      meeting.queueEntries['ct1'] = ct1Entry;
-      meeting.currentTopicEntryId = 'ct1';
+      meeting.queue.entries['q1'] = q1Entry;
+      meeting.queue.orderedIds = ['q1'];
+      meeting.current.topic = { userId: otherKey, topic: 'old topic', startTime: new Date().toISOString() };
 
       // Advance — queue and topic should be cleared
       manager.nextAgendaItem(meeting.id);
-      expect(meeting.queuedSpeakerIds).toHaveLength(0);
-      expect(meeting.currentTopicEntryId).toBeUndefined();
+      expect(meeting.queue.orderedIds).toHaveLength(0);
+      expect(meeting.current.topic).toBeUndefined();
     });
   });
 
@@ -432,7 +427,7 @@ describe('MeetingManager', () => {
       expect(entry!.type).toBe('topic');
       expect(entry!.topic).toBe('My topic');
       expect(meeting.users[entry!.userId]).toEqual(otherUser);
-      expect(meeting.queuedSpeakerIds).toHaveLength(1);
+      expect(meeting.queue.orderedIds).toHaveLength(1);
     });
 
     it('inserts entries in priority order (point-of-order first)', () => {
@@ -441,8 +436,8 @@ describe('MeetingManager', () => {
       manager.addQueueEntry(meeting.id, 'topic', 'Low priority', otherUser);
       manager.addQueueEntry(meeting.id, 'point-of-order', 'Urgent', testUser);
 
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('point-of-order');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[1]].type).toBe('topic');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('point-of-order');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[1]].type).toBe('topic');
     });
 
     it('maintains FIFO within the same type', () => {
@@ -451,8 +446,8 @@ describe('MeetingManager', () => {
       manager.addQueueEntry(meeting.id, 'topic', 'First topic', testUser);
       manager.addQueueEntry(meeting.id, 'topic', 'Second topic', otherUser);
 
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('First topic');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[1]].topic).toBe('Second topic');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].topic).toBe('First topic');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[1]].topic).toBe('Second topic');
     });
 
     it('respects full priority ordering', () => {
@@ -464,7 +459,7 @@ describe('MeetingManager', () => {
       manager.addQueueEntry(meeting.id, 'question', 'B', testUser);
       manager.addQueueEntry(meeting.id, 'point-of-order', 'A', testUser);
 
-      const types = meeting.queuedSpeakerIds.map((id) => meeting.queueEntries[id].type);
+      const types = meeting.queue.orderedIds.map((id) => meeting.queue.entries[id].type);
       expect(types).toEqual(['point-of-order', 'question', 'reply', 'topic']);
     });
 
@@ -476,7 +471,7 @@ describe('MeetingManager', () => {
       // Question should go between point-of-order and topic
       manager.addQueueEntry(meeting.id, 'question', 'Middle', otherUser);
 
-      const types = meeting.queuedSpeakerIds.map((id) => meeting.queueEntries[id].type);
+      const types = meeting.queue.orderedIds.map((id) => meeting.queue.entries[id].type);
       expect(types).toEqual(['point-of-order', 'question', 'topic']);
     });
 
@@ -492,7 +487,7 @@ describe('MeetingManager', () => {
 
       const result = manager.editQueueEntry(meeting.id, entry.id, { topic: 'New topic' });
       expect(result).toBe(true);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('New topic');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].topic).toBe('New topic');
     });
 
     it('updates the type', () => {
@@ -500,7 +495,7 @@ describe('MeetingManager', () => {
       const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', testUser)!;
 
       manager.editQueueEntry(meeting.id, entry.id, { type: 'question' });
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('question');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('leaves unchanged fields alone', () => {
@@ -508,8 +503,8 @@ describe('MeetingManager', () => {
       const entry = manager.addQueueEntry(meeting.id, 'topic', 'Keep me', testUser)!;
 
       manager.editQueueEntry(meeting.id, entry.id, { type: 'question' });
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('Keep me');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('question');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].topic).toBe('Keep me');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('returns false for non-existent entry', () => {
@@ -528,7 +523,7 @@ describe('MeetingManager', () => {
       const entry = manager.addQueueEntry(meeting.id, 'topic', 'Remove me', testUser)!;
 
       expect(manager.removeQueueEntry(meeting.id, entry.id)).toBe(true);
-      expect(meeting.queuedSpeakerIds).toHaveLength(0);
+      expect(meeting.queue.orderedIds).toHaveLength(0);
     });
 
     it('preserves other entries when removing one', () => {
@@ -538,9 +533,9 @@ describe('MeetingManager', () => {
       manager.addQueueEntry(meeting.id, 'topic', 'Also keep', testUser);
 
       manager.removeQueueEntry(meeting.id, toRemove.id);
-      expect(meeting.queuedSpeakerIds).toHaveLength(2);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('Keep');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[1]].topic).toBe('Also keep');
+      expect(meeting.queue.orderedIds).toHaveLength(2);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].topic).toBe('Keep');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[1]].topic).toBe('Also keep');
     });
 
     it('returns false for non-existent entry', () => {
@@ -577,9 +572,9 @@ describe('MeetingManager', () => {
 
       expect(speaker).not.toBeNull();
       expect(speaker!.topic).toBe('First');
-      expect(meeting.queueEntries[meeting.currentSpeakerEntryId!]?.topic).toBe('First');
-      expect(meeting.queuedSpeakerIds).toHaveLength(1);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].topic).toBe('Second');
+      expect(meeting.current.speaker?.topic).toBe('First');
+      expect(meeting.queue.orderedIds).toHaveLength(1);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].topic).toBe('Second');
     });
 
     it('sets currentTopic when the entry type is "topic"', () => {
@@ -588,36 +583,43 @@ describe('MeetingManager', () => {
 
       manager.nextSpeaker(meeting.id);
 
-      expect(meeting.queueEntries[meeting.currentTopicEntryId!]?.topic).toBe('New discussion');
+      expect(meeting.current.topic?.topic).toBe('New discussion');
     });
 
     it('does not change currentTopic for non-topic types', () => {
       const meeting = manager.create([testUser]);
 
-      // Set an existing topic
+      // Set an existing topic directly on current
       const testUserKey = ensureUser(meeting, testUser);
-      const oldTopicEntry = { id: 'old', type: 'topic' as const, topic: 'Previous topic', userId: testUserKey };
-      meeting.queueEntries['old'] = oldTopicEntry;
-      meeting.currentTopicEntryId = 'old';
+      meeting.current.topic = {
+        userId: testUserKey,
+        topic: 'Previous topic',
+        startTime: new Date().toISOString(),
+      };
 
       manager.addQueueEntry(meeting.id, 'question', 'A question', otherUser);
       manager.nextSpeaker(meeting.id);
 
       // currentTopic should remain unchanged
-      expect(meeting.queueEntries[meeting.currentTopicEntryId!]?.topic).toBe('Previous topic');
+      expect(meeting.current.topic?.topic).toBe('Previous topic');
     });
 
     it('clears the current speaker when queue is empty', () => {
       const meeting = manager.create([testUser]);
       const testUserKey = ensureUser(meeting, testUser);
-      const oldEntry = { id: 'old', type: 'topic' as const, topic: 'Done', userId: testUserKey };
-      meeting.queueEntries['old'] = oldEntry;
-      meeting.currentSpeakerEntryId = 'old';
+      meeting.current.speaker = {
+        id: 'old',
+        type: 'topic',
+        topic: 'Done',
+        userId: testUserKey,
+        source: 'queue',
+        startTime: new Date().toISOString(),
+      };
 
       const result = manager.nextSpeaker(meeting.id);
 
       expect(result).toBeNull();
-      expect(meeting.currentSpeakerEntryId).toBeUndefined();
+      expect(meeting.current.speaker).toBeUndefined();
     });
 
     it('returns null for non-existent meeting', () => {
@@ -635,7 +637,7 @@ describe('MeetingManager', () => {
       // Move C to the beginning
       const result = manager.reorderQueueEntry(meeting.id, c.id, null);
       expect(result).toBe(true);
-      expect(meeting.queuedSpeakerIds.map((id) => meeting.queueEntries[id].topic)).toEqual(['C', 'A', 'B']);
+      expect(meeting.queue.orderedIds.map((id) => meeting.queue.entries[id].topic)).toEqual(['C', 'A', 'B']);
     });
 
     it('moves an entry after another entry', () => {
@@ -647,7 +649,7 @@ describe('MeetingManager', () => {
       // Move A to after C (to the end)
       const result = manager.reorderQueueEntry(meeting.id, a.id, c.id);
       expect(result).toBe(true);
-      expect(meeting.queuedSpeakerIds.map((id) => meeting.queueEntries[id].topic)).toEqual(['B', 'C', 'A']);
+      expect(meeting.queue.orderedIds.map((id) => meeting.queue.entries[id].topic)).toEqual(['B', 'C', 'A']);
     });
 
     // -- Type changes based on direction --
@@ -663,8 +665,8 @@ describe('MeetingManager', () => {
       // Items above new position: Q, T — lowest priority is T (topic)
       manager.reorderQueueEntry(meeting.id, poo.id, t.id);
 
-      expect(meeting.queuedSpeakerIds[2]).toBe(poo.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[2]].type).toBe('topic');
+      expect(meeting.queue.orderedIds[2]).toBe(poo.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[2]].type).toBe('topic');
     });
 
     it('moving down: adopts type of the single item above', () => {
@@ -677,8 +679,8 @@ describe('MeetingManager', () => {
       // Items above: Q — lowest priority is question
       manager.reorderQueueEntry(meeting.id, poo.id, q.id);
 
-      expect(meeting.queuedSpeakerIds[1]).toBe(poo.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[1]].type).toBe('question');
+      expect(meeting.queue.orderedIds[1]).toBe(poo.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[1]].type).toBe('question');
     });
 
     it('moving up: adopts the highest priority of items below', () => {
@@ -692,8 +694,8 @@ describe('MeetingManager', () => {
       // Items below new position: POO, Q — highest priority is POO (point-of-order)
       manager.reorderQueueEntry(meeting.id, t.id, null);
 
-      expect(meeting.queuedSpeakerIds[0]).toBe(t.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('point-of-order');
+      expect(meeting.queue.orderedIds[0]).toBe(t.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('point-of-order');
     });
 
     it('moving up: adopts type of the single item below', () => {
@@ -706,8 +708,8 @@ describe('MeetingManager', () => {
       // Items below: Q — highest priority is question
       manager.reorderQueueEntry(meeting.id, t.id, null);
 
-      expect(meeting.queuedSpeakerIds[0]).toBe(t.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('question');
+      expect(meeting.queue.orderedIds[0]).toBe(t.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('moving down past mixed types: adopts the lowest priority above', () => {
@@ -715,35 +717,35 @@ describe('MeetingManager', () => {
       // Build a manually out-of-order queue: POO, Topic, Question
       // (can't use addQueueEntry since it auto-sorts by priority)
       const testUserKey = ensureUser(meeting, testUser);
-      meeting.queueEntries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
-      meeting.queueEntries['t'] = { id: 't', type: 'topic', topic: 'T', userId: testUserKey };
-      meeting.queueEntries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
-      meeting.queuedSpeakerIds = ['poo', 't', 'q'];
+      meeting.queue.entries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
+      meeting.queue.entries['t'] = { id: 't', type: 'topic', topic: 'T', userId: testUserKey };
+      meeting.queue.entries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
+      meeting.queue.orderedIds = ['poo', 't', 'q'];
 
       // Move POO after Q (to the end, moving down)
       // Items above: T, Q — lowest priority is T (topic, priority 3)
       manager.reorderQueueEntry(meeting.id, 'poo', 'q');
 
-      expect(meeting.queuedSpeakerIds[2]).toBe('poo');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[2]].type).toBe('topic');
+      expect(meeting.queue.orderedIds[2]).toBe('poo');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[2]].type).toBe('topic');
     });
 
     it('moving up past mixed types: adopts the highest priority at or below', () => {
       const meeting = manager.create([testUser]);
       // Build a manually out-of-order queue: Question, Topic, POO
       const testUserKey = ensureUser(meeting, testUser);
-      meeting.queueEntries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
-      meeting.queueEntries['t'] = { id: 't', type: 'topic', topic: 'T', userId: testUserKey };
-      meeting.queueEntries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
-      meeting.queuedSpeakerIds = ['q', 't', 'poo'];
+      meeting.queue.entries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
+      meeting.queue.entries['t'] = { id: 't', type: 'topic', topic: 'T', userId: testUserKey };
+      meeting.queue.entries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
+      meeting.queue.orderedIds = ['q', 't', 'poo'];
 
       // Move POO to the beginning (moving up)
       // Items at and below index 0 (including POO itself): POO, Q, T
       // Highest priority is POO itself (point-of-order, priority 0)
       manager.reorderQueueEntry(meeting.id, 'poo', null);
 
-      expect(meeting.queuedSpeakerIds[0]).toBe('poo');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('point-of-order');
+      expect(meeting.queue.orderedIds[0]).toBe('poo');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('point-of-order');
     });
 
     it('moving up: topic moving above questions becomes question', () => {
@@ -757,8 +759,8 @@ describe('MeetingManager', () => {
       // Highest priority is Q (question, priority 1)
       manager.reorderQueueEntry(meeting.id, t.id, null);
 
-      expect(meeting.queuedSpeakerIds[0]).toBe(t.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('question');
+      expect(meeting.queue.orderedIds[0]).toBe(t.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('moving down: includes itself in the "above" set', () => {
@@ -776,25 +778,25 @@ describe('MeetingManager', () => {
       // Items at and above index 1: [T, Q] — lowest priority is topic
       manager.reorderQueueEntry(meeting.id, q.id, t.id);
 
-      expect(meeting.queuedSpeakerIds[1]).toBe(q.id);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[1]].type).toBe('topic');
+      expect(meeting.queue.orderedIds[1]).toBe(q.id);
+      expect(meeting.queue.entries[meeting.queue.orderedIds[1]].type).toBe('topic');
     });
 
     it('moving up: includes itself in the "below" set', () => {
       const meeting = manager.create([testUser]);
       // Build queue: Question, Point-of-order (out of order)
       const testUserKey = ensureUser(meeting, testUser);
-      meeting.queueEntries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
-      meeting.queueEntries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
-      meeting.queuedSpeakerIds = ['q', 'poo'];
+      meeting.queue.entries['q'] = { id: 'q', type: 'question', topic: 'Q', userId: testUserKey };
+      meeting.queue.entries['poo'] = { id: 'poo', type: 'point-of-order', topic: 'POO', userId: testUserKey };
+      meeting.queue.orderedIds = ['q', 'poo'];
 
       // Move POO to beginning (moving up)
       // Items at and below index 0: [POO, Q]
       // POO's own type (point-of-order, priority 0) is the highest priority
       manager.reorderQueueEntry(meeting.id, 'poo', null);
 
-      expect(meeting.queuedSpeakerIds[0]).toBe('poo');
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('point-of-order');
+      expect(meeting.queue.orderedIds[0]).toBe('poo');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('point-of-order');
     });
 
     it('keeps original type when entry is alone in the queue', () => {
@@ -804,7 +806,7 @@ describe('MeetingManager', () => {
       // Moving the only entry to the beginning is a no-op but should succeed
       const result = manager.reorderQueueEntry(meeting.id, entry.id, null);
       expect(result).toBe(true);
-      expect(meeting.queueEntries[meeting.queuedSpeakerIds[0]].type).toBe('question');
+      expect(meeting.queue.entries[meeting.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('returns false for non-existent entry', () => {
@@ -818,7 +820,7 @@ describe('MeetingManager', () => {
       const a = manager.addQueueEntry(meeting.id, 'topic', 'A', testUser)!;
       expect(manager.reorderQueueEntry(meeting.id, a.id, 'no-such-id')).toBe(false);
       // Entry should be back in its original position
-      expect(meeting.queuedSpeakerIds[0]).toBe(a.id);
+      expect(meeting.queue.orderedIds[0]).toBe(a.id);
     });
 
     it('returns false for non-existent meeting', () => {

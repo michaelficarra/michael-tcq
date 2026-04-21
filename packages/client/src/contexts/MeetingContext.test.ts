@@ -1,24 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { MeetingState, User } from '@tcq/shared';
 import { meetingReducer, type MeetingContextState } from './MeetingContext.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 
 /** Create a minimal meeting state for testing. */
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test-meeting',
-    users: {},
-    chairIds: [],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides);
 }
 
 function makeState(overrides?: Partial<MeetingContextState>): MeetingContextState {
@@ -156,7 +143,7 @@ describe('meetingReducer', () => {
         oldIndex: 0,
         newIndex: 2,
       });
-      expect(result.meeting!.queuedSpeakerIds).toEqual(['y', 'z', 'x']);
+      expect(result.meeting!.queue.orderedIds).toEqual(['y', 'z', 'x']);
     });
 
     it('moves an entry backward (up the list)', () => {
@@ -166,7 +153,7 @@ describe('meetingReducer', () => {
         oldIndex: 2,
         newIndex: 0,
       });
-      expect(result.meeting!.queuedSpeakerIds).toEqual(['z', 'x', 'y']);
+      expect(result.meeting!.queue.orderedIds).toEqual(['z', 'x', 'y']);
     });
 
     it('is a no-op when oldIndex equals newIndex', () => {
@@ -176,7 +163,7 @@ describe('meetingReducer', () => {
         oldIndex: 1,
         newIndex: 1,
       });
-      expect(result.meeting!.queuedSpeakerIds).toEqual(['x', 'y', 'z']);
+      expect(result.meeting!.queue.orderedIds).toEqual(['x', 'y', 'z']);
     });
 
     it('does not mutate the original state', () => {
@@ -186,7 +173,7 @@ describe('meetingReducer', () => {
         oldIndex: 0,
         newIndex: 2,
       });
-      expect(state.meeting!.queuedSpeakerIds).toEqual(['x', 'y', 'z']);
+      expect(state.meeting!.queue.orderedIds).toEqual(['x', 'y', 'z']);
     });
 
     it('returns state unchanged when meeting is null', () => {

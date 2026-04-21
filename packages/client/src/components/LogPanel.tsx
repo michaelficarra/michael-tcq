@@ -491,8 +491,8 @@ function serialiseLog(meeting: MeetingState): string {
   }
 
   // Current (ongoing) topic speakers
-  if (meeting.currentTopicSpeakers.length > 0) {
-    lines.push(serialiseSpeakers(meeting.currentTopicSpeakers, users));
+  if (meeting.current.topicSpeakers.length > 0) {
+    lines.push(serialiseSpeakers(meeting.current.topicSpeakers, users));
     lines.push('');
   }
 
@@ -505,7 +505,7 @@ function serialiseLog(meeting: MeetingState): string {
       }
     }
   }
-  for (const s of meeting.currentTopicSpeakers) {
+  for (const s of meeting.current.topicSpeakers) {
     speakerTotals.set(s.userId, (speakerTotals.get(s.userId) ?? 0) + (s.duration ?? 0));
   }
 
@@ -553,7 +553,7 @@ export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
     );
   }
 
-  const hasCurrentTopic = meeting.currentTopicSpeakers.length > 0;
+  const hasCurrentTopic = meeting.current.topicSpeakers.length > 0;
   const isEmpty = reversedLog.length === 0 && !hasCurrentTopic;
 
   return (
@@ -576,7 +576,7 @@ export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
 
       <div className="space-y-4">
         {/* Current (ongoing) topic group at the top */}
-        {hasCurrentTopic && <CurrentTopicGroup speakers={meeting.currentTopicSpeakers} users={meeting.users} />}
+        {hasCurrentTopic && <CurrentTopicGroup speakers={meeting.current.topicSpeakers} users={meeting.users} />}
 
         {/* Finalised log entries in reverse chronological order */}
         {reversedLog.map((entry, i) => (

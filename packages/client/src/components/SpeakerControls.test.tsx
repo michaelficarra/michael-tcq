@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 
 const testUser: User = {
   ghid: 1,
@@ -11,22 +12,8 @@ const testUser: User = {
   organisation: 'ACME',
 };
 
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test-meeting',
-    users: {},
-    chairIds: [],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides);
 }
 
 function renderControls(meeting: MeetingState, onAddEntry = vi.fn()) {

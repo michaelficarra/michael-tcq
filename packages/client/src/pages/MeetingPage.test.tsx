@@ -23,22 +23,10 @@ vi.mock('../hooks/useSocketConnection.js', () => ({
   useSocketConnection: () => null,
 }));
 
-function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return {
-    id: 'test-meeting',
-    users: { alice: chairUser },
-    chairIds: ['alice'],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+
+function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+  return buildMeeting(overrides, { id: 'test-meeting', users: { alice: chairUser }, chairIds: ['alice'] });
 }
 
 // Inject meeting state into the MeetingContext by dispatching a 'state' action

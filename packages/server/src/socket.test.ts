@@ -167,7 +167,7 @@ describe('Socket.IO integration', () => {
     expect(state.chairIds).toHaveLength(1);
     expect(state.users[state.chairIds[0]].ghUsername).toBe('testuser');
     expect(state.agenda).toEqual([]);
-    expect(state.queuedSpeakerIds).toEqual([]);
+    expect(state.queue.orderedIds).toEqual([]);
   });
 
   it('two clients in the same meeting both receive state', async () => {
@@ -455,8 +455,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'My topic' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds).toHaveLength(1);
-      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.queue.orderedIds).toHaveLength(1);
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(entry.type).toBe('topic');
       expect(entry.topic).toBe('My topic');
       expect(state.users[entry.userId].ghUsername).toBe('testuser');
@@ -477,8 +477,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'point-of-order', topic: 'Urgent' });
       const state = await statePromise;
 
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('point-of-order');
-      expect(state.queueEntries[state.queuedSpeakerIds[1]].type).toBe('topic');
+      expect(state.queue.entries[state.queue.orderedIds[0]].type).toBe('point-of-order');
+      expect(state.queue.entries[state.queue.orderedIds[1]].type).toBe('topic');
     });
   });
 
@@ -493,8 +493,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'Their topic', asUsername: 'alice' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds).toHaveLength(1);
-      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.queue.orderedIds).toHaveLength(1);
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(state.users[entry.userId].ghUsername).toBe('alice');
       expect(entry.topic).toBe('Their topic');
     });
@@ -517,7 +517,7 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       // Should use the full profile, not a placeholder
-      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(state.users[entry.userId].name).toBe('Known User');
       expect(state.users[entry.userId].organisation).toBe('ACME');
     });
@@ -532,7 +532,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'unknownperson' });
       const state = await statePromise;
 
-      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(state.users[entry.userId].ghUsername).toBe('unknownperson');
       expect(state.users[entry.userId].name).toBe('unknownperson');
     });
@@ -558,7 +558,7 @@ describe('Socket.IO integration', () => {
 
       expect(error).toMatch(/only chairs/i);
       // No entry should have been added
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
     });
   });
 
@@ -573,14 +573,14 @@ describe('Socket.IO integration', () => {
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'topic', topic: 'Remove me' });
       const stateAfterAdd = await statePromise;
-      const entryId = stateAfterAdd.queuedSpeakerIds[0];
+      const entryId = stateAfterAdd.queue.orderedIds[0];
 
       // Remove it
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:remove', { id: entryId });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds).toHaveLength(0);
+      expect(state.queue.orderedIds).toHaveLength(0);
     });
 
     it("rejects removal of another user's entry by non-chair", async () => {
@@ -626,7 +626,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:reorder', { id: c.id, afterId: null });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds.map((id) => state.queueEntries[id].topic)).toEqual(['C', 'A', 'B']);
+      expect(state.queue.orderedIds.map((id) => state.queue.entries[id].topic)).toEqual(['C', 'A', 'B']);
     });
 
     it('changes entry type when crossing a type boundary', async () => {
@@ -642,8 +642,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:reorder', { id: t.id, afterId: null });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds[0]).toBe(t.id);
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('question');
+      expect(state.queue.orderedIds[0]).toBe(t.id);
+      expect(state.queue.entries[state.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('rejects non-owner non-chair from reordering', async () => {
@@ -697,8 +697,8 @@ describe('Socket.IO integration', () => {
       const statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:reorder', { id: a.id, afterId: b.id });
       const state = await statePromise;
-      expect(state.queuedSpeakerIds[0]).toBe(b.id);
-      expect(state.queuedSpeakerIds[1]).toBe(a.id);
+      expect(state.queue.orderedIds[0]).toBe(b.id);
+      expect(state.queue.orderedIds[1]).toBe(a.id);
     });
 
     it('rejects owner moving their entry up', async () => {
@@ -743,7 +743,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:edit', { id: entry.id, topic: 'New topic' });
       const state = await statePromise;
 
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('New topic');
+      expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('New topic');
     });
 
     it('rejects edit from non-owner non-chair', async () => {
@@ -772,9 +772,8 @@ describe('Socket.IO integration', () => {
 
       expect(error).toMatch(/your own/i);
       // Entry should be unchanged
-      expect(
-        ctx.meetingManager.get(meeting.id)!.queueEntries[ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds[0]].topic,
-      ).toBe('Not yours');
+      const state = ctx.meetingManager.get(meeting.id)!;
+      expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('Not yours');
     });
 
     it('rejects type change from non-chair owner', async () => {
@@ -791,7 +790,7 @@ describe('Socket.IO integration', () => {
 
       expect(error).toMatch(/only chairs/i);
       // Type should be unchanged
-      expect(ctx.meetingManager.get(meeting.id)!.queueEntries[entry.id].type).toBe('topic');
+      expect(ctx.meetingManager.get(meeting.id)!.queue.entries[entry.id].type).toBe('topic');
     });
 
     it('allows chair to change entry type', async () => {
@@ -810,7 +809,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:edit', { id: entry.id, type: 'question' });
       const state = await statePromise;
 
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].type).toBe('question');
+      expect(state.queue.entries[state.queue.orderedIds[0]].type).toBe('question');
     });
 
     it('allows chair to edit any entry', async () => {
@@ -830,7 +829,7 @@ describe('Socket.IO integration', () => {
       client.emit('queue:edit', { id: entry.id, topic: 'Chair edited' });
       const state = await statePromise;
 
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Chair edited');
+      expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('Chair edited');
     });
   });
 
@@ -844,12 +843,12 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.queueEntries[state.currentSpeakerEntryId!]?.topic).toBe('First');
-      expect(state.queuedSpeakerIds).toHaveLength(1);
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Second');
+      expect(state.current.speaker?.topic).toBe('First');
+      expect(state.queue.orderedIds).toHaveLength(1);
+      expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('Second');
     });
 
     it('sets currentTopic when advancing a topic-type entry', async () => {
@@ -860,10 +859,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.queueEntries[state.currentTopicEntryId!]?.topic).toBe('New discussion');
+      expect(state.current.topic?.topic).toBe('New discussion');
     });
 
     it('clears the speaker when queue is empty', async () => {
@@ -871,29 +870,28 @@ describe('Socket.IO integration', () => {
       const meeting = ctx.meetingManager.create([owner]);
       // Set a current speaker and topic but leave queue empty
       const ownerKey = 'testuser';
-      meeting.queueEntries['old-speaker'] = {
+      meeting.current.speaker = {
         id: 'old-speaker',
         type: 'topic',
         topic: 'Done',
         userId: ownerKey,
+        source: 'queue',
+        startTime: new Date().toISOString(),
       };
-      meeting.currentSpeakerEntryId = 'old-speaker';
-      meeting.queueEntries['old-topic'] = {
-        id: 'old-topic',
-        type: 'topic',
-        topic: 'Done',
+      meeting.current.topic = {
         userId: ownerKey,
+        topic: 'Done',
+        startTime: new Date().toISOString(),
       };
-      meeting.currentTopicEntryId = 'old-topic';
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      // Use the current speaker entry ID as the precondition
-      client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, () => {});
+      // Use the current speaker id as the precondition
+      client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.currentSpeakerEntryId).toBeUndefined();
+      expect(state.current.speaker).toBeUndefined();
     });
 
     it('rejects conflicting advance when currentSpeakerEntryId does not match', async () => {
@@ -913,7 +911,7 @@ describe('Socket.IO integration', () => {
       expect(response.error).toMatch(/already advanced/i);
 
       // Queue should not have advanced
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(1);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(1);
     });
 
     it('returns ok: true via ack on success', async () => {
@@ -924,7 +922,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, resolve);
       });
       const response = await ackPromise;
 
@@ -964,7 +962,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, resolve);
       });
       const response = await ackPromise;
 
@@ -982,7 +980,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null }, resolve);
+        client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, resolve);
       });
       const response = await ackPromise;
 
@@ -999,10 +997,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Capture the precondition before any mutations
-      const precondition = meeting.currentSpeakerEntryId ?? null;
+      const precondition = meeting.current.speaker?.id ?? null;
 
       // Make an unrelated mutation — edit a queue entry's topic
-      const entryId = meeting.queuedSpeakerIds[0];
+      const entryId = meeting.queue.orderedIds[0];
       ctx.meetingManager.editQueueEntry(meeting.id, entryId, { topic: 'Edited topic' });
 
       // Advance with the original precondition — should succeed because
@@ -1015,8 +1013,7 @@ describe('Socket.IO integration', () => {
       expect(response.ok).toBe(true);
       // The edited entry should now be the current speaker
       const updated = ctx.meetingManager.get(meeting.id)!;
-      const speaker = updated.queueEntries[updated.currentSpeakerEntryId!];
-      expect(speaker.topic).toBe('Edited topic');
+      expect(updated.current.speaker?.topic).toBe('Edited topic');
     });
 
     it('rejects when another chair already advanced the speaker', async () => {
@@ -1029,7 +1026,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Both chairs see no current speaker
-      const staleEntryId = meeting.currentSpeakerEntryId ?? null;
+      const staleEntryId = meeting.current.speaker?.id ?? null;
 
       // Chair A advances (server-side, simulating the first concurrent click)
       ctx.meetingManager.nextSpeaker(meeting.id);
@@ -1044,7 +1041,7 @@ describe('Socket.IO integration', () => {
       expect(response.error).toMatch(/already advanced/i);
       // Should still be on the first speaker (Chair A's advance), not skipped to second
       const updated = ctx.meetingManager.get(meeting.id)!;
-      expect(updated.queueEntries[updated.currentSpeakerEntryId!].topic).toBe('First');
+      expect(updated.current.speaker?.topic).toBe('First');
     });
   });
 
@@ -1349,13 +1346,14 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state = await statePromise;
 
-      expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First topic');
-      const currentEntry = state.queueEntries[state.currentSpeakerEntryId!];
-      expect(state.users[currentEntry.userId].ghUsername).toBe('testuser');
-      expect(currentEntry.topic).toBe('Introducing: First topic');
+      expect(state.agenda.find((i) => i.id === state.current.agendaItemId)?.name).toBe('First topic');
+      const speaker = state.current.speaker!;
+      expect(state.users[speaker.userId].ghUsername).toBe('testuser');
+      expect(speaker.topic).toBe('Introducing: First topic');
+      expect(speaker.source).toBe('agenda');
     });
 
     it('advances to the next agenda item', async () => {
@@ -1368,15 +1366,15 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state1 = await statePromise;
 
       // Advance to second — use the currentAgendaItemId from the state we just received
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.current.agendaItemId ?? null }, () => {});
       const state2 = await statePromise;
 
-      expect(state2.agenda.find((i) => i.id === state2.currentAgendaItemId)?.name).toBe('Second');
+      expect(state2.agenda.find((i) => i.id === state2.current.agendaItemId)?.name).toBe('Second');
     });
 
     it('rejects from non-chair via ack', async () => {
@@ -1415,7 +1413,7 @@ describe('Socket.IO integration', () => {
 
       // Start (first item)
       let ackPromise = new Promise<any>((resolve) => {
-        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, resolve);
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, resolve);
       });
       const startResponse = await ackPromise;
       expect(startResponse.ok).toBe(true);
@@ -1428,7 +1426,7 @@ describe('Socket.IO integration', () => {
       ackPromise = new Promise<any>((resolve) => {
         client.emit(
           'meeting:nextAgendaItem',
-          { currentAgendaItemId: currentMeeting.currentAgendaItemId ?? null },
+          { currentAgendaItemId: currentMeeting.current.agendaItemId ?? null },
           resolve,
         );
       });
@@ -1458,7 +1456,7 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       // Should still be on the first item (rejected, but got current state back)
-      expect(state.agenda.find((i) => i.id === state.currentAgendaItemId)?.name).toBe('First');
+      expect(state.agenda.find((i) => i.id === state.current.agendaItemId)?.name).toBe('First');
     });
 
     it('accepts advancement after unrelated mutations (queue add)', async () => {
@@ -1481,10 +1479,10 @@ describe('Socket.IO integration', () => {
       // Advance with the precondition from state1 — should succeed because
       // the current agenda item hasn't changed
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.current.agendaItemId ?? null }, () => {});
       const state2 = await statePromise;
 
-      expect(state2.agenda.find((i) => i.id === state2.currentAgendaItemId)?.name).toBe('Second');
+      expect(state2.agenda.find((i) => i.id === state2.current.agendaItemId)?.name).toBe('Second');
     });
 
     it('rejects when another chair already advanced the agenda item', async () => {
@@ -1497,7 +1495,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Both chairs see no current agenda item (meeting not started)
-      const staleItemId = meeting.currentAgendaItemId ?? null;
+      const staleItemId = meeting.current.agendaItemId ?? null;
 
       // Chair A starts the meeting (server-side, simulating the first concurrent click)
       ctx.meetingManager.nextAgendaItem(meeting.id);
@@ -1512,7 +1510,7 @@ describe('Socket.IO integration', () => {
       expect(response.error).toMatch(/another chair/i);
       // Should still be on First (Chair A's advance), not skipped to Second
       const updated = ctx.meetingManager.get(meeting.id)!;
-      expect(updated.agenda.find((i) => i.id === updated.currentAgendaItemId)?.name).toBe('First');
+      expect(updated.agenda.find((i) => i.id === updated.current.agendaItemId)?.name).toBe('First');
     });
   });
 
@@ -1561,7 +1559,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state = await statePromise;
 
       expect(state.log).toHaveLength(2);
@@ -1579,12 +1577,12 @@ describe('Socket.IO integration', () => {
 
       // Start meeting (advance to first item)
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Advance to second item
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
 
       // Should have: meeting-started, item-started(First), topic-discussed (intro), item-finished(First), item-started(Second)
@@ -1606,7 +1604,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a new topic to the queue and advance
@@ -1615,7 +1613,7 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
       // The introductory topic group should be finalised in the log
@@ -1624,8 +1622,8 @@ describe('Socket.IO integration', () => {
       expect(topicEntries[0].type === 'topic-discussed' && topicEntries[0].speakers).toHaveLength(1);
 
       // The new topic should be in currentTopicSpeakers (not yet finalised)
-      expect(state.currentTopicSpeakers).toHaveLength(1);
-      expect(state.currentTopicSpeakers[0].topic).toBe('My topic');
+      expect(state.current.topicSpeakers).toHaveLength(1);
+      expect(state.current.topicSpeakers[0].topic).toBe('My topic');
     });
 
     it('nests replies under the current topic group', async () => {
@@ -1636,7 +1634,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a reply and advance to it
@@ -1645,13 +1643,13 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
       // Reply should be in the same topic group as the intro (not finalised yet)
-      expect(state.currentTopicSpeakers).toHaveLength(2);
-      expect(state.currentTopicSpeakers[1].type).toBe('reply');
-      expect(state.currentTopicSpeakers[1].topic).toBe('My reply');
+      expect(state.current.topicSpeakers).toHaveLength(2);
+      expect(state.current.topicSpeakers[1].type).toBe('reply');
+      expect(state.current.topicSpeakers[1].topic).toBe('My reply');
     });
 
     it('excludes point-of-order speakers from topic groups', async () => {
@@ -1662,7 +1660,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add a point-of-order and advance to it
@@ -1671,12 +1669,12 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('queue:next', { currentSpeakerEntryId: state.currentSpeakerEntryId ?? null }, () => {});
+      client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
       // Point-of-order should NOT be in the current topic speakers
-      expect(state.currentTopicSpeakers).toHaveLength(1);
-      expect(state.currentTopicSpeakers[0].topic).toContain('Introducing');
+      expect(state.current.topicSpeakers).toHaveLength(1);
+      expect(state.current.topicSpeakers[0].topic).toContain('Introducing');
     });
 
     it('logs poll-ran entry when a poll is stopped', async () => {
@@ -1722,7 +1720,7 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Add entries to the queue
@@ -1732,7 +1730,7 @@ describe('Socket.IO integration', () => {
 
       // Advance to next agenda item (leaving the queue non-empty)
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
 
       const finished = state.log.find((e) => e.type === 'agenda-item-finished');
@@ -1753,12 +1751,12 @@ describe('Socket.IO integration', () => {
 
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
 
       // Advance to next item with empty queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
 
       const finished = state.log.find((e) => e.type === 'agenda-item-finished');
@@ -1780,13 +1778,13 @@ describe('Socket.IO integration', () => {
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:setClosed', { closed: true });
       let state = await statePromise;
-      expect(state.queueClosed).toBe(true);
+      expect(state.queue.closed).toBe(true);
 
       // Re-open the queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:setClosed', { closed: false });
       state = await statePromise;
-      expect(state.queueClosed).toBe(false);
+      expect(state.queue.closed).toBe(false);
     });
 
     it('rejects from non-chair', async () => {
@@ -1817,7 +1815,7 @@ describe('Socket.IO integration', () => {
       const error = await errorPromise;
 
       expect(error).toMatch(/queue is closed/i);
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
     });
 
     it('non-chair can add a Point of Order when queue is closed', async () => {
@@ -1833,8 +1831,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'point-of-order', topic: 'Point of order' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds).toHaveLength(1);
-      const entry = state.queueEntries[state.queuedSpeakerIds[0]];
+      expect(state.queue.orderedIds).toHaveLength(1);
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(entry.type).toBe('point-of-order');
       expect(entry.topic).toBe('Point of order');
     });
@@ -1853,7 +1851,7 @@ describe('Socket.IO integration', () => {
         const error = await errorPromise;
         expect(error).toMatch(/queue is closed/i);
       }
-      expect(ctx.meetingManager.get(meeting.id)!.queuedSpeakerIds).toHaveLength(0);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
     });
 
     it('chair can add entries when queue is closed', async () => {
@@ -1868,8 +1866,8 @@ describe('Socket.IO integration', () => {
       client.emit('queue:add', { type: 'topic', topic: 'Chair entry' });
       const state = await statePromise;
 
-      expect(state.queuedSpeakerIds).toHaveLength(1);
-      expect(state.queueEntries[state.queuedSpeakerIds[0]].topic).toBe('Chair entry');
+      expect(state.queue.orderedIds).toHaveLength(1);
+      expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('Chair entry');
     });
 
     it('meeting:nextAgendaItem reopens the queue', async () => {
@@ -1882,21 +1880,21 @@ describe('Socket.IO integration', () => {
 
       // Start the meeting (advances to first agenda item)
       let statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
-      expect(state.queueClosed).toBe(false);
+      expect(state.queue.closed).toBe(false);
 
       // Close the queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:setClosed', { closed: true });
       state = await statePromise;
-      expect(state.queueClosed).toBe(true);
+      expect(state.queue.closed).toBe(true);
 
       // Advance to next agenda item — should reopen queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {});
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
-      expect(state.queueClosed).toBe(false);
+      expect(state.queue.closed).toBe(false);
     });
 
     it('queue is closed by default before meeting starts', async () => {
@@ -1905,7 +1903,7 @@ describe('Socket.IO integration', () => {
 
       await joinMeeting(meeting.id);
       const state = ctx.meetingManager.get(meeting.id)!;
-      expect(state.queueClosed).toBe(true);
+      expect(state.queue.closed).toBe(true);
     });
   });
 });

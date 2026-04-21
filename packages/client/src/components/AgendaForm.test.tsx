@@ -12,20 +12,13 @@ const chairUser: User = {
   organisation: 'ACME',
 };
 
-const baseMeeting: MeetingState = {
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
+
+const baseMeeting: MeetingState = buildMeeting(undefined, {
   id: 'test',
   users: { alice: chairUser },
   chairIds: ['alice'],
-  agenda: [],
-  currentAgendaItemId: undefined,
-  currentSpeakerEntryId: undefined,
-  currentTopicEntryId: undefined,
-  queueEntries: {},
-  queuedSpeakerIds: [],
-  queueClosed: false,
-  log: [],
-  currentTopicSpeakers: [],
-};
+});
 
 function renderForm(socket: TypedSocket | null = null, onCancel = () => {}, onSubmit = () => {}) {
   return render(

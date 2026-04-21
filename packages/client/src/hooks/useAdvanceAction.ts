@@ -48,27 +48,32 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
   // `undefined` means we haven't seen any state yet (initial render).
   const prevSpeakerRef = useRef<string | null | undefined>(undefined);
 
+  // Extract primitive values for the effect's dep array. The eslint
+  // react-hooks rule can't reason through nested optional chaining, so
+  // we lift the two primitives the effect actually observes.
+  const currentSpeakerId = meeting?.current.speaker?.id ?? null;
+  const lastAdvancementBy = meeting?.operational.lastAdvancementBy;
+
   // Detect speaker advancement from any source (server state broadcast).
   // setState is called via setTimeout to avoid synchronous setState in
   // the effect body (which triggers cascading renders).
   useEffect(() => {
     if (event !== 'queue:next') return;
 
-    const currentId = meeting?.currentSpeakerEntryId ?? null;
     const prevId = prevSpeakerRef.current;
 
     if (prevId === undefined) {
       // First render — just record, don't trigger cooldown.
-      prevSpeakerRef.current = currentId;
+      prevSpeakerRef.current = currentSpeakerId;
       return;
     }
 
-    if (currentId !== prevId) {
-      prevSpeakerRef.current = currentId;
+    if (currentSpeakerId !== prevId) {
+      prevSpeakerRef.current = currentSpeakerId;
 
       // Skip cooldown for self-initiated advancements — the debounce
       // alone is sufficient to prevent accidental double-fires.
-      const selfInitiated = user != null && meeting?.lastSpeakerAdvancementAttributedTo === userKey(user);
+      const selfInitiated = user != null && lastAdvancementBy === userKey(user);
       if (selfInitiated) return;
 
       cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
@@ -86,7 +91,7 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
     }
 
     return undefined;
-  }, [meeting?.currentSpeakerEntryId, event, user, meeting?.lastSpeakerAdvancementAttributedTo]);
+  }, [currentSpeakerId, event, user, lastAdvancementBy]);
 
   const fire = useCallback(() => {
     if (!socket || !meeting) return;
@@ -103,7 +108,7 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
     if (event === 'queue:next') {
       socket.emit(
         event,
-        { currentSpeakerEntryId: meeting.currentSpeakerEntryId ?? null },
+        { currentSpeakerEntryId: meeting.current.speaker?.id ?? null },
         (response: AdvanceResponse) => {
           if (!response.ok && response.error) {
             console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
@@ -111,7 +116,7 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
         },
       );
     } else {
-      socket.emit(event, { currentAgendaItemId: meeting.currentAgendaItemId ?? null }, (response: AdvanceResponse) => {
+      socket.emit(event, { currentAgendaItemId: meeting.current.agendaItemId ?? null }, (response: AdvanceResponse) => {
         if (!response.ok && response.error) {
           console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
         }

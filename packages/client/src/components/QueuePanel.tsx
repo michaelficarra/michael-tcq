@@ -65,21 +65,20 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   const socket = useSocket();
 
   // Derive the current agenda item from the ID reference
-  const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.currentAgendaItemId);
+  const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.current.agendaItemId);
 
-  // Derive queue-related values from normalised IDs + maps
-  const currentSpeaker = meeting?.currentSpeakerEntryId
-    ? meeting.queueEntries[meeting.currentSpeakerEntryId]
-    : undefined;
-  const currentTopic = meeting?.currentTopicEntryId ? meeting.queueEntries[meeting.currentTopicEntryId] : undefined;
-  const queuedSpeakers = meeting?.queuedSpeakerIds.map((id) => meeting.queueEntries[id]).filter(Boolean) ?? [];
+  // Current speaker / topic are first-class structs on meeting.current
+  const currentSpeaker = meeting?.current.speaker;
+  const currentTopic = meeting?.current.topic;
+  const queuedSpeakers = meeting?.queue.orderedIds.map((id) => meeting.queue.entries[id]).filter(Boolean) ?? [];
 
   // Derive start times for count-up timers
-  const agendaItemStartTime = meeting?.currentAgendaItemStartTime;
-  const currentTopicStartTime = meeting?.currentTopicSpeakers?.[0]?.startTime;
+  const agendaItemStartTime = meeting?.current.agendaItemStartTime;
+  const topicSpeakers = meeting?.current.topicSpeakers;
+  const currentTopicStartTime = topicSpeakers?.[0]?.startTime;
   const currentSpeakerStartTime = (() => {
-    if (!meeting?.currentTopicSpeakers?.length) return undefined;
-    const last = meeting.currentTopicSpeakers[meeting.currentTopicSpeakers.length - 1];
+    if (!topicSpeakers?.length) return undefined;
+    const last = topicSpeakers[topicSpeakers.length - 1];
     return last.duration === undefined ? last.startTime : undefined;
   })();
 
@@ -109,7 +108,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   /** Called when a drag starts — determine if we need to restrict direction. */
   function handleDragStart(event: DragStartEvent) {
     if (!meeting || !user) return;
-    const entry = meeting.queueEntries[event.active.id as string];
+    const entry = meeting.queue.entries[event.active.id as string];
     if (!entry) return;
     const isOwner = entry.userId === userKey(user);
     // Restrict upward movement for non-chair owners
@@ -320,8 +319,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
         )}
       </section>
 
-      {/* --- Current Topic Section (hidden when same as current speaker) --- */}
-      {currentTopic && currentTopic.id !== currentSpeaker?.id && (
+      {/* --- Current Topic Section (hidden when the same turn is the current speaker) --- */}
+      {currentTopic && currentTopic.startTime !== currentSpeaker?.startTime && (
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
@@ -419,11 +418,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
             <>
               {currentAgendaItem && (
                 <button
-                  onClick={() => socket?.emit('queue:setClosed', { closed: !meeting.queueClosed })}
+                  onClick={() => socket?.emit('queue:setClosed', { closed: !meeting.queue.closed })}
                   className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                              text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
                 >
-                  {meeting.queueClosed ? 'Open Queue' : 'Close Queue'}
+                  {meeting.queue.closed ? 'Open Queue' : 'Close Queue'}
                 </button>
               )}
               {queuedSpeakers.length > 0 && (
@@ -491,7 +490,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext items={meeting.queuedSpeakerIds} strategy={verticalListSortingStrategy}>
+            <SortableContext items={meeting.queue.orderedIds} strategy={verticalListSortingStrategy}>
               <ol aria-label="Queued speakers">
                 {queuedSpeakers.map((entry, index) => (
                   <SortableQueueEntry
@@ -511,7 +510,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           </DndContext>
         )}
 
-        {meeting.queueClosed && !isChair && (
+        {meeting.queue.closed && !isChair && (
           <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">
             The queue is closed. You can still raise a Point of Order.
           </p>

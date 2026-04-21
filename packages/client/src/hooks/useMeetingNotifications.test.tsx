@@ -4,27 +4,14 @@ import type { ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { PreferencesProvider, type NotificationPrefs } from '../contexts/PreferencesContext.js';
+import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
 import { useMeetingNotifications } from './useMeetingNotifications.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 
-function makeMeeting(overrides: Partial<MeetingState> = {}): MeetingState {
-  return {
-    id: 'm',
-    users: { alice, bob },
-    chairIds: ['alice'],
-    agenda: [],
-    currentAgendaItemId: undefined,
-    currentSpeakerEntryId: undefined,
-    currentTopicEntryId: undefined,
-    queueEntries: {},
-    queuedSpeakerIds: [],
-    queueClosed: false,
-    log: [],
-    currentTopicSpeakers: [],
-    ...overrides,
-  };
+function makeMeeting(overrides: MakeMeetingOverrides = {}): MeetingState {
+  return buildMeeting(overrides, { id: 'm', users: { alice, bob }, chairIds: ['alice'] });
 }
 
 /** Seed the PreferencesContext's initial state synchronously via localStorage. */

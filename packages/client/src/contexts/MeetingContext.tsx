@@ -67,10 +67,13 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
     }
     case 'optimisticQueueReorder': {
       if (!state.meeting) return state;
-      const queuedSpeakerIds = [...state.meeting.queuedSpeakerIds];
-      const [id] = queuedSpeakerIds.splice(action.oldIndex, 1);
-      queuedSpeakerIds.splice(action.newIndex, 0, id);
-      return { ...state, meeting: { ...state.meeting, queuedSpeakerIds } };
+      const orderedIds = [...state.meeting.queue.orderedIds];
+      const [id] = orderedIds.splice(action.oldIndex, 1);
+      orderedIds.splice(action.newIndex, 0, id);
+      return {
+        ...state,
+        meeting: { ...state.meeting, queue: { ...state.meeting.queue, orderedIds } },
+      };
     }
   }
 }

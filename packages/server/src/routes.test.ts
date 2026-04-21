@@ -96,7 +96,7 @@ describe('Meeting REST routes', () => {
       expect(body.chairIds).toHaveLength(1);
       expect(body.chairIds[0]).toBe('testuser');
       expect(body.agenda).toEqual([]);
-      expect(body.queuedSpeakerIds).toEqual([]);
+      expect(body.queue.orderedIds).toEqual([]);
     });
 
     it('returns 400 when chairs is missing', async () => {
