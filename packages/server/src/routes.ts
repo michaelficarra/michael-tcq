@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
 import type { User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
@@ -44,24 +45,24 @@ export function createMeetingRoutes(
       return;
     }
 
-    const { username } = req.body as { username?: string };
-    const trimmed = username?.trim();
-    if (!trimmed) {
-      res.status(400).json({ error: 'Username is required' });
+    const parsed = SwitchUserBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
       return;
     }
+    const { username } = parsed.data;
 
     // Create a new mock user with a deterministic ghid derived from
     // the username, so the same username always gets the same identity.
     let hash = 0;
-    for (const ch of trimmed) {
+    for (const ch of username) {
       hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
     }
 
     const user: User = {
       ghid: Math.abs(hash),
-      ghUsername: trimmed,
-      name: trimmed,
+      ghUsername: username,
+      name: username,
       organisation: '',
     };
 
@@ -80,19 +81,16 @@ export function createMeetingRoutes(
       return;
     }
 
-    const { chairs: chairUsernames } = req.body as { chairs?: string[] };
-
-    if (!Array.isArray(chairUsernames) || chairUsernames.length === 0) {
-      res.status(400).json({ error: 'At least one chair username is required' });
+    const parsed = CreateMeetingBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
       return;
     }
+    const chairUsernames = parsed.data.chairs;
 
     // Resolve each username to a User object
     const chairs: User[] = [];
-    for (const raw of chairUsernames) {
-      const username = raw.trim();
-      if (!username) continue;
-
+    for (const username of chairUsernames) {
       // If this is the current user, use their full session profile
       if (username.toLowerCase() === user.ghUsername.toLowerCase()) {
         chairs.push(user);
@@ -163,11 +161,12 @@ export function createMeetingRoutes(
       return;
     }
 
-    let { url } = req.body as { url?: string };
-    if (!url || typeof url !== 'string') {
-      res.status(400).json({ error: 'URL is required' });
+    const bodyParse = ImportAgendaBodySchema.safeParse(req.body);
+    if (!bodyParse.success) {
+      res.status(400).json({ error: bodyParse.error.issues[0]?.message ?? 'Invalid request' });
       return;
     }
+    let url = bodyParse.data.url;
 
     // Transform GitHub blob URLs to raw.githubusercontent.com URLs
     // e.g. https://github.com/tc39/agendas/blob/main/2026/03.md

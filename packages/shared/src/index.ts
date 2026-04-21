@@ -38,6 +38,28 @@ export type {
   NextSpeakerPayload,
   NextAgendaItemPayload,
   AdvanceResponse,
+  CreateMeetingBody,
+  SwitchUserBody,
+  ImportAgendaBody,
+} from './messages.js';
+export {
+  AgendaAddPayloadSchema,
+  AgendaEditPayloadSchema,
+  AgendaDeletePayloadSchema,
+  AgendaReorderPayloadSchema,
+  ChairsUpdatePayloadSchema,
+  QueueAddPayloadSchema,
+  QueueEditPayloadSchema,
+  QueueRemovePayloadSchema,
+  QueueReorderPayloadSchema,
+  QueueSetClosedPayloadSchema,
+  PollStartPayloadSchema,
+  PollReactPayloadSchema,
+  NextSpeakerPayloadSchema,
+  NextAgendaItemPayloadSchema,
+  CreateMeetingBodySchema,
+  SwitchUserBodySchema,
+  ImportAgendaBodySchema,
 } from './messages.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
 export { userKey } from './helpers.js';

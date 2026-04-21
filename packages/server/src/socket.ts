@@ -1,11 +1,47 @@
 import type { Server, Socket } from 'socket.io';
+import type { ZodType } from 'zod';
 import type { ClientToServerEvents, ServerToClientEvents, User, MeetingState } from '@tcq/shared';
-import { QUEUE_ENTRY_LABELS, userKey } from '@tcq/shared';
+import {
+  QUEUE_ENTRY_LABELS,
+  userKey,
+  AgendaAddPayloadSchema,
+  AgendaDeletePayloadSchema,
+  AgendaEditPayloadSchema,
+  AgendaReorderPayloadSchema,
+  ChairsUpdatePayloadSchema,
+  NextAgendaItemPayloadSchema,
+  NextSpeakerPayloadSchema,
+  PollReactPayloadSchema,
+  PollStartPayloadSchema,
+  QueueAddPayloadSchema,
+  QueueEditPayloadSchema,
+  QueueRemovePayloadSchema,
+  QueueReorderPayloadSchema,
+  QueueSetClosedPayloadSchema,
+} from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { isAdmin } from './admin.js';
+
+/**
+ * Validate a wire payload against its Zod schema. On failure, emit an
+ * `error` event to the socket (surfaced as a user-facing message) and
+ * return null so the caller can early-return.
+ */
+function parsePayload<T>(
+  schema: ZodType<T>,
+  payload: unknown,
+  socket: Socket<ClientToServerEvents, ServerToClientEvents>,
+): T | null {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    socket.emit('error', result.error.issues[0]?.message ?? 'Invalid payload');
+    return null;
+  }
+  return result.data;
+}
 
 // -- Log helpers --
 
@@ -222,12 +258,9 @@ export function registerSocketHandlers(
         return;
       }
 
-      const usernames = payload.usernames?.map((u: string) => u.trim()).filter((u: string) => u.length > 0);
-
-      if (!Array.isArray(usernames)) {
-        socket.emit('error', 'Invalid chair list');
-        return;
-      }
+      const parsed = parsePayload(ChairsUpdatePayloadSchema, payload, socket);
+      if (!parsed) return;
+      const { usernames } = parsed;
 
       // Non-admin chairs: at least one chair required, cannot remove self
       if (!userIsAdmin) {
@@ -286,17 +319,9 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Validate the payload
-      const name = payload.name?.trim();
-      if (!name) {
-        socket.emit('error', 'Agenda item name is required');
-        return;
-      }
-      const ownerUsername = payload.ownerUsername?.trim();
-      if (!ownerUsername) {
-        socket.emit('error', 'Owner username is required');
-        return;
-      }
+      const parsed = parsePayload(AgendaAddPayloadSchema, payload, socket);
+      if (!parsed) return;
+      const { name, ownerUsername } = parsed;
 
       // Build the owner User object. If the owner is a known user in the
       // meeting, use their full profile. Otherwise, create a placeholder.
@@ -310,10 +335,8 @@ export function registerSocketHandlers(
           organisation: '',
         };
 
-      // Parse timebox: treat 0, negative, and NaN as "no timebox"
-      const timebox = payload.timebox && payload.timebox > 0 ? payload.timebox : undefined;
-
-      meetingManager.addAgendaItem(joinedMeetingId, name, owner, timebox);
+      // The schema already constrains timebox to a positive integer; undefined = no timebox.
+      meetingManager.addAgendaItem(joinedMeetingId, name, owner, parsed.timebox);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
@@ -326,41 +349,31 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Build the updates object, resolving owner username if provided
+      const parsed = parsePayload(AgendaEditPayloadSchema, payload, socket);
+      if (!parsed) return;
+
       const updates: { name?: string; owner?: User; timebox?: number | null } = {};
 
-      if (payload.name !== undefined) {
-        const trimmed = payload.name.trim();
-        if (!trimmed) {
-          socket.emit('error', 'Agenda item name cannot be empty');
-          return;
-        }
-        updates.name = trimmed;
-      }
+      if (parsed.name !== undefined) updates.name = parsed.name;
 
-      if (payload.ownerUsername !== undefined) {
-        const ownerUsername = payload.ownerUsername.trim();
-        if (!ownerUsername) {
-          socket.emit('error', 'Owner username cannot be empty');
-          return;
-        }
+      if (parsed.ownerUsername !== undefined) {
         // Resolve owner from known users or create placeholder
         const meeting = meetingManager.get(joinedMeetingId);
-        const key = ownerUsername.toLowerCase();
+        const key = parsed.ownerUsername.toLowerCase();
         updates.owner = meeting?.users[key] ?? {
           ghid: 0,
-          ghUsername: ownerUsername,
-          name: ownerUsername,
+          ghUsername: parsed.ownerUsername,
+          name: parsed.ownerUsername,
           organisation: '',
         };
       }
 
-      if (payload.timebox !== undefined) {
+      if (parsed.timebox !== undefined) {
         // null clears the timebox; 0 or negative also clears it
-        updates.timebox = payload.timebox === null || payload.timebox <= 0 ? null : payload.timebox;
+        updates.timebox = parsed.timebox === null || parsed.timebox <= 0 ? null : parsed.timebox;
       }
 
-      const edited = meetingManager.editAgendaItem(joinedMeetingId, payload.id, updates);
+      const edited = meetingManager.editAgendaItem(joinedMeetingId, parsed.id, updates);
       if (!edited) {
         socket.emit('error', 'Agenda item not found');
         return;
@@ -378,7 +391,10 @@ export function registerSocketHandlers(
         return;
       }
 
-      const deleted = meetingManager.deleteAgendaItem(joinedMeetingId, payload.id);
+      const parsed = parsePayload(AgendaDeletePayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const deleted = meetingManager.deleteAgendaItem(joinedMeetingId, parsed.id);
       if (!deleted) {
         socket.emit('error', 'Agenda item not found');
         return;
@@ -396,7 +412,10 @@ export function registerSocketHandlers(
         return;
       }
 
-      const reordered = meetingManager.reorderAgendaItem(joinedMeetingId, payload.id, payload.afterId);
+      const parsed = parsePayload(AgendaReorderPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const reordered = meetingManager.reorderAgendaItem(joinedMeetingId, parsed.id, parsed.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid reorder indices');
         return;
@@ -412,15 +431,8 @@ export function registerSocketHandlers(
     socket.on('queue:add', (payload) => {
       if (!joinedMeetingId) return;
 
-      const topic = payload.topic?.trim();
-      if (!topic) {
-        socket.emit('error', 'Topic is required');
-        return;
-      }
-      if (!payload.type) {
-        socket.emit('error', 'Entry type is required');
-        return;
-      }
+      const parsed = parsePayload(QueueAddPayloadSchema, payload, socket);
+      if (!parsed) return;
 
       // Reject if queue is closed and user is not a chair. Point of Order is
       // exempt — procedural interruptions are always permitted regardless of
@@ -429,7 +441,7 @@ export function registerSocketHandlers(
       if (
         addMeeting?.queue.closed &&
         !meetingManager.isChair(joinedMeetingId, user) &&
-        payload.type !== 'point-of-order'
+        parsed.type !== 'point-of-order'
       ) {
         socket.emit('error', 'The queue is closed');
         return;
@@ -438,24 +450,23 @@ export function registerSocketHandlers(
       // Determine who the entry is for: the current user, or a specified
       // user if the chair provided asUsername.
       let entryUser = user;
-      if (payload.asUsername) {
+      if (parsed.asUsername) {
         if (!meetingManager.isChair(joinedMeetingId, user)) {
           socket.emit('error', 'Only chairs can add entries on behalf of others');
           return;
         }
-        const username = payload.asUsername.trim();
-        const key = username.toLowerCase();
+        const key = parsed.asUsername.toLowerCase();
         // Look up the user from known meeting participants or create a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
         entryUser = meeting?.users[key] ?? {
           ghid: 0,
-          ghUsername: username,
-          name: username,
+          ghUsername: parsed.asUsername,
+          name: parsed.asUsername,
           organisation: '',
         };
       }
 
-      const entry = meetingManager.addQueueEntry(joinedMeetingId, payload.type, topic, entryUser);
+      const entry = meetingManager.addQueueEntry(joinedMeetingId, parsed.type, parsed.topic, entryUser);
       if (!entry) {
         socket.emit('error', 'Failed to add queue entry');
         return;
@@ -470,8 +481,11 @@ export function registerSocketHandlers(
     socket.on('queue:edit', (payload) => {
       if (!joinedMeetingId) return;
 
+      const parsed = parsePayload(QueueEditPayloadSchema, payload, socket);
+      if (!parsed) return;
+
       // Check permissions: owner can edit their own, chairs can edit any
-      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, parsed.id);
       if (!entry) {
         socket.emit('error', 'Queue entry not found');
         return;
@@ -484,25 +498,17 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Build the updates, validating topic if provided
       const updates: { topic?: string; type?: import('@tcq/shared').QueueEntryType } = {};
-      if (payload.topic !== undefined) {
-        const trimmed = payload.topic.trim();
-        if (!trimmed) {
-          socket.emit('error', 'Topic cannot be empty');
-          return;
-        }
-        updates.topic = trimmed;
-      }
-      if (payload.type !== undefined) {
+      if (parsed.topic !== undefined) updates.topic = parsed.topic;
+      if (parsed.type !== undefined) {
         if (!isChairUser) {
           socket.emit('error', 'Only chairs can change entry types');
           return;
         }
-        updates.type = payload.type;
+        updates.type = parsed.type;
       }
 
-      const edited = meetingManager.editQueueEntry(joinedMeetingId, payload.id, updates);
+      const edited = meetingManager.editQueueEntry(joinedMeetingId, parsed.id, updates);
       if (!edited) {
         socket.emit('error', 'Queue entry not found');
         return;
@@ -516,8 +522,11 @@ export function registerSocketHandlers(
     socket.on('queue:remove', (payload) => {
       if (!joinedMeetingId) return;
 
+      const parsed = parsePayload(QueueRemovePayloadSchema, payload, socket);
+      if (!parsed) return;
+
       // Check permissions: user can remove their own entry, chairs can remove any
-      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, parsed.id);
       if (!entry) {
         socket.emit('error', 'Queue entry not found');
         return;
@@ -530,7 +539,7 @@ export function registerSocketHandlers(
         return;
       }
 
-      meetingManager.removeQueueEntry(joinedMeetingId, payload.id);
+      meetingManager.removeQueueEntry(joinedMeetingId, parsed.id);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
@@ -541,7 +550,10 @@ export function registerSocketHandlers(
     socket.on('queue:reorder', (payload) => {
       if (!joinedMeetingId) return;
 
-      const entry = meetingManager.getQueueEntry(joinedMeetingId, payload.id);
+      const parsed = parsePayload(QueueReorderPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const entry = meetingManager.getQueueEntry(joinedMeetingId, parsed.id);
       if (!entry) {
         socket.emit('error', 'Queue entry not found');
         return;
@@ -561,13 +573,13 @@ export function registerSocketHandlers(
       if (isOwner && !isChairUser) {
         const meeting = meetingManager.get(joinedMeetingId);
         if (meeting) {
-          const currentIndex = meeting.queue.orderedIds.indexOf(payload.id);
-          if (payload.afterId === null) {
+          const currentIndex = meeting.queue.orderedIds.indexOf(parsed.id);
+          if (parsed.afterId === null) {
             // Moving to the beginning — that's moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
             return;
           }
-          const afterIndex = meeting.queue.orderedIds.indexOf(payload.afterId);
+          const afterIndex = meeting.queue.orderedIds.indexOf(parsed.afterId);
           if (afterIndex < currentIndex) {
             // Target is above current position — moving up, not allowed
             socket.emit('error', 'You can only move your entry to a later position');
@@ -576,7 +588,7 @@ export function registerSocketHandlers(
         }
       }
 
-      const reordered = meetingManager.reorderQueueEntry(joinedMeetingId, payload.id, payload.afterId);
+      const reordered = meetingManager.reorderQueueEntry(joinedMeetingId, parsed.id, parsed.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid queue reorder');
         return;
@@ -593,7 +605,9 @@ export function registerSocketHandlers(
         socket.emit('error', 'Only chairs can open or close the queue');
         return;
       }
-      meetingManager.setQueueClosed(joinedMeetingId, payload.closed);
+      const parsed = parsePayload(QueueSetClosedPayloadSchema, payload, socket);
+      if (!parsed) return;
+      meetingManager.setQueueClosed(joinedMeetingId, parsed.closed);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
@@ -610,6 +624,12 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
 
+      const parsed = parsePayload(NextSpeakerPayloadSchema, payload, socket);
+      if (!parsed) {
+        respond({ ok: false, error: 'Invalid payload' });
+        return;
+      }
+
       // Allow chairs and the current speaker to advance.
       const actorId = userKey(user);
       const isChair = meetingManager.isChair(joinedMeetingId, user);
@@ -622,7 +642,7 @@ export function registerSocketHandlers(
       // Precondition check: reject if someone already advanced the speaker.
       // The client sends the CurrentSpeaker id it saw; if it doesn't match
       // the server's current speaker, the view is stale.
-      if (payload.currentSpeakerEntryId !== (meeting.current.speaker?.id ?? null)) {
+      if (parsed.currentSpeakerEntryId !== (meeting.current.speaker?.id ?? null)) {
         // Client's view is stale — send current state so it can update
         socket.emit('state', meeting);
         respond({ ok: false, error: 'Speaker already advanced' });
@@ -677,27 +697,18 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Validate options
-      if (!Array.isArray(payload.options) || payload.options.length < 2) {
-        socket.emit('error', 'At least 2 poll options are required');
-        return;
-      }
-      for (const opt of payload.options) {
-        if (!opt.emoji?.trim() || !opt.label?.trim()) {
-          socket.emit('error', 'Each option must have an emoji and a label');
-          return;
-        }
-      }
+      const parsed = parsePayload(PollStartPayloadSchema, payload, socket);
+      if (!parsed) return;
 
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
 
       meetingManager.startPoll(
         joinedMeetingId,
-        payload.options.map((o) => ({ emoji: o.emoji.trim(), label: o.label.trim() })),
+        parsed.options,
         ensureUser(meeting, user),
-        payload.topic?.trim() || undefined,
-        payload.multiSelect !== false,
+        parsed.topic || undefined,
+        parsed.multiSelect !== false,
       );
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
@@ -759,7 +770,10 @@ export function registerSocketHandlers(
     socket.on('poll:react', (payload) => {
       if (!joinedMeetingId) return;
 
-      const toggled = meetingManager.toggleReaction(joinedMeetingId, payload.optionId, user);
+      const parsed = parsePayload(PollReactPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const toggled = meetingManager.toggleReaction(joinedMeetingId, parsed.optionId, user);
       if (!toggled) {
         socket.emit('error', 'Poll is not active or option is invalid');
         return;
@@ -783,12 +797,18 @@ export function registerSocketHandlers(
         return;
       }
 
+      const parsed = parsePayload(NextAgendaItemPayloadSchema, payload, socket);
+      if (!parsed) {
+        respond({ ok: false, error: 'Invalid payload' });
+        return;
+      }
+
       // Precondition check: reject if another chair already advanced the agenda.
       // The client sends the currentAgendaItemId it sees; if it doesn't match
       // the server's current agenda item, another chair has already acted.
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
-      if (payload.currentAgendaItemId !== (meeting.current.agendaItemId ?? null)) {
+      if (parsed.currentAgendaItemId !== (meeting.current.agendaItemId ?? null)) {
         socket.emit('state', meeting);
         respond({ ok: false, error: 'Another chair already advanced the agenda' });
         return;

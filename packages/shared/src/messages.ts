@@ -1,148 +1,203 @@
-import type { MeetingState, QueueEntryType } from './types.js';
+/**
+ * Wire payload schemas and event-shape types for the Socket.IO transport.
+ *
+ * Every client-to-server payload is described as a Zod schema so the server
+ * can validate at the boundary with `Schema.safeParse(payload)` and the
+ * TypeScript types are derived via `z.infer`. Authority checks (isChair,
+ * isOwner) live in the handlers — they aren't shape validation.
+ *
+ * Keep the Zod messages user-facing: they're shown as-is in the UI when
+ * the server emits an `error` event after a rejected parse.
+ */
+
+import { z } from 'zod';
+import type { MeetingState } from './types.js';
+
+// -- Shared sub-schemas --
+
+/**
+ * Source of truth for the set of queue entry types. The type alias in
+ * `./types.ts` is structurally identical (duplicated literals); the two
+ * stay in sync because any divergence would surface as a type error at
+ * the use sites in `socket.ts` and `meetings.ts`.
+ */
+const QueueEntryTypeSchema = z.enum(['point-of-order', 'question', 'reply', 'topic']);
+
+/** Non-empty trimmed string with a human-readable "required" message. */
+const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is required`);
 
 // -- Payloads for client-to-server events --
 
 /** Payload for adding a new agenda item. */
-export interface AgendaAddPayload {
-  name: string;
-  ownerUsername: string;
-  timebox?: number; // duration in minutes; omit or 0 for no timebox
-}
+export const AgendaAddPayloadSchema = z.object({
+  name: requiredTrimmed('Agenda item name'),
+  ownerUsername: requiredTrimmed('Owner username'),
+  /** Duration in minutes; omit or 0 for no timebox. */
+  timebox: z.number().int().positive().optional(),
+});
+export type AgendaAddPayload = z.infer<typeof AgendaAddPayloadSchema>;
 
 /** Payload for deleting an agenda item. */
-export interface AgendaDeletePayload {
-  id: string;
-}
+export const AgendaDeletePayloadSchema = z.object({
+  id: z.string(),
+});
+export type AgendaDeletePayload = z.infer<typeof AgendaDeletePayloadSchema>;
 
 /**
- * Payload for reordering an agenda item.
- *
- * Uses item UUIDs rather than indices to avoid race conditions when
- * two chairs reorder simultaneously. The item identified by `id` is
- * moved to the position immediately after `afterId`. If `afterId` is
- * null, the item is moved to the beginning of the agenda.
+ * Payload for reordering an agenda item. The item identified by `id` is
+ * moved to the position immediately after `afterId`. If `afterId` is null,
+ * the item is moved to the beginning of the agenda.
  */
-export interface AgendaReorderPayload {
-  id: string;
-  afterId: string | null;
-}
+export const AgendaReorderPayloadSchema = z.object({
+  id: z.string(),
+  afterId: z.string().nullable(),
+});
+export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
 
-/** Payload for editing an existing agenda item (chair only). */
-export interface AgendaEditPayload {
-  id: string;
-  name?: string;
-  ownerUsername?: string;
-  timebox?: number | null; // null to clear the timebox
-}
+/**
+ * Payload for editing an existing agenda item (chair only). All fields are
+ * optional; omitted fields leave that attribute unchanged. `timebox: null`
+ * explicitly clears a previously-set timebox.
+ */
+export const AgendaEditPayloadSchema = z.object({
+  id: z.string(),
+  name: z.string().trim().min(1, 'Agenda item name cannot be empty').optional(),
+  ownerUsername: z.string().trim().min(1, 'Owner username cannot be empty').optional(),
+  timebox: z.number().int().nullable().optional(),
+});
+export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
 
 /** Payload for editing an existing queue entry. */
-export interface QueueEditPayload {
-  id: string;
-  topic?: string;
-  type?: QueueEntryType;
-}
+export const QueueEditPayloadSchema = z.object({
+  id: z.string(),
+  topic: z.string().trim().min(1, 'Topic cannot be empty').optional(),
+  type: QueueEntryTypeSchema.optional(),
+});
+export type QueueEditPayload = z.infer<typeof QueueEditPayloadSchema>;
 
 /** Payload for adding a queue entry. */
-export interface QueueAddPayload {
-  type: QueueEntryType;
-  topic: string;
+export const QueueAddPayloadSchema = z.object({
+  type: QueueEntryTypeSchema,
+  topic: requiredTrimmed('Topic'),
   /**
-   * Optional: GitHub username to add the entry as. Chair only.
-   * When omitted, the entry is added as the current session user.
+   * Optional: GitHub username to add the entry as. Chair only. When omitted,
+   * the entry is added as the current session user.
    */
-  asUsername?: string;
-}
+  asUsername: z.string().trim().min(1).optional(),
+});
+export type QueueAddPayload = z.infer<typeof QueueAddPayloadSchema>;
 
 /** Payload for removing a queue entry. */
-export interface QueueRemovePayload {
-  id: string;
-}
+export const QueueRemovePayloadSchema = z.object({
+  id: z.string(),
+});
+export type QueueRemovePayload = z.infer<typeof QueueRemovePayloadSchema>;
 
 /** Payload for opening or closing the queue to non-chair entries. */
-export interface QueueSetClosedPayload {
-  closed: boolean;
-}
+export const QueueSetClosedPayloadSchema = z.object({
+  closed: z.boolean(),
+});
+export type QueueSetClosedPayload = z.infer<typeof QueueSetClosedPayloadSchema>;
 
 /**
- * Payload for reordering a queue entry. Chair only.
- *
- * Uses UUIDs rather than indices to avoid race conditions (same approach
- * as agenda reordering). The entry identified by `id` is moved to the
- * position immediately after `afterId`. If `afterId` is null, the entry
- * is moved to the beginning of the queue.
- *
- * When an entry crosses a type priority boundary, its type is changed
- * to match the entries at its new position. For example, moving a
- * "New Topic" above a "Clarifying Question" changes it to "Clarifying
- * Question".
+ * Payload for reordering a queue entry. Chair (or self, downward-only) only.
+ * When an entry crosses a type priority boundary the handler rewrites its
+ * type to match its new neighbours.
  */
-/**
- * Payload for starting a poll with custom options.
- * Each option has an emoji and a human-readable label. The server
- * assigns unique IDs. Minimum 2 options required.
- */
-export interface PollStartPayload {
-  /** Optional topic/question for the poll. */
-  topic?: string;
-  /** Whether participants can select multiple options. Defaults to true. */
-  multiSelect?: boolean;
-  options: { emoji: string; label: string }[];
-}
+export const QueueReorderPayloadSchema = z.object({
+  id: z.string(),
+  afterId: z.string().nullable(),
+});
+export type QueueReorderPayload = z.infer<typeof QueueReorderPayloadSchema>;
 
 /**
- * Payload for toggling a poll reaction.
- * References the option by its ID. Each user can have at most one
- * reaction per option. Sending the same option again removes it (toggle).
+ * Payload for starting a poll with custom options. Each option has an emoji
+ * and a human-readable label. The server assigns unique IDs. Minimum 2
+ * options are required.
  */
-export interface PollReactPayload {
-  optionId: string;
-}
-
-export interface QueueReorderPayload {
-  id: string;
-  afterId: string | null;
-}
-
-/**
- * Payload for updating the list of meeting chairs. Chair only.
- * At least one chair must remain.
- */
-export interface ChairsUpdatePayload {
-  usernames: string[];
-}
+export const PollStartPayloadSchema = z.object({
+  topic: z.string().trim().optional(),
+  multiSelect: z.boolean().optional(),
+  options: z
+    .array(
+      z.object({
+        emoji: requiredTrimmed('Each option must have an emoji and a label'),
+        label: requiredTrimmed('Each option must have an emoji and a label'),
+      }),
+    )
+    .min(2, 'At least 2 poll options are required'),
+});
+export type PollStartPayload = z.infer<typeof PollStartPayloadSchema>;
 
 /**
- * Payload for advancing to the next speaker. Includes the queue entry
- * ID of the current speaker as a precondition — the server rejects if
- * another chair already advanced (i.e. the current speaker changed).
- * This prevents double-advancement without false rejections from
- * unrelated mutations (queue edits, reactions, etc.).
+ * Payload for toggling a poll reaction. References the option by its ID.
+ * Each user can have at most one reaction per option; sending the same
+ * option again removes it (toggle).
  */
-export interface NextSpeakerPayload {
-  /** The queue entry ID of the current speaker the client sees, or null if none. */
-  currentSpeakerEntryId: string | null;
-}
+export const PollReactPayloadSchema = z.object({
+  optionId: z.string(),
+});
+export type PollReactPayload = z.infer<typeof PollReactPayloadSchema>;
+
+/**
+ * Payload for updating the list of meeting chairs. Chair/admin only. At
+ * least one chair must remain (except when an admin performs the update).
+ */
+export const ChairsUpdatePayloadSchema = z.object({
+  usernames: z.array(z.string().trim().min(1)),
+});
+export type ChairsUpdatePayload = z.infer<typeof ChairsUpdatePayloadSchema>;
+
+/**
+ * Payload for advancing to the next speaker. Includes the CurrentSpeaker
+ * id seen by the client as a precondition — the server rejects if another
+ * chair already advanced (the current speaker changed).
+ */
+export const NextSpeakerPayloadSchema = z.object({
+  currentSpeakerEntryId: z.string().nullable(),
+});
+export type NextSpeakerPayload = z.infer<typeof NextSpeakerPayloadSchema>;
 
 /**
  * Payload for advancing to the next agenda item. Includes the current
- * agenda item ID as a precondition — the server rejects if another
- * chair already advanced to a different agenda item.
+ * agenda item id as a precondition — the server rejects if another chair
+ * already advanced to a different agenda item.
  */
-export interface NextAgendaItemPayload {
-  /** The agenda item ID the client sees as current, or null if meeting hasn't started. */
-  currentAgendaItemId: string | null;
-}
+export const NextAgendaItemPayloadSchema = z.object({
+  currentAgendaItemId: z.string().nullable(),
+});
+export type NextAgendaItemPayload = z.infer<typeof NextAgendaItemPayloadSchema>;
 
 /**
- * Response sent back via Socket.IO acknowledgement callback for
- * advancement events. On success, `ok` is true. On rejection
- * (conflicting advancement or error), `ok` is false with an error message.
+ * Response sent back via Socket.IO acknowledgement callback for advancement
+ * events. On success, `ok` is true. On rejection, `ok` is false with an
+ * error message.
  */
 export interface AdvanceResponse {
   ok: boolean;
   /** Error message — present when ok is false. */
   error?: string;
 }
+
+// -- REST payloads --
+
+/** POST /api/meetings — create a new meeting. */
+export const CreateMeetingBodySchema = z.object({
+  chairs: z.array(z.string().trim().min(1)).min(1, 'At least one chair username is required'),
+});
+export type CreateMeetingBody = z.infer<typeof CreateMeetingBodySchema>;
+
+/** POST /api/dev/switch-user — switch the mock identity (dev mode only). */
+export const SwitchUserBodySchema = z.object({
+  username: requiredTrimmed('Username'),
+});
+export type SwitchUserBody = z.infer<typeof SwitchUserBodySchema>;
+
+/** POST /api/meetings/:id/import-agenda — import an agenda from a URL. */
+export const ImportAgendaBodySchema = z.object({
+  url: requiredTrimmed('URL'),
+});
+export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
 
 // -- Event interfaces --
 

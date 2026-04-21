@@ -161,7 +161,7 @@ Socket.IO is the right transport for TCQ because it directly maps to the applica
 The server is the single source of truth. The flow for every state change is:
 
 1. Client emits an **action** via Socket.IO (e.g. `queue:add` with a payload).
-2. Server **validates** the action (is the user authenticated? are they in this meeting? do they have permission?).
+2. Server **validates** the action — the payload is parsed against a shared Zod schema (defined in `@tcq/shared`) for shape / trim / length / enum checks, then authority checks (is the user authenticated? are they in this meeting? do they have permission?) run in the handler.
 3. Server **mutates** its in-memory `MeetingState`.
 4. Server **broadcasts** the updated state (or a targeted delta) to all clients in the meeting room.
 5. Clients **apply** the broadcast to their local state via the reducer.
