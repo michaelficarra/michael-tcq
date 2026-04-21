@@ -697,14 +697,10 @@ export function registerSocketHandlers(
       meetingManager.startPoll(
         joinedMeetingId,
         payload.options.map((o) => ({ emoji: o.emoji.trim(), label: o.label.trim() })),
+        ensureUser(meeting, user),
+        payload.topic?.trim() || undefined,
+        payload.multiSelect !== false,
       );
-
-      // Record poll start metadata for the log entry when the poll ends
-      meeting.pollStartTime = new Date().toISOString();
-      meeting.pollStartChairId = ensureUser(meeting, user);
-      meeting.pollTopic = payload.topic?.trim() || undefined;
-      meeting.pollMultiSelect = payload.multiSelect !== false;
-      meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
@@ -724,43 +720,37 @@ export function registerSocketHandlers(
       const now = new Date().toISOString();
       const chairId = ensureUser(meeting, user);
 
-      // Build the log entry before stopPoll clears reactions/options
-      if (meeting.pollStartTime) {
+      // Build the log entry before stopPoll clears the active poll
+      const poll = meeting.poll;
+      if (poll) {
         // Count distinct voters
         const voterSet = new Set<string>();
-        for (const r of meeting.reactions) {
+        for (const r of poll.reactions) {
           voterSet.add(r.userId);
         }
 
         // Build results sorted by count descending
-        const results = meeting.pollOptions
+        const results = poll.options
           .map((opt) => ({
             emoji: opt.emoji,
             label: opt.label,
-            count: meeting.reactions.filter((r) => r.optionId === opt.id).length,
+            count: poll.reactions.filter((r) => r.optionId === opt.id).length,
           }))
           .sort((a, b) => b.count - a.count);
 
         meeting.log.push({
           type: 'poll-ran',
-          timestamp: meeting.pollStartTime,
-          startChairId: meeting.pollStartChairId ?? chairId,
+          timestamp: poll.startTime,
+          startChairId: poll.startChairId,
           endChairId: chairId,
-          topic: meeting.pollTopic,
-          duration: new Date(now).getTime() - new Date(meeting.pollStartTime).getTime(),
+          topic: poll.topic,
+          duration: new Date(now).getTime() - new Date(poll.startTime).getTime(),
           totalVoters: voterSet.size,
           results,
         });
       }
 
       meetingManager.stopPoll(joinedMeetingId);
-
-      // Clear poll start metadata
-      meeting.pollStartTime = undefined;
-      meeting.pollStartChairId = undefined;
-      meeting.pollTopic = undefined;
-      meeting.pollMultiSelect = undefined;
-      meetingManager.markDirty(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });

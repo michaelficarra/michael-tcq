@@ -118,6 +118,25 @@ export type LogEntry =
   | TopicDiscussedLog
   | PollRanLog;
 
+/**
+ * The active poll for a meeting. Present when a poll is running;
+ * absent when no poll is active.
+ */
+export interface ActivePoll {
+  /** The options for the poll. Each has an emoji, a label, and a unique ID. */
+  options: PollOption[];
+  /** Reactions to the poll options. */
+  reactions: Reaction[];
+  /** ISO timestamp when the poll was started. */
+  startTime: string;
+  /** The user key of the chair who started the poll. */
+  startChairId: string;
+  /** The topic/question for the poll, if one was provided. */
+  topic?: string;
+  /** Whether the poll allows selecting multiple options. */
+  multiSelect: boolean;
+}
+
 export interface MeetingState {
   id: string;
   /** Lookup map of all users who have participated in this meeting, keyed by lowercase ghUsername. */
@@ -135,26 +154,10 @@ export interface MeetingState {
   /** Whether the queue is closed to new entries from non-chair users. */
   queueClosed: boolean;
 
-  /** Whether a poll is currently active. */
-  trackPoll: boolean;
-
   /**
-   * The options for the current poll. Set when the poll is started;
-   * cleared when it's stopped. Each option has an emoji, a label,
-   * and a unique ID.
+   * The active poll, if one is running. Absent when no poll is active.
    */
-  pollOptions: PollOption[];
-
-  /** Reactions to the current poll options. */
-  reactions: Reaction[];
-
-  /**
-   * Monotonically increasing version counter. Bumped on every mutation.
-   * Used by advancement events (queue:next, meeting:nextAgendaItem) to
-   * prevent double-advancement from concurrent chair clicks — the client
-   * sends the version it saw, and the server rejects if it's stale.
-   */
-  version: number;
+  poll?: ActivePoll;
 
   /**
    * The user key of the chair who triggered the most recent speaker or
@@ -184,16 +187,4 @@ export interface MeetingState {
 
   /** ISO timestamp when the current agenda item started. Used to compute duration on finish. */
   currentAgendaItemStartTime?: string;
-
-  /** ISO timestamp when the current poll was started. */
-  pollStartTime?: string;
-
-  /** The user key of the chair who started the current poll. */
-  pollStartChairId?: string;
-
-  /** The topic/question for the current poll, if one was provided. */
-  pollTopic?: string;
-
-  /** Whether the current poll allows selecting multiple options. */
-  pollMultiSelect?: boolean;
 }

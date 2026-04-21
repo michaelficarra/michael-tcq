@@ -22,10 +22,6 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     queueClosed: false,
-    reactions: [],
-    trackPoll: false,
-    pollOptions: [],
-    version: 0,
     log: [],
     currentTopicSpeakers: [],
     ...overrides,
@@ -256,8 +252,13 @@ describe('Presentation mode', () => {
         { id: 'opt-2', emoji: '👎', label: 'Negative' },
       ];
       const meeting = makeMeeting({
-        trackPoll: true,
-        pollOptions: options,
+        poll: {
+          options,
+          reactions: [],
+          startTime: new Date().toISOString(),
+          startChairId: 'alice',
+          multiSelect: true,
+        },
       });
       renderInPresentationMode(wrapWithProviders(<PollReactions />, meeting));
 
@@ -272,8 +273,13 @@ describe('Presentation mode', () => {
         { id: 'opt-2', emoji: '👎', label: 'Negative' },
       ];
       const meeting = makeMeeting({
-        trackPoll: true,
-        pollOptions: options,
+        poll: {
+          options,
+          reactions: [],
+          startTime: new Date().toISOString(),
+          startChairId: 'alice',
+          multiSelect: true,
+        },
       });
       renderInPresentationMode(wrapWithProviders(<PollReactions />, meeting, chairUser));
 

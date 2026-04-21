@@ -52,10 +52,6 @@ export class MeetingManager {
         expired++;
         await this.store.remove(meeting.id);
       } else {
-        migrateLegacyMeeting(meeting);
-        // Default queueClosed for meetings persisted before this field existed
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration for legacy persisted data
-        if ((meeting as any).queueClosed === undefined) meeting.queueClosed = false;
         this.meetings.set(meeting.id, meeting);
       }
     }
@@ -90,10 +86,6 @@ export class MeetingManager {
       queueEntries: {},
       queuedSpeakerIds: [],
       queueClosed: true,
-      reactions: [],
-      trackPoll: false,
-      pollOptions: [],
-      version: 0,
       lastConnectionTime: new Date().toISOString(),
       log: [],
       currentTopicSpeakers: [],
@@ -133,17 +125,9 @@ export class MeetingManager {
     await this.store.remove(id);
   }
 
-  /**
-   * Mark a meeting as having unsaved changes and bump its version.
-   * Every mutation calls this, so the version counter tracks all changes.
-   * Used by advancement events to detect stale concurrent requests.
-   */
+  /** Mark a meeting as having unsaved changes. */
   markDirty(id: string): void {
     this.dirty.add(id);
-    const meeting = this.meetings.get(id);
-    if (meeting) {
-      meeting.version++;
-    }
   }
 
   /**
@@ -561,37 +545,44 @@ export class MeetingManager {
   // -- Poll mutations --
 
   /**
-   * Start a poll with custom options. Sets trackPoll
-   * to true, stores the options, and clears any existing reactions.
-   * Each option gets a unique UUID assigned by the server.
+   * Start a poll with custom options. Populates `meeting.poll` with the
+   * given options (each assigned a unique UUID), start time, chair, topic,
+   * and selection mode. Any pre-existing poll is replaced.
    */
-  startPoll(meetingId: string, options: { emoji: string; label: string }[]): boolean {
+  startPoll(
+    meetingId: string,
+    options: { emoji: string; label: string }[],
+    startChairId: string,
+    topic: string | undefined,
+    multiSelect: boolean,
+  ): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    // Assign unique IDs to each option
-    meeting.pollOptions = options.map((opt) => ({
-      id: randomUUID(),
-      emoji: opt.emoji,
-      label: opt.label,
-    }));
-    meeting.trackPoll = true;
-    meeting.reactions = [];
+    meeting.poll = {
+      options: options.map((opt) => ({
+        id: randomUUID(),
+        emoji: opt.emoji,
+        label: opt.label,
+      })),
+      reactions: [],
+      startTime: new Date().toISOString(),
+      startChairId,
+      topic,
+      multiSelect,
+    };
     this.markDirty(meetingId);
     return true;
   }
 
   /**
-   * Stop a poll. Sets trackPoll to false and clears
-   * all reactions and options.
+   * Stop the active poll. Clears `meeting.poll`.
    */
   stopPoll(meetingId: string): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    meeting.trackPoll = false;
-    meeting.pollOptions = [];
-    meeting.reactions = [];
+    meeting.poll = undefined;
     this.markDirty(meetingId);
     return true;
   }
@@ -605,33 +596,29 @@ export class MeetingManager {
    * at most once. In single-select mode, selecting a new option removes
    * any previous selection by that user.
    *
-   * Returns false if the meeting doesn't exist, poll
-   * is not active, or the option ID is invalid.
+   * Returns false if the meeting doesn't exist, no poll is active, or
+   * the option ID is invalid.
    */
   toggleReaction(meetingId: string, optionId: string, user: User): boolean {
     const meeting = this.meetings.get(meetingId);
-    if (!meeting) return false;
-    if (!meeting.trackPoll) return false;
+    if (!meeting || !meeting.poll) return false;
 
-    // Validate that the option exists
-    const optionExists = meeting.pollOptions.some((o) => o.id === optionId);
-    if (!optionExists) return false;
+    const poll = meeting.poll;
+    if (!poll.options.some((o) => o.id === optionId)) return false;
 
     const key = ensureUser(meeting, user);
 
-    // Check if the user already reacted to this option
-    const existingIndex = meeting.reactions.findIndex((r) => r.optionId === optionId && r.userId === key);
+    const existingIndex = poll.reactions.findIndex((r) => r.optionId === optionId && r.userId === key);
 
     if (existingIndex !== -1) {
       // Remove it (toggle off)
-      meeting.reactions.splice(existingIndex, 1);
+      poll.reactions.splice(existingIndex, 1);
     } else {
       // In single-select mode, remove any existing reaction by this user first
-      if (!meeting.pollMultiSelect) {
-        meeting.reactions = meeting.reactions.filter((r) => r.userId !== key);
+      if (!poll.multiSelect) {
+        poll.reactions = poll.reactions.filter((r) => r.userId !== key);
       }
-      // Add it (toggle on)
-      meeting.reactions.push({ optionId, userId: key });
+      poll.reactions.push({ optionId, userId: key });
     }
 
     this.markDirty(meetingId);
@@ -725,175 +712,3 @@ export class MeetingManager {
     return now - lastConnection > MEETING_EXPIRY_MS;
   }
 }
-
-// -- Legacy migration --
-
-/**
- * Migrate a meeting from the legacy format (inline User/QueueEntry objects)
- * to the normalised format (ID references with lookup maps).
- * Detects legacy format by checking for the absence of the `users` field.
- */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function migrateLegacyMeeting(meeting: MeetingState): void {
-  const m = meeting as any;
-
-  // Already migrated (or new format)
-  if (meeting.users && typeof meeting.users === 'object' && !Array.isArray(meeting.users)) {
-    // Handle partial migration from the previous currentAgendaItem → currentAgendaItemId change
-    if (m.currentAgendaItem && !meeting.currentAgendaItemId) {
-      meeting.currentAgendaItemId = m.currentAgendaItem.id;
-      delete m.currentAgendaItem;
-    }
-    return;
-  }
-
-  const users: Record<string, User> = {};
-  const eu = (u: User): string => {
-    const key = userKey(u);
-    users[key] = u;
-    return key;
-  };
-
-  // Chairs: User[] → string[]
-  if (Array.isArray(m.chairs) && m.chairs.length > 0 && typeof m.chairs[0] === 'object' && m.chairs[0].ghUsername) {
-    meeting.chairIds = m.chairs.map((c: User) => eu(c));
-  }
-  delete m.chairs;
-
-  // Agenda items: owner → ownerId
-  for (const item of meeting.agenda) {
-    if ((item as any).owner && typeof (item as any).owner === 'object') {
-      (item as any).ownerId = eu((item as any).owner);
-      delete (item as any).owner;
-    }
-  }
-
-  // currentAgendaItem → currentAgendaItemId
-  if (m.currentAgendaItem && !meeting.currentAgendaItemId) {
-    meeting.currentAgendaItemId = m.currentAgendaItem.id;
-    delete m.currentAgendaItem;
-  }
-
-  // Queue entries: queuedSpeakers → queueEntries + queuedSpeakerIds
-  const queueEntries: Record<string, QueueEntry> = {};
-  if (Array.isArray(m.queuedSpeakers)) {
-    meeting.queuedSpeakerIds = [];
-    for (const entry of m.queuedSpeakers) {
-      if (entry.user && typeof entry.user === 'object') {
-        entry.userId = eu(entry.user);
-        delete entry.user;
-      }
-      queueEntries[entry.id] = entry;
-      meeting.queuedSpeakerIds.push(entry.id);
-    }
-    delete m.queuedSpeakers;
-  }
-
-  // currentSpeaker → currentSpeakerEntryId
-  if (m.currentSpeaker && typeof m.currentSpeaker === 'object' && m.currentSpeaker.id) {
-    const cs = m.currentSpeaker;
-    if (cs.user && typeof cs.user === 'object') {
-      cs.userId = eu(cs.user);
-      delete cs.user;
-    }
-    queueEntries[cs.id] = cs;
-    meeting.currentSpeakerEntryId = cs.id;
-    delete m.currentSpeaker;
-  }
-
-  // currentTopic → currentTopicEntryId
-  if (m.currentTopic && typeof m.currentTopic === 'object' && m.currentTopic.id) {
-    const ct = m.currentTopic;
-    if (ct.user && typeof ct.user === 'object') {
-      ct.userId = eu(ct.user);
-      delete ct.user;
-    }
-    queueEntries[ct.id] = ct;
-    meeting.currentTopicEntryId = ct.id;
-    delete m.currentTopic;
-  }
-
-  meeting.queueEntries = queueEntries;
-
-  // Reactions: user → userId
-  if (Array.isArray(meeting.reactions)) {
-    for (const r of meeting.reactions) {
-      if ((r as any).user && typeof (r as any).user === 'object') {
-        (r as any).userId = eu((r as any).user);
-        delete (r as any).user;
-      }
-    }
-  }
-
-  // TopicSpeakers: user → userId
-  if (Array.isArray(meeting.currentTopicSpeakers)) {
-    for (const s of meeting.currentTopicSpeakers) {
-      if ((s as any).user && typeof (s as any).user === 'object') {
-        (s as any).userId = eu((s as any).user);
-        delete (s as any).user;
-      }
-    }
-  }
-
-  // Log entries
-  for (const entry of meeting.log) {
-    migrateLogEntry(entry, eu);
-  }
-
-  // pollStartChair → pollStartChairId
-  if (m.pollStartChair && typeof m.pollStartChair === 'object') {
-    meeting.pollStartChairId = eu(m.pollStartChair);
-    delete m.pollStartChair;
-  }
-
-  meeting.users = users;
-}
-
-/** Migrate a single log entry from inline User objects to user ID references. */
-function migrateLogEntry(entry: any, eu: (u: User) => string): void {
-  // Common: chair → chairId
-  if (entry.chair && typeof entry.chair === 'object') {
-    entry.chairId = eu(entry.chair);
-    delete entry.chair;
-  }
-
-  switch (entry.type) {
-    case 'agenda-item-started':
-      if (entry.itemOwner && typeof entry.itemOwner === 'object') {
-        entry.itemOwnerId = eu(entry.itemOwner);
-        delete entry.itemOwner;
-      }
-      break;
-    case 'agenda-item-finished':
-      if (
-        Array.isArray(entry.participants) &&
-        entry.participants.length > 0 &&
-        typeof entry.participants[0] === 'object'
-      ) {
-        entry.participantIds = entry.participants.map((p: User) => eu(p));
-        delete entry.participants;
-      }
-      break;
-    case 'topic-discussed':
-      if (Array.isArray(entry.speakers)) {
-        for (const s of entry.speakers) {
-          if (s.user && typeof s.user === 'object') {
-            s.userId = eu(s.user);
-            delete s.user;
-          }
-        }
-      }
-      break;
-    case 'poll-ran':
-      if (entry.startChair && typeof entry.startChair === 'object') {
-        entry.startChairId = eu(entry.startChair);
-        delete entry.startChair;
-      }
-      if (entry.endChair && typeof entry.endChair === 'object') {
-        entry.endChairId = eu(entry.endChair);
-        delete entry.endChair;
-      }
-      break;
-  }
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */

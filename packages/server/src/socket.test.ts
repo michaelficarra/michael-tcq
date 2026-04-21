@@ -1229,11 +1229,11 @@ describe('Socket.IO integration', () => {
       client.emit('poll:start', { options: samplePollOptions });
       const state = await statePromise;
 
-      expect(state.trackPoll).toBe(true);
-      expect(state.pollOptions).toHaveLength(2);
-      expect(state.pollOptions[0].emoji).toBe('❤️');
-      expect(state.pollOptions[0].label).toBe('Love');
-      expect(state.reactions).toHaveLength(0);
+      expect(state.poll).toBeDefined();
+      expect(state.poll!.options).toHaveLength(2);
+      expect(state.poll!.options[0].emoji).toBe('❤️');
+      expect(state.poll!.options[0].label).toBe('Love');
+      expect(state.poll!.reactions).toHaveLength(0);
     });
 
     it('rejects with fewer than 2 options', async () => {
@@ -1270,10 +1270,10 @@ describe('Socket.IO integration', () => {
   });
 
   describe('poll:stop', () => {
-    it('stops a poll and clears reactions and options', async () => {
+    it('stops a poll by clearing meeting.poll', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1281,9 +1281,7 @@ describe('Socket.IO integration', () => {
       client.emit('poll:stop');
       const state = await statePromise;
 
-      expect(state.trackPoll).toBe(false);
-      expect(state.pollOptions).toHaveLength(0);
-      expect(state.reactions).toHaveLength(0);
+      expect(state.poll).toBeUndefined();
     });
   });
 
@@ -1291,8 +1289,8 @@ describe('Socket.IO integration', () => {
     it('adds a reaction and broadcasts', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
-      const optionId = meeting.pollOptions[0].id;
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
+      const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1300,16 +1298,16 @@ describe('Socket.IO integration', () => {
       client.emit('poll:react', { optionId });
       const state = await statePromise;
 
-      expect(state.reactions).toHaveLength(1);
-      expect(state.reactions[0].optionId).toBe(optionId);
-      expect(state.users[state.reactions[0].userId].ghUsername).toBe('testuser');
+      expect(state.poll!.reactions).toHaveLength(1);
+      expect(state.poll!.reactions[0].optionId).toBe(optionId);
+      expect(state.users[state.poll!.reactions[0].userId].ghUsername).toBe('testuser');
     });
 
     it('toggles off an existing reaction', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions);
-      const optionId = meeting.pollOptions[0].id;
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, 'testuser', undefined, true);
+      const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1323,7 +1321,7 @@ describe('Socket.IO integration', () => {
       client.emit('poll:react', { optionId });
       const state = await statePromise;
 
-      expect(state.reactions).toHaveLength(0);
+      expect(state.poll!.reactions).toHaveLength(0);
     });
 
     it('rejects when poll is not active', async () => {
@@ -1698,7 +1696,7 @@ describe('Socket.IO integration', () => {
 
       // React to an option
       statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('poll:react', { optionId: state.pollOptions[0].id });
+      client.emit('poll:react', { optionId: state.poll!.options[0].id });
       state = await statePromise;
 
       // Stop the poll

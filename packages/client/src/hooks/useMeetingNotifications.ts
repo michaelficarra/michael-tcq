@@ -95,11 +95,11 @@ export function useMeetingNotifications(): void {
       }
     }
 
-    // 3a. A poll was just started (trackPoll transitioned from false to true).
+    // 3a. A poll was just started (meeting.poll transitioned from absent to present).
     // Suppress for the chair who initiated it — they pressed the button and
     // don't need to be notified about their own action.
-    if (notificationPrefs.onPollStarted && !prev.trackPoll && meeting.trackPoll && meeting.pollStartChairId !== me) {
-      const body = meeting.pollTopic ? `Topic: ${meeting.pollTopic}` : 'A poll is now open.';
+    if (notificationPrefs.onPollStarted && !prev.poll && meeting.poll && meeting.poll.startChairId !== me) {
+      const body = meeting.poll.topic ? `Topic: ${meeting.poll.topic}` : 'A poll is now open.';
       showNotification('Poll started', { body });
     }
 

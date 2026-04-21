@@ -19,9 +19,10 @@ export function PollReactions() {
   const isChair = useIsChair();
   const socket = useSocket();
 
-  if (!meeting || !meeting.trackPoll || meeting.pollOptions.length === 0) {
+  if (!meeting || !meeting.poll || meeting.poll.options.length === 0) {
     return null;
   }
+  const poll = meeting.poll;
 
   /** Toggle a reaction for the current user on the given option. */
   function handleReact(optionId: string) {
@@ -34,12 +35,10 @@ export function PollReactions() {
    * and count, sorted by count descending.
    */
   function handleCopyResults() {
-    if (!meeting) return;
-
     // Build a sorted summary: count reactions per option, sort descending
-    const results = meeting.pollOptions
+    const results = poll.options
       .map((option) => {
-        const count = meeting.reactions.filter((r) => r.optionId === option.id).length;
+        const count = poll.reactions.filter((r) => r.optionId === option.id).length;
         return { emoji: option.emoji, label: option.label, count };
       })
       .sort((a, b) => b.count - a.count);
@@ -55,19 +54,17 @@ export function PollReactions() {
     <div>
       {/* Poll topic and timer */}
       <div className="flex items-center gap-3 mb-4">
-        {meeting.pollTopic && <p className="text-stone-800 dark:text-stone-200 font-medium">{meeting.pollTopic}</p>}
-        {meeting.pollStartTime && (
-          <span className="ml-auto">
-            <CountUpTimer since={meeting.pollStartTime} />
-          </span>
-        )}
+        {poll.topic && <p className="text-stone-800 dark:text-stone-200 font-medium">{poll.topic}</p>}
+        <span className="ml-auto">
+          <CountUpTimer since={poll.startTime} />
+        </span>
       </div>
 
       {/* Reaction buttons */}
       <div className="flex flex-wrap gap-3 justify-center" role="group" aria-label="Poll reactions">
-        {meeting.pollOptions.map((option) => {
+        {poll.options.map((option) => {
           // Count how many users reacted to this option
-          const reactionsForOption = meeting.reactions.filter((r) => r.optionId === option.id);
+          const reactionsForOption = poll.reactions.filter((r) => r.optionId === option.id);
           const count = reactionsForOption.length;
 
           // Check if the current user has reacted to this option

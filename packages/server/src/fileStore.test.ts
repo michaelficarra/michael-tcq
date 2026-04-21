@@ -18,10 +18,6 @@ function makeMeeting(id: string): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     queueClosed: false,
-    reactions: [],
-    trackPoll: false,
-    pollOptions: [],
-    version: 0,
     log: [],
     currentTopicSpeakers: [],
   };
@@ -89,10 +85,10 @@ describe('FileMeetingStore', () => {
     await store.save(meeting);
 
     // Modify and re-save
-    meeting.trackPoll = true;
+    meeting.queueClosed = true;
     await store.save(meeting);
 
     const loaded = await store.load('bright-pine');
-    expect(loaded?.trackPoll).toBe(true);
+    expect(loaded?.queueClosed).toBe(true);
   });
 });

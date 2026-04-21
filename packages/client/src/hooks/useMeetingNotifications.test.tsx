@@ -21,10 +21,6 @@ function makeMeeting(overrides: Partial<MeetingState> = {}): MeetingState {
     queueEntries: {},
     queuedSpeakerIds: [],
     queueClosed: false,
-    trackPoll: false,
-    pollOptions: [],
-    reactions: [],
-    version: 0,
     log: [],
     currentTopicSpeakers: [],
     ...overrides,
@@ -140,14 +136,23 @@ describe('useMeetingNotifications', () => {
     expect(advancedCalls).toHaveLength(0);
   });
 
-  it('fires "Poll started" when trackPoll transitions true', () => {
+  it('fires "Poll started" when a poll becomes active', () => {
     seedPreferences({ enabled: true });
     // Bob is the chair who started the poll; alice (the current user) is a
     // participant and should be notified.
-    const prev = makeMeeting({ trackPoll: false });
+    const prev = makeMeeting();
     const { rerender } = render(<Scene meeting={prev} user={alice} />);
 
-    const next = makeMeeting({ trackPoll: true, pollTopic: 'Should we break?', pollStartChairId: 'bob' });
+    const next = makeMeeting({
+      poll: {
+        options: [],
+        reactions: [],
+        startTime: new Date().toISOString(),
+        startChairId: 'bob',
+        topic: 'Should we break?',
+        multiSelect: true,
+      },
+    });
     rerender(<Scene meeting={next} user={alice} />);
 
     expect(notificationCtor).toHaveBeenCalledWith(
@@ -160,10 +165,19 @@ describe('useMeetingNotifications', () => {
     seedPreferences({ enabled: true });
     // Alice (the current user) is the chair starting the poll — she shouldn't
     // be notified about her own action.
-    const prev = makeMeeting({ trackPoll: false });
+    const prev = makeMeeting();
     const { rerender } = render(<Scene meeting={prev} user={alice} />);
 
-    const next = makeMeeting({ trackPoll: true, pollTopic: 'Should we break?', pollStartChairId: 'alice' });
+    const next = makeMeeting({
+      poll: {
+        options: [],
+        reactions: [],
+        startTime: new Date().toISOString(),
+        startChairId: 'alice',
+        topic: 'Should we break?',
+        multiSelect: true,
+      },
+    });
     rerender(<Scene meeting={next} user={alice} />);
 
     const pollCalls = notificationCtor.mock.calls.filter(([title]) => title === 'Poll started');

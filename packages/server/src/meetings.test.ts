@@ -53,7 +53,7 @@ describe('MeetingManager', () => {
     expect(meeting.queuedSpeakerIds).toEqual([]);
     expect(meeting.currentAgendaItemId).toBeUndefined();
     expect(meeting.currentSpeakerEntryId).toBeUndefined();
-    expect(meeting.trackPoll).toBe(false);
+    expect(meeting.poll).toBeUndefined();
   });
 
   it('get returns the created meeting', () => {
@@ -118,10 +118,6 @@ describe('MeetingManager', () => {
       queueEntries: {},
       queuedSpeakerIds: [],
       queueClosed: false,
-      reactions: [],
-      trackPoll: false,
-      pollOptions: [],
-      version: 0,
       log: [],
       currentTopicSpeakers: [],
     });
@@ -839,45 +835,46 @@ describe('MeetingManager', () => {
     { emoji: '👀', label: 'Watching' },
   ];
 
+  const chairKey = userKey(testUser);
+
   describe('startPoll', () => {
     it('enables poll with custom options', () => {
       const meeting = manager.create([testUser]);
 
-      const result = manager.startPoll(meeting.id, samplePollOptions);
+      const result = manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
       expect(result).toBe(true);
-      expect(meeting.trackPoll).toBe(true);
-      expect(meeting.pollOptions).toHaveLength(3);
-      expect(meeting.pollOptions[0].emoji).toBe('❤️');
-      expect(meeting.pollOptions[0].label).toBe('Love');
+      expect(meeting.poll).toBeDefined();
+      expect(meeting.poll!.options).toHaveLength(3);
+      expect(meeting.poll!.options[0].emoji).toBe('❤️');
+      expect(meeting.poll!.options[0].label).toBe('Love');
       // Each option gets a unique ID
-      expect(meeting.pollOptions[0].id).toBeDefined();
-      expect(meeting.pollOptions[0].id).not.toBe(meeting.pollOptions[1].id);
+      expect(meeting.poll!.options[0].id).toBeDefined();
+      expect(meeting.poll!.options[0].id).not.toBe(meeting.poll!.options[1].id);
     });
 
-    it('clears existing reactions when starting', () => {
+    it('replaces any existing poll (reactions reset)', () => {
       const meeting = manager.create([testUser]);
-      meeting.reactions = [{ optionId: 'old', userId: userKey(testUser) }];
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      meeting.poll!.reactions = [{ optionId: meeting.poll!.options[0].id, userId: chairKey }];
 
-      manager.startPoll(meeting.id, samplePollOptions);
-      expect(meeting.reactions).toHaveLength(0);
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      expect(meeting.poll!.reactions).toHaveLength(0);
     });
 
     it('returns false for non-existent meeting', () => {
-      expect(manager.startPoll('no-such-meeting', samplePollOptions)).toBe(false);
+      expect(manager.startPoll('no-such-meeting', samplePollOptions, chairKey, undefined, true)).toBe(false);
     });
   });
 
   describe('stopPoll', () => {
-    it('disables poll and clears reactions and options', () => {
+    it('disables poll by clearing meeting.poll', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
-      meeting.reactions = [{ optionId: meeting.pollOptions[0].id, userId: userKey(testUser) }];
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      meeting.poll!.reactions = [{ optionId: meeting.poll!.options[0].id, userId: chairKey }];
 
       const result = manager.stopPoll(meeting.id);
       expect(result).toBe(true);
-      expect(meeting.trackPoll).toBe(false);
-      expect(meeting.pollOptions).toHaveLength(0);
-      expect(meeting.reactions).toHaveLength(0);
+      expect(meeting.poll).toBeUndefined();
     });
 
     it('returns false for non-existent meeting', () => {
@@ -888,44 +885,43 @@ describe('MeetingManager', () => {
   describe('toggleReaction', () => {
     it('adds a reaction when the user has not reacted to this option', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
-      const optionId = meeting.pollOptions[0].id;
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      const optionId = meeting.poll!.options[0].id;
 
       const result = manager.toggleReaction(meeting.id, optionId, testUser);
       expect(result).toBe(true);
-      expect(meeting.reactions).toHaveLength(1);
-      expect(meeting.reactions[0].optionId).toBe(optionId);
-      expect(meeting.users[meeting.reactions[0].userId].ghUsername).toBe('alice');
+      expect(meeting.poll!.reactions).toHaveLength(1);
+      expect(meeting.poll!.reactions[0].optionId).toBe(optionId);
+      expect(meeting.users[meeting.poll!.reactions[0].userId].ghUsername).toBe('alice');
     });
 
     it('removes a reaction when the user already has it (toggle off)', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
-      const optionId = meeting.pollOptions[0].id;
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      const optionId = meeting.poll!.options[0].id;
 
       manager.toggleReaction(meeting.id, optionId, testUser);
       manager.toggleReaction(meeting.id, optionId, testUser);
-      expect(meeting.reactions).toHaveLength(0);
+      expect(meeting.poll!.reactions).toHaveLength(0);
     });
 
     it('allows multiple different options from the same user in multi-select mode', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
-      meeting.pollMultiSelect = true;
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
 
-      manager.toggleReaction(meeting.id, meeting.pollOptions[0].id, testUser);
-      manager.toggleReaction(meeting.id, meeting.pollOptions[1].id, testUser);
-      expect(meeting.reactions).toHaveLength(2);
+      manager.toggleReaction(meeting.id, meeting.poll!.options[0].id, testUser);
+      manager.toggleReaction(meeting.id, meeting.poll!.options[1].id, testUser);
+      expect(meeting.poll!.reactions).toHaveLength(2);
     });
 
     it('allows different users to react to the same option', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
-      const optionId = meeting.pollOptions[0].id;
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      const optionId = meeting.poll!.options[0].id;
 
       manager.toggleReaction(meeting.id, optionId, testUser);
       manager.toggleReaction(meeting.id, optionId, otherUser);
-      expect(meeting.reactions).toHaveLength(2);
+      expect(meeting.poll!.reactions).toHaveLength(2);
     });
 
     it('returns false when poll is not active', () => {
@@ -935,7 +931,7 @@ describe('MeetingManager', () => {
 
     it('returns false for an invalid option ID', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, samplePollOptions);
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
       expect(manager.toggleReaction(meeting.id, 'invalid-option', testUser)).toBe(false);
     });
 
@@ -945,36 +941,46 @@ describe('MeetingManager', () => {
 
     it('in single-select mode, removes previous reaction when selecting a new option', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, [
-        { emoji: '👍', label: 'Yes' },
-        { emoji: '👎', label: 'No' },
-      ]);
-      meeting.pollMultiSelect = false;
+      manager.startPoll(
+        meeting.id,
+        [
+          { emoji: '👍', label: 'Yes' },
+          { emoji: '👎', label: 'No' },
+        ],
+        chairKey,
+        undefined,
+        false,
+      );
 
-      const opt1 = meeting.pollOptions[0].id;
-      const opt2 = meeting.pollOptions[1].id;
+      const opt1 = meeting.poll!.options[0].id;
+      const opt2 = meeting.poll!.options[1].id;
 
       manager.toggleReaction(meeting.id, opt1, testUser);
-      expect(meeting.reactions).toHaveLength(1);
-      expect(meeting.reactions[0].optionId).toBe(opt1);
+      expect(meeting.poll!.reactions).toHaveLength(1);
+      expect(meeting.poll!.reactions[0].optionId).toBe(opt1);
 
       // Select a different option — should replace, not add
       manager.toggleReaction(meeting.id, opt2, testUser);
-      expect(meeting.reactions).toHaveLength(1);
-      expect(meeting.reactions[0].optionId).toBe(opt2);
+      expect(meeting.poll!.reactions).toHaveLength(1);
+      expect(meeting.poll!.reactions[0].optionId).toBe(opt2);
     });
 
     it('in multi-select mode, allows multiple reactions from the same user', () => {
       const meeting = manager.create([testUser]);
-      manager.startPoll(meeting.id, [
-        { emoji: '👍', label: 'Yes' },
-        { emoji: '👎', label: 'No' },
-      ]);
-      meeting.pollMultiSelect = true;
+      manager.startPoll(
+        meeting.id,
+        [
+          { emoji: '👍', label: 'Yes' },
+          { emoji: '👎', label: 'No' },
+        ],
+        chairKey,
+        undefined,
+        true,
+      );
 
-      manager.toggleReaction(meeting.id, meeting.pollOptions[0].id, testUser);
-      manager.toggleReaction(meeting.id, meeting.pollOptions[1].id, testUser);
-      expect(meeting.reactions).toHaveLength(2);
+      manager.toggleReaction(meeting.id, meeting.poll!.options[0].id, testUser);
+      manager.toggleReaction(meeting.id, meeting.poll!.options[1].id, testUser);
+      expect(meeting.poll!.reactions).toHaveLength(2);
     });
   });
 

@@ -269,7 +269,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                   Next Agenda Item
                 </button>
               )}
-              {!meeting.trackPoll && (
+              {!meeting.poll && (
                 <button
                   onClick={() => setShowPollSetup(true)}
                   className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
@@ -583,7 +583,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
       )}
 
       {/* Active poll modal — non-dismissable, visible to all */}
-      {meeting.trackPoll && (
+      {meeting.poll && (
         <div
           className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
           role="dialog"

@@ -23,10 +23,6 @@ const baseMeeting: MeetingState = {
   queueEntries: {},
   queuedSpeakerIds: [],
   queueClosed: false,
-  reactions: [],
-  trackPoll: false,
-  pollOptions: [],
-  version: 0,
   log: [],
   currentTopicSpeakers: [],
 };
