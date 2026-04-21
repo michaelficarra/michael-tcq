@@ -26,17 +26,16 @@ export class FirestoreMeetingStore implements MeetingStore {
     // - GOOGLE_APPLICATION_CREDENTIALS env var (local dev)
     // - Default service account (Cloud Run)
     // Options can include databaseId for named databases.
-    this.db = new Firestore(options);
+    // ignoreUndefinedProperties: MeetingState has many optional fields
+    // (current.speaker, poll, operational.lastAdvancementBy, etc.). Without
+    // this flag, Firestore rejects undefined values on write.
+    this.db = new Firestore({ ignoreUndefinedProperties: true, ...options });
   }
 
   /** Persist a meeting's current state as a Firestore document. */
   async save(meeting: MeetingState): Promise<void> {
     const docRef = this.db.collection(MEETINGS_COLLECTION).doc(meeting.id);
-    // Use set() to create or overwrite the entire document.
-    // Firestore doesn't natively handle undefined values, so we
-    // serialise via JSON to strip them out.
-    const data = JSON.parse(JSON.stringify(meeting));
-    await docRef.set(data);
+    await docRef.set(meeting);
   }
 
   /** Load a single meeting by ID, or null if it doesn't exist. */

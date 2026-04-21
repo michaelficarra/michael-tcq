@@ -5,13 +5,13 @@ import { QueuePanel } from './QueuePanel.js';
 import { AgendaPanel } from './AgendaPanel.js';
 import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides, { id: 'test', users: { alice: chairUser }, chairIds: ['alice'] });
 }
 
@@ -74,7 +74,7 @@ describe('Presentation mode', () => {
           { id: '1', name: 'First', ownerId: 'alice' },
           { id: '2', name: 'Second', ownerId: 'alice' },
         ],
-        currentAgendaItemId: '1',
+        current: { topicSpeakers: [], agendaItemId: '1' },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -90,8 +90,17 @@ describe('Presentation mode', () => {
     it('hides Next Speaker button', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'bob' } },
-        currentSpeakerEntryId: 's1',
+        current: {
+          topicSpeakers: [],
+          speaker: {
+            id: 's1',
+            type: 'topic',
+            topic: 'Test',
+            userId: 'bob',
+            source: 'queue',
+            startTime: '2026-01-01T00:00:00.000Z',
+          },
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -106,8 +115,11 @@ describe('Presentation mode', () => {
 
     it('hides drag handles on queue entries', () => {
       const meeting = makeMeeting({
-        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
-        queuedSpeakerIds: ['q1'],
+        queue: {
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
+          orderedIds: ['q1'],
+          closed: false,
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -122,8 +134,11 @@ describe('Presentation mode', () => {
 
     it('hides edit/delete buttons on queue entries', () => {
       const meeting = makeMeeting({
-        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
-        queuedSpeakerIds: ['q1'],
+        queue: {
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
+          orderedIds: ['q1'],
+          closed: false,
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -140,8 +155,11 @@ describe('Presentation mode', () => {
     it('keeps queue entry content visible', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Visible topic', userId: 'bob' } },
-        queuedSpeakerIds: ['q1'],
+        queue: {
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'Visible topic', userId: 'bob' } },
+          orderedIds: ['q1'],
+          closed: false,
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -157,8 +175,11 @@ describe('Presentation mode', () => {
     it('keeps the type badge visible on queue entries', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
-        queuedSpeakerIds: ['q1'],
+        queue: {
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
+          orderedIds: ['q1'],
+          closed: false,
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -174,8 +195,17 @@ describe('Presentation mode', () => {
     it('keeps current speaker info visible', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Speaking about this', userId: 'bob' } },
-        currentSpeakerEntryId: 's1',
+        current: {
+          topicSpeakers: [],
+          speaker: {
+            id: 's1',
+            type: 'topic',
+            topic: 'Speaking about this',
+            userId: 'bob',
+            source: 'queue',
+            startTime: '2026-01-01T00:00:00.000Z',
+          },
+        },
       });
       renderInPresentationMode(
         wrapWithProviders(

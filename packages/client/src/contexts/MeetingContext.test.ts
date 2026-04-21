@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { MeetingState, User } from '@tcq/shared';
 import { meetingReducer, type MeetingContextState } from './MeetingContext.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 /** Create a minimal meeting state for testing. */
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 
@@ -134,10 +134,10 @@ describe('meetingReducer', () => {
   // -- optimisticQueueReorder --
 
   describe('optimisticQueueReorder action', () => {
-    const queuedSpeakerIds = ['x', 'y', 'z'];
+    const queueWith = (orderedIds: string[]) => ({ entries: {}, orderedIds, closed: false });
 
     it('moves an entry forward (down the list)', () => {
-      const state = makeState({ meeting: makeMeeting({ queuedSpeakerIds }) });
+      const state = makeState({ meeting: makeMeeting({ queue: queueWith(['x', 'y', 'z']) }) });
       const result = meetingReducer(state, {
         type: 'optimisticQueueReorder',
         oldIndex: 0,
@@ -147,7 +147,7 @@ describe('meetingReducer', () => {
     });
 
     it('moves an entry backward (up the list)', () => {
-      const state = makeState({ meeting: makeMeeting({ queuedSpeakerIds }) });
+      const state = makeState({ meeting: makeMeeting({ queue: queueWith(['x', 'y', 'z']) }) });
       const result = meetingReducer(state, {
         type: 'optimisticQueueReorder',
         oldIndex: 2,
@@ -157,7 +157,7 @@ describe('meetingReducer', () => {
     });
 
     it('is a no-op when oldIndex equals newIndex', () => {
-      const state = makeState({ meeting: makeMeeting({ queuedSpeakerIds }) });
+      const state = makeState({ meeting: makeMeeting({ queue: queueWith(['x', 'y', 'z']) }) });
       const result = meetingReducer(state, {
         type: 'optimisticQueueReorder',
         oldIndex: 1,
@@ -167,7 +167,7 @@ describe('meetingReducer', () => {
     });
 
     it('does not mutate the original state', () => {
-      const state = makeState({ meeting: makeMeeting({ queuedSpeakerIds }) });
+      const state = makeState({ meeting: makeMeeting({ queue: queueWith(['x', 'y', 'z']) }) });
       meetingReducer(state, {
         type: 'optimisticQueueReorder',
         oldIndex: 0,

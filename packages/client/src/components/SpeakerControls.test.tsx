@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const testUser: User = {
   ghid: 1,
@@ -12,7 +12,7 @@ const testUser: User = {
   organisation: 'ACME',
 };
 
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 
@@ -44,8 +44,10 @@ describe('SpeakerControls', () => {
   it('shows the Reply button when there is a current topic', () => {
     const meeting = makeMeeting({
       users: { alice: testUser },
-      queueEntries: { 'ct-1': { id: 'ct-1', type: 'topic', topic: 'Active topic', userId: 'alice' } },
-      currentTopicEntryId: 'ct-1',
+      current: {
+        topicSpeakers: [],
+        topic: { speakerId: 'ct-1', userId: 'alice', topic: 'Active topic', startTime: '2026-01-01T00:00:00.000Z' },
+      },
     });
     renderControls(meeting);
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();
@@ -71,7 +73,7 @@ describe('SpeakerControls', () => {
   });
 
   it('disables buttons when queue is closed and user is not a chair, except Point of Order', () => {
-    const meeting = makeMeeting({ queueClosed: true });
+    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
     renderControls(meeting);
 
     expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
@@ -81,7 +83,7 @@ describe('SpeakerControls', () => {
   });
 
   it('enables buttons when queue is closed and user IS a chair', () => {
-    const meeting = makeMeeting({ queueClosed: true, chairIds: ['alice'] });
+    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true }, chairIds: ['alice'] });
     renderControls(meeting);
 
     expect(screen.getByRole('button', { name: 'New Topic' })).toBeEnabled();

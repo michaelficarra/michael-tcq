@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import type { MeetingState, User } from '@tcq/shared';
+import type { CurrentSpeaker, MeetingState, User } from '@tcq/shared';
 import { useAdvanceAction } from './useAdvanceAction.js';
 import { MeetingStateContext, MeetingDispatchContext, type MeetingContextState } from '../contexts/MeetingContext.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
+
+/** Build a minimal CurrentSpeaker struct with the given turn id. */
+function speakerWith(id: string): CurrentSpeaker {
+  return { id, userId: 'alice', type: 'topic', topic: 't', source: 'queue', startTime: '2026-01-01T00:00:00.000Z' };
+}
 
 interface MakeMeetingOverrides {
   /** Convenience: set current.speaker to a minimal struct with this id. */
@@ -19,8 +24,10 @@ interface MakeMeetingOverrides {
 /** Create a minimal meeting state for testing. */
 function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
   return buildMeeting({
-    currentSpeakerEntryId: overrides?.speakerId,
-    lastSpeakerAdvancementAttributedTo: overrides?.lastAdvancementBy,
+    current: overrides?.speakerId
+      ? { topicSpeakers: [], speaker: speakerWith(overrides.speakerId) }
+      : { topicSpeakers: [] },
+    operational: overrides?.lastAdvancementBy ? { lastAdvancementBy: overrides.lastAdvancementBy } : {},
   });
 }
 

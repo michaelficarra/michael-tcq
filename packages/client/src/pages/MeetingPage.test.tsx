@@ -23,9 +23,9 @@ vi.mock('../hooks/useSocketConnection.js', () => ({
   useSocketConnection: () => null,
 }));
 
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides, { id: 'test-meeting', users: { alice: chairUser }, chairIds: ['alice'] });
 }
 

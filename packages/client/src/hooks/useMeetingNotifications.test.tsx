@@ -4,13 +4,13 @@ import type { ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { PreferencesProvider, type NotificationPrefs } from '../contexts/PreferencesContext.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { useMeetingNotifications } from './useMeetingNotifications.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 
-function makeMeeting(overrides: MakeMeetingOverrides = {}): MeetingState {
+function makeMeeting(overrides: Partial<MeetingState> = {}): MeetingState {
   return buildMeeting(overrides, { id: 'm', users: { alice, bob }, chairIds: ['alice'] });
 }
 
@@ -80,7 +80,7 @@ afterEach(() => {
 describe('useMeetingNotifications', () => {
   it('does not fire on the first state load', () => {
     seedPreferences({ enabled: true });
-    const initial = makeMeeting({ currentAgendaItemId: 'a' });
+    const initial = makeMeeting({ current: { topicSpeakers: [], agendaItemId: 'a' } });
     render(<Scene meeting={initial} />);
     expect(notificationCtor).not.toHaveBeenCalled();
   });
@@ -91,10 +91,10 @@ describe('useMeetingNotifications', () => {
       { id: 'a', name: 'Opening', ownerId: 'alice' },
       { id: 'b', name: 'Discussion', ownerId: 'bob' },
     ];
-    const prev = makeMeeting({ agenda, currentAgendaItemId: 'a' });
+    const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
 
-    const next = makeMeeting({ agenda, currentAgendaItemId: 'b' });
+    const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'b' } });
     rerender(<Scene meeting={next} />);
 
     expect(notificationCtor).toHaveBeenCalledWith(
@@ -109,10 +109,10 @@ describe('useMeetingNotifications', () => {
   it('fires "Meeting started" (not "Agenda advanced") on the first agenda item transition', () => {
     seedPreferences({ enabled: true });
     const agenda = [{ id: 'a', name: 'Opening', ownerId: 'alice' }];
-    const prev = makeMeeting({ agenda, currentAgendaItemId: undefined });
+    const prev = makeMeeting({ agenda });
     const { rerender } = render(<Scene meeting={prev} />);
 
-    const next = makeMeeting({ agenda, currentAgendaItemId: 'a' });
+    const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
 
     expect(notificationCtor).toHaveBeenCalledWith(
@@ -174,20 +174,19 @@ describe('useMeetingNotifications', () => {
   it('fires "Clarifying question" when someone queues one on your current topic', () => {
     seedPreferences({ enabled: true });
     // Alice is the current-topic author via t1; no prior question entries.
+    const aliceTopic = { speakerId: 't1', userId: 'alice', topic: 'my topic', startTime: '2026-01-01T00:00:00.000Z' };
     const prev = makeMeeting({
-      queueEntries: { t1: { id: 't1', type: 'topic', topic: 'my topic', userId: 'alice' } },
-      queuedSpeakerIds: [],
-      currentTopicEntryId: 't1',
+      current: { topicSpeakers: [], topic: aliceTopic },
     });
     const { rerender } = render(<Scene meeting={prev} user={alice} />);
 
     const next = makeMeeting({
-      queueEntries: {
-        t1: { id: 't1', type: 'topic', topic: 'my topic', userId: 'alice' },
-        q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'bob' },
+      queue: {
+        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'bob' } },
+        orderedIds: ['q1'],
+        closed: false,
       },
-      queuedSpeakerIds: ['q1'],
-      currentTopicEntryId: 't1',
+      current: { topicSpeakers: [], topic: aliceTopic },
     });
     rerender(<Scene meeting={next} user={alice} />);
 
@@ -201,20 +200,19 @@ describe('useMeetingNotifications', () => {
     seedPreferences({ enabled: true });
     // Bob is the current-topic author; a question from another user shouldn't
     // notify Alice because the topic isn't hers.
+    const bobTopic = { speakerId: 't1', userId: 'bob', topic: "bob's", startTime: '2026-01-01T00:00:00.000Z' };
     const prev = makeMeeting({
-      queueEntries: { t1: { id: 't1', type: 'topic', topic: "bob's", userId: 'bob' } },
-      queuedSpeakerIds: [],
-      currentTopicEntryId: 't1',
+      current: { topicSpeakers: [], topic: bobTopic },
     });
     const { rerender } = render(<Scene meeting={prev} user={alice} />);
 
     const next = makeMeeting({
-      queueEntries: {
-        t1: { id: 't1', type: 'topic', topic: "bob's", userId: 'bob' },
-        q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'carol' },
+      queue: {
+        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'carol' } },
+        orderedIds: ['q1'],
+        closed: false,
       },
-      queuedSpeakerIds: ['q1'],
-      currentTopicEntryId: 't1',
+      current: { topicSpeakers: [], topic: bobTopic },
     });
     rerender(<Scene meeting={next} user={alice} />);
 
@@ -225,17 +223,23 @@ describe('useMeetingNotifications', () => {
   it('fires "You\'re up next" when the head of the queue becomes your entry', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: {
+        entries: { q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' } },
+        orderedIds: ['q1'],
+        closed: false,
+      },
     });
     const { rerender } = render(<Scene meeting={prev} />);
 
     const next = makeMeeting({
-      queueEntries: {
-        q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' },
-        q2: { id: 'q2', type: 'topic', topic: 'my turn', userId: 'alice' },
+      queue: {
+        entries: {
+          q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'my turn', userId: 'alice' },
+        },
+        orderedIds: ['q2', 'q1'],
+        closed: false,
       },
-      queuedSpeakerIds: ['q2', 'q1'],
     });
     rerender(<Scene meeting={next} />);
 
@@ -244,14 +248,17 @@ describe('useMeetingNotifications', () => {
 
   it('fires "Your agenda item is next" when the upcoming agenda item is yours', () => {
     seedPreferences({ enabled: true });
-    const prev = makeMeeting({ agenda: [{ id: 'a', name: 'Opening', ownerId: 'bob' }], currentAgendaItemId: 'a' });
+    const prev = makeMeeting({
+      agenda: [{ id: 'a', name: 'Opening', ownerId: 'bob' }],
+      current: { topicSpeakers: [], agendaItemId: 'a' },
+    });
     const { rerender } = render(<Scene meeting={prev} />);
 
     const agenda = [
       { id: 'a', name: 'Opening', ownerId: 'bob' },
       { id: 'b', name: 'My item', ownerId: 'alice' },
     ];
-    const next = makeMeeting({ agenda, currentAgendaItemId: 'a' });
+    const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
 
     expect(notificationCtor).toHaveBeenCalledWith(
@@ -266,8 +273,11 @@ describe('useMeetingNotifications', () => {
     const { rerender } = render(<Scene meeting={prev} />);
 
     const next = makeMeeting({
-      queueEntries: { q1: { id: 'q1', type: 'point-of-order', topic: 'order please', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: {
+        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'order please', userId: 'bob' } },
+        orderedIds: ['q1'],
+        closed: false,
+      },
     });
     rerender(<Scene meeting={next} />);
 
@@ -283,8 +293,11 @@ describe('useMeetingNotifications', () => {
     const { rerender } = render(<Scene meeting={prev} />);
 
     const next = makeMeeting({
-      queueEntries: { q1: { id: 'q1', type: 'point-of-order', topic: 'mine', userId: 'alice' } },
-      queuedSpeakerIds: ['q1'],
+      queue: {
+        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'mine', userId: 'alice' } },
+        orderedIds: ['q1'],
+        closed: false,
+      },
     });
     rerender(<Scene meeting={next} />);
 
@@ -298,10 +311,10 @@ describe('useMeetingNotifications', () => {
       { id: 'a', name: 'A', ownerId: 'alice' },
       { id: 'b', name: 'B', ownerId: 'alice' },
     ];
-    const prev = makeMeeting({ agenda, currentAgendaItemId: 'a' });
+    const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
 
-    const next = makeMeeting({ agenda, currentAgendaItemId: 'b' });
+    const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'b' } });
     rerender(<Scene meeting={next} />);
 
     expect(notificationCtor).not.toHaveBeenCalled();
@@ -313,10 +326,10 @@ describe('useMeetingNotifications', () => {
       { id: 'a', name: 'A', ownerId: 'bob' },
       { id: 'b', name: 'B', ownerId: 'bob' },
     ];
-    const prev = makeMeeting({ agenda, currentAgendaItemId: 'a' });
+    const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
 
-    const next = makeMeeting({ agenda, currentAgendaItemId: 'b' });
+    const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'b' } });
     rerender(<Scene meeting={next} />);
 
     const advanceCalls = notificationCtor.mock.calls.filter(([title]) => title === 'Agenda advanced');
@@ -332,8 +345,11 @@ describe('useMeetingNotifications', () => {
       const agenda = [{ id: 'a', name: 'Opening', ownerId: 'alice', timebox: 5 }]; // 5-minute timebox
       const meeting = makeMeeting({
         agenda,
-        currentAgendaItemId: 'a',
-        currentAgendaItemStartTime: new Date(now).toISOString(),
+        current: {
+          topicSpeakers: [],
+          agendaItemId: 'a',
+          agendaItemStartTime: new Date(now).toISOString(),
+        },
       });
 
       render(<Scene meeting={meeting} />);
@@ -363,8 +379,11 @@ describe('useMeetingNotifications', () => {
       // Start time was 30 minutes ago — deadline is 25 minutes in the past.
       const meeting = makeMeeting({
         agenda,
-        currentAgendaItemId: 'a',
-        currentAgendaItemStartTime: new Date(now - 30 * 60_000).toISOString(),
+        current: {
+          topicSpeakers: [],
+          agendaItemId: 'a',
+          agendaItemStartTime: new Date(now - 30 * 60_000).toISOString(),
+        },
       });
 
       render(<Scene meeting={meeting} />);
@@ -388,8 +407,11 @@ describe('useMeetingNotifications', () => {
       const agenda = [{ id: 'a', name: 'Opening', ownerId: 'alice', timebox: 5 }];
       const meeting = makeMeeting({
         agenda,
-        currentAgendaItemId: 'a',
-        currentAgendaItemStartTime: new Date(now).toISOString(),
+        current: {
+          topicSpeakers: [],
+          agendaItemId: 'a',
+          agendaItemStartTime: new Date(now).toISOString(),
+        },
       });
 
       render(<Scene meeting={meeting} />);
@@ -411,8 +433,11 @@ describe('useMeetingNotifications', () => {
     (Notification as unknown as { permission: NotificationPermission }).permission = 'denied';
 
     const next = makeMeeting({
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'anything', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: {
+        entries: { q1: { id: 'q1', type: 'topic', topic: 'anything', userId: 'bob' } },
+        orderedIds: ['q1'],
+        closed: false,
+      },
     });
     rerender(<Scene meeting={next} />);
 

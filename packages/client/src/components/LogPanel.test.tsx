@@ -3,13 +3,13 @@ import { render, screen } from '@testing-library/react';
 import type { MeetingState, User, LogEntry, TopicSpeaker } from '@tcq/shared';
 import { LogPanel } from './LogPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'ACME' };
 const carol: User = { ghid: 3, ghUsername: 'carol', name: 'Carol', organisation: 'ACME' };
 
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides, { id: 'test', users: { alice, bob, carol }, chairIds: ['alice'] });
 }
 
@@ -270,7 +270,7 @@ describe('LogPanel', () => {
         startTime: new Date().toISOString(),
       },
     ];
-    renderLog(makeMeeting({ currentTopicSpeakers: speakers }));
+    renderLog(makeMeeting({ current: { topicSpeakers: speakers } }));
     expect(screen.getByText('Active discussion')).toBeTruthy();
     expect(screen.getByText('ongoing')).toBeTruthy();
   });

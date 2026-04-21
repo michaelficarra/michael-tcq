@@ -879,6 +879,7 @@ describe('Socket.IO integration', () => {
         startTime: new Date().toISOString(),
       };
       meeting.current.topic = {
+        speakerId: 'old-speaker',
         userId: ownerKey,
         topic: 'Done',
         startTime: new Date().toISOString(),

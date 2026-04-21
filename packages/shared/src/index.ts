@@ -20,6 +20,7 @@ export type {
   TopicDiscussedLog,
   PollRanLog,
 } from './types.js';
+export { QueueEntryTypeSchema } from './types.js';
 export type {
   ClientToServerEvents,
   ServerToClientEvents,

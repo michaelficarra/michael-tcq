@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface User {
   ghid: number;
   ghUsername: string;
@@ -12,7 +14,13 @@ export interface AgendaItem {
   timebox?: number; // duration in minutes
 }
 
-export type QueueEntryType = 'point-of-order' | 'question' | 'reply' | 'topic';
+/**
+ * Source of truth for the set of queue entry types. The `QueueEntryType`
+ * alias is derived via `z.infer` and the `QUEUE_ENTRY_TYPES` constant in
+ * `./constants.ts` is derived via `.options` — single definition, no drift.
+ */
+export const QueueEntryTypeSchema = z.enum(['point-of-order', 'question', 'reply', 'topic']);
+export type QueueEntryType = z.infer<typeof QueueEntryTypeSchema>;
 
 export interface QueueEntry {
   id: string;
@@ -165,6 +173,14 @@ export interface CurrentSpeaker {
  * don't change the topic.
  */
 export interface CurrentTopic {
+  /**
+   * Turn id of the speaker who introduced this topic. Equal to the
+   * `CurrentSpeaker.id` active at the moment the topic was set — the UI
+   * uses this to decide whether the current speaker is still the topic
+   * introducer (don't show the topic section separately) or a later
+   * question/reply/point-of-order (do show it).
+   */
+  speakerId: string;
   /** User key of the topic owner (whoever introduced the topic). */
   userId: string;
   /** The topic name. */

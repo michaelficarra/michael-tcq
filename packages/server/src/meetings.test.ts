@@ -407,7 +407,12 @@ describe('MeetingManager', () => {
       const q1Entry = { id: 'q1', type: 'topic' as const, topic: 'old topic', userId: otherKey };
       meeting.queue.entries['q1'] = q1Entry;
       meeting.queue.orderedIds = ['q1'];
-      meeting.current.topic = { userId: otherKey, topic: 'old topic', startTime: new Date().toISOString() };
+      meeting.current.topic = {
+        speakerId: 'q1',
+        userId: otherKey,
+        topic: 'old topic',
+        startTime: new Date().toISOString(),
+      };
 
       // Advance — queue and topic should be cleared
       manager.nextAgendaItem(meeting.id);
@@ -592,6 +597,7 @@ describe('MeetingManager', () => {
       // Set an existing topic directly on current
       const testUserKey = ensureUser(meeting, testUser);
       meeting.current.topic = {
+        speakerId: 'previous-speaker',
         userId: testUserKey,
         topic: 'Previous topic',
         startTime: new Date().toISOString(),

@@ -12,16 +12,7 @@
 
 import { z } from 'zod';
 import type { MeetingState } from './types.js';
-
-// -- Shared sub-schemas --
-
-/**
- * Source of truth for the set of queue entry types. The type alias in
- * `./types.ts` is structurally identical (duplicated literals); the two
- * stay in sync because any divergence would surface as a type error at
- * the use sites in `socket.ts` and `meetings.ts`.
- */
-const QueueEntryTypeSchema = z.enum(['point-of-order', 'question', 'reply', 'topic']);
+import { QueueEntryTypeSchema } from './types.js';
 
 /** Non-empty trimmed string with a human-readable "required" message. */
 const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is required`);

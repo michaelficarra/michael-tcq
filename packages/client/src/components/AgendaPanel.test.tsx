@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { AgendaPanel } from './AgendaPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 // Mock useAuth so we can control isAdmin flag
@@ -19,7 +19,7 @@ vi.mock('../contexts/AuthContext.js', () => ({
 }));
 
 /** Create a minimal meeting state for testing. */
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 

@@ -1,9 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { MeetingState, User } from '@tcq/shared';
+import type {
+  CurrentContext,
+  CurrentSpeaker,
+  CurrentTopic,
+  MeetingQueueState,
+  MeetingState,
+  QueueEntry,
+  User,
+} from '@tcq/shared';
 import { QueuePanel } from './QueuePanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
-import { makeMeeting as buildMeeting, type MakeMeetingOverrides } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = {
@@ -20,7 +28,36 @@ const otherUser: User = {
   organisation: 'Corp',
 };
 
-function makeMeeting(overrides?: MakeMeetingOverrides): MeetingState {
+const TEST_TIME = '2026-01-01T00:00:00.000Z';
+
+/** Build a queue subobject from entries + ordering. */
+const queueOf = (entries: Record<string, QueueEntry>, orderedIds: string[], closed = false): MeetingQueueState => ({
+  entries,
+  orderedIds,
+  closed,
+});
+
+/** Snapshot a queue-sourced CurrentSpeaker from a QueueEntry. */
+const speakerOf = (entry: QueueEntry): CurrentSpeaker => ({
+  id: entry.id,
+  type: entry.type,
+  topic: entry.topic,
+  userId: entry.userId,
+  source: 'queue',
+  startTime: TEST_TIME,
+});
+
+/** Snapshot a CurrentTopic from the QueueEntry that introduced it. */
+const topicOf = (entry: QueueEntry): CurrentTopic => ({
+  speakerId: entry.id,
+  userId: entry.userId,
+  topic: entry.topic,
+  startTime: TEST_TIME,
+});
+
+const currentOf = (overrides: Partial<CurrentContext> = {}): CurrentContext => ({ topicSpeakers: [], ...overrides });
+
+function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 
@@ -54,7 +91,7 @@ describe('QueuePanel', () => {
           timebox: 20,
         },
       ],
-      currentAgendaItemId: 'item-1',
+      current: currentOf({ agendaItemId: 'item-1' }),
     });
     renderQueue(meeting);
 
@@ -119,7 +156,7 @@ describe('QueuePanel', () => {
         { id: '1', name: 'First', ownerId: 'alice' },
         { id: '2', name: 'Second', ownerId: 'alice' },
       ],
-      currentAgendaItemId: '1',
+      current: currentOf({ agendaItemId: '1' }),
     });
     renderQueue(meeting, chairUser);
 
@@ -131,7 +168,7 @@ describe('QueuePanel', () => {
       users: { alice: chairUser },
       chairIds: ['alice'],
       agenda: [{ id: '1', name: 'Only', ownerId: 'alice' }],
-      currentAgendaItemId: '1',
+      current: currentOf({ agendaItemId: '1' }),
     });
     renderQueue(meeting, chairUser);
 
@@ -146,7 +183,7 @@ describe('QueuePanel', () => {
         { id: '1', name: 'First', ownerId: 'alice' },
         { id: '2', name: 'Second', ownerId: 'alice' },
       ],
-      currentAgendaItemId: '1',
+      current: currentOf({ agendaItemId: '1' }),
     });
     renderQueue(meeting, chairUser);
 
@@ -161,10 +198,10 @@ describe('QueuePanel', () => {
   });
 
   it('shows the current speaker when set', () => {
+    const entry: QueueEntry = { id: 'entry-1', type: 'topic', topic: 'My proposal', userId: 'bob' };
     const meeting = makeMeeting({
       users: { bob: otherUser },
-      queueEntries: { 'entry-1': { id: 'entry-1', type: 'topic', topic: 'My proposal', userId: 'bob' } },
-      currentSpeakerEntryId: 'entry-1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting);
 
@@ -175,10 +212,10 @@ describe('QueuePanel', () => {
   // -- Current topic section --
 
   it('shows the current topic section when a topic is active', () => {
+    const ct: QueueEntry = { id: 'ct-1', type: 'topic', topic: 'Active discussion point', userId: 'alice' };
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { 'ct-1': { id: 'ct-1', type: 'topic', topic: 'Active discussion point', userId: 'alice' } },
-      currentTopicEntryId: 'ct-1',
+      current: currentOf({ topic: topicOf(ct) }),
     });
     renderQueue(meeting);
 
@@ -192,26 +229,30 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
-      currentAgendaItemId: '1',
-      currentAgendaItemStartTime: new Date(Date.now() - 125_000).toISOString(),
+      current: currentOf({
+        agendaItemId: '1',
+        agendaItemStartTime: new Date(Date.now() - 125_000).toISOString(),
+      }),
     });
     renderQueue(meeting);
     expect(screen.getByText('2:05')).toBeInTheDocument();
   });
 
   it('shows a timer for the current speaker', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Test', userId: 'alice' };
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Test', userId: 'alice' } },
-      currentSpeakerEntryId: 's1',
-      currentTopicSpeakers: [
-        {
-          userId: 'alice',
-          type: 'topic',
-          topic: 'Test',
-          startTime: new Date(Date.now() - 65_000).toISOString(),
-        },
-      ],
+      current: currentOf({
+        speaker: speakerOf(entry),
+        topicSpeakers: [
+          {
+            userId: 'alice',
+            type: 'topic',
+            topic: 'Test',
+            startTime: new Date(Date.now() - 65_000).toISOString(),
+          },
+        ],
+      }),
     });
     renderQueue(meeting);
     expect(screen.getByText('1:05')).toBeInTheDocument();
@@ -230,11 +271,13 @@ describe('QueuePanel', () => {
         carol: { ghid: 3, ghUsername: 'carol', name: 'Carol', organisation: '' },
         dave: { ghid: 4, ghUsername: 'dave', name: 'Dave', organisation: 'Inc' },
       },
-      queueEntries: {
-        q1: { id: 'q1', type: 'question', topic: 'How does this work?', userId: 'carol' },
-        q2: { id: 'q2', type: 'topic', topic: 'Alternative approach', userId: 'dave' },
-      },
-      queuedSpeakerIds: ['q1', 'q2'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'question', topic: 'How does this work?', userId: 'carol' },
+          q2: { id: 'q2', type: 'topic', topic: 'Alternative approach', userId: 'dave' },
+        },
+        ['q1', 'q2'],
+      ),
     });
     renderQueue(meeting);
 
@@ -249,33 +292,33 @@ describe('QueuePanel', () => {
   // -- Next Speaker button --
 
   it('shows "Next Speaker" button for chairs when there is a current speaker', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' } },
-      currentSpeakerEntryId: 's1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting, chairUser);
     expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
   });
 
   it('shows "Next Speaker" for chairs when nobody is speaking but queue has entries', () => {
+    const q1: QueueEntry = { id: 'q1', type: 'topic', topic: 'Waiting', userId: 'bob' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Waiting', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1 }, ['q1']),
     });
     renderQueue(meeting, chairUser);
     expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
   });
 
   it('hides "Next Speaker" for non-chairs', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' };
     const meeting = makeMeeting({
       users: { bob: otherUser },
       chairIds: ['bob'],
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' } },
-      currentSpeakerEntryId: 's1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting, chairUser);
     expect(screen.queryByRole('button', { name: 'Next Speaker' })).not.toBeInTheDocument();
@@ -285,15 +328,15 @@ describe('QueuePanel', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
+    const speakerEntry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' };
+    const topicEntry: QueueEntry = { id: 'topic-123', type: 'topic', topic: 'Topic', userId: 'bob' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: {
-        s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' },
-        'topic-123': { id: 'topic-123', type: 'topic', topic: 'Topic', userId: 'bob' },
-      },
-      currentSpeakerEntryId: 's1',
-      currentTopicEntryId: 'topic-123',
+      current: currentOf({
+        speaker: speakerOf(speakerEntry),
+        topic: topicOf(topicEntry),
+      }),
     });
     renderQueue(meeting, chairUser, mockSocket);
 
@@ -304,11 +347,11 @@ describe('QueuePanel', () => {
   // -- "I'm done speaking" button --
 
   it('shows "I\'m done speaking" for non-chair active speaker', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' } },
-      currentSpeakerEntryId: 's1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting, otherUser);
     expect(screen.getByRole('button', { name: /done speaking/i })).toBeInTheDocument();
@@ -316,22 +359,22 @@ describe('QueuePanel', () => {
   });
 
   it('hides "I\'m done speaking" for non-chair who is not the active speaker', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' } },
-      currentSpeakerEntryId: 's1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting, otherUser);
     expect(screen.queryByRole('button', { name: /done speaking/i })).not.toBeInTheDocument();
   });
 
   it('hides "I\'m done speaking" for chairs (they see "Next Speaker" instead)', () => {
+    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' };
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      queueEntries: { s1: { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' } },
-      currentSpeakerEntryId: 's1',
+      current: currentOf({ speaker: speakerOf(entry) }),
     });
     renderQueue(meeting, chairUser);
     expect(screen.queryByRole('button', { name: /done speaking/i })).not.toBeInTheDocument();
@@ -343,8 +386,7 @@ describe('QueuePanel', () => {
   it('shows delete button on own queue entries', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My entry', userId: 'alice' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'My entry', userId: 'alice' } }, ['q1']),
     });
     renderQueue(meeting, chairUser);
     expect(screen.getByRole('button', { name: /delete entry: my entry/i })).toBeInTheDocument();
@@ -354,8 +396,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Other entry', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Other entry', userId: 'bob' } }, ['q1']),
     });
     renderQueue(meeting, chairUser);
     expect(screen.getByRole('button', { name: /delete entry/i })).toBeInTheDocument();
@@ -365,8 +406,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { bob: otherUser },
       chairIds: ['bob'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Not mine', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Not mine', userId: 'bob' } }, ['q1']),
     });
     renderQueue(meeting, chairUser);
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
@@ -378,8 +418,9 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { 'entry-42': { id: 'entry-42', type: 'topic', topic: 'Remove me', userId: 'alice' } },
-      queuedSpeakerIds: ['entry-42'],
+      queue: queueOf({ 'entry-42': { id: 'entry-42', type: 'topic', topic: 'Remove me', userId: 'alice' } }, [
+        'entry-42',
+      ]),
     });
     renderQueue(meeting, chairUser, mockSocket);
 
@@ -395,8 +436,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
     });
     renderQueue(meeting, chairUser, mockSocket);
 
@@ -429,8 +469,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
     });
 
     render(
@@ -456,8 +495,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
     });
 
     render(
@@ -480,8 +518,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } }, ['q1']),
     });
     renderQueue(meeting, chairUser);
 
@@ -492,8 +529,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'My entry', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'My entry', userId: 'bob' } }, ['q1']),
     });
     renderQueue(meeting, otherUser);
 
@@ -506,11 +542,13 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queueEntries: {
-        q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' },
-        q2: { id: 'q2', type: 'topic', topic: 'Second', userId: 'bob' },
-      },
-      queuedSpeakerIds: ['q1', 'q2'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'Second', userId: 'bob' },
+        },
+        ['q1', 'q2'],
+      ),
     });
     renderQueue(meeting, chairUser);
 
@@ -523,8 +561,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { bob: otherUser },
       chairIds: ['bob'],
-      queueEntries: { q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } },
-      queuedSpeakerIds: ['q1'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } }, ['q1']),
     });
     renderQueue(meeting, chairUser);
 
@@ -543,12 +580,12 @@ describe('QueuePanel', () => {
   // -- Queue closed message --
 
   it('shows the queue-closed message at the bottom of the speaker queue for non-chairs', () => {
-    renderQueue(makeMeeting({ queueClosed: true }), otherUser);
+    renderQueue(makeMeeting({ queue: queueOf({}, [], true) }), otherUser);
     expect(screen.getByText('The queue is closed. You can still raise a Point of Order.')).toBeInTheDocument();
   });
 
   it('does not show closed message when user is a chair', () => {
-    renderQueue(makeMeeting({ queueClosed: true, chairIds: ['alice'] }), chairUser);
+    renderQueue(makeMeeting({ queue: queueOf({}, [], true), chairIds: ['alice'] }), chairUser);
     expect(screen.queryByText(/queue is closed/i)).not.toBeInTheDocument();
   });
 });

@@ -494,6 +494,7 @@ export class MeetingManager {
     // If this is a new topic, update the current topic
     if (entry.type === 'topic') {
       meeting.current.topic = {
+        speakerId: speaker.id,
         userId: entry.userId,
         topic: entry.topic,
         startTime: now,

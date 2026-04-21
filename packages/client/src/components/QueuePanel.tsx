@@ -320,7 +320,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
       </section>
 
       {/* --- Current Topic Section (hidden when the same turn is the current speaker) --- */}
-      {currentTopic && currentTopic.startTime !== currentSpeaker?.startTime && (
+      {currentTopic && currentTopic.speakerId !== currentSpeaker?.id && (
         <section aria-labelledby="topic-heading">
           <h2
             id="topic-heading"
