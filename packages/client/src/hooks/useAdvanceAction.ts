@@ -93,6 +93,15 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
     return undefined;
   }, [currentSpeakerId, event, user, lastAdvancementBy]);
 
+  // Clear the debounce timer on unmount so it doesn't fire `setDebounceActive`
+  // on an unmounted component (happens in tests that click the button and
+  // unmount before DEBOUNCE_MS elapses).
+  useEffect(() => {
+    return () => {
+      clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
   const fire = useCallback(() => {
     if (!socket || !meeting) return;
     if (Date.now() < cooldownUntilRef.current) return;
