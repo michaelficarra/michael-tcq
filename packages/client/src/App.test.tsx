@@ -133,7 +133,7 @@ describe('HomePage', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chairs: ['alice'] }),
       });
-      expect(mockNavigate).toHaveBeenCalledWith('/meeting/calm-wave-fox');
+      expect(mockNavigate).toHaveBeenCalledWith('/meeting/calm-wave-fox#agenda');
     });
   });
 

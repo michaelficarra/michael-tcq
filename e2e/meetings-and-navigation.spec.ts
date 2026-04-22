@@ -121,46 +121,46 @@ test.describe('Navigation', () => {
     await expect(page.getByRole('tab', { name: 'Help' })).toBeVisible();
   });
 
-  test('the Queue tab is the default active tab', async ({ page }) => {
+  test('the Agenda tab is the default active tab after creating a meeting', async ({ page }) => {
     await createMeeting(page);
 
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('the active tab has aria-selected="true"', async ({ page }) => {
     await createMeeting(page);
 
-    // Queue is default
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
-
-    // Switch to Agenda
-    await goToAgendaTab(page);
+    // Agenda is the default after creation
     await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'false');
+
+    // Switch to Queue
+    await goToQueueTab(page);
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'false');
   });
 
   test('clicking each tab shows the corresponding panel', async ({ page }) => {
     await createMeeting(page);
 
-    // Queue panel is visible by default — verify queue-specific content
-    await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
-
-    // Switch to Agenda — verify agenda-specific content
-    await goToAgendaTab(page);
+    // Agenda panel is visible by default after creation — verify agenda-specific content
     await expect(page.getByText('No agenda items yet.')).toBeVisible();
-    await expect(page.getByText('Waiting for the meeting to start')).not.toBeVisible();
+
+    // Switch to Queue — verify queue-specific content
+    await goToQueueTab(page);
+    await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
+    await expect(page.getByText('No agenda items yet.')).not.toBeVisible();
 
     // Switch to Log
     await goToLogTab(page);
-    await expect(page.getByText('No agenda items yet.')).not.toBeVisible();
+    await expect(page.getByText('Waiting for the meeting to start')).not.toBeVisible();
 
     // Switch to Help
     await goToHelpTab(page);
-    await expect(page.getByText('No agenda items yet.')).not.toBeVisible();
+    await expect(page.getByText('Waiting for the meeting to start')).not.toBeVisible();
 
-    // Switch back to Queue
-    await goToQueueTab(page);
-    await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
+    // Switch back to Agenda
+    await goToAgendaTab(page);
+    await expect(page.getByText('No agenda items yet.')).toBeVisible();
   });
 
   test('top navigation bar shows the TCQ logo linking to home, tabs, and user menu', async ({ page }) => {

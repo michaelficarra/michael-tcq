@@ -199,7 +199,9 @@ function NewMeetingCard() {
       }
 
       const meeting = await res.json();
-      navigate(`/meeting/${meeting.id}`);
+      // Land on the Agenda tab so the chair can immediately add items and
+      // co-chairs — the Queue is empty and uninteresting for a fresh meeting.
+      navigate(`/meeting/${meeting.id}#agenda`);
     } catch {
       setError('Failed to create meeting');
     } finally {

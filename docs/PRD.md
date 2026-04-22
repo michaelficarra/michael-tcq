@@ -57,7 +57,7 @@ The home page shows two cards side by side:
 
 ### Creating a Meeting
 
-An authenticated user clicks "Start a New Meeting" to create a meeting with themselves as the sole initial chair. The system generates a meeting ID consisting of a short sequence of memorable, easily distinguished words. Additional chairs can be added from the Agenda tab after the meeting is created.
+An authenticated user clicks "Start a New Meeting" to create a meeting with themselves as the sole initial chair. The system generates a meeting ID consisting of a short sequence of memorable, easily distinguished words. After creation, the user is taken directly to the new meeting's Agenda tab so they can immediately add agenda items and additional chairs.
 
 ### Joining a Meeting
 

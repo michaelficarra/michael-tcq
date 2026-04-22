@@ -22,8 +22,8 @@ export async function createMeeting(page: Page): Promise<string> {
   await page.waitForURL(/\/meeting\//);
   const url = new URL(page.url());
   const id = url.pathname.split('/meeting/')[1];
-  // Wait for meeting to load (queue tab is default)
-  await expect(page.getByText('Waiting for the meeting to start')).toBeVisible();
+  // Meeting creation redirects to the Agenda tab — wait for it to become active.
+  await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
   return decodeURIComponent(id);
 }
 
