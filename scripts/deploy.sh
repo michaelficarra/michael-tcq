@@ -199,6 +199,24 @@ ensure_gcloud() {
   fi
 }
 
+# Refuse to deploy from a dirty tree: the image is always tagged :latest,
+# so a dirty deploy leaves no record of what actually shipped.
+ensure_clean_working_tree() {
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not inside a git working tree — refusing to deploy." >&2
+    exit 1
+  fi
+  local dirty
+  dirty="$(git -C "$PROJECT_ROOT" status --porcelain)"
+  if [ -n "$dirty" ]; then
+    echo "Working tree is dirty — refusing to deploy:" >&2
+    echo "$dirty" >&2
+    echo "" >&2
+    echo "Commit, stash, or discard your changes and re-run." >&2
+    exit 1
+  fi
+}
+
 # Fail fast if the user hasn't run `gcloud auth login`. We don't invoke
 # `gcloud auth login` from inside the script because it opens a browser
 # and handles poorly when the script itself is driving an interactive flow.
@@ -519,6 +537,7 @@ ensure_github_oauth() {
 # ---------------------------------------------------------------------------
 
 main() {
+  ensure_clean_working_tree
   ensure_gcloud
   ensure_auth
 

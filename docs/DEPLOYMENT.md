@@ -22,6 +22,7 @@ The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In
 - A [Google Cloud](https://cloud.google.com/) account
 - [Docker](https://docs.docker.com/get-docker/) installed locally
 - The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) — the deploy script offers to install it if it's missing
+- A clean git working tree — the deploy script refuses to run with uncommitted or untracked changes, since the deployed image is always tagged `:latest` and a dirty deploy leaves no record of what actually shipped. Commit or stash before running.
 
 ## First-Time Setup (Recommended)
 
