@@ -19,7 +19,8 @@ export type UserKey = string & { readonly __brand: 'UserKey' };
 export interface AgendaItem {
   id: string;
   name: string;
-  ownerId: UserKey;
+  /** Ordered, non-empty list of presenter user keys. First presenter becomes the initial speaker when the item is advanced to. */
+  presenterIds: UserKey[];
   timebox?: number; // duration in minutes
 }
 
@@ -86,7 +87,7 @@ export interface AgendaItemStartedLog extends LogEntryBase {
   type: 'agenda-item-started';
   chairId: UserKey;
   itemName: string;
-  itemOwnerId: UserKey;
+  itemPresenterIds: UserKey[];
 }
 
 export interface AgendaItemFinishedLog extends LogEntryBase {

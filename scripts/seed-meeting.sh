@@ -2,7 +2,7 @@
 #
 # Seed a meeting with sample data for development/demo purposes.
 #
-# Picks random TC39 members as chairs and agenda item owners, selects
+# Picks random TC39 members as chairs and agenda item presenters, selects
 # a random subset of plausible agenda topics and queue items, creates
 # a meeting, and populates it with agenda items and a speaker queue.
 #
@@ -63,9 +63,9 @@ rand_range() {
   echo $(( RANDOM % (max - min + 1) + min ))
 }
 
-# We need up to 20 random owners for agenda items
+# We need up to 20 random people to play roles as chairs and presenters
 RANDOM_MEMBERS=$(pick_random 20)
-readarray -t OWNERS <<< "$RANDOM_MEMBERS"
+readarray -t PEOPLE <<< "$RANDOM_MEMBERS"
 
 # Select 10-20 agenda items and 6-15 queue topics
 AGENDA_COUNT=$(rand_range 10 20)
@@ -76,7 +76,7 @@ echo "Seeding meeting with $AGENDA_COUNT agenda items and $QUEUE_COUNT queue top
 # Create a meeting with real TC39 members as chairs.
 MEETING_JSON=$(curl -sf -X POST "$SERVER/api/meetings" \
   -H 'Content-Type: application/json' \
-  -d "{\"chairs\":[\"${OWNERS[0]}\",\"${OWNERS[1]}\",\"${OWNERS[2]}\"]}")
+  -d "{\"chairs\":[\"${PEOPLE[0]}\",\"${PEOPLE[1]}\",\"${PEOPLE[2]}\"]}")
 
 MEETING_ID=$(echo "$MEETING_JSON" | node -e "
   let d = '';
@@ -84,18 +84,18 @@ MEETING_ID=$(echo "$MEETING_JSON" | node -e "
   process.stdin.on('end', () => console.log(JSON.parse(d).id));
 ")
 
-echo "Created meeting: $MEETING_ID (chairs: ${OWNERS[0]}, ${OWNERS[1]}, ${OWNERS[2]})"
+echo "Created meeting: $MEETING_ID (chairs: ${PEOPLE[0]}, ${PEOPLE[1]}, ${PEOPLE[2]})"
 
 # Switch to a chair so the main socket has permission to manage the meeting.
 CHAIR_COOKIE=$(curl -sf -X POST "$SERVER/api/dev/switch-user" \
   -H 'Content-Type: application/json' \
-  -d "{\"username\":\"${OWNERS[0]}\"}" \
+  -d "{\"username\":\"${PEOPLE[0]}\"}" \
   -D - -o /dev/null | grep -i '^set-cookie:' | head -1 | sed 's/^[Ss]et-[Cc]ookie: //;s/;.*//')
 
-echo "Switched to chair: ${OWNERS[0]}"
+echo "Switched to chair: ${PEOPLE[0]}"
 
-# Pass owners as a JSON array via environment variable
-OWNERS_JSON=$(printf '%s\n' "${OWNERS[@]}" | node -e "
+# Pass the people pool as a JSON array via environment variable
+PEOPLE_JSON=$(printf '%s\n' "${PEOPLE[@]}" | node -e "
   let d = '';
   process.stdin.on('data', c => d += c);
   process.stdin.on('end', () => console.log(JSON.stringify(d.trim().split('\n'))));
@@ -104,15 +104,16 @@ OWNERS_JSON=$(printf '%s\n' "${OWNERS[@]}" | node -e "
 # Connect via Socket.IO and set up the meeting content.
 # Uses a sequential queue of actions, waiting for a state broadcast
 # after each one before proceeding to the next.
-OWNERS_JSON="$OWNERS_JSON" AGENDA_COUNT="$AGENDA_COUNT" QUEUE_COUNT="$QUEUE_COUNT" CHAIR_COOKIE="$CHAIR_COOKIE" node -e "
+PEOPLE_JSON="$PEOPLE_JSON" AGENDA_COUNT="$AGENDA_COUNT" QUEUE_COUNT="$QUEUE_COUNT" CHAIR_COOKIE="$CHAIR_COOKIE" node -e "
 const { io } = require('socket.io-client');
 const socket = io('$SERVER', {
   transports: ['websocket'],
   extraHeaders: { cookie: process.env.CHAIR_COOKIE },
 });
 
-// Owners selected from TC39 membership (passed via env var)
-const owners = JSON.parse(process.env.OWNERS_JSON);
+// People selected from TC39 membership (passed via env var); used as both
+// chairs (first few) and as the pool of potential presenters / queue authors.
+const people = JSON.parse(process.env.PEOPLE_JSON);
 const agendaCount = parseInt(process.env.AGENDA_COUNT, 10);
 const queueCount = parseInt(process.env.QUEUE_COUNT, 10);
 
@@ -282,11 +283,20 @@ const selectedQueue = shuffle([...queuePool]).slice(0, queueCount).map(topic => 
 // Build the action sequence
 const actions = [];
 
-// Add agenda items (each with a random owner)
-selectedAgenda.forEach((item, i) => {
+// Pick N distinct random presenters from the people pool.
+function pickPresenters(n) {
+  const shuffled = shuffle([...people]);
+  return shuffled.slice(0, n);
+}
+
+// Add agenda items. Most items have one presenter; some have two or three
+// to exercise the multi-presenter data model.
+selectedAgenda.forEach((item) => {
+  const r = Math.random();
+  const presenterCount = r < 0.1 ? 3 : r < 0.3 ? 2 : 1;
   actions.push(() => socket.emit('agenda:add', {
     name: item.name,
-    ownerUsername: owners[Math.floor(Math.random() * owners.length)],
+    presenterUsernames: pickPresenters(presenterCount),
     timebox: item.timebox,
   }));
 });
@@ -298,7 +308,7 @@ actions.push((state) =>
 
 // Assign a random author to each queue entry and add them as that user
 selectedQueue.forEach((item) => {
-  item.author = owners[Math.floor(Math.random() * owners.length)];
+  item.author = people[Math.floor(Math.random() * people.length)];
   actions.push(() => addQueueEntryAsUser(item.author, item));
 });
 
@@ -370,10 +380,10 @@ socket.on('state', (state) => {
     console.log('Meeting seeded successfully!');
     console.log('');
     console.log('  Agenda items:     ' + state.agenda.length);
-    console.log('  Queue entries:    ' + state.queuedSpeakerIds.length);
+    console.log('  Queue entries:    ' + state.queue.orderedIds.length);
     console.log('');
-    state.queuedSpeakerIds.forEach((id, i) => {
-      const e = state.queueEntries[id];
+    state.queue.orderedIds.forEach((id, i) => {
+      const e = state.queue.entries[id];
       const u = state.users[e.userId];
       console.log('    ' + (i + 1) + '. [' + e.type + '] ' + e.topic
         + ' (' + (u?.name ?? e.userId) + ')');

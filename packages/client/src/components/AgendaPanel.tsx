@@ -215,7 +215,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                   item={item}
                   index={index}
                   isChair={isChair}
-                  isOwnItem={!!user && item.ownerId === userKey(user)}
+                  isOwnItem={!!user && item.presenterIds.includes(userKey(user))}
                   onDelete={handleDelete}
                 />
               ))}
@@ -248,7 +248,7 @@ interface SortableAgendaItemProps {
   item: AgendaItem;
   index: number;
   isChair: boolean;
-  /** Whether the current user is the owner of this agenda item. */
+  /** Whether the current user is one of this item's presenters. */
   isOwnItem: boolean;
   onDelete: (id: string) => void;
 }
@@ -258,7 +258,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editOwner, setEditOwner] = useState('');
+  const [editPresenters, setEditPresenters] = useState('');
   const [editTimebox, setEditTimebox] = useState('');
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -274,7 +274,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
     setEditName(item.name);
-    setEditOwner(meeting?.users[item.ownerId]?.ghUsername ?? item.ownerId);
+    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.ghUsername ?? k).join(', '));
     setEditTimebox(item.timebox != null && item.timebox > 0 ? String(item.timebox) : '');
     setEditing(true);
   }
@@ -283,15 +283,18 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmedName = editName.trim();
-    const trimmedOwner = editOwner.trim();
-    if (!trimmedName || !trimmedOwner) return;
+    const presenterUsernames = editPresenters
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (!trimmedName || presenterUsernames.length === 0) return;
 
     const timeboxMinutes = parseInt(editTimebox, 10);
 
     socket?.emit('agenda:edit', {
       id: item.id,
       name: trimmedName,
-      ownerUsername: trimmedOwner,
+      presenterUsernames,
       timebox: timeboxMinutes > 0 ? timeboxMinutes : null,
     });
     setEditing(false);
@@ -325,11 +328,13 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
           />
           <input
             type="text"
-            value={editOwner}
-            onChange={(e) => setEditOwner(e.target.value)}
+            value={editPresenters}
+            onChange={(e) => setEditPresenters(e.target.value)}
             required
-            aria-label="Owner username"
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
+            aria-label="Presenters"
+            placeholder="alice, bob"
+            title="GitHub usernames, comma-separated (omit the @)"
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-40
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
@@ -389,12 +394,15 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
           {item.name}
         </InlineMarkdown>
 
-        {/* Owner info */}
-        <UserBadge
-          user={meeting?.users[item.ownerId]}
-          size={16}
-          className="ml-2 text-sm text-stone-500 dark:text-stone-400"
-        />
+        {/* Presenter badges — one per presenter */}
+        {item.presenterIds.map((pid) => (
+          <UserBadge
+            key={pid}
+            user={meeting?.users[pid]}
+            size={16}
+            className="ml-2 text-sm text-stone-500 dark:text-stone-400"
+          />
+        ))}
 
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (

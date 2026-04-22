@@ -66,8 +66,24 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(2);
-    expect(items[0]).toEqual({ name: "Secretary's Report", presenter: 'Samina Husain', timebox: 15 });
-    expect(items[1]).toEqual({ name: 'Opening, welcome and roll call', presenter: 'Chair', timebox: 10 });
+    expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], timebox: 15 });
+    expect(items[1]).toEqual({ name: 'Opening, welcome and roll call', presenters: ['Chair'], timebox: 10 });
+  });
+
+  it('parses numbered list items with multiple comma-separated presenters', () => {
+    const md = `## Agenda items
+
+1. Joint Report (15m, Alice, Bob)
+1. Co-chaired session (Chair, Co-chair, 20m)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({ name: 'Joint Report', presenters: ['Alice', 'Bob'], timebox: 15 });
+    expect(items[1]).toEqual({
+      name: 'Co-chaired session',
+      presenters: ['Chair', 'Co-chair'],
+      timebox: 20,
+    });
   });
 
   it('parses numbered list items without parenthetical', () => {
@@ -77,7 +93,7 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(1);
-    expect(items[0]).toEqual({ name: "Project Editors' Reports", presenter: '', timebox: undefined });
+    expect(items[0]).toEqual({ name: "Project Editors' Reports", presenters: [], timebox: undefined });
   });
 
   it('skips structural items like adjournment', () => {
@@ -110,14 +126,30 @@ describe('parseAgendaMarkdown', () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toEqual({
       name: '[Temporal](https://github.com/tc39/proposal-temporal) for Stage 4',
-      presenter: 'Philip Chimento',
+      presenters: ['Philip Chimento'],
       timebox: 30,
     });
     expect(items[1]).toEqual({
       name: '[JSON.parseImmutable](https://github.com/tc39/proposal-json-parseimmutable) update',
-      presenter: 'Peter Klecha',
+      presenters: ['Peter Klecha'],
       timebox: 15,
     });
+  });
+
+  it('parses table rows with multiple comma-separated presenters', () => {
+    const md = `## Agenda items
+
+1. Proposals
+
+    | stage | timebox | topic | presenter |
+    |:-----:|:-------:|-------|-----------|
+    | 2 | 30m | Joint Proposal | Alice, Bob |
+    | 1 | 15m | With links | [Alice](https://a.example), [Bob](https://b.example) |
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(2);
+    expect(items[0].presenters).toEqual(['Alice', 'Bob']);
+    expect(items[1].presenters).toEqual(['Alice', 'Bob']);
   });
 
   it('parses tables without a stage column', () => {
@@ -133,7 +165,7 @@ describe('parseAgendaMarkdown', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toEqual({
       name: 'Abort Protocol Discussion',
-      presenter: 'James M Snell',
+      presenters: ['James M Snell'],
       timebox: 30,
     });
   });
@@ -167,7 +199,7 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0].name).toBe(
       '[Iterator Includes](https://github.com/michaelficarra/proposal-iterator-includes) for Stage 1, 2, or 2.7 ([slides](https://example.com))',
     );
-    expect(items[0].presenter).toBe('Michael Ficarra');
+    expect(items[0].presenters).toEqual(['Michael Ficarra']);
   });
 
   it('strips emoji prefixes from agenda items', () => {

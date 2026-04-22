@@ -1,9 +1,10 @@
 /**
  * Form for adding a new agenda item.
  *
- * Fields: name (required), owner GitHub username (required), timebox in
- * minutes (optional). Matches the layout from the original screenshots:
- * a horizontal row of labelled inputs with Create/Cancel buttons.
+ * Fields: name (required), presenter GitHub username(s) — comma-separated,
+ * at least one — (required), timebox in minutes (optional). Matches the
+ * layout from the original screenshots: a horizontal row of labelled inputs
+ * with Create/Cancel buttons.
  */
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
@@ -20,8 +21,8 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
   const { user } = useMeetingState();
 
   const [name, setName] = useState('');
-  // Default the owner field to the current user's username
-  const [ownerUsername, setOwnerUsername] = useState(user?.ghUsername ?? '');
+  // Default the presenters field to the current user's username
+  const [presenters, setPresenters] = useState(user?.ghUsername ?? '');
   const [timebox, setTimebox] = useState('');
 
   // Focus the name input when the form opens
@@ -34,8 +35,11 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
     e.preventDefault();
 
     const trimmedName = name.trim();
-    const trimmedOwner = ownerUsername.trim();
-    if (!trimmedName || !trimmedOwner) return;
+    const presenterUsernames = presenters
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (!trimmedName || presenterUsernames.length === 0) return;
 
     // Parse timebox: empty string or non-positive = no timebox
     const timeboxMinutes = parseInt(timebox, 10);
@@ -43,7 +47,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
 
     socket?.emit('agenda:add', {
       name: trimmedName,
-      ownerUsername: trimmedOwner,
+      presenterUsernames,
       timebox: timeboxValue,
     });
 
@@ -73,22 +77,27 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
           />
         </div>
 
-        {/* Owner field */}
-        <div className="min-w-[160px]">
-          <label htmlFor="agenda-owner" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
-            Owner
+        {/* Presenters field */}
+        <div className="min-w-[200px]">
+          <label
+            htmlFor="agenda-presenters"
+            className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+          >
+            Presenters
           </label>
           <input
-            id="agenda-owner"
+            id="agenda-presenters"
             type="text"
-            value={ownerUsername}
-            onChange={(e) => setOwnerUsername(e.target.value)}
+            value={presenters}
+            onChange={(e) => setPresenters(e.target.value)}
             required
             className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">GitHub username (omit the @)</p>
+          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
+            GitHub username(s), comma-separated (omit the @)
+          </p>
         </div>
 
         {/* Timebox field */}

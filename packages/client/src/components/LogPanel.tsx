@@ -434,11 +434,12 @@ function serialiseLog(meeting: MeetingState): string {
         break;
 
       case 'agenda-item-started': {
-        const owner = userName(users, entry.itemOwnerId);
+        const presenters = entry.itemPresenterIds.map((id) => userName(users, id)).join(', ');
+        const label = entry.itemPresenterIds.length === 1 ? 'Presenter' : 'Presenters';
         lines.push(`## ${entry.itemName}`);
         lines.push('');
         lines.push(
-          `Owner: ${owner} | Started: ${formatTimestamp(entry.timestamp)} | Chair: ${userName(users, entry.chairId)}`,
+          `${label}: ${presenters} | Started: ${formatTimestamp(entry.timestamp)} | Chair: ${userName(users, entry.chairId)}`,
         );
         lines.push('');
         break;

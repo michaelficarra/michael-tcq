@@ -171,9 +171,9 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             On the <strong>Agenda</strong> tab, click <strong>New Agenda Item</strong> to add items. Each item has a
-            name, an owner (the person who will present it), and an optional timebox in minutes. Drag items to reorder
-            them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items. Agenda item names
-            support basic inline markdown (bold, italic, strikethrough, code, and links).
+            name, one or more presenters (comma-separated GitHub usernames), and an optional timebox in minutes. Drag
+            items to reorder them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items.
+            Agenda item names support basic inline markdown (bold, italic, strikethrough, code, and links).
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             You can <strong>import an agenda</strong> from a URL to a markdown document (e.g. a TC39 meeting agenda on
@@ -186,8 +186,8 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           </p>
           <ol className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-decimal">
             <li>
-              Click <strong>Start Meeting</strong> to advance to the first agenda item. The item's owner becomes the
-              current speaker.
+              Click <strong>Start Meeting</strong> to advance to the first agenda item. The item's first presenter
+              becomes the current speaker.
             </li>
             <li>
               As participants enter the queue, click <strong>Next Speaker</strong> to advance through them. The queue
@@ -195,9 +195,9 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
             </li>
             <li>
               When discussion on an item is complete, click <strong>Next Agenda Item</strong> to move on. If the queue
-              is non-empty you'll be asked to confirm. The queue is cleared and the next item's owner becomes the
-              speaker. Any remaining queue entries are recorded in the meeting log, so you can restore them later if the
-              agenda item is revisited.
+              is non-empty you'll be asked to confirm. The queue is cleared and the next item's first presenter becomes
+              the speaker. Any remaining queue entries are recorded in the meeting log, so you can restore them later if
+              the agenda item is revisited.
             </li>
           </ol>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">

@@ -376,6 +376,16 @@ test.describe('Timers', () => {
     await expect(agendaItem.getByText(/\d+:\d{2}/)).toBeVisible();
   });
 
+  test('current agenda item shows a badge for each presenter when there are multiple', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Joint session', ['admin', 'otheruser']);
+    await startMeeting(page);
+
+    const agendaItem = queueSection(page, 'Agenda Item');
+    await expect(agendaItem.locator('img')).toHaveCount(2);
+  });
+
   test('current speaker shows a count-up timer', async ({ page }) => {
     await addQueueEntry(page, 'New Topic', 'Timed topic');
     await page.getByRole('button', { name: 'Next Speaker' }).click();

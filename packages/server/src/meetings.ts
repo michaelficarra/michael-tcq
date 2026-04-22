@@ -23,6 +23,18 @@ export function ensureUser(meeting: MeetingState, user: User): UserKey {
   return key;
 }
 
+/** Drop duplicate keys, preserving first-occurrence order. */
+function dedupeKeys(keys: UserKey[]): UserKey[] {
+  const seen = new Set<UserKey>();
+  const out: UserKey[] = [];
+  for (const k of keys) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
+}
+
 /**
  * Manages the in-memory map of active meetings and coordinates with
  * the persistent store for durability.
@@ -172,17 +184,22 @@ export class MeetingManager {
   // -- Agenda mutations --
 
   /**
-   * Add a new agenda item to a meeting.
-   * Returns the created item, or null if the meeting doesn't exist.
+   * Add a new agenda item to a meeting. `presenters` must be non-empty;
+   * duplicate keys are de-duplicated preserving first-occurrence order.
+   * Returns the created item, or null if the meeting doesn't exist or
+   * `presenters` is empty.
    */
-  addAgendaItem(meetingId: string, name: string, owner: User, timebox?: number): AgendaItem | null {
+  addAgendaItem(meetingId: string, name: string, presenters: User[], timebox?: number): AgendaItem | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
+
+    const presenterIds = dedupeKeys(presenters.map((p) => ensureUser(meeting, p)));
+    if (presenterIds.length === 0) return null;
 
     const item: AgendaItem = {
       id: randomUUID(),
       name,
-      ownerId: ensureUser(meeting, owner),
+      presenterIds,
       timebox,
     };
 
@@ -194,12 +211,14 @@ export class MeetingManager {
   /**
    * Edit an existing agenda item. Only the provided fields are updated;
    * omitted fields are left unchanged. Pass `timebox: null` to clear
-   * the timebox. Returns true if the item was found and updated.
+   * the timebox. When `presenters` is provided it must be non-empty;
+   * an empty list is rejected (the call returns false without mutating).
+   * Returns true if the item was found and updated.
    */
   editAgendaItem(
     meetingId: string,
     itemId: string,
-    updates: { name?: string; owner?: User; timebox?: number | null },
+    updates: { name?: string; presenters?: User[]; timebox?: number | null },
   ): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
@@ -207,8 +226,12 @@ export class MeetingManager {
     const item = meeting.agenda.find((i) => i.id === itemId);
     if (!item) return false;
 
+    if (updates.presenters !== undefined) {
+      const presenterIds = dedupeKeys(updates.presenters.map((p) => ensureUser(meeting, p)));
+      if (presenterIds.length === 0) return false;
+      item.presenterIds = presenterIds;
+    }
     if (updates.name !== undefined) item.name = updates.name;
-    if (updates.owner !== undefined) item.ownerId = ensureUser(meeting, updates.owner);
     if (updates.timebox === null) {
       item.timebox = undefined;
     } else if (updates.timebox !== undefined) {
@@ -286,8 +309,8 @@ export class MeetingManager {
    * this starts the meeting by setting the first item. Otherwise it
    * advances to the next item in the list.
    *
-   * When advancing, the agenda item's owner becomes the current speaker
-   * with a topic of "Introducing: <item name>". The current topic and
+   * When advancing, the agenda item's first presenter becomes the current
+   * speaker with a topic of "Introducing: <item name>". The current topic and
    * queue are cleared since we're starting a new agenda item.
    *
    * Returns the new current agenda item, or null if there's nothing to
@@ -316,20 +339,22 @@ export class MeetingManager {
     const nextItem = meeting.agenda[nextIndex];
     const now = new Date().toISOString();
 
-    // The item owner becomes the current speaker. No synthesised queue entry:
-    // the CurrentSpeaker struct is the sole representation of this turn.
+    // The item's first presenter becomes the current speaker. No synthesised
+    // queue entry: the CurrentSpeaker struct is the sole representation of
+    // this turn. Any co-presenters are not auto-queued — they can self-add.
+    const firstPresenterId = nextItem.presenterIds[0];
     const speaker: CurrentSpeaker = {
       id: randomUUID(),
       type: 'topic',
       topic: `Introducing: ${nextItem.name}`,
-      userId: nextItem.ownerId,
+      userId: firstPresenterId,
       source: 'agenda',
       startTime: now,
     };
 
-    // Topic group for this agenda item starts with the owner's introduction.
+    // Topic group for this agenda item starts with the introduction.
     const introSpeaker: TopicSpeaker = {
-      userId: nextItem.ownerId,
+      userId: firstPresenterId,
       type: 'topic',
       topic: `Introducing: ${nextItem.name}`,
       startTime: now,

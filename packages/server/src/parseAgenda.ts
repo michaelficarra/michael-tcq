@@ -8,7 +8,8 @@
 
 export interface ParsedAgendaItem {
   name: string;
-  presenter: string;
+  /** Ordered list of presenter names extracted from the source. May be empty — the caller substitutes a default. */
+  presenters: string[];
   timebox?: number; // minutes
 }
 
@@ -81,17 +82,18 @@ function parseTimebox(text: string): number | undefined {
 }
 
 /**
- * Parse a parenthetical suffix like "(Chair, 10m)" or "(15m, Samina Husain)"
- * into a presenter and timebox.
+ * Parse a parenthetical suffix like "(Chair, 10m)" or "(15m, Alice, Bob)"
+ * into a list of presenters and a timebox. Each non-timebox comma-separated
+ * token becomes its own presenter entry.
  */
-function parseParenthetical(paren: string): { presenter: string; timebox?: number } {
+function parseParenthetical(paren: string): { presenters: string[]; timebox?: number } {
   // Split on commas and classify each part
   const parts = paren
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  let presenter = '';
+  const presenters: string[] = [];
   let timebox: number | undefined;
 
   for (const part of parts) {
@@ -99,12 +101,11 @@ function parseParenthetical(paren: string): { presenter: string; timebox?: numbe
     if (tb !== undefined) {
       timebox = tb;
     } else {
-      // Accumulate non-timebox parts as presenter
-      presenter = presenter ? `${presenter}, ${part}` : part;
+      presenters.push(part);
     }
   }
 
-  return { presenter, timebox };
+  return { presenters, timebox };
 }
 
 /** Detect table header columns by matching known names. */
@@ -210,12 +211,20 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
         const timeboxIdx = tableColumns.get('timebox');
 
         const name = topicIdx !== undefined ? cleanName(rawCells[topicIdx]) : '';
-        const presenter = presenterIdx !== undefined ? stripMarkdown(rawCells[presenterIdx]) : '';
+        // Presenter cell may list multiple comma-separated names. stripMarkdown
+        // flattens link syntax first, so "[Alice](url), [Bob](url)" splits cleanly.
+        const presenters =
+          presenterIdx !== undefined
+            ? stripMarkdown(rawCells[presenterIdx])
+                .split(',')
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+            : [];
         const rawTimebox = timeboxIdx !== undefined ? stripMarkdown(rawCells[timeboxIdx]) : '';
         const timebox = parseTimebox(rawTimebox);
 
         if (name) {
-          items.push({ name, presenter, timebox });
+          items.push({ name, presenters, timebox });
         }
       }
       continue;
@@ -254,11 +263,11 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
       const parenMatch = cleanedText.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
       if (parenMatch) {
         const name = parenMatch[1].trim();
-        const { presenter, timebox } = parseParenthetical(parenMatch[2]);
-        items.push({ name, presenter, timebox });
+        const { presenters, timebox } = parseParenthetical(parenMatch[2]);
+        items.push({ name, presenters, timebox });
       } else {
         // No parenthetical — use the whole text as the name
-        items.push({ name: cleanedText, presenter: '', timebox: undefined });
+        items.push({ name: cleanedText, presenters: [], timebox: undefined });
       }
     }
   }

@@ -75,18 +75,21 @@ export async function goToHelpTab(page: Page) {
   await switchToTab(page, 'Help');
 }
 
-/** Add an agenda item (must be on the Agenda tab as a chair). */
-export async function addAgendaItem(page: Page, name: string, owner?: string, timebox?: number) {
-  // Click the "New Agenda Item" button to show the form
-  const addButton = page.getByRole('button', { name: /New Agenda Item/i });
-  if (await addButton.isVisible()) {
-    await addButton.click();
-  }
+/**
+ * Add an agenda item (must be on the Agenda tab as a chair).
+ * `presenters` accepts a single username or an array; joined with commas.
+ */
+export async function addAgendaItem(page: Page, name: string, presenters?: string | string[], timebox?: number) {
+  // Open the form. Playwright's click auto-waits for the button to be actionable,
+  // so this handles the race where the meeting state hasn't finished syncing yet
+  // when the helper is called.
+  await page.getByRole('button', { name: /New Agenda Item/i }).click();
 
   // Fill in the form
   await page.getByLabel('Agenda Item Name').fill(name);
-  if (owner) {
-    await page.getByLabel('Owner').fill(owner);
+  if (presenters !== undefined) {
+    const value = Array.isArray(presenters) ? presenters.join(', ') : presenters;
+    await page.getByLabel('Presenters').fill(value);
   }
   if (timebox !== undefined) {
     await page.getByLabel(/timebox/i).fill(String(timebox));

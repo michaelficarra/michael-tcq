@@ -291,12 +291,12 @@ describe('Socket.IO integration', () => {
 
       // Listen for the state update after adding
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('agenda:add', { name: 'First item', ownerUsername: 'testuser', timebox: 15 });
+      client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], timebox: 15 });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
       expect(state.agenda[0].name).toBe('First item');
-      expect(state.users[state.agenda[0].ownerId].ghUsername).toBe('testuser');
+      expect(state.users[state.agenda[0].presenterIds[0]].ghUsername).toBe('testuser');
       expect(state.agenda[0].timebox).toBe(15);
     });
 
@@ -315,7 +315,7 @@ describe('Socket.IO integration', () => {
 
       // Client 2 waits for the broadcast
       const state2Promise = waitForEvent<MeetingState>(client2, 'state');
-      client1.emit('agenda:add', { name: 'Broadcast test', ownerUsername: 'testuser' });
+      client1.emit('agenda:add', { name: 'Broadcast test', presenterUsernames: ['testuser'] });
       const state2 = await state2Promise;
 
       expect(state2.agenda).toHaveLength(1);
@@ -337,7 +337,7 @@ describe('Socket.IO integration', () => {
 
       // Listen for error
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('agenda:add', { name: 'Should fail', ownerUsername: 'testuser' });
+      client.emit('agenda:add', { name: 'Should fail', presenterUsernames: ['testuser'] });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
@@ -356,12 +356,14 @@ describe('Socket.IO integration', () => {
           organisation: 'Test Org',
         },
       ]);
-      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'To delete', {
-        ghid: 1,
-        ghUsername: 'testuser',
-        name: 'Test User',
-        organisation: 'Test Org',
-      })!;
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'To delete', [
+        {
+          ghid: 1,
+          ghUsername: 'testuser',
+          name: 'Test User',
+          organisation: 'Test Org',
+        },
+      ])!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -384,9 +386,9 @@ describe('Socket.IO integration', () => {
         },
       ]);
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
-      ctx.meetingManager.addAgendaItem(meeting.id, 'A', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'B', owner);
-      const itemC = ctx.meetingManager.addAgendaItem(meeting.id, 'C', owner)!;
+      ctx.meetingManager.addAgendaItem(meeting.id, 'A', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'B', [owner]);
+      const itemC = ctx.meetingManager.addAgendaItem(meeting.id, 'C', [owner])!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -403,7 +405,7 @@ describe('Socket.IO integration', () => {
     it('edits an agenda item and broadcasts updated state', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Old name', owner)!;
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Old name', [owner])!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -424,12 +426,14 @@ describe('Socket.IO integration', () => {
           organisation: '',
         },
       ]);
-      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      })!;
+      const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
+        {
+          ghid: 99,
+          ghUsername: 'chairperson',
+          name: 'Chair',
+          organisation: '',
+        },
+      ])!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -504,12 +508,14 @@ describe('Socket.IO integration', () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       // Add an agenda item owned by a known user with a full profile
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
-        ghid: 42,
-        ghUsername: 'knownuser',
-        name: 'Known User',
-        organisation: 'ACME',
-      });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
+        {
+          ghid: 42,
+          ghUsername: 'knownuser',
+          name: 'Known User',
+          organisation: 'ACME',
+        },
+      ]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1115,12 +1121,14 @@ describe('Socket.IO integration', () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       // Add a known user via the agenda
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
-        ghid: 42,
-        ghUsername: 'knownuser',
-        name: 'Known User',
-        organisation: 'ACME',
-      });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
+        {
+          ghid: 42,
+          ghUsername: 'knownuser',
+          name: 'Known User',
+          organisation: 'ACME',
+        },
+      ]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1343,7 +1351,7 @@ describe('Socket.IO integration', () => {
     it('starts the meeting and broadcasts updated state', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First topic', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First topic', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1361,8 +1369,8 @@ describe('Socket.IO integration', () => {
     it('advances to the next agenda item', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1388,12 +1396,14 @@ describe('Socket.IO integration', () => {
           organisation: '',
         },
       ]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
+        {
+          ghid: 99,
+          ghUsername: 'chairperson',
+          name: 'Chair',
+          organisation: '',
+        },
+      ]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1409,7 +1419,7 @@ describe('Socket.IO integration', () => {
     it('returns error via ack when no more agenda items', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Only item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Only item', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1441,8 +1451,8 @@ describe('Socket.IO integration', () => {
     it('rejects conflicting advance when currentAgendaItemId does not match', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1464,8 +1474,8 @@ describe('Socket.IO integration', () => {
     it('accepts advancement after unrelated mutations (queue add)', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1490,9 +1500,9 @@ describe('Socket.IO integration', () => {
     it('rejects when another chair already advanced the agenda item', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Third', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Third', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1557,7 +1567,7 @@ describe('Socket.IO integration', () => {
 
     it('logs meeting-started and agenda-item-started on first agenda advancement', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
       const statePromise = waitForEvent<MeetingState>(client, 'state');
@@ -1572,8 +1582,8 @@ describe('Socket.IO integration', () => {
 
     it('logs agenda-item-finished when advancing to the next item', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1600,7 +1610,7 @@ describe('Socket.IO integration', () => {
 
     it('groups speakers under topic-discussed entries', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1630,7 +1640,7 @@ describe('Socket.IO integration', () => {
 
     it('nests replies under the current topic group', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1656,7 +1666,7 @@ describe('Socket.IO integration', () => {
 
     it('excludes point-of-order speakers from topic groups', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1715,8 +1725,8 @@ describe('Socket.IO integration', () => {
 
     it('includes remaining queue in agenda-item-finished when queue is non-empty', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1746,8 +1756,8 @@ describe('Socket.IO integration', () => {
 
     it('does not include remainingQueue when queue is empty at advancement', async () => {
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'First', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1875,8 +1885,8 @@ describe('Socket.IO integration', () => {
     it('meeting:nextAgendaItem reopens the queue', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 1', owner);
-      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 2', owner);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 1', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 2', [owner]);
 
       const client = await joinMeeting(meeting.id);
 

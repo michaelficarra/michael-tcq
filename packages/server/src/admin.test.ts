@@ -97,8 +97,12 @@ describe('Admin endpoints', () => {
         { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
         { ghid: 2, ghUsername: 'other', name: 'Other', organisation: '' },
       ]);
-      manager.addAgendaItem(meeting.id, 'Item 1', { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' });
-      manager.addAgendaItem(meeting.id, 'Item 2', { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' });
+      manager.addAgendaItem(meeting.id, 'Item 1', [
+        { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
+      ]);
+      manager.addAgendaItem(meeting.id, 'Item 2', [
+        { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
+      ]);
       manager.addQueueEntry(meeting.id, 'topic', 'Topic', {
         ghid: 1,
         ghUsername: 'testuser',

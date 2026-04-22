@@ -35,16 +35,16 @@ describe('AgendaForm', () => {
     renderForm();
 
     expect(screen.getByLabelText('Agenda Item Name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Owner')).toBeInTheDocument();
+    expect(screen.getByLabelText('Presenters')).toBeInTheDocument();
     expect(screen.getByLabelText('Timebox')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
-  it('pre-fills the owner field with the current user username', () => {
+  it('pre-fills the presenters field with the current user username', () => {
     renderForm();
-    const ownerInput = screen.getByLabelText('Owner') as HTMLInputElement;
-    expect(ownerInput.value).toBe('alice');
+    const presentersInput = screen.getByLabelText('Presenters') as HTMLInputElement;
+    expect(presentersInput.value).toBe('alice');
   });
 
   it('focuses the name input on mount', () => {
@@ -82,7 +82,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Test Item',
-      ownerUsername: 'alice',
+      presenterUsernames: ['alice'],
       timebox: 15,
     });
     expect(onSubmit).toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'No timebox',
-      ownerUsername: 'alice',
+      presenterUsernames: ['alice'],
       timebox: undefined,
     });
   });

@@ -52,14 +52,14 @@ describe('LogPanel', () => {
             timestamp: new Date().toISOString(),
             chairId: 'alice',
             itemName: 'Proposal A',
-            itemOwnerId: 'bob',
+            itemPresenterIds: ['bob'],
           },
         ],
       }),
     );
     expect(screen.getByText('Started:')).toBeTruthy();
     expect(screen.getByText('Proposal A')).toBeTruthy();
-    // Chair badge should be shown (not the item owner)
+    // Chair badge should be shown (not the item presenter)
     expect(screen.getByText('Alice')).toBeTruthy();
   });
 
@@ -280,7 +280,7 @@ describe('LogPanel', () => {
     const t2 = '2026-01-01T10:05:00Z';
     const log: LogEntry[] = [
       { type: 'meeting-started', timestamp: t1, chairId: 'alice' },
-      { type: 'agenda-item-started', timestamp: t2, chairId: 'alice', itemName: 'Item 1', itemOwnerId: 'alice' },
+      { type: 'agenda-item-started', timestamp: t2, chairId: 'alice', itemName: 'Item 1', itemPresenterIds: ['alice'] },
     ];
     renderLog(makeMeeting({ log }));
     const started = screen.getByText('Meeting started');
@@ -297,7 +297,7 @@ describe('LogPanel', () => {
         timestamp: '2026-01-01T10:00:00Z',
         chairId: 'alice',
         itemName: 'Item 1',
-        itemOwnerId: 'alice',
+        itemPresenterIds: ['alice'],
       },
       {
         type: 'agenda-item-finished',
@@ -312,7 +312,7 @@ describe('LogPanel', () => {
         timestamp: '2026-01-01T10:10:00Z',
         chairId: 'alice',
         itemName: 'Item 2',
-        itemOwnerId: 'bob',
+        itemPresenterIds: ['bob'],
       },
     ];
     const { container } = renderLog(makeMeeting({ log }));

@@ -55,7 +55,7 @@ describe('Presentation mode', () => {
 
     it('hides the Start Meeting button', () => {
       const meeting = makeMeeting({
-        agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
+        agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -71,8 +71,8 @@ describe('Presentation mode', () => {
     it('hides Next Agenda Item button', () => {
       const meeting = makeMeeting({
         agenda: [
-          { id: '1', name: 'First', ownerId: 'alice' },
-          { id: '2', name: 'Second', ownerId: 'alice' },
+          { id: '1', name: 'First', presenterIds: ['alice'] },
+          { id: '2', name: 'Second', presenterIds: ['alice'] },
         ],
         current: { topicSpeakers: [], agendaItemId: '1' },
       });
@@ -233,7 +233,7 @@ describe('Presentation mode', () => {
 
     it('hides edit/delete buttons on agenda items', () => {
       const meeting = makeMeeting({
-        agenda: [{ id: '1', name: 'Test Item', ownerId: 'alice' }],
+        agenda: [{ id: '1', name: 'Test Item', presenterIds: ['alice'] }],
       });
       renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
@@ -244,7 +244,7 @@ describe('Presentation mode', () => {
     it('keeps agenda item content visible', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        agenda: [{ id: '1', name: 'Visible Item', ownerId: 'bob', timebox: 15 }],
+        agenda: [{ id: '1', name: 'Visible Item', presenterIds: ['bob'], timebox: 15 }],
       });
       renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 

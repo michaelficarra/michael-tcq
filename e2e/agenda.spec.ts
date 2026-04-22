@@ -97,7 +97,7 @@ test.describe('Agenda tab', () => {
   });
 
   test.describe('Agenda Management (Chair Only)', () => {
-    test('add form has fields for name, owner (pre-populated), and timebox', async ({ page }) => {
+    test('add form has fields for name, presenters (pre-populated), and timebox', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
@@ -106,10 +106,10 @@ test.describe('Agenda tab', () => {
 
       // Verify form fields are visible
       await expect(page.getByLabel('Agenda Item Name')).toBeVisible();
-      const ownerInput = page.getByLabel('Owner');
-      await expect(ownerInput).toBeVisible();
-      // Owner should be pre-populated with the current user's username
-      await expect(ownerInput).toHaveValue('admin');
+      const presentersInput = page.getByLabel('Presenters');
+      await expect(presentersInput).toBeVisible();
+      // Presenters field should be pre-populated with the current user's username
+      await expect(presentersInput).toHaveValue('admin');
       await expect(page.getByLabel('Timebox')).toBeVisible();
 
       // Submit and cancel buttons
@@ -130,7 +130,7 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.getByText('1')).toBeVisible();
     });
 
-    test('items show number, name, owner with avatar, and timebox if set', async ({ page }) => {
+    test('items show number, name, presenter with avatar, and timebox if set', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
@@ -138,8 +138,20 @@ test.describe('Agenda tab', () => {
 
       await expect(page.getByText('Timed item')).toBeVisible();
       await expect(page.getByText('15 minutes')).toBeVisible();
-      // Owner avatar (an img element) should be present
+      // Presenter avatar (an img element) should be present
       await expect(page.getByRole('tabpanel', { name: 'Agenda' }).locator('img').first()).toBeVisible();
+    });
+
+    test('adding an item with multiple comma-separated presenters renders a badge each', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await addAgendaItem(page, 'Joint item', ['admin', 'otheruser']);
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      // Two avatar images should be present on the item row.
+      const avatars = panel.locator('li').first().locator('img');
+      await expect(avatars).toHaveCount(2);
     });
 
     test('clicking edit on an item opens inline edit form', async ({ page }) => {
@@ -153,7 +165,7 @@ test.describe('Agenda tab', () => {
 
       // Inline edit fields should appear
       await expect(page.getByLabel('Agenda item name')).toBeVisible();
-      await expect(page.getByLabel('Owner username')).toBeVisible();
+      await expect(page.getByLabel('Presenters')).toBeVisible();
       await expect(page.getByLabel('Timebox in minutes')).toBeVisible();
 
       // The name field should be pre-populated
@@ -250,11 +262,11 @@ test.describe('Agenda tab', () => {
       await expect(page.getByText('Item Gamma')).toBeVisible();
     });
 
-    test('items owned by the current user have a visible left border', async ({ page }) => {
+    test('items with the current user as a presenter have a visible left border', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      // Add an item owned by the current user (admin)
+      // Add an item presented by the current user (admin)
       await addAgendaItem(page, 'My item');
 
       const panel = page.getByRole('tabpanel', { name: 'Agenda' });
@@ -263,17 +275,29 @@ test.describe('Agenda tab', () => {
       await expect(item).toHaveCSS('border-left-width', '3px');
     });
 
-    test('items owned by another user do not have a left border', async ({ page }) => {
+    test('items with only other users as presenters do not have a left border', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      // Add an item owned by someone else
+      // Add an item presented by someone else
       await addAgendaItem(page, 'Their item', 'otheruser');
 
       const panel = page.getByRole('tabpanel', { name: 'Agenda' });
       const item = panel.locator('li').first();
       // The item should NOT have a left border
       await expect(item).toHaveCSS('border-left-width', '0px');
+    });
+
+    test('items where the viewer is a co-presenter still show the left border', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // admin is one of two presenters
+      await addAgendaItem(page, 'Joint item', ['otheruser', 'admin']);
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      const item = panel.locator('li').first();
+      await expect(item).toHaveCSS('border-left-width', '3px');
     });
 
     test('timebox displays singular "minute" for 1 minute', async ({ page }) => {

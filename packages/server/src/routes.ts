@@ -238,15 +238,20 @@ export function createMeetingRoutes(
       return;
     }
 
-    // Add each item to the meeting, bypassing GitHub username validation
+    // Add each item to the meeting, bypassing GitHub username validation.
+    // If no presenters were parsed, fall back to the importing user so the
+    // item still has at least one presenter.
     for (const item of items) {
-      const owner: User = {
-        ghid: 0,
-        ghUsername: item.presenter || user.ghUsername,
-        name: item.presenter || user.name,
-        organisation: '',
-      };
-      meetingManager.addAgendaItem(meetingId, item.name, owner, item.timebox);
+      const presenters: User[] =
+        item.presenters.length > 0
+          ? item.presenters.map((name) => ({
+              ghid: 0,
+              ghUsername: name,
+              name,
+              organisation: '',
+            }))
+          : [user];
+      meetingManager.addAgendaItem(meetingId, item.name, presenters, item.timebox);
     }
 
     // Broadcast the updated state to all connected clients

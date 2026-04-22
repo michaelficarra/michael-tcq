@@ -11,9 +11,15 @@ import {
 } from './helpers.js';
 
 test.describe('Keyboard Shortcuts', () => {
+  // These tests dispatch keys via `page.locator('body').press(...)` instead of
+  // `page.keyboard.press(...)`. In webkit, `keyboard.press` immediately after
+  // navigation occasionally lands before the page takes focus, causing the
+  // global keydown handler to never see the event. Dispatching on `body`
+  // targets the element directly and is deterministic across browsers.
+
   test('pressing "?" opens the keyboard shortcuts dialog', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('?');
+    await page.locator('body').press('?');
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     // Scope to the dialog; Help prose also contains "Keyboard Shortcuts".
@@ -22,7 +28,7 @@ test.describe('Keyboard Shortcuts', () => {
 
   test('the dialog lists all shortcuts', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('?');
+    await page.locator('body').press('?');
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -42,7 +48,7 @@ test.describe('Keyboard Shortcuts', () => {
 
   test('the dialog has an enable/disable toggle', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('?');
+    await page.locator('body').press('?');
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -62,43 +68,43 @@ test.describe('Keyboard Shortcuts', () => {
 
   test('pressing Escape closes the shortcuts dialog', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('?');
+    await page.locator('body').press('?');
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    await page.keyboard.press('Escape');
+    await page.locator('body').press('Escape');
     await expect(dialog).not.toBeVisible();
   });
 
   test('pressing "1" switches to Agenda tab', async ({ page }) => {
     await createMeeting(page);
-    // Default tab is Queue
+    // Meeting creation lands on the Agenda tab, so switch away first.
+    await goToQueueTab(page);
     await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
 
-    await page.keyboard.press('1');
+    await page.locator('body').press('1');
     await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "2" switches to Queue tab', async ({ page }) => {
     await createMeeting(page);
-    // Switch away from Queue first
-    await goToAgendaTab(page);
+    // Meeting creation lands on the Agenda tab — confirm before pressing "2".
     await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
 
-    await page.keyboard.press('2');
+    await page.locator('body').press('2');
     await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "3" switches to Log tab', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('3');
+    await page.locator('body').press('3');
     await expect(page.getByRole('tab', { name: 'Log' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('pressing "4" switches to Help tab', async ({ page }) => {
     await createMeeting(page);
-    await page.keyboard.press('4');
+    await page.locator('body').press('4');
     await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
   });
 

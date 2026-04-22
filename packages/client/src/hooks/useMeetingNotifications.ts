@@ -69,11 +69,12 @@ export function useMeetingNotifications(): void {
       }
     }
 
-    // 2. Your agenda item is next (upcoming item changed, and it's yours).
+    // 2. Your agenda item is next (upcoming item changed, and you are one
+    //    of its presenters). Fires on each co-presenter's client independently.
     if (notificationPrefs.onMyAgendaItemNext) {
       const prevNext = nextAgendaItem(prev);
       const next = nextAgendaItem(meeting);
-      if (next && next.id !== prevNext?.id && next.ownerId === me) {
+      if (next && next.id !== prevNext?.id && next.presenterIds.includes(me)) {
         showNotification('Your agenda item is next', { body: next.name });
       }
     }

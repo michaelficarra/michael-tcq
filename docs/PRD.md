@@ -69,10 +69,10 @@ If a user navigates to a non-existent meeting, a clear error page is shown with 
 
 1. A chair creates a meeting and shares the meeting ID with participants.
 2. Participants join.
-3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's owner automatically becomes the current speaker.
+3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's first presenter automatically becomes the current speaker.
 4. Participants enter the queue to discuss the item.
 5. The chair advances through the queue.
-6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's owner becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
+6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's first presenter becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
 7. This repeats until the agenda is exhausted.
 
 Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
@@ -93,7 +93,7 @@ The active tab is indicated with a teal underline. A top navigation bar shows th
 The agenda is an ordered list of items. Each agenda item has:
 
 - **Name** — the title of the item
-- **Owner** — a GitHub user who will introduce/present it (shown with their GitHub avatar)
+- **Presenters** — one or more GitHub users who will introduce/present it (each shown with their GitHub avatar). An item must have at least one presenter; the first presenter becomes the current speaker when the meeting advances to the item.
 - **Timebox** (optional) — a duration in minutes
 
 ### Chair Management
@@ -107,9 +107,9 @@ For regular chairs: they cannot remove themselves from the list (no remove icon 
 
 ### Agenda Management (Chair Only)
 
-- **Add** — Create a new agenda item by specifying a name, owner (GitHub username, validated against GitHub when OAuth is configured), and optional timebox. The form fields are: Agenda Item Name (flexible width), Owner (pre-populated with current user), and Timebox in minutes.
-- **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. Markdown formatting in item names is preserved.
-- **Edit** — Inline edit of an existing agenda item's name, owner, and timebox.
+- **Add** — Create a new agenda item by specifying a name, presenters (one or more GitHub usernames, comma-separated), and optional timebox. Presenter usernames are not validated against GitHub — unknown names are recorded as placeholder users. The form fields are: Agenda Item Name (flexible width), Presenters (pre-populated with current user), and Timebox in minutes.
+- **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. A presenter column or parenthetical may list multiple comma-separated names, each becoming a distinct presenter. Markdown formatting in item names is preserved.
+- **Edit** — Inline edit of an existing agenda item's name, presenters, and timebox.
 - **Delete** — Remove an agenda item.
 - **Reorder** — Drag-and-drop to rearrange agenda items. The entire agenda item row is the drag target.
 
@@ -119,7 +119,7 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 
 ### Agenda Display
 
-The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), owner (with GitHub avatar, display name, and organisation), and timebox duration if set. Items owned by the current user are visually distinguished with a coloured left border.
+The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and timebox duration if set. Items where the current user is one of the presenters are visually distinguished with a coloured left border.
 
 ## Queue
 
@@ -195,7 +195,7 @@ New Topic: My discussion point (alice)
 Clarifying Question: How does this work? (bob)
 ```
 
-Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(username)`, the entry is added on behalf of that user, preserving the original author. The username is resolved against known meeting participants (chairs, existing queue entries, agenda owners); unknown usernames create a placeholder user. Non-chairs cannot add entries on behalf of other users.
+Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(username)`, the entry is added on behalf of that user, preserving the original author. The username is resolved against known meeting participants (chairs, existing queue entries, agenda presenters); unknown usernames create a placeholder user. Non-chairs cannot add entries on behalf of other users.
 
 ### Current Speaker
 
@@ -262,13 +262,13 @@ Each log entry records:
 
 The following events are logged:
 
-| Event                    | Logged when                                                                                                              | Description format                                              | Additional data                                                                                                                                                                                                                                          |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Meeting started**      | Chair advances to the first agenda item                                                                                  | "Meeting started"                                               | —                                                                                                                                                                                                                                                        |
-| **Agenda item started**  | Chair advances to a new agenda item                                                                                      | "Started: _item name_"                                          | Item owner (initial speaker)                                                                                                                                                                                                                             |
-| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one)                              | "Finished: _item name_"                                         | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
-| **Topic discussed**      | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the agenda item owner's introductory turn | Topic name with speaker's user badge inline                     | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below)                                                                                                                                             |
-| **Poll ran**             | Chair stops a poll                                                                                                       | "Ran a poll" (or "Ran a poll: _topic_" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count)                                                           |
+| Event                    | Logged when                                                                                                            | Description format                                              | Additional data                                                                                                                                                                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Meeting started**      | Chair advances to the first agenda item                                                                                | "Meeting started"                                               | —                                                                                                                                                                                                                                                        |
+| **Agenda item started**  | Chair advances to a new agenda item                                                                                    | "Started: _item name_"                                          | Item presenters (the first presenter is the initial speaker)                                                                                                                                                                                             |
+| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one)                            | "Finished: _item name_"                                         | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
+| **Topic discussed**      | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the first presenter's introductory turn | Topic name with speaker's user badge inline                     | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below)                                                                                                                                             |
+| **Poll ran**             | Chair stops a poll                                                                                                     | "Ran a poll" (or "Ran a poll: _topic_" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count)                                                           |
 
 ### Speaker Grouping
 
@@ -300,7 +300,7 @@ The log is permanent and cannot be edited or deleted during the meeting's lifeti
 
 ## User Identity Display
 
-Wherever a user's name is shown (agenda item owners, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from GitHub and hidden gracefully if the image fails to load.
+Wherever a user's name is shown (agenda item presenters, queue entry speakers, current speaker, chairs list, poll tooltips, navigation bar), their GitHub avatar is displayed alongside their name and organisation. Avatars are loaded from GitHub and hidden gracefully if the image fails to load.
 
 ## Keyboard Shortcuts
 
@@ -334,7 +334,7 @@ The hamburger menu in the top-right navigation contains a **Preferences** entry 
 Browser-native notifications can be enabled from the Preferences modal. The top-level **Notifications** toggle is off by default; the first time the user switches it on, the browser prompts for permission. If permission is granted, the toggle stays on. Per-event sub-toggles default to on, except for the two chair-oriented ones (point of order and agenda-item overrun) which default to off:
 
 - **When your queue entry is next** — a queue entry you authored has reached the head of the queue.
-- **When your agenda item is next** — the agenda item immediately after the current one is owned by you.
+- **When your agenda item is next** — the agenda item immediately after the current one lists you as one of its presenters. Each presenter who has opted in is notified independently.
 - **When the meeting has started** — fires once when the first agenda item becomes active. Mutually exclusive with "agenda advances" — only the meeting-started notification fires on the initial transition.
 - **When the agenda advances** — the current agenda item has changed after the meeting is already underway.
 - **When a poll has started** — a chair has opened a new poll. The chair who started the poll is not notified about their own action.

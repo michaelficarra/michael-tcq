@@ -44,6 +44,24 @@ function parsePayload<T>(
   return result.data;
 }
 
+/**
+ * Resolve a presenter username to a User. Prefers a user already known to
+ * the meeting, then the session user itself (so their full profile wins
+ * when they add themselves), otherwise a placeholder.
+ */
+function resolvePresenter(meeting: MeetingState | undefined, sessionUser: User, username: string): User {
+  const key = asUserKey(username.toLowerCase());
+  return (
+    meeting?.users[key] ??
+    (userKey(sessionUser) === key ? sessionUser : undefined) ?? {
+      ghid: 0,
+      ghUsername: username,
+      name: username,
+      organisation: '',
+    }
+  );
+}
+
 // -- Log helpers --
 
 /**
@@ -310,9 +328,9 @@ export function registerSocketHandlers(
     });
 
     // --- agenda:add ---
-    // Chair adds a new agenda item. The owner is specified by GitHub username;
-    // for now we create a placeholder User object. GitHub API validation will
-    // be added when real OAuth is implemented.
+    // Chair adds a new agenda item. Presenters are specified by GitHub
+    // username; for unknown names we create placeholder User objects.
+    // GitHub API validation will be added when real OAuth is implemented.
     socket.on('agenda:add', async (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
@@ -322,27 +340,18 @@ export function registerSocketHandlers(
 
       const parsed = parsePayload(AgendaAddPayloadSchema, payload, socket);
       if (!parsed) return;
-      const { name, ownerUsername } = parsed;
+      const { name, presenterUsernames } = parsed;
 
-      // Build the owner User object. If the owner is a known user in the
-      // meeting, use their full profile. Otherwise, create a placeholder.
       const meeting = meetingManager.get(joinedMeetingId);
-      const key = asUserKey(ownerUsername.toLowerCase());
-      const owner: User = meeting?.users[key] ??
-        (userKey(user) === key ? user : undefined) ?? {
-          ghid: 0,
-          ghUsername: ownerUsername,
-          name: ownerUsername,
-          organisation: '',
-        };
+      const presenters = presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
 
       // The schema already constrains timebox to a positive integer; undefined = no timebox.
-      meetingManager.addAgendaItem(joinedMeetingId, name, owner, parsed.timebox);
+      meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.timebox);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
     // --- agenda:edit ---
-    // Chair edits an existing agenda item's name, owner, or timebox.
+    // Chair edits an existing agenda item's name, presenters, or timebox.
     socket.on('agenda:edit', (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
@@ -353,20 +362,13 @@ export function registerSocketHandlers(
       const parsed = parsePayload(AgendaEditPayloadSchema, payload, socket);
       if (!parsed) return;
 
-      const updates: { name?: string; owner?: User; timebox?: number | null } = {};
+      const updates: { name?: string; presenters?: User[]; timebox?: number | null } = {};
 
       if (parsed.name !== undefined) updates.name = parsed.name;
 
-      if (parsed.ownerUsername !== undefined) {
-        // Resolve owner from known users or create placeholder
+      if (parsed.presenterUsernames !== undefined) {
         const meeting = meetingManager.get(joinedMeetingId);
-        const key = asUserKey(parsed.ownerUsername.toLowerCase());
-        updates.owner = meeting?.users[key] ?? {
-          ghid: 0,
-          ghUsername: parsed.ownerUsername,
-          name: parsed.ownerUsername,
-          organisation: '',
-        };
+        updates.presenters = parsed.presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
       }
 
       if (parsed.timebox !== undefined) {
@@ -855,9 +857,9 @@ export function registerSocketHandlers(
       }
 
       // nextAgendaItem seeds current.speaker, current.topicSpeakers (with the
-      // introducing owner), and resets the queue. Its internal timestamp may
-      // be a few ms off from `now` captured above — acceptable for display /
-      // duration purposes.
+      // first presenter introducing), and resets the queue. Its internal
+      // timestamp may be a few ms off from `now` captured above — acceptable
+      // for display / duration purposes.
       const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
       if (!nextItem) {
         respond({ ok: false, error: 'No more agenda items' });
@@ -878,7 +880,7 @@ export function registerSocketHandlers(
         timestamp: now,
         chairId,
         itemName: nextItem.name,
-        itemOwnerId: nextItem.ownerId,
+        itemPresenterIds: nextItem.presenterIds,
       });
 
       meeting.operational.lastAdvancementBy = chairId;

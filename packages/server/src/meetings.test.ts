@@ -131,11 +131,11 @@ describe('MeetingManager', () => {
   describe('addAgendaItem', () => {
     it('adds an item to the agenda', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Item One', testUser, 20);
+      const item = manager.addAgendaItem(meeting.id, 'Item One', [testUser], 20);
 
       expect(item).not.toBeNull();
       expect(item!.name).toBe('Item One');
-      expect(meeting.users[item!.ownerId]).toEqual(testUser);
+      expect(meeting.users[item!.presenterIds[0]]).toEqual(testUser);
       expect(item!.timebox).toBe(20);
       expect(meeting.agenda).toHaveLength(1);
       expect(meeting.agenda[0].id).toBe(item!.id);
@@ -143,53 +143,89 @@ describe('MeetingManager', () => {
 
     it('adds items in order', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'First', testUser);
-      manager.addAgendaItem(meeting.id, 'Second', testUser);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [testUser]);
 
       expect(meeting.agenda[0].name).toBe('First');
       expect(meeting.agenda[1].name).toBe('Second');
     });
 
     it('returns null for non-existent meeting', () => {
-      const item = manager.addAgendaItem('no-such-meeting', 'Item', testUser);
+      const item = manager.addAgendaItem('no-such-meeting', 'Item', [testUser]);
       expect(item).toBeNull();
     });
 
     it('assigns a unique ID to each item', () => {
       const meeting = manager.create([testUser]);
-      const item1 = manager.addAgendaItem(meeting.id, 'A', testUser);
-      const item2 = manager.addAgendaItem(meeting.id, 'B', testUser);
+      const item1 = manager.addAgendaItem(meeting.id, 'A', [testUser]);
+      const item2 = manager.addAgendaItem(meeting.id, 'B', [testUser]);
       expect(item1!.id).not.toBe(item2!.id);
     });
 
     it('allows omitting timebox', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'No timebox', testUser);
+      const item = manager.addAgendaItem(meeting.id, 'No timebox', [testUser]);
       expect(item!.timebox).toBeUndefined();
+    });
+
+    it('stores multiple presenters in order', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Joint', [testUser, otherUser]);
+      expect(item!.presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
+    });
+
+    it('dedupes repeated presenters, preserving first-occurrence order', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Dup', [testUser, otherUser, testUser]);
+      expect(item!.presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
+    });
+
+    it('returns null when presenters is empty', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'No presenter', []);
+      expect(item).toBeNull();
+      expect(meeting.agenda).toHaveLength(0);
     });
   });
 
   describe('editAgendaItem', () => {
     it('updates the name', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Old name', testUser)!;
+      const item = manager.addAgendaItem(meeting.id, 'Old name', [testUser])!;
 
       const result = manager.editAgendaItem(meeting.id, item.id, { name: 'New name' });
       expect(result).toBe(true);
       expect(meeting.agenda[0].name).toBe('New name');
     });
 
-    it('updates the owner', () => {
+    it('updates the presenters', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Item', testUser)!;
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
 
-      manager.editAgendaItem(meeting.id, item.id, { owner: otherUser });
-      expect(meeting.users[meeting.agenda[0].ownerId]).toEqual(otherUser);
+      manager.editAgendaItem(meeting.id, item.id, { presenters: [otherUser] });
+      expect(meeting.users[meeting.agenda[0].presenterIds[0]]).toEqual(otherUser);
+    });
+
+    it('replaces a single presenter with multiple', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
+
+      manager.editAgendaItem(meeting.id, item.id, { presenters: [testUser, otherUser] });
+      expect(meeting.agenda[0].presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
+    });
+
+    it('rejects an empty presenters list', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
+
+      const result = manager.editAgendaItem(meeting.id, item.id, { presenters: [] });
+      expect(result).toBe(false);
+      expect(meeting.agenda[0].presenterIds).toEqual([userKey(testUser)]);
     });
 
     it('updates the timebox', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Item', testUser, 10)!;
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
       manager.editAgendaItem(meeting.id, item.id, { timebox: 30 });
       expect(meeting.agenda[0].timebox).toBe(30);
@@ -197,7 +233,7 @@ describe('MeetingManager', () => {
 
     it('clears the timebox when set to null', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Item', testUser, 10)!;
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
       manager.editAgendaItem(meeting.id, item.id, { timebox: null });
       expect(meeting.agenda[0].timebox).toBeUndefined();
@@ -205,17 +241,17 @@ describe('MeetingManager', () => {
 
     it('leaves unchanged fields alone', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'Keep me', testUser, 15)!;
+      const item = manager.addAgendaItem(meeting.id, 'Keep me', [testUser], 15)!;
 
       manager.editAgendaItem(meeting.id, item.id, { name: 'Changed' });
       expect(meeting.agenda[0].name).toBe('Changed');
-      expect(meeting.users[meeting.agenda[0].ownerId]).toEqual(testUser);
+      expect(meeting.users[meeting.agenda[0].presenterIds[0]]).toEqual(testUser);
       expect(meeting.agenda[0].timebox).toBe(15);
     });
 
     it('reflects edits to the current agenda item via the agenda array', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'Current', testUser);
+      manager.addAgendaItem(meeting.id, 'Current', [testUser]);
       manager.nextAgendaItem(meeting.id);
 
       const itemId = meeting.current.agendaItemId!;
@@ -237,7 +273,7 @@ describe('MeetingManager', () => {
   describe('deleteAgendaItem', () => {
     it('removes an item from the agenda', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'To delete', testUser)!;
+      const item = manager.addAgendaItem(meeting.id, 'To delete', [testUser])!;
 
       const deleted = manager.deleteAgendaItem(meeting.id, item.id);
       expect(deleted).toBe(true);
@@ -255,8 +291,8 @@ describe('MeetingManager', () => {
 
     it('clears currentAgendaItemId when the current item is deleted', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'First', testUser);
-      manager.addAgendaItem(meeting.id, 'Second', testUser);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [testUser]);
       manager.nextAgendaItem(meeting.id);
       expect(meeting.current.agendaItemId).toBeDefined();
 
@@ -266,9 +302,9 @@ describe('MeetingManager', () => {
 
     it('preserves other items when deleting one', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'Keep', testUser);
-      const toDelete = manager.addAgendaItem(meeting.id, 'Delete', testUser)!;
-      manager.addAgendaItem(meeting.id, 'Also keep', testUser);
+      manager.addAgendaItem(meeting.id, 'Keep', [testUser]);
+      const toDelete = manager.addAgendaItem(meeting.id, 'Delete', [testUser])!;
+      manager.addAgendaItem(meeting.id, 'Also keep', [testUser]);
 
       manager.deleteAgendaItem(meeting.id, toDelete.id);
       expect(meeting.agenda).toHaveLength(2);
@@ -280,9 +316,9 @@ describe('MeetingManager', () => {
   describe('reorderAgendaItem', () => {
     it('moves an item to the beginning when afterId is null', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'A', testUser);
-      manager.addAgendaItem(meeting.id, 'B', testUser);
-      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+      manager.addAgendaItem(meeting.id, 'A', [testUser]);
+      manager.addAgendaItem(meeting.id, 'B', [testUser]);
+      const c = manager.addAgendaItem(meeting.id, 'C', [testUser])!;
 
       // Move C to the beginning
       const result = manager.reorderAgendaItem(meeting.id, c.id, null);
@@ -292,9 +328,9 @@ describe('MeetingManager', () => {
 
     it('moves an item after another item', () => {
       const meeting = manager.create([testUser]);
-      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
-      manager.addAgendaItem(meeting.id, 'B', testUser);
-      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+      const a = manager.addAgendaItem(meeting.id, 'A', [testUser])!;
+      manager.addAgendaItem(meeting.id, 'B', [testUser]);
+      const c = manager.addAgendaItem(meeting.id, 'C', [testUser])!;
 
       // Move A to after C (i.e. to the end)
       const result = manager.reorderAgendaItem(meeting.id, a.id, c.id);
@@ -304,9 +340,9 @@ describe('MeetingManager', () => {
 
     it('moves an item to the middle', () => {
       const meeting = manager.create([testUser]);
-      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
-      manager.addAgendaItem(meeting.id, 'B', testUser);
-      const c = manager.addAgendaItem(meeting.id, 'C', testUser)!;
+      const a = manager.addAgendaItem(meeting.id, 'A', [testUser])!;
+      manager.addAgendaItem(meeting.id, 'B', [testUser]);
+      const c = manager.addAgendaItem(meeting.id, 'C', [testUser])!;
 
       // Move C after A (between A and B)
       const result = manager.reorderAgendaItem(meeting.id, c.id, a.id);
@@ -316,13 +352,13 @@ describe('MeetingManager', () => {
 
     it('returns false for non-existent item', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'A', testUser);
+      manager.addAgendaItem(meeting.id, 'A', [testUser]);
       expect(manager.reorderAgendaItem(meeting.id, 'no-such-id', null)).toBe(false);
     });
 
     it('returns false for non-existent afterId', () => {
       const meeting = manager.create([testUser]);
-      const a = manager.addAgendaItem(meeting.id, 'A', testUser)!;
+      const a = manager.addAgendaItem(meeting.id, 'A', [testUser])!;
       expect(manager.reorderAgendaItem(meeting.id, a.id, 'no-such-id')).toBe(false);
       // Item should be back in its original position
       expect(meeting.agenda[0].id).toBe(a.id);
@@ -338,8 +374,8 @@ describe('MeetingManager', () => {
   describe('nextAgendaItem', () => {
     it('starts the meeting by setting the first agenda item', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'First', testUser);
-      manager.addAgendaItem(meeting.id, 'Second', testUser);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [testUser]);
 
       const result = manager.nextAgendaItem(meeting.id);
       expect(result).not.toBeNull();
@@ -347,9 +383,9 @@ describe('MeetingManager', () => {
       expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('First');
     });
 
-    it('sets the item owner as the current speaker', () => {
+    it('sets the first presenter as the current speaker', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'Proposal', otherUser);
+      manager.addAgendaItem(meeting.id, 'Proposal', [otherUser]);
 
       manager.nextAgendaItem(meeting.id);
 
@@ -361,10 +397,20 @@ describe('MeetingManager', () => {
       expect(speaker.source).toBe('agenda');
     });
 
+    it('picks the first presenter from a multi-presenter item as the current speaker', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Joint', [otherUser, testUser]);
+
+      manager.nextAgendaItem(meeting.id);
+
+      const speaker = meeting.current.speaker!;
+      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+    });
+
     it('advances to the next agenda item', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'First', testUser);
-      manager.addAgendaItem(meeting.id, 'Second', otherUser);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [otherUser]);
 
       // Start meeting (first item)
       manager.nextAgendaItem(meeting.id);
@@ -380,7 +426,7 @@ describe('MeetingManager', () => {
 
     it('returns null when advancing past the last item', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'Only item', testUser);
+      manager.addAgendaItem(meeting.id, 'Only item', [testUser]);
 
       manager.nextAgendaItem(meeting.id); // first
       const result = manager.nextAgendaItem(meeting.id); // past the end
@@ -398,8 +444,8 @@ describe('MeetingManager', () => {
 
     it('clears the queue and current topic when advancing', () => {
       const meeting = manager.create([testUser]);
-      manager.addAgendaItem(meeting.id, 'First', testUser);
-      manager.addAgendaItem(meeting.id, 'Second', testUser);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [testUser]);
 
       // Start, then simulate some queue state
       manager.nextAgendaItem(meeting.id);

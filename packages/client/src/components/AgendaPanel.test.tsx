@@ -51,8 +51,8 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       agenda: [
-        { id: '1', name: 'First item', ownerId: 'alice', timebox: 20 },
-        { id: '2', name: 'Second item', ownerId: 'alice' },
+        { id: '1', name: 'First item', presenterIds: ['alice'], timebox: 20 },
+        { id: '2', name: 'Second item', presenterIds: ['alice'] },
       ],
     });
     renderAgenda(meeting);
@@ -88,7 +88,7 @@ describe('AgendaPanel', () => {
     fireEvent.click(screen.getByText('New Agenda Item'));
 
     expect(screen.getByLabelText('Agenda Item Name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Owner')).toBeInTheDocument();
+    expect(screen.getByLabelText('Presenters')).toBeInTheDocument();
     expect(screen.getByLabelText('Timebox')).toBeInTheDocument();
   });
 
@@ -96,7 +96,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: '1', name: 'Deletable item', ownerId: 'alice' }],
+      agenda: [{ id: '1', name: 'Deletable item', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -107,7 +107,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }, alice: chairUser },
       chairIds: ['other'],
-      agenda: [{ id: '1', name: 'Item', ownerId: 'alice' }],
+      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -121,7 +121,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: 'item-1', name: 'To delete', ownerId: 'alice' }],
+      agenda: [{ id: 'item-1', name: 'To delete', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser, mockSocket);
 
@@ -129,14 +129,40 @@ describe('AgendaPanel', () => {
     expect(emit).toHaveBeenCalledWith('agenda:delete', { id: 'item-1' });
   });
 
-  it('shows owner organisation in parentheses', () => {
+  it('renders a badge per presenter when an item has multiple', () => {
+    const alice = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'A Corp' };
+    const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'B Corp' };
+    const meeting = makeMeeting({
+      users: { alice, bob },
+      agenda: [{ id: '1', name: 'Joint', presenterIds: ['alice', 'bob'] }],
+    });
+    renderAgenda(meeting);
+
+    // Both users' names appear alongside the item.
+    expect(screen.getByText(/Alice/)).toBeInTheDocument();
+    expect(screen.getByText(/Bob/)).toBeInTheDocument();
+  });
+
+  it('highlights items where the viewer is any of the presenters', () => {
+    const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob },
+      agenda: [{ id: '1', name: 'Joint', presenterIds: ['bob', 'alice'] }],
+    });
+    renderAgenda(meeting, chairUser);
+
+    const li = screen.getByText('Joint').closest('li')!;
+    expect(li.className).toMatch(/border-l-teal-500/);
+  });
+
+  it('shows presenter organisation in parentheses', () => {
     const meeting = makeMeeting({
       users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' } },
       agenda: [
         {
           id: '1',
           name: 'Test',
-          ownerId: 'alice',
+          presenterIds: ['alice'],
         },
       ],
     });

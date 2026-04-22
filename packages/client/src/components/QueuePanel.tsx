@@ -287,7 +287,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               <InlineMarkdown>{currentAgendaItem.name}</InlineMarkdown>
             </p>
             <div className="text-sm text-stone-500 dark:text-stone-400 flex flex-wrap items-center gap-x-2">
-              <UserBadge user={meeting.users[currentAgendaItem.ownerId]} size={18} />
+              {currentAgendaItem.presenterIds.map((pid) => (
+                <UserBadge key={pid} user={meeting.users[pid]} size={18} />
+              ))}
               {currentAgendaItem.timebox != null && currentAgendaItem.timebox > 0 && (
                 <span className="ml-2">
                   {currentAgendaItem.timebox} {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}

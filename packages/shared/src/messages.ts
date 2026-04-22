@@ -22,7 +22,7 @@ const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
   name: requiredTrimmed('Agenda item name'),
-  ownerUsername: requiredTrimmed('Owner username'),
+  presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required'),
   /** Duration in minutes; omit or 0 for no timebox. */
   timebox: z.number().int().positive().optional(),
 });
@@ -53,7 +53,7 @@ export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
 export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: z.string().trim().min(1, 'Agenda item name cannot be empty').optional(),
-  ownerUsername: z.string().trim().min(1, 'Owner username cannot be empty').optional(),
+  presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required').optional(),
   timebox: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
@@ -235,7 +235,7 @@ export interface ClientToServerEvents {
   /**
    * Start the meeting by advancing to the first agenda item, or advance
    * to the next agenda item if the meeting is already in progress.
-   * Chair only. The agenda item's owner becomes the current speaker.
+   * Chair only. The agenda item's first presenter becomes the current speaker.
    * Includes precondition (current agenda item ID) to prevent double-advancement.
    */
   'meeting:nextAgendaItem': (payload: NextAgendaItemPayload, ack: (response: AdvanceResponse) => void) => void;
