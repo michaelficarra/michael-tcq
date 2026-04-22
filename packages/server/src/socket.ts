@@ -498,11 +498,23 @@ export function registerSocketHandlers(
     // Any authenticated user can add themselves to the speaker queue.
     // Chairs can optionally specify `asUsername` to add an entry on
     // behalf of another user (used by the "Restore Queue" feature).
-    socket.on('queue:add', (payload) => {
+    //
+    // For `type: 'reply'`, the client sends the speakerId of the CurrentTopic
+    // it saw as a precondition. This guards the race where the chair advances
+    // the agenda (which clears the topic) or advances onto a different topic
+    // between the user clicking Reply and this handler running — we reject
+    // rather than attach the reply to the wrong topic.
+    socket.on('queue:add', (payload, ack?) => {
+      // ack is optional — older clients may emit without a callback.
+      const respond = typeof ack === 'function' ? ack : () => {};
+
       if (!joinedMeetingId) return;
 
       const parsed = parsePayload(QueueAddPayloadSchema, payload, socket);
-      if (!parsed) return;
+      if (!parsed) {
+        respond({ ok: false, error: 'Invalid payload' });
+        return;
+      }
 
       // Reject if queue is closed and user is not a chair. Point of Order is
       // exempt — procedural interruptions are always permitted regardless of
@@ -514,7 +526,27 @@ export function registerSocketHandlers(
         parsed.type !== 'point-of-order'
       ) {
         socket.emit('error', 'The queue is closed');
+        respond({ ok: false, error: 'The queue is closed' });
         return;
+      }
+
+      // Precondition check for replies: the topic the user intended to reply
+      // to must still be the current topic. `undefined` in the payload means
+      // the client didn't send the precondition — treat that as a mismatch
+      // for replies so stale clients can't silently bypass the guard. The
+      // asUsername path (chair-driven bulk restore) bypasses this — it's a
+      // deliberate admin operation, not a UI race.
+      if (parsed.type === 'reply' && !parsed.asUsername) {
+        const currentSpeakerId = addMeeting?.current.topic?.speakerId ?? null;
+        const claimedSpeakerId = parsed.currentTopicSpeakerId ?? null;
+        if (parsed.currentTopicSpeakerId === undefined || currentSpeakerId !== claimedSpeakerId) {
+          // Re-broadcast state to the stale client so it reconciles.
+          if (addMeeting) socket.emit('state', addMeeting);
+          const message = 'Topic has changed — your reply was not added';
+          socket.emit('error', message);
+          respond({ ok: false, error: message });
+          return;
+        }
       }
 
       // Determine who the entry is for: the current user, or a specified
@@ -524,6 +556,7 @@ export function registerSocketHandlers(
       if (parsed.asUsername) {
         if (!meetingManager.isChair(joinedMeetingId, user)) {
           socket.emit('error', 'Only chairs can add entries on behalf of others');
+          respond({ ok: false, error: 'Only chairs can add entries on behalf of others' });
           return;
         }
         const key = asUserKey(parsed.asUsername.toLowerCase());
@@ -540,10 +573,12 @@ export function registerSocketHandlers(
       const entry = meetingManager.addQueueEntry(joinedMeetingId, parsed.type, parsed.topic, entryUser);
       if (!entry) {
         socket.emit('error', 'Failed to add queue entry');
+        respond({ ok: false, error: 'Failed to add queue entry' });
         return;
       }
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      respond({ ok: true });
     });
 
     // --- queue:edit ---

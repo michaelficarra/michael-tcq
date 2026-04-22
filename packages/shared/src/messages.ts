@@ -104,6 +104,15 @@ export const QueueAddPayloadSchema = z.object({
    * the entry is added as the current session user.
    */
   asUsername: z.string().trim().min(1).optional(),
+  /**
+   * Precondition for `type: 'reply'` — the `speakerId` of the CurrentTopic
+   * the client saw when the user initiated the reply. The server rejects the
+   * add when this doesn't match the current topic's speakerId (i.e. the
+   * chair advanced to a different topic, or the agenda moved on and cleared
+   * the topic). `null` means the client saw no topic. Ignored for non-reply
+   * types.
+   */
+  currentTopicSpeakerId: z.string().nullable().optional(),
 });
 export type QueueAddPayload = z.infer<typeof QueueAddPayloadSchema>;
 
@@ -288,9 +297,11 @@ export interface ClientToServerEvents {
   /**
    * Add the current user to the speaker queue. The entry is automatically
    * inserted at the correct position based on type priority. Any
-   * authenticated user can do this.
+   * authenticated user can do this. For `type: 'reply'`, the server uses
+   * `currentTopicSpeakerId` as a precondition and rejects when the topic
+   * has moved on — callers pass an ack to detect this.
    */
-  'queue:add': (payload: QueueAddPayload) => void;
+  'queue:add': (payload: QueueAddPayload, ack?: (response: AdvanceResponse) => void) => void;
 
   /**
    * Remove an entry from the speaker queue. A user can remove their own

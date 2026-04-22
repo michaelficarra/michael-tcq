@@ -106,7 +106,14 @@ function MeetingPageInner() {
   /**
    * Add a queue entry with placeholder text, then trigger auto-edit on
    * the new entry. Used by both keyboard shortcuts and the SpeakerControls
-   * buttons. Listens for the next state broadcast to identify the new entry.
+   * buttons.
+   *
+   * For replies, sends the current topic's speakerId as a precondition so
+   * the server can reject the add when the chair has advanced onto a
+   * different topic (or cleared it via agenda advance) in between. On
+   * rejection, the server runs the ack with `ok: false` and does NOT
+   * broadcast state for this action — we tear the state listener down so
+   * a later unrelated broadcast can't mis-fire the auto-edit.
    */
   const addQueueEntry = useCallback(
     (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
@@ -116,16 +123,25 @@ function MeetingPageInner() {
       if (meeting.queue.closed && !isChair && type !== 'point-of-order') return;
       setActiveTab('queue');
 
-      // Capture current entry IDs so we can identify the new one
       const currentIds = new Set(meeting.queue.orderedIds);
-      socket.once('state', (newState) => {
+      const currentTopicSpeakerId = type === 'reply' ? (meeting.current.topic?.speakerId ?? null) : undefined;
+
+      // The server broadcasts state before firing the ack, so the state
+      // listener must be armed before we emit; the ack only tells us
+      // whether to keep it (success) or discard it (rejection).
+      const stateHandler = (newState: import('@tcq/shared').MeetingState) => {
         const newId = newState.queue.orderedIds.find((id: string) => !currentIds.has(id));
         if (newId) {
           setAutoEditEntryId(newId);
         }
-      });
+      };
+      socket.once('state', stateHandler);
 
-      socket.emit('queue:add', { type, topic: placeholder });
+      socket.emit('queue:add', { type, topic: placeholder, currentTopicSpeakerId }, (response) => {
+        if (!response.ok) {
+          socket.off('state', stateHandler);
+        }
+      });
     },
     [socket, meeting, isChair],
   );
