@@ -114,78 +114,78 @@ const socket = io('$SERVER', {
 // People selected from TC39 membership (passed via env var); used as both
 // chairs (first few) and as the pool of potential presenters / queue authors.
 const people = JSON.parse(process.env.PEOPLE_JSON);
-const agendaCount = parseInt(process.env.AGENDA_COUNT, 10);
+const agendaCount = parseInt(process.env.AGENDA_COUNT, 20);
 const queueCount = parseInt(process.env.QUEUE_COUNT, 10);
 
 // --- Pool of plausible agenda topics ---
 const agendaPool = [
   // Administrative / procedural
-  { name: 'Opening, welcome, and roll call', timebox: 5 },
-  { name: 'Review and adoption of previous meeting minutes', timebox: 10 },
-  { name: 'Report from the Ecma Secretariat', timebox: 15 },
-  { name: 'Report from the ECMA-262 editors', timebox: 15 },
-  { name: 'Report from the ECMA-402 editors', timebox: 15 },
-  { name: 'Report from the ECMA-404 editors', timebox: 5 },
-  { name: 'Updates from the CoC committee', timebox: 10 },
-  { name: 'TC39 chair group update', timebox: 10 },
-  { name: 'TC39 delegate travel policy discussion', timebox: 15 },
-  { name: 'Meeting schedule and host selection for 2027', timebox: 10 },
-  { name: 'TC39 website redesign proposal', timebox: 15 },
-  { name: 'Normative: editorial conventions for spec algorithms', timebox: 20 },
-  { name: 'Process document: clarify Stage 2.7 requirements', timebox: 15 },
-  { name: 'Liaison report: W3C TAG review outcomes', timebox: 10 },
-  { name: 'Liaison report: IETF coordination on structured headers', timebox: 10 },
+  { name: 'Opening, welcome, and roll call', duration: 5 },
+  { name: 'Review and adoption of previous meeting minutes', duration: 10 },
+  { name: 'Report from the Ecma Secretariat', duration: 15 },
+  { name: 'Report from the ECMA-262 editors', duration: 15 },
+  { name: 'Report from the ECMA-402 editors', duration: 15 },
+  { name: 'Report from the ECMA-404 editors', duration: 5 },
+  { name: 'Updates from the CoC committee', duration: 10 },
+  { name: 'TC39 chair group update', duration: 10 },
+  { name: 'TC39 delegate travel policy discussion', duration: 15 },
+  { name: 'Meeting schedule and host selection for 2027', duration: 10 },
+  { name: 'TC39 website redesign proposal', duration: 15 },
+  { name: 'Normative: editorial conventions for spec algorithms', duration: 20 },
+  { name: 'Process document: clarify Stage 2.7 requirements', duration: 15 },
+  { name: 'Liaison report: W3C TAG review outcomes', duration: 10 },
+  { name: 'Liaison report: IETF coordination on structured headers', duration: 10 },
 
   // Stage advancement proposals
-  { name: 'Iterator helpers for Stage 4', timebox: 30 },
-  { name: 'Pattern matching for Stage 2.7', timebox: 45 },
-  { name: 'Temporal API: normative changes and Stage 4 readiness', timebox: 30 },
-  { name: 'Async context for Stage 3', timebox: 30 },
-  { name: 'Explicit resource management: Stage 4 criteria review', timebox: 20 },
-  { name: 'Decimal for Stage 2', timebox: 30 },
-  { name: 'Joint iteration for Stage 2.7', timebox: 20 },
-  { name: 'Signals for Stage 1', timebox: 30 },
-  { name: 'Promise.withResolvers for Stage 4', timebox: 15 },
-  { name: 'Set methods: Stage 4 normative fix', timebox: 15 },
-  { name: 'RegExp modifiers for Stage 4', timebox: 15 },
-  { name: 'Float16Array for Stage 3', timebox: 20 },
-  { name: 'Error.isError for Stage 3', timebox: 15 },
-  { name: 'Import attributes for Stage 4', timebox: 15 },
-  { name: 'ShadowRealm: Stage 3 update and open questions', timebox: 30 },
-  { name: 'Throw expressions for Stage 2', timebox: 20 },
-  { name: 'Extractors for Stage 2', timebox: 30 },
-  { name: 'Math.sum for Stage 2.7', timebox: 15 },
-  { name: 'Symbol predicates for Stage 3', timebox: 20 },
-  { name: 'Intl.MessageFormat for Stage 2', timebox: 20 },
-  { name: 'String.dedent for Stage 2.7', timebox: 20 },
-  { name: 'Structs for Stage 2', timebox: 45 },
+  { name: 'Iterator helpers for Stage 4', duration: 30 },
+  { name: 'Pattern matching for Stage 2.7', duration: 45 },
+  { name: 'Temporal API: normative changes and Stage 4 readiness', duration: 30 },
+  { name: 'Async context for Stage 3', duration: 30 },
+  { name: 'Explicit resource management: Stage 4 criteria review', duration: 20 },
+  { name: 'Decimal for Stage 2', duration: 30 },
+  { name: 'Joint iteration for Stage 2.7', duration: 20 },
+  { name: 'Signals for Stage 1', duration: 30 },
+  { name: 'Promise.withResolvers for Stage 4', duration: 15 },
+  { name: 'Set methods: Stage 4 normative fix', duration: 15 },
+  { name: 'RegExp modifiers for Stage 4', duration: 15 },
+  { name: 'Float16Array for Stage 3', duration: 20 },
+  { name: 'Error.isError for Stage 3', duration: 15 },
+  { name: 'Import attributes for Stage 4', duration: 15 },
+  { name: 'ShadowRealm: Stage 3 update and open questions', duration: 30 },
+  { name: 'Throw expressions for Stage 2', duration: 20 },
+  { name: 'Extractors for Stage 2', duration: 30 },
+  { name: 'Math.sum for Stage 2.7', duration: 15 },
+  { name: 'Symbol predicates for Stage 3', duration: 20 },
+  { name: 'Intl.MessageFormat for Stage 2', duration: 20 },
+  { name: 'String.dedent for Stage 2.7', duration: 20 },
+  { name: 'Structs for Stage 2', duration: 45 },
 
   // Status updates and discussions
-  { name: 'Source phase imports: implementer feedback summary', timebox: 15 },
-  { name: 'Module harmony: deferred imports status update', timebox: 20 },
-  { name: 'Array grouping: web compatibility follow-up', timebox: 15 },
-  { name: 'Atomics.pause: implementation experience report', timebox: 15 },
-  { name: 'Pipeline operator: syntax alternatives discussion', timebox: 30 },
-  { name: 'Record and Tuple: progress on engine prototyping', timebox: 20 },
-  { name: 'Async iterator helpers: design space overview', timebox: 20 },
-  { name: 'Decorator metadata: interop with class fields', timebox: 20 },
-  { name: 'Type annotations: parser feedback from engines', timebox: 30 },
-  { name: 'Do expressions: interaction with completion reform', timebox: 20 },
-  { name: 'Shared structs: memory model considerations', timebox: 30 },
-  { name: 'WeakRef FinalizationRegistry: normative edge-case fix', timebox: 15 },
-  { name: 'Realm-scoped globals: motivation and use cases', timebox: 20 },
-  { name: 'Immutable ArrayBuffer: design constraints', timebox: 20 },
-  { name: 'Iterator sequencing: composability with helpers', timebox: 15 },
-  { name: 'Micro-waits: userland scheduling primitives', timebox: 25 },
-  { name: 'Restricting subclassing of built-ins', timebox: 20 },
-  { name: 'Discard bindings (_ pattern) for Stage 2', timebox: 20 },
-  { name: 'ArrayBuffer transfer: normative corner case', timebox: 10 },
-  { name: 'Uint8Array Base64 and hex: Stage 3 update', timebox: 15 },
+  { name: 'Source phase imports: implementer feedback summary', duration: 15 },
+  { name: 'Module harmony: deferred imports status update', duration: 20 },
+  { name: 'Array grouping: web compatibility follow-up', duration: 15 },
+  { name: 'Atomics.pause: implementation experience report', duration: 15 },
+  { name: 'Pipeline operator: syntax alternatives discussion', duration: 30 },
+  { name: 'Record and Tuple: progress on engine prototyping', duration: 20 },
+  { name: 'Async iterator helpers: design space overview', duration: 20 },
+  { name: 'Decorator metadata: interop with class fields', duration: 20 },
+  { name: 'Type annotations: parser feedback from engines', duration: 30 },
+  { name: 'Do expressions: interaction with completion reform', duration: 20 },
+  { name: 'Shared structs: memory model considerations', duration: 30 },
+  { name: 'WeakRef FinalizationRegistry: normative edge-case fix', duration: 15 },
+  { name: 'Realm-scoped globals: motivation and use cases', duration: 20 },
+  { name: 'Immutable ArrayBuffer: design constraints', duration: 20 },
+  { name: 'Iterator sequencing: composability with helpers', duration: 15 },
+  { name: 'Micro-waits: userland scheduling primitives', duration: 25 },
+  { name: 'Restricting subclassing of built-ins', duration: 20 },
+  { name: 'Discard bindings (_ pattern) for Stage 2', duration: 20 },
+  { name: 'ArrayBuffer transfer: normative corner case', duration: 10 },
+  { name: 'Uint8Array Base64 and hex: Stage 3 update', duration: 15 },
 
   // Closing
-  { name: 'Test262 status update', timebox: 10 },
-  { name: 'Summary of decisions and action items', timebox: 10 },
-  { name: 'Process document updates and closing', timebox: null },
+  { name: 'Test262 status update', duration: 10 },
+  { name: 'Summary of decisions and action items', duration: 10 },
+  { name: 'Process document updates and closing' },
 ];
 
 // --- Pool of plausible queue items (all new topics) ---
@@ -294,11 +294,15 @@ function pickPresenters(n) {
 selectedAgenda.forEach((item) => {
   const r = Math.random();
   const presenterCount = r < 0.1 ? 3 : r < 0.3 ? 2 : 1;
-  actions.push(() => socket.emit('agenda:add', {
+  // The add schema accepts a positive integer or an omitted field for
+  // 'no estimate' — it rejects null. Build the payload conditionally so
+  // pool entries without a curated duration just don't carry the key.
+  const payload = {
     name: item.name,
     presenterUsernames: pickPresenters(presenterCount),
-    timebox: item.timebox,
-  }));
+  };
+  if (item.duration != null) payload.duration = item.duration;
+  actions.push(() => socket.emit('agenda:add', payload));
 });
 
 // Start the meeting (advance to the first agenda item)
