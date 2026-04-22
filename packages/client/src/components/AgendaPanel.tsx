@@ -761,7 +761,7 @@ function ChairsSection() {
           return (
             <span
               key={chairId}
-              className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 select-none ${canRemove(chairId) ? 'pr-1' : 'pr-2'}`}
+              className={`inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 ${canRemove(chairId) ? 'pr-1' : 'pr-2'}`}
             >
               <UserBadge user={chair} size={18} />
               {canRemove(chairId) && (
