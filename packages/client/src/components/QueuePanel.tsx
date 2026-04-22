@@ -27,8 +27,15 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { QueueEntry, QueueEntryType } from '@tcq/shared';
-import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
+import type { AgendaItem, QueueEntry, QueueEntryType } from '@tcq/shared';
+import {
+  QUEUE_ENTRY_TYPES,
+  QUEUE_ENTRY_LABELS,
+  QUEUE_ENTRY_PRIORITY,
+  formatShortDuration,
+  isAgendaItem,
+  userKey,
+} from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -65,7 +72,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   const socket = useSocket();
 
   // Derive the current agenda item from the ID reference
-  const currentAgendaItem = meeting?.agenda.find((item) => item.id === meeting.current.agendaItemId);
+  const currentAgendaItem = meeting?.agenda.find(
+    (entry): entry is AgendaItem => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
+  );
 
   // Current speaker / topic are first-class structs on meeting.current
   const currentSpeaker = meeting?.current.speaker;
@@ -228,13 +237,17 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
     socket?.emit('queue:reorder', { id: active.id as string, afterId });
   }
 
-  // Determine whether there are more agenda items after the current one
+  // Determine whether there are more agenda items after the current one.
+  // Session headers are skipped — advancement only lands on actual items.
   const hasMoreAgendaItems = (() => {
     if (!currentAgendaItem) {
-      return meeting.agenda.length > 0;
+      return meeting.agenda.some((e) => isAgendaItem(e));
     }
-    const currentIndex = meeting.agenda.findIndex((item) => item.id === currentAgendaItem.id);
-    return currentIndex < meeting.agenda.length - 1;
+    const currentIndex = meeting.agenda.findIndex((e) => isAgendaItem(e) && e.id === currentAgendaItem.id);
+    for (let i = currentIndex + 1; i < meeting.agenda.length; i++) {
+      if (isAgendaItem(meeting.agenda[i])) return true;
+    }
+    return false;
   })();
 
   return (
@@ -291,9 +304,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                 <UserBadge key={pid} user={meeting.users[pid]} size={18} />
               ))}
               {currentAgendaItem.timebox != null && currentAgendaItem.timebox > 0 && (
-                <span className="ml-2">
-                  {currentAgendaItem.timebox} {currentAgendaItem.timebox === 1 ? 'minute' : 'minutes'}
-                </span>
+                <span className="ml-2">{formatShortDuration(currentAgendaItem.timebox)}</span>
               )}
               {agendaItemStartTime && (
                 <CountUpTimer
@@ -307,8 +318,9 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
         ) : (
           <div className="pl-3">
             <p className="text-stone-500 dark:text-stone-400">Waiting for the meeting to start&hellip;</p>
-            {/* Start Meeting button — chair only */}
-            {isChair && meeting.agenda.length > 0 && (
+            {/* Start Meeting button — chair only. Enabled only when the
+                agenda has at least one actual item (sessions don't count). */}
+            {isChair && meeting.agenda.some((e) => isAgendaItem(e)) && (
               <button
                 onClick={handleNextAgendaItem}
                 className="mt-2 border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm

@@ -59,7 +59,7 @@ describe('AgendaPanel', () => {
 
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText('First item')).toBeInTheDocument();
-    expect(screen.getByText(/20 minutes/)).toBeInTheDocument();
+    expect(screen.getByText('20m')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('Second item')).toBeInTheDocument();
   });
@@ -352,6 +352,113 @@ describe('AgendaPanel', () => {
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
         usernames: ['alice'],
       });
+    });
+  });
+
+  describe('sessions', () => {
+    it('shows the "New Session" button for chairs alongside "New Agenda Item"', () => {
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByText('New Agenda Item')).toBeInTheDocument();
+      expect(screen.getByText('New Session')).toBeInTheDocument();
+    });
+
+    it('hides the "New Session" button for non-chairs', () => {
+      const meeting = makeMeeting({
+        users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
+        chairIds: ['other'],
+      });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.queryByText('New Session')).not.toBeInTheDocument();
+    });
+
+    it('opens a session form and emits session:add on submit', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByText('New Session'));
+      fireEvent.change(screen.getByLabelText(/session name/i), { target: { value: 'Morning block' } });
+      fireEvent.change(screen.getByLabelText(/^capacity$/i), { target: { value: '90' } });
+      fireEvent.submit(screen.getByLabelText(/session name/i));
+
+      expect(emit).toHaveBeenCalledWith('session:add', { name: 'Morning block', capacity: 90 });
+    });
+
+    it('renders a session header with capacity / used / remaining', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Morning', capacity: 90 },
+          { id: 'a', name: 'First', presenterIds: ['alice'], timebox: 15 },
+          { id: 'b', name: 'Second', presenterIds: ['alice'], timebox: 30 },
+        ],
+      });
+      renderAgenda(meeting);
+
+      // "Morning" session header present (rendered in upper case by Tailwind
+      // but the text node itself preserves the original casing).
+      expect(screen.getByText('Morning')).toBeInTheDocument();
+      // Capacity 1h30m, used 45m, remaining 45m.
+      expect(screen.getByText('1h30m')).toBeInTheDocument();
+      // Two "45m" elements: one for used, one for remaining.
+      expect(screen.getAllByText('45m').length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/remaining/i)).toBeInTheDocument();
+    });
+
+    it('flips to "overflow" label when the run exceeds capacity', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
+          { id: 'a', name: 'First', presenterIds: ['alice'], timebox: 15 },
+          { id: 'b', name: 'Second', presenterIds: ['alice'], timebox: 15 },
+          { id: 'c', name: 'Third', presenterIds: ['alice'], timebox: 10 },
+        ],
+      });
+      renderAgenda(meeting);
+
+      // Capacity 30m, used 30m (first two fit exactly), overflow = 40 - 30 = 10m.
+      expect(screen.getByText(/overflow/i)).toBeInTheDocument();
+      expect(screen.queryByText(/remaining/i)).not.toBeInTheDocument();
+      // Both the session overflow amount and the "Third" item render as "10m".
+      // Presence of at least two matching nodes confirms the overflow amount is shown.
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('numbers agenda items sequentially, skipping session headers', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        agenda: [
+          { id: 'a', name: 'First', presenterIds: ['alice'] },
+          { kind: 'session', id: 's1', name: 'Block', capacity: 30 },
+          { id: 'b', name: 'Second', presenterIds: ['alice'] },
+        ],
+      });
+      renderAgenda(meeting);
+
+      // Items should be numbered 1, 2 — not 1, 3 — even though a session
+      // sits between them in the list.
+      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.queryByText('3')).not.toBeInTheDocument();
+    });
+
+    it('emits session:delete when the chair clicks the session delete button', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        chairIds: ['alice'],
+        agenda: [{ kind: 'session', id: 's1', name: 'Block', capacity: 30 }],
+      });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /delete session block/i }));
+      expect(emit).toHaveBeenCalledWith('session:delete', { id: 's1' });
     });
   });
 });

@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { MeetingState } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
+import type { AgendaEntry, AgendaItem, MeetingState } from '@tcq/shared';
+import { isAgendaItem, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager, ensureUser } from './meetings.js';
+
+/** Narrow an entry we expect to be an agenda item — fails the test if it's not. */
+function asItem(entry: AgendaEntry | undefined): AgendaItem {
+  if (!entry || !isAgendaItem(entry)) throw new Error('expected an AgendaItem');
+  return entry;
+}
 
 /** A no-op in-memory store for unit tests. */
 class InMemoryStore implements MeetingStore {
@@ -203,7 +209,7 @@ describe('MeetingManager', () => {
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
 
       manager.editAgendaItem(meeting.id, item.id, { presenters: [otherUser] });
-      expect(meeting.users[meeting.agenda[0].presenterIds[0]]).toEqual(otherUser);
+      expect(meeting.users[asItem(meeting.agenda[0]).presenterIds[0]]).toEqual(otherUser);
     });
 
     it('replaces a single presenter with multiple', () => {
@@ -211,7 +217,7 @@ describe('MeetingManager', () => {
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
 
       manager.editAgendaItem(meeting.id, item.id, { presenters: [testUser, otherUser] });
-      expect(meeting.agenda[0].presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
+      expect(asItem(meeting.agenda[0]).presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
     });
 
     it('rejects an empty presenters list', () => {
@@ -220,7 +226,7 @@ describe('MeetingManager', () => {
 
       const result = manager.editAgendaItem(meeting.id, item.id, { presenters: [] });
       expect(result).toBe(false);
-      expect(meeting.agenda[0].presenterIds).toEqual([userKey(testUser)]);
+      expect(asItem(meeting.agenda[0]).presenterIds).toEqual([userKey(testUser)]);
     });
 
     it('updates the timebox', () => {
@@ -228,7 +234,7 @@ describe('MeetingManager', () => {
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
       manager.editAgendaItem(meeting.id, item.id, { timebox: 30 });
-      expect(meeting.agenda[0].timebox).toBe(30);
+      expect(asItem(meeting.agenda[0]).timebox).toBe(30);
     });
 
     it('clears the timebox when set to null', () => {
@@ -236,7 +242,7 @@ describe('MeetingManager', () => {
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
       manager.editAgendaItem(meeting.id, item.id, { timebox: null });
-      expect(meeting.agenda[0].timebox).toBeUndefined();
+      expect(asItem(meeting.agenda[0]).timebox).toBeUndefined();
     });
 
     it('leaves unchanged fields alone', () => {
@@ -245,8 +251,8 @@ describe('MeetingManager', () => {
 
       manager.editAgendaItem(meeting.id, item.id, { name: 'Changed' });
       expect(meeting.agenda[0].name).toBe('Changed');
-      expect(meeting.users[meeting.agenda[0].presenterIds[0]]).toEqual(testUser);
-      expect(meeting.agenda[0].timebox).toBe(15);
+      expect(meeting.users[asItem(meeting.agenda[0]).presenterIds[0]]).toEqual(testUser);
+      expect(asItem(meeting.agenda[0]).timebox).toBe(15);
     });
 
     it('reflects edits to the current agenda item via the agenda array', () => {
@@ -1046,5 +1052,127 @@ describe('MeetingManager', () => {
     }
     // All 50 should be unique
     expect(ids.size).toBe(50);
+  });
+
+  // -- Sessions --
+
+  describe('addSession', () => {
+    it('appends a session entry with kind session and a unique id', () => {
+      const meeting = manager.create([testUser]);
+      const first = manager.addSession(meeting.id, 'Morning', 90)!;
+      const second = manager.addSession(meeting.id, 'Afternoon', 60)!;
+
+      expect(meeting.agenda).toHaveLength(2);
+      expect(meeting.agenda[0]).toMatchObject({ kind: 'session', name: 'Morning', capacity: 90 });
+      expect(meeting.agenda[1]).toMatchObject({ kind: 'session', name: 'Afternoon', capacity: 60 });
+      expect(first.id).not.toBe(second.id);
+    });
+
+    it('returns null for non-existent meeting', () => {
+      expect(manager.addSession('no-such-meeting', 'x', 10)).toBeNull();
+    });
+  });
+
+  describe('editSession', () => {
+    it('updates name and capacity', () => {
+      const meeting = manager.create([testUser]);
+      const session = manager.addSession(meeting.id, 'Old', 30)!;
+
+      const ok = manager.editSession(meeting.id, session.id, { name: 'New', capacity: 60 });
+      expect(ok).toBe(true);
+      const updated = meeting.agenda[0];
+      expect(updated).toMatchObject({ kind: 'session', name: 'New', capacity: 60 });
+    });
+
+    it('does not match an agenda item id', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
+
+      // Even though ids are in the same space, editSession refuses
+      // to touch an agenda item.
+      const ok = manager.editSession(meeting.id, item.id, { name: 'hijacked' });
+      expect(ok).toBe(false);
+      expect(asItem(meeting.agenda[0]).name).toBe('Item');
+    });
+  });
+
+  describe('deleteSession', () => {
+    it('removes the session but leaves adjacent items intact', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Before', [testUser]);
+      const session = manager.addSession(meeting.id, 'Block', 30)!;
+      manager.addAgendaItem(meeting.id, 'After', [testUser]);
+
+      expect(meeting.agenda).toHaveLength(3);
+      const ok = manager.deleteSession(meeting.id, session.id);
+      expect(ok).toBe(true);
+      expect(meeting.agenda).toHaveLength(2);
+      expect(asItem(meeting.agenda[0]).name).toBe('Before');
+      expect(asItem(meeting.agenda[1]).name).toBe('After');
+    });
+
+    it('does not match an agenda item id', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
+      expect(manager.deleteSession(meeting.id, item.id)).toBe(false);
+      expect(meeting.agenda).toHaveLength(1);
+    });
+  });
+
+  describe('deleteAgendaItem (with sessions interleaved)', () => {
+    it('does not delete a session when passed a session id', () => {
+      const meeting = manager.create([testUser]);
+      const session = manager.addSession(meeting.id, 'Block', 30)!;
+      expect(manager.deleteAgendaItem(meeting.id, session.id)).toBe(false);
+      expect(meeting.agenda).toHaveLength(1);
+    });
+  });
+
+  describe('reorderAgendaItem (sessions)', () => {
+    it('moves a session entry via the shared reorder protocol', () => {
+      const meeting = manager.create([testUser]);
+      const a = manager.addAgendaItem(meeting.id, 'A', [testUser])!;
+      const session = manager.addSession(meeting.id, 'Block', 30)!;
+      const b = manager.addAgendaItem(meeting.id, 'B', [testUser])!;
+
+      // Move session to the beginning
+      expect(manager.reorderAgendaItem(meeting.id, session.id, null)).toBe(true);
+      expect(meeting.agenda.map((e) => e.id)).toEqual([session.id, a.id, b.id]);
+    });
+  });
+
+  describe('nextAgendaItem (skipping sessions)', () => {
+    it('skips over session headers when advancing', () => {
+      const meeting = manager.create([testUser]);
+      const first = manager.addAgendaItem(meeting.id, 'First', [testUser])!;
+      manager.addSession(meeting.id, 'Block', 30);
+      const third = manager.addAgendaItem(meeting.id, 'Third', [testUser])!;
+
+      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(first.id);
+      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(third.id);
+    });
+
+    it('returns null when only sessions remain after the current item', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Only', [testUser]);
+      manager.addSession(meeting.id, 'Tail', 30);
+
+      manager.nextAgendaItem(meeting.id); // advance to "Only"
+      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+    });
+
+    it('returns null when the agenda contains only sessions', () => {
+      const meeting = manager.create([testUser]);
+      manager.addSession(meeting.id, 'Empty block', 30);
+      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+    });
+
+    it('starts from the first agenda item even when preceded by sessions', () => {
+      const meeting = manager.create([testUser]);
+      manager.addSession(meeting.id, 'Intro', 10);
+      const first = manager.addAgendaItem(meeting.id, 'First', [testUser])!;
+
+      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(first.id);
+    });
   });
 });

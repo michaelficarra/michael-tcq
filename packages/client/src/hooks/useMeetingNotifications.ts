@@ -15,14 +15,29 @@ import { userKey } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { showNotification } from '../lib/notifications.js';
+import { isAgendaItem } from '@tcq/shared';
+import type { AgendaItem } from '@tcq/shared';
 
-/** The agenda item immediately after the current one, or `undefined` if none. */
-function nextAgendaItem(state: MeetingState) {
+/**
+ * The agenda item immediately after the current one, or `undefined` if
+ * none. Session headers are skipped — they're not agenda items and should
+ * never be the next thing to advance to.
+ */
+function nextAgendaItem(state: MeetingState): AgendaItem | undefined {
   if (state.agenda.length === 0) return undefined;
-  if (!state.current.agendaItemId) return state.agenda[0];
-  const currentIdx = state.agenda.findIndex((item) => item.id === state.current.agendaItemId);
-  if (currentIdx === -1) return undefined;
-  return state.agenda[currentIdx + 1];
+  let searchFrom: number;
+  if (state.current.agendaItemId) {
+    const idx = state.agenda.findIndex((e) => isAgendaItem(e) && e.id === state.current.agendaItemId);
+    if (idx === -1) return undefined;
+    searchFrom = idx + 1;
+  } else {
+    searchFrom = 0;
+  }
+  for (let i = searchFrom; i < state.agenda.length; i++) {
+    const entry = state.agenda[i];
+    if (isAgendaItem(entry)) return entry;
+  }
+  return undefined;
 }
 
 /** IDs of queue entries with type 'point-of-order'. */
@@ -84,7 +99,9 @@ export function useMeetingNotifications(): void {
     //    "meeting started" and subsequent changes are "agenda advanced" — they
     //    are mutually exclusive so the user never gets both for one event.
     if (prev.current.agendaItemId !== meeting.current.agendaItemId && meeting.current.agendaItemId) {
-      const current = meeting.agenda.find((item) => item.id === meeting.current.agendaItemId);
+      const current = meeting.agenda.find(
+        (entry): entry is AgendaItem => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
+      );
       if (current) {
         if (!prev.current.agendaItemId) {
           if (notificationPrefs.onMeetingStarted) {
@@ -136,7 +153,9 @@ export function useMeetingNotifications(): void {
   //    change to the item id, its name, its timebox, or the start time tears
   //    down and reschedules; permission / preference changes do the same.
   const currentAgendaId = meeting?.current.agendaItemId;
-  const currentAgendaItem = currentAgendaId ? meeting?.agenda.find((a) => a.id === currentAgendaId) : undefined;
+  const currentAgendaItem = currentAgendaId
+    ? meeting?.agenda.find((e): e is AgendaItem => isAgendaItem(e) && e.id === currentAgendaId)
+    : undefined;
   const currentTimebox = currentAgendaItem?.timebox;
   const currentItemName = currentAgendaItem?.name;
   const currentItemStartTime = meeting?.current.agendaItemStartTime;

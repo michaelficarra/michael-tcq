@@ -117,6 +117,8 @@ No external state library (Redux, Zustand, Jotai) is needed. The state shape is 
 
 `MeetingState` is grouped into domain subobjects: `queue` (entries, ordering, closed flag), `current` (agenda item, speaker, topic, topic-group accumulator), `poll` (present when a poll is running), and `operational` (advancement attribution and last-connection timestamp) — alongside the durable top-level fields `users`, `chairIds`, `agenda`, and `log`. The current speaker is a first-class struct on `current.speaker` rather than a reference into the queue entries map.
 
+The `agenda` field is an ordered list of `AgendaEntry`s — a discriminated union of `AgendaItem` (regular items) and `Session` (session headers that group items by capacity). Items and sessions share the same UUID id-space and the same reorder protocol (`agenda:reorder`). Session containment — which items are rendered inside which session, and the used/remaining/overflow values — is a pure display concern derived on the client from the agenda order and timeboxes; it is not stored in the meeting state. Agenda items persist unchanged from before the session feature: they have no `kind` discriminator, so existing stored meetings deserialise as `AgendaEntry[]` without migration.
+
 ## Backend
 
 ### Framework: Express

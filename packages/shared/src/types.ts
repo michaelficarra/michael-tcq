@@ -25,6 +25,31 @@ export interface AgendaItem {
 }
 
 /**
+ * A named time block that groups a contiguous run of agenda items by
+ * capacity. Sessions are display-only: they're interleaved with agenda
+ * items in the same ordered list but are not themselves agenda items —
+ * advancement skips over them, and the items they visually "contain" are
+ * derived from the run that follows them in the agenda.
+ *
+ * The `kind: 'session'` tag discriminates `Session` from `AgendaItem` in
+ * the `AgendaEntry` union; agenda items deliberately have no `kind` field
+ * so existing persisted JSON loads unchanged.
+ */
+export interface Session {
+  kind: 'session';
+  id: string;
+  name: string;
+  /** Capacity in minutes — a positive integer. */
+  capacity: number;
+}
+
+/**
+ * An entry in the agenda list: either an agenda item or a session header.
+ * Use the `isSession` / `isAgendaItem` helpers to discriminate.
+ */
+export type AgendaEntry = AgendaItem | Session;
+
+/**
  * Source of truth for the set of queue entry types. The `QueueEntryType`
  * alias is derived via `z.infer` and the `QUEUE_ENTRY_TYPES` constant in
  * `./constants.ts` is derived via `.options` — single definition, no drift.
@@ -256,7 +281,11 @@ export interface MeetingState {
   /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];
-  agenda: AgendaItem[];
+  /**
+   * Ordered list of agenda entries. May contain a mix of agenda items and
+   * session headers; use the helpers in `./helpers.ts` to discriminate.
+   */
+  agenda: AgendaEntry[];
   /** Queue state: entries, ordering, and the closed flag. */
   queue: MeetingQueueState;
   /** Current-agenda-item context: speaker, topic, and timing. */

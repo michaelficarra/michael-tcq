@@ -4,14 +4,27 @@ import session from 'express-session';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
-import type { MeetingState, ClientToServerEvents, ServerToClientEvents, User } from '@tcq/shared';
-import { asUserKey } from '@tcq/shared';
+import type {
+  AgendaEntry,
+  AgendaItem,
+  MeetingState,
+  ClientToServerEvents,
+  ServerToClientEvents,
+  User,
+} from '@tcq/shared';
+import { asUserKey, isAgendaItem } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
 
 // --- Helpers ---
+
+/** Narrow an entry we expect to be an agenda item — fails if it's not. */
+function asItem(entry: AgendaEntry | undefined): AgendaItem {
+  if (!entry || !isAgendaItem(entry)) throw new Error('expected an AgendaItem');
+  return entry;
+}
 
 /** A no-op in-memory store for tests. */
 class InMemoryStore implements MeetingStore {
@@ -295,9 +308,10 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
-      expect(state.agenda[0].name).toBe('First item');
-      expect(state.users[state.agenda[0].presenterIds[0]].ghUsername).toBe('testuser');
-      expect(state.agenda[0].timebox).toBe(15);
+      const first = asItem(state.agenda[0]);
+      expect(first.name).toBe('First item');
+      expect(state.users[first.presenterIds[0]].ghUsername).toBe('testuser');
+      expect(first.timebox).toBe(15);
     });
 
     it('broadcasts to all clients in the meeting', async () => {
@@ -399,6 +413,21 @@ describe('Socket.IO integration', () => {
 
       expect(state.agenda.map((i) => i.name)).toEqual(['C', 'A', 'B']);
     });
+
+    it('reorders a session entry through the same protocol', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const itemA = ctx.meetingManager.addAgendaItem(meeting.id, 'A', [owner])!;
+      const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
+      const itemB = ctx.meetingManager.addAgendaItem(meeting.id, 'B', [owner])!;
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:reorder', { id: session.id, afterId: null });
+      const state = await statePromise;
+
+      expect(state.agenda.map((e) => e.id)).toEqual([session.id, itemA.id, itemB.id]);
+    });
   });
 
   describe('agenda:edit', () => {
@@ -444,6 +473,122 @@ describe('Socket.IO integration', () => {
       expect(error).toMatch(/only chairs/i);
       // Item should be unchanged
       expect(ctx.meetingManager.get(meeting.id)!.agenda[0].name).toBe('Item');
+    });
+  });
+
+  // -- Session events --
+
+  describe('session:add', () => {
+    it('adds a session header and broadcasts updated state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('session:add', { name: 'Morning block', capacity: 90 });
+      const state = await statePromise;
+
+      expect(state.agenda).toHaveLength(1);
+      const entry = state.agenda[0];
+      expect(entry).toMatchObject({ kind: 'session', name: 'Morning block', capacity: 90 });
+    });
+
+    it('rejects non-positive capacity', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('session:add', { name: 'Block', capacity: 0 });
+      await errorPromise;
+      expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(0);
+    });
+
+    it('rejects empty name', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('session:add', { name: '   ', capacity: 30 });
+      await errorPromise;
+      expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(0);
+    });
+
+    it('rejects add from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+
+      const client = await joinMeeting(meeting.id);
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('session:add', { name: 'Block', capacity: 30 });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(0);
+    });
+  });
+
+  describe('session:edit', () => {
+    it('updates name and capacity', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const session = ctx.meetingManager.addSession(meeting.id, 'Old', 30)!;
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('session:edit', { id: session.id, name: 'New', capacity: 45 });
+      const state = await statePromise;
+
+      expect(state.agenda[0]).toMatchObject({ kind: 'session', name: 'New', capacity: 45 });
+    });
+
+    it('rejects edit from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+      const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
+
+      const client = await joinMeeting(meeting.id);
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('session:edit', { id: session.id, name: 'Hacked' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      expect(ctx.meetingManager.get(meeting.id)!.agenda[0]).toMatchObject({ name: 'Block' });
+    });
+  });
+
+  describe('session:delete', () => {
+    it('removes the session but keeps contained items', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Contained', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('session:delete', { id: session.id });
+      const state = await statePromise;
+
+      expect(state.agenda).toHaveLength(1);
+      expect(state.agenda[0]).toMatchObject({ name: 'Contained' });
+    });
+
+    it('rejects delete from non-chair', async () => {
+      const meeting = ctx.meetingManager.create([
+        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+      ]);
+      const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
+
+      const client = await joinMeeting(meeting.id);
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('session:delete', { id: session.id });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/only chairs/i);
+      expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(1);
     });
   });
 

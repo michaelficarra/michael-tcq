@@ -186,6 +186,27 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
             GitHub). The parser extracts items from both numbered lists and markdown tables.
           </p>
 
+          <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Grouping Items into Sessions</h4>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            Click <strong>New Session</strong> to add a named time block — for example, "Tuesday morning" with a
+            90&#8239;minute capacity. Sessions are interleaved with agenda items in the same list and can be dragged to
+            reorder like items. A session visually groups the contiguous run of agenda items that follows it (stopping
+            at the next session header): items whose cumulative timeboxes fit within the session's capacity are indented
+            beneath it. Items without a timebox count as 0&#8239;minutes.
+          </p>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            Each session header shows its <strong>capacity</strong>, <strong>used</strong> (the sum of the timeboxes
+            that fit), and <strong>remaining</strong>. If the run below the session exceeds its capacity, the remaining
+            label is replaced by an <strong>overflow</strong> indicator showing by how much — useful for spotting
+            over-scheduled blocks at a glance.
+          </p>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+            Deleting a session does <strong>not</strong> delete its agenda items — only the header is removed. Moving a
+            session doesn't move the items beneath it either; containment is recomputed from the session's new position.
+            Sessions are display-only: <strong>Next Agenda Item</strong> skips over session headers and only lands on
+            actual items.
+          </p>
+
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Running the Meeting</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             Switch to the <strong>Queue</strong> tab to run the meeting:

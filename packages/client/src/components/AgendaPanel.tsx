@@ -29,11 +29,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { AgendaItem } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
+import type { AgendaItem, Session } from '@tcq/shared';
+import { formatShortDuration, isAgendaItem, isSession, userKey } from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
+import { computeContainment } from '../lib/containment.js';
 import { AgendaForm } from './AgendaForm.js';
+import { SessionForm } from './SessionForm.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
 
@@ -51,6 +53,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const isChair = useIsChair();
   const socket = useSocket();
   const [showForm, setShowForm] = useState(false);
+  const [showSessionForm, setShowSessionForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
@@ -73,11 +76,32 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     return <div id="panel-agenda" role="tabpanel" aria-label="Agenda" hidden={hidden} className="p-6" />;
   }
 
-  // Index of the current agenda item (`-1` means there isn't one yet).
-  // Drives the orange current-row highlight and the past-row dimming.
+  // Index of the current agenda item within the full entry array (`-1`
+  // means there isn't one yet). Drives the orange current-row highlight
+  // and the past-row dimming. Only agenda items can be "current" —
+  // sessions are never current.
   const currentIndex = meeting.current.agendaItemId
-    ? meeting.agenda.findIndex((i) => i.id === meeting.current.agendaItemId)
+    ? meeting.agenda.findIndex((e) => isAgendaItem(e) && e.id === meeting.current.agendaItemId)
     : -1;
+
+  // Containment derived from the current agenda order + timeboxes. Sessions
+  // collect the contiguous run of items that follow them (stopping at the
+  // next session header); items whose cumulative timeboxes stay within the
+  // session's capacity are rendered indented.
+  const containment = computeContainment(meeting.agenda);
+
+  // 1-based display number per agenda item — counted across items only so
+  // that session interpolation doesn't create gaps in the numbering.
+  const itemNumbers = new Map<string, number>();
+  {
+    let n = 0;
+    for (const entry of meeting.agenda) {
+      if (isAgendaItem(entry)) {
+        n += 1;
+        itemNumbers.set(entry.id, n);
+      }
+    }
+  }
 
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {
@@ -115,13 +139,18 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     socket?.emit('agenda:delete', { id: itemId });
   }
 
+  /** Handle deleting a session header. Contained items stay in the list. */
+  function handleDeleteSession(sessionId: string) {
+    socket?.emit('session:delete', { id: sessionId });
+  }
+
   return (
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
       {/* Chairs list with inline edit for chairs */}
       <ChairsSection />
 
       {/* Agenda item list */}
-      {meeting.agenda.length === 0 && !showForm ? (
+      {meeting.agenda.length === 0 && !showForm && !showSessionForm ? (
         <div className="mb-4">
           <p className="text-stone-400 dark:text-stone-500 italic mb-2">No agenda items yet.</p>
           {isChair && !showImport && (
@@ -216,37 +245,62 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
             disabled={!isChair}
           >
             <ol className="space-y-1 mb-4" aria-label="Agenda items">
-              {meeting.agenda.map((item, index) => (
-                <SortableAgendaItem
-                  key={item.id}
-                  item={item}
-                  index={index}
-                  isChair={isChair}
-                  isOwnItem={!!user && item.presenterIds.includes(userKey(user))}
-                  isPast={index < currentIndex}
-                  isCurrent={index === currentIndex}
-                  onDelete={handleDelete}
-                />
-              ))}
+              {meeting.agenda.map((entry, index) =>
+                isSession(entry) ? (
+                  <SortableSession
+                    key={entry.id}
+                    session={entry}
+                    isChair={isChair}
+                    used={containment.used.get(entry.id) ?? 0}
+                    runTotal={containment.runTotal.get(entry.id) ?? 0}
+                    onDelete={handleDeleteSession}
+                  />
+                ) : (
+                  <SortableAgendaItem
+                    key={entry.id}
+                    item={entry}
+                    index={index}
+                    displayNumber={itemNumbers.get(entry.id) ?? 0}
+                    isChair={isChair}
+                    isOwnItem={!!user && entry.presenterIds.includes(userKey(user))}
+                    isPast={index < currentIndex}
+                    isCurrent={index === currentIndex}
+                    isContained={containment.containedBy.has(entry.id)}
+                    onDelete={handleDelete}
+                  />
+                ),
+              )}
             </ol>
           </SortableContext>
         </DndContext>
       )}
 
-      {/* Add agenda item — chairs only */}
-      {isChair &&
-        (showForm ? (
-          <AgendaForm onCancel={() => setShowForm(false)} onSubmit={() => setShowForm(false)} />
-        ) : (
+      {/* Add agenda item / session — chairs only. Only one form is shown
+          at a time: opening one closes the other. */}
+      {isChair && showForm && <AgendaForm onCancel={() => setShowForm(false)} onSubmit={() => setShowForm(false)} />}
+      {isChair && showSessionForm && (
+        <SessionForm onCancel={() => setShowSessionForm(false)} onSubmit={() => setShowSessionForm(false)} />
+      )}
+      {isChair && !showForm && !showSessionForm && (
+        <div className="flex flex-wrap gap-2 presentation-hidden">
           <button
             onClick={() => setShowForm(true)}
             className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
                        text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
-                       cursor-pointer presentation-hidden"
+                       cursor-pointer"
           >
             New Agenda Item
           </button>
-        ))}
+          <button
+            onClick={() => setShowSessionForm(true)}
+            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                       text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
+                       cursor-pointer"
+          >
+            New Session
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,7 +309,10 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
 
 interface SortableAgendaItemProps {
   item: AgendaItem;
+  /** Position in the full entry array — drives zebra striping. */
   index: number;
+  /** 1-based position among agenda items (sessions skipped) for the number column. */
+  displayNumber: number;
   isChair: boolean;
   /** Whether the current user is one of this item's presenters. */
   isOwnItem: boolean;
@@ -272,10 +329,25 @@ interface SortableAgendaItemProps {
    * the actively-discussed row stands out from the rest of the list.
    */
   isCurrent: boolean;
+  /**
+   * True when this item is visually contained within the preceding session
+   * header — adds a left/right margin so the item sits "inside" the session.
+   */
+  isContained: boolean;
   onDelete: (id: string) => void;
 }
 
-function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent, onDelete }: SortableAgendaItemProps) {
+function SortableAgendaItem({
+  item,
+  index,
+  displayNumber,
+  isChair,
+  isOwnItem,
+  isPast,
+  isCurrent,
+  isContained,
+  onDelete,
+}: SortableAgendaItemProps) {
   const { meeting } = useMeetingState();
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
@@ -331,6 +403,9 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent
       ? 'bg-white dark:bg-stone-900'
       : 'bg-stone-100/50 dark:bg-stone-800/50';
   const dimClasses = isPast ? 'opacity-60 text-stone-500 dark:text-stone-500' : '';
+  // Items that fit within the preceding session's capacity are indented
+  // so the session visually "contains" them.
+  const containedClasses = isContained ? 'ml-4 md:ml-6' : '';
 
   // --- Editing mode: inline form ---
   if (editing) {
@@ -338,10 +413,10 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
         <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
-          {index + 1}
+          {displayNumber}
         </span>
 
         <form onSubmit={handleEditSubmit} className="flex-1 flex flex-wrap items-center gap-2">
@@ -405,13 +480,13 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
-      } ${dimClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
-      aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
+      } ${dimClasses} ${containedClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      aria-label={isChair ? `Drag to reorder item ${displayNumber}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
       {/* Item number */}
       <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
-        {index + 1}
+        {displayNumber}
       </span>
 
       <div className="flex-1 min-w-0">
@@ -436,7 +511,7 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent
         {/* Timebox */}
         {item.timebox != null && item.timebox > 0 && (
           <span className="ml-2 text-sm text-stone-400 dark:text-stone-500 align-middle">
-            {item.timebox} {item.timebox === 1 ? 'minute' : 'minutes'}
+            {formatShortDuration(item.timebox)}
           </span>
         )}
       </div>
@@ -455,6 +530,166 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent
             onClick={() => onDelete(item.id)}
             className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             aria-label={`Delete ${item.name}`}
+          >
+            delete
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+// -- Sortable session header --
+
+interface SortableSessionProps {
+  session: Session;
+  isChair: boolean;
+  /** Sum of timeboxes of the contained (fitting) items following this session. */
+  used: number;
+  /**
+   * Sum of timeboxes across the full contiguous run that follows this
+   * session, including items past capacity. When this exceeds capacity we
+   * show "overflow" instead of "remaining".
+   */
+  runTotal: number;
+  onDelete: (id: string) => void;
+}
+
+function SortableSession({ session, isChair, used, runTotal, onDelete }: SortableSessionProps) {
+  const socket = useSocket();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCapacity, setEditCapacity] = useState('');
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: session.id,
+    disabled: !isChair || editing,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  function startEditing() {
+    setEditName(session.name);
+    setEditCapacity(String(session.capacity));
+    setEditing(true);
+  }
+
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmedName = editName.trim();
+    const capacity = parseInt(editCapacity, 10);
+    if (!trimmedName || !(capacity > 0)) return;
+    socket?.emit('session:edit', { id: session.id, name: trimmedName, capacity });
+    setEditing(false);
+  }
+
+  const overflowing = runTotal > session.capacity;
+  const remaining = session.capacity - used;
+  const overflowAmount = runTotal - session.capacity;
+
+  const baseClasses =
+    'flex flex-wrap items-center gap-3 border-y border-stone-300 dark:border-stone-600 px-2 py-1.5 rounded bg-stone-100 dark:bg-stone-800';
+
+  if (editing) {
+    return (
+      <li ref={setNodeRef} style={style} className={baseClasses}>
+        <form onSubmit={handleEditSubmit} className="flex-1 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            required
+            autoFocus
+            aria-label="Session name"
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+                       dark:bg-stone-700 dark:text-stone-100
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <input
+            type="number"
+            value={editCapacity}
+            onChange={(e) => setEditCapacity(e.target.value)}
+            min="1"
+            max="9999"
+            required
+            aria-label="Session capacity in minutes"
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-20
+                       dark:bg-stone-700 dark:text-stone-100
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <button
+            type="submit"
+            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+          >
+            Cancel
+          </button>
+        </form>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`${baseClasses} ${isDragging ? 'opacity-50' : ''} ${
+        isChair ? 'cursor-grab active:cursor-grabbing' : ''
+      }`}
+      aria-label={isChair ? `Drag to reorder session ${session.name}` : undefined}
+      {...(isChair ? { ...attributes, ...listeners } : {})}
+    >
+      <span
+        className="text-base font-bold uppercase tracking-wide text-stone-700 dark:text-stone-200 flex-1 min-w-0 truncate"
+        title={session.name}
+      >
+        {session.name}
+      </span>
+
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-stone-600 dark:text-stone-400 tabular-nums">
+        <span>
+          capacity{' '}
+          <span className="font-medium text-stone-700 dark:text-stone-300">
+            {formatShortDuration(session.capacity)}
+          </span>
+        </span>
+        <span>
+          used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
+        </span>
+        {overflowing ? (
+          <span className="text-red-600 dark:text-red-400">
+            overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
+          </span>
+        ) : (
+          <span>
+            remaining{' '}
+            <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(remaining)}</span>
+          </span>
+        )}
+      </span>
+
+      {isChair && (
+        <div className="flex gap-3 shrink-0 presentation-hidden">
+          <button
+            onClick={startEditing}
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            aria-label={`Edit session ${session.name}`}
+          >
+            edit
+          </button>
+          <button
+            onClick={() => onDelete(session.id)}
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+            aria-label={`Delete session ${session.name}`}
           >
             delete
           </button>

@@ -58,6 +58,35 @@ export const AgendaEditPayloadSchema = z.object({
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
 
+/**
+ * Payload for adding a new session header (chair only). Sessions are
+ * always appended to the end of the agenda; move them into position
+ * via `agenda:reorder` afterwards.
+ */
+export const SessionAddPayloadSchema = z.object({
+  name: requiredTrimmed('Session name'),
+  /** Capacity in minutes — positive integer. */
+  capacity: z.number().int().positive(),
+});
+export type SessionAddPayload = z.infer<typeof SessionAddPayloadSchema>;
+
+/**
+ * Payload for editing an existing session header (chair only). All fields
+ * are optional; omitted fields leave that attribute unchanged.
+ */
+export const SessionEditPayloadSchema = z.object({
+  id: z.string(),
+  name: z.string().trim().min(1, 'Session name cannot be empty').optional(),
+  capacity: z.number().int().positive().optional(),
+});
+export type SessionEditPayload = z.infer<typeof SessionEditPayloadSchema>;
+
+/** Payload for deleting a session header. */
+export const SessionDeletePayloadSchema = z.object({
+  id: z.string(),
+});
+export type SessionDeletePayload = z.infer<typeof SessionDeletePayloadSchema>;
+
 /** Payload for editing an existing queue entry. */
 export const QueueEditPayloadSchema = z.object({
   id: z.string(),
@@ -229,8 +258,24 @@ export interface ClientToServerEvents {
   /** Delete an agenda item by ID (chair only). */
   'agenda:delete': (payload: AgendaDeletePayload) => void;
 
-  /** Reorder an agenda item to a new position (chair only). */
+  /**
+   * Reorder an agenda entry (item or session) to a new position (chair
+   * only). Items and sessions share the same id-space and the same
+   * reorder protocol.
+   */
   'agenda:reorder': (payload: AgendaReorderPayload) => void;
+
+  /** Add a new session header (chair only). Appended to the end of the agenda. */
+  'session:add': (payload: SessionAddPayload) => void;
+
+  /** Edit an existing session header (chair only). */
+  'session:edit': (payload: SessionEditPayload) => void;
+
+  /**
+   * Delete a session header by ID (chair only). Does not delete the
+   * agenda items that were visually contained within it.
+   */
+  'session:delete': (payload: SessionDeletePayload) => void;
 
   /**
    * Start the meeting by advancing to the first agenda item, or advance

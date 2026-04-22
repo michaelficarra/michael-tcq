@@ -2,6 +2,8 @@ export type {
   User,
   UserKey,
   AgendaItem,
+  Session,
+  AgendaEntry,
   QueueEntry,
   QueueEntryType,
   PollOption,
@@ -29,6 +31,9 @@ export type {
   AgendaEditPayload,
   AgendaDeletePayload,
   AgendaReorderPayload,
+  SessionAddPayload,
+  SessionEditPayload,
+  SessionDeletePayload,
   ChairsUpdatePayload,
   QueueAddPayload,
   QueueEditPayload,
@@ -49,6 +54,9 @@ export {
   AgendaEditPayloadSchema,
   AgendaDeletePayloadSchema,
   AgendaReorderPayloadSchema,
+  SessionAddPayloadSchema,
+  SessionEditPayloadSchema,
+  SessionDeletePayloadSchema,
   ChairsUpdatePayloadSchema,
   QueueAddPayloadSchema,
   QueueEditPayloadSchema,
@@ -64,4 +72,4 @@ export {
   ImportAgendaBodySchema,
 } from './messages.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
-export { userKey, asUserKey } from './helpers.js';
+export { userKey, asUserKey, isSession, isAgendaItem, formatShortDuration } from './helpers.js';

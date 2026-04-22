@@ -10,6 +10,9 @@ import {
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
   AgendaReorderPayloadSchema,
+  SessionAddPayloadSchema,
+  SessionDeletePayloadSchema,
+  SessionEditPayloadSchema,
   ChairsUpdatePayloadSchema,
   NextAgendaItemPayloadSchema,
   NextSpeakerPayloadSchema,
@@ -421,6 +424,70 @@ export function registerSocketHandlers(
       const reordered = meetingManager.reorderAgendaItem(joinedMeetingId, parsed.id, parsed.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid reorder indices');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- session:add ---
+    // Chair adds a new session header. Appended to the end of the agenda;
+    // the chair reorders it into position via `agenda:reorder`.
+    socket.on('session:add', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can add sessions');
+        return;
+      }
+
+      const parsed = parsePayload(SessionAddPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      meetingManager.addSession(joinedMeetingId, parsed.name, parsed.capacity);
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- session:edit ---
+    // Chair edits an existing session's name or capacity.
+    socket.on('session:edit', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can edit sessions');
+        return;
+      }
+
+      const parsed = parsePayload(SessionEditPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const updates: { name?: string; capacity?: number } = {};
+      if (parsed.name !== undefined) updates.name = parsed.name;
+      if (parsed.capacity !== undefined) updates.capacity = parsed.capacity;
+
+      const edited = meetingManager.editSession(joinedMeetingId, parsed.id, updates);
+      if (!edited) {
+        socket.emit('error', 'Session not found');
+        return;
+      }
+
+      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+    });
+
+    // --- session:delete ---
+    // Chair removes a session header. Contained agenda items are left
+    // alone — containment is a client-side display concept.
+    socket.on('session:delete', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can delete sessions');
+        return;
+      }
+
+      const parsed = parsePayload(SessionDeletePayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const deleted = meetingManager.deleteSession(joinedMeetingId, parsed.id);
+      if (!deleted) {
+        socket.emit('error', 'Session not found');
         return;
       }
 

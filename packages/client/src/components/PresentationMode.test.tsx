@@ -250,7 +250,7 @@ describe('Presentation mode', () => {
 
       expect(screen.getByText('Visible Item')).toBeInTheDocument();
       expect(screen.getByText('Bob')).toBeInTheDocument();
-      expect(screen.getByText(/15 minutes/)).toBeInTheDocument();
+      expect(screen.getByText('15m')).toBeInTheDocument();
     });
 
     it('keeps the chairs list visible', () => {

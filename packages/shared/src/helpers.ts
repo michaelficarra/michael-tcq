@@ -1,4 +1,4 @@
-import type { UserKey } from './types.js';
+import type { AgendaEntry, AgendaItem, Session, UserKey } from './types.js';
 
 /**
  * Derive the canonical user key from a User-like object.
@@ -18,4 +18,35 @@ export function userKey(user: { ghUsername: string }): UserKey {
  */
 export function asUserKey(s: string): UserKey {
   return s as UserKey;
+}
+
+/** Type guard: is this agenda entry a session header? */
+export function isSession(entry: AgendaEntry): entry is Session {
+  return 'kind' in entry && entry.kind === 'session';
+}
+
+/**
+ * Type guard: is this agenda entry a regular agenda item? Discriminates
+ * by absence of a `kind` field so existing persisted agenda items (which
+ * have no `kind`) satisfy this without any migration.
+ */
+export function isAgendaItem(entry: AgendaEntry): entry is AgendaItem {
+  return !('kind' in entry);
+}
+
+/**
+ * Format a duration in minutes as a short human-friendly string.
+ *
+ * Examples: `0 → "0m"`, `45 → "45m"`, `60 → "1h"`, `120 → "2h"`, `315 → "5h15m"`.
+ * Zero parts are dropped. Negative values are rendered with a leading `-`
+ * (this is a safety net — callers should normally pass non-negative values).
+ */
+export function formatShortDuration(minutes: number): string {
+  if (minutes === 0) return '0m';
+  const negative = minutes < 0;
+  const abs = Math.abs(minutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const body = h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h${m}m`;
+  return negative ? `-${body}` : body;
 }

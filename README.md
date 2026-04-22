@@ -23,6 +23,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 ### Agenda and meeting structure
 
 - **Agenda import** — chairs can import an agenda from a URL to a markdown document (e.g. a TC39 meeting agenda on GitHub). The parser extracts items from both numbered lists and markdown tables, preserving markdown formatting in item names.
+- **Sessions** — chairs can interleave named session headers (with a capacity in minutes) among agenda items. Each session visually groups the contiguous run of items that follow it and shows used / remaining capacity, flipping to an "overflow" indicator when the run exceeds its budget.
 - **Editable chair list** — chairs can edit the list of chairs from the Agenda tab during a meeting, adding or removing others (but not themselves).
 
 ### Polls and meeting log
@@ -74,6 +75,9 @@ Dark mode follows the system colour scheme by default, and can be overridden in 
 
 ![Agenda tab](docs/screenshots/agenda.png)
 The agenda tab with chairs, numbered items, and drag-to-reorder.
+
+![Agenda with sessions](docs/screenshots/sessions.png)
+Sessions group a contiguous run of agenda items by capacity. Each session header shows capacity, used, and remaining (or overflow when the run exceeds its budget).
 
 ![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png)
 Press `?` to view all keyboard shortcuts.

@@ -5,11 +5,12 @@ import type {
   MeetingState,
   QueueEntry,
   QueueEntryType,
+  Session,
   TopicSpeaker,
   User,
   UserKey,
 } from '@tcq/shared';
-import { QUEUE_ENTRY_PRIORITY, userKey } from '@tcq/shared';
+import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 
@@ -130,7 +131,8 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     const currentId = meeting?.current.agendaItemId;
     if (!currentId) return undefined;
-    return meeting!.agenda.find((item) => item.id === currentId);
+    // Only agenda items are eligible — sessions are never "current".
+    return meeting!.agenda.find((entry): entry is AgendaItem => isAgendaItem(entry) && entry.id === currentId);
   }
 
   /** List all active meetings. Used by the admin dashboard. */
@@ -223,7 +225,9 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const item = meeting.agenda.find((i) => i.id === itemId);
+    // Guard on `isAgendaItem` so a session id with the same-shape edit
+    // payload can't accidentally mutate a session header here.
+    const item = meeting.agenda.find((e): e is AgendaItem => isAgendaItem(e) && e.id === itemId);
     if (!item) return false;
 
     if (updates.presenters !== undefined) {
@@ -250,7 +254,8 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    const index = meeting.agenda.findIndex((item) => item.id === itemId);
+    // Only agenda items — session headers are deleted via `deleteSession`.
+    const index = meeting.agenda.findIndex((entry) => isAgendaItem(entry) && entry.id === itemId);
     if (index === -1) return false;
 
     meeting.agenda.splice(index, 1);
@@ -265,10 +270,13 @@ export class MeetingManager {
   }
 
   /**
-   * Reorder an agenda item by moving it to the position after another item.
+   * Reorder an agenda entry (item or session) by moving it after another
+   * entry. Items and sessions share the same id-space and are reordered
+   * through the same protocol — dnd-kit uses a single sortable context
+   * for both.
    *
-   * Uses item UUIDs rather than indices to avoid race conditions when
-   * two chairs reorder simultaneously. If `afterId` is null, the item
+   * Uses entry UUIDs rather than indices to avoid race conditions when
+   * two chairs reorder simultaneously. If `afterId` is null, the entry
    * is moved to the beginning of the agenda.
    *
    * Returns true if the reorder was valid and applied.
@@ -277,27 +285,86 @@ export class MeetingManager {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
-    // Find and remove the item being moved
-    const itemIndex = meeting.agenda.findIndex((i) => i.id === itemId);
+    // Find and remove the entry being moved
+    const itemIndex = meeting.agenda.findIndex((e) => e.id === itemId);
     if (itemIndex === -1) return false;
 
-    const [item] = meeting.agenda.splice(itemIndex, 1);
+    const [entry] = meeting.agenda.splice(itemIndex, 1);
 
     if (afterId === null) {
       // Move to the beginning
-      meeting.agenda.unshift(item);
+      meeting.agenda.unshift(entry);
     } else {
-      // Find the "after" item in the (now shorter) array
-      const afterIndex = meeting.agenda.findIndex((i) => i.id === afterId);
+      // Find the "after" entry in the (now shorter) array
+      const afterIndex = meeting.agenda.findIndex((e) => e.id === afterId);
       if (afterIndex === -1) {
-        // afterId not found — put the item back and report failure
-        meeting.agenda.splice(itemIndex, 0, item);
+        // afterId not found — put the entry back and report failure
+        meeting.agenda.splice(itemIndex, 0, entry);
         return false;
       }
-      // Insert immediately after the "after" item
-      meeting.agenda.splice(afterIndex + 1, 0, item);
+      // Insert immediately after the "after" entry
+      meeting.agenda.splice(afterIndex + 1, 0, entry);
     }
 
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  // -- Session mutations --
+
+  /**
+   * Add a new session header to the agenda. Appended to the end of the
+   * list; callers reposition it via `reorderAgendaItem`. Returns the
+   * created session, or null if the meeting doesn't exist.
+   */
+  addSession(meetingId: string, name: string, capacity: number): Session | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    const session: Session = {
+      kind: 'session',
+      id: randomUUID(),
+      name,
+      capacity,
+    };
+
+    meeting.agenda.push(session);
+    this.markDirty(meetingId);
+    return session;
+  }
+
+  /**
+   * Edit an existing session header. Only the provided fields are updated.
+   * Returns true if the session was found and updated.
+   */
+  editSession(meetingId: string, sessionId: string, updates: { name?: string; capacity?: number }): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const session = meeting.agenda.find((e): e is Session => !isAgendaItem(e) && e.id === sessionId);
+    if (!session) return false;
+
+    if (updates.name !== undefined) session.name = updates.name;
+    if (updates.capacity !== undefined) session.capacity = updates.capacity;
+
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /**
+   * Delete a session header by ID. Does not delete any agenda items that
+   * were visually contained within it — containment is a purely client-side
+   * display concern, so the items' positions in the list are unaffected.
+   * Returns true if the session was found and removed.
+   */
+  deleteSession(meetingId: string, sessionId: string): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+
+    const index = meeting.agenda.findIndex((e) => !isAgendaItem(e) && e.id === sessionId);
+    if (index === -1) return false;
+
+    meeting.agenda.splice(index, 1);
     this.markDirty(meetingId);
     return true;
   }
@@ -322,21 +389,25 @@ export class MeetingManager {
 
     if (meeting.agenda.length === 0) return null;
 
-    let nextIndex: number;
-
+    // Starting position for the search — one past the current item, or
+    // the start of the agenda if no item is current yet.
+    let searchFrom: number;
     if (!meeting.current.agendaItemId) {
-      // No current item — start with the first one
-      nextIndex = 0;
+      searchFrom = 0;
     } else {
-      // Find the current item's position and advance to the next
-      const currentIndex = meeting.agenda.findIndex((item) => item.id === meeting.current.agendaItemId);
-      nextIndex = currentIndex + 1;
+      const currentIndex = meeting.agenda.findIndex(
+        (entry) => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
+      );
+      searchFrom = currentIndex + 1;
     }
 
-    // Check if we've gone past the end of the agenda
-    if (nextIndex >= meeting.agenda.length) return null;
+    // Skip any interleaved session headers — advancement only lands on
+    // actual agenda items. If the remainder is all sessions (or empty),
+    // there's nothing to advance to.
+    const nextIndex = meeting.agenda.findIndex((entry, idx) => idx >= searchFrom && isAgendaItem(entry));
+    if (nextIndex === -1) return null;
 
-    const nextItem = meeting.agenda[nextIndex];
+    const nextItem = meeting.agenda[nextIndex] as AgendaItem;
     const now = new Date().toISOString();
 
     // The item's first presenter becomes the current speaker. No synthesised

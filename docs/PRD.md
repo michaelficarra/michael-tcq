@@ -90,7 +90,7 @@ The active tab is indicated with a teal underline. A top navigation bar shows th
 
 ## Agenda
 
-The agenda is an ordered list of items. Each agenda item has:
+The agenda is an ordered list of entries. Most entries are **agenda items**; interleaved among them chairs may also add **session headers** that group a contiguous run of items by capacity (see "Sessions" below). Each agenda item has:
 
 - **Name** — the title of the item
 - **Presenters** — one or more GitHub users who will introduce/present it (each shown with their GitHub avatar). An item must have at least one presenter; the first presenter becomes the current speaker when the meeting advances to the item.
@@ -122,6 +122,21 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and timebox duration if set. Items where the current user is one of the presenters are visually distinguished with a coloured left border.
 
 The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder.
+
+### Sessions
+
+A **session** is a named time block that visually groups a contiguous run of agenda items by capacity. Sessions are not themselves agenda items — advancement (next agenda item) skips over them, and the items a session "contains" are derived from its position in the list, not from any parent/child linkage.
+
+- **Add** — Alongside the "New Agenda Item" button, chairs see a "New Session" button. Creating a session takes a **name** and a **capacity** (positive integer number of minutes). New sessions are appended to the end of the agenda; chairs reorder them into position afterwards.
+- **Edit** — Chairs can edit a session's name and capacity inline.
+- **Delete** — Removing a session does **not** delete the agenda items that were visually contained within it; only the session header is removed.
+- **Reorder** — Sessions can be dragged up and down like agenda items. Moving a session does not move the agenda items that were contained within it; containment is recomputed from the session's new position.
+- **Display** — A session renders as a distinct header row in the agenda list (bold, uppercase, with dividers). It shows three values formatted in a compact duration format (e.g. `45m`, `2h`, `5h15m`):
+  - **capacity** — the session's duration
+  - **used** — the sum of timeboxes of the agenda items that fit within its capacity (items without a timebox count as 0m)
+  - **remaining** — capacity − used, when the full run fits, OR
+  - **overflow** — (run total − capacity) when the contiguous run of items that follows the session exceeds its capacity. The "overflow" label replaces the "remaining" label in that case, rendered in a warning colour.
+- **Containment** — The run of agenda items under a session starts at the item immediately after the session and ends at the next session header (or end of agenda). Items whose cumulative timeboxes stay within the capacity are rendered with a left/right margin so they sit visually "inside" the session. Items that would push the running sum past capacity are left unindented but still counted in the overflow calculation.
 
 ## Queue
 

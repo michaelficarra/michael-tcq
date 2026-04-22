@@ -137,7 +137,7 @@ test.describe('Agenda tab', () => {
       await addAgendaItem(page, 'Timed item', undefined, 15);
 
       await expect(page.getByText('Timed item')).toBeVisible();
-      await expect(page.getByText('15 minutes')).toBeVisible();
+      await expect(page.getByText('15m', { exact: true })).toBeVisible();
       // Presenter avatar (an img element) should be present
       await expect(page.getByRole('tabpanel', { name: 'Agenda' }).locator('img').first()).toBeVisible();
     });
@@ -300,15 +300,91 @@ test.describe('Agenda tab', () => {
       await expect(item).toHaveCSS('border-left-width', '3px');
     });
 
-    test('timebox displays singular "minute" for 1 minute', async ({ page }) => {
+    test('timebox renders in short duration format', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
+      // 1 minute — should display as "1m"
       await addAgendaItem(page, 'Quick item', undefined, 1);
+      await expect(page.getByText('1m', { exact: true })).toBeVisible();
 
-      await expect(page.getByText('1 minute')).toBeVisible();
-      // Should not say "1 minutes"
-      await expect(page.getByText('1 minutes')).not.toBeVisible();
+      // 90 minutes — should display compact hour+minute format
+      await addAgendaItem(page, 'Long item', undefined, 90);
+      await expect(page.getByText('1h30m', { exact: true })).toBeVisible();
+    });
+  });
+
+  test.describe('Sessions (Chair Only)', () => {
+    test('creates a session with capacity and shows it in the agenda list', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // Open the New Session form and submit it.
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Morning block');
+      await page.getByLabel('Capacity').fill('90');
+      await page.getByRole('button', { name: 'Create' }).click();
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(panel.getByText('Morning block')).toBeVisible();
+      // Capacity 1h30m, no items yet — remaining equals capacity.
+      await expect(panel.getByText(/remaining/i)).toBeVisible();
+      // 1h30m appears in the capacity label and the remaining label.
+      await expect(panel.getByText('1h30m').first()).toBeVisible();
+    });
+
+    test('updates used and remaining live as items are added below', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Block');
+      await page.getByLabel('Capacity').fill('60');
+      await page.getByRole('button', { name: 'Create' }).click();
+
+      await addAgendaItem(page, 'First', undefined, 15);
+      await addAgendaItem(page, 'Second', undefined, 20);
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      // used = 35m, remaining = 25m
+      await expect(panel.getByText('35m', { exact: true })).toBeVisible();
+      await expect(panel.getByText('25m', { exact: true })).toBeVisible();
+    });
+
+    test('flips to "overflow" label when items exceed capacity', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Tight');
+      await page.getByLabel('Capacity').fill('30');
+      await page.getByRole('button', { name: 'Create' }).click();
+
+      await addAgendaItem(page, 'A', undefined, 15);
+      await addAgendaItem(page, 'B', undefined, 15);
+      await addAgendaItem(page, 'C', undefined, 10);
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(panel.getByText(/overflow/i)).toBeVisible();
+      await expect(panel.getByText(/remaining/i)).not.toBeVisible();
+    });
+
+    test('deleting a session keeps the agenda items in place', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Block');
+      await page.getByLabel('Capacity').fill('30');
+      await page.getByRole('button', { name: 'Create' }).click();
+
+      await addAgendaItem(page, 'Kept item', undefined, 10);
+
+      await page.getByRole('button', { name: 'Delete session Block' }).click();
+
+      const panel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(panel.getByText('Block')).not.toBeVisible();
+      await expect(panel.getByText('Kept item')).toBeVisible();
     });
   });
 });

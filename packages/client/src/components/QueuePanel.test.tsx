@@ -97,7 +97,7 @@ describe('QueuePanel', () => {
 
     expect(screen.getByText('Discussion of proposal')).toBeInTheDocument();
     expect(screen.getByText(/Alice/)).toBeInTheDocument();
-    expect(screen.getByText(/20 minutes/)).toBeInTheDocument();
+    expect(screen.getByText('20m')).toBeInTheDocument();
   });
 
   it('shows all presenters for a multi-presenter current agenda item', () => {
