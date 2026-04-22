@@ -94,7 +94,7 @@ The agenda is an ordered list of entries. Most entries are **agenda items**; int
 
 - **Name** — the title of the item
 - **Presenters** — one or more GitHub users who will introduce/present it (each shown with their GitHub avatar). An item must have at least one presenter; the first presenter becomes the current speaker when the meeting advances to the item.
-- **Timebox** (optional) — a duration in minutes
+- **Timebox** (optional) — a duration in minutes. When an agenda item is completed (the chair advances past it), its timebox is automatically replaced with the actual elapsed time, rounded up to the nearest minute, so the agenda's estimates self-correct as the meeting progresses.
 
 ### Chair Management
 

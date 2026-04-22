@@ -100,6 +100,30 @@ test.describe('Meeting Flow', () => {
     await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Item Two');
   });
 
+  test('completing an agenda item replaces its timebox with the actual elapsed time', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    // Seed an obviously-wrong timebox on the first item (99 min → "1h39m")
+    // so we can verify it was overwritten rather than merely left alone.
+    await addAgendaItem(page, 'Item One', 'admin', 99);
+    await addAgendaItem(page, 'Item Two', 'admin');
+
+    const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+    await expect(agendaPanel.getByText('1h39m', { exact: true })).toBeVisible();
+
+    await startMeeting(page);
+
+    // Let a handful of ms elapse so the server sees a non-zero duration.
+    await page.waitForTimeout(50);
+
+    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+
+    await goToAgendaTab(page);
+    // Real elapsed time is milliseconds → Math.ceil rounds up to 1 minute.
+    await expect(agendaPanel.getByText('1m', { exact: true })).toBeVisible();
+    await expect(agendaPanel.getByText('1h39m', { exact: true })).not.toBeVisible();
+  });
+
   test('"Next Agenda Item" button is hidden on the last agenda item', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);

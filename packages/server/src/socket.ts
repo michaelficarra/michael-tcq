@@ -911,13 +911,20 @@ export function registerSocketHandlers(
                 .join('\n')
             : undefined;
 
+        const durationMs = new Date(now).getTime() - new Date(outgoingStartTime).getTime();
+
+        // Replace the outgoing item's timebox with the actual elapsed time,
+        // rounded up to the nearest minute. Turns the timebox into a
+        // self-correcting estimate for future re-use of the agenda.
+        outgoingItem.timebox = Math.ceil(durationMs / 60000);
+
         // Append agenda-item-finished
         meeting.log.push({
           type: 'agenda-item-finished',
           timestamp: now,
           chairId,
           itemName: outgoingItem.name,
-          duration: new Date(now).getTime() - new Date(outgoingStartTime).getTime(),
+          duration: durationMs,
           participantIds,
           remainingQueue,
         });

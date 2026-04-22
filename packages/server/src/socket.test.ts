@@ -1669,6 +1669,70 @@ describe('Socket.IO integration', () => {
       const updated = ctx.meetingManager.get(meeting.id)!;
       expect(updated.agenda.find((i) => i.id === updated.current.agendaItemId)?.name).toBe('First');
     });
+
+    it("replaces the completed item's timebox with the elapsed time rounded up to the nearest minute", async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // Seed an obviously-wrong timebox so we can verify it was overwritten,
+      // not merely left alone.
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner], 999);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting (advance to First).
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
+      const state1 = await statePromise;
+      const firstId = state1.current.agendaItemId!;
+
+      // Let a handful of ms elapse so the rounding-up behaviour is exercised
+      // with a positive duration rather than a same-millisecond collision.
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Advance to Second — this completes First.
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId }, () => {});
+      const state2 = await statePromise;
+
+      const first = asItem(state2.agenda.find((i) => i.id === firstId));
+      // Pin to the log's duration to prove the exact Math.ceil(ms / 60000) relationship.
+      const finished = state2.log.find(
+        (e): e is Extract<typeof e, { type: 'agenda-item-finished' }> =>
+          e.type === 'agenda-item-finished' && e.itemName === 'First',
+      )!;
+      expect(finished.duration).toBeGreaterThan(0);
+      expect(first.timebox).toBe(Math.ceil(finished.duration / 60000));
+      // And specifically: the old 999 value was clobbered.
+      expect(first.timebox).toBeLessThan(999);
+    });
+
+    it("sets a timebox on completion even if the item didn't have one", async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      // No timebox on First.
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
+      const state1 = await statePromise;
+      const firstId = state1.current.agendaItemId!;
+      expect(asItem(state1.agenda.find((i) => i.id === firstId)).timebox).toBeUndefined();
+
+      // Same reason as above — ensure a positive elapsed duration.
+      await new Promise((r) => setTimeout(r, 20));
+
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId }, () => {});
+      const state2 = await statePromise;
+
+      const first = asItem(state2.agenda.find((i) => i.id === firstId));
+      expect(first.timebox).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(first.timebox)).toBe(true);
+    });
   });
 
   it('client can switch meetings by joining a different one', async () => {
