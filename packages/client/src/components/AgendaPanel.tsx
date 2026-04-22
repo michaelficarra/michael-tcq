@@ -7,7 +7,8 @@
  * - Delete existing items
  * - Reorder items via drag-and-drop
  *
- * Participants see a read-only numbered list.
+ * Participants see a read-only numbered list with the current-item
+ * highlight and past-item dimming.
  */
 
 import { useState, type FormEvent } from 'react';
@@ -71,6 +72,12 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   if (hidden || !meeting) {
     return <div id="panel-agenda" role="tabpanel" aria-label="Agenda" hidden={hidden} className="p-6" />;
   }
+
+  // Index of the current agenda item (`-1` means there isn't one yet).
+  // Drives the orange current-row highlight and the past-row dimming.
+  const currentIndex = meeting.current.agendaItemId
+    ? meeting.agenda.findIndex((i) => i.id === meeting.current.agendaItemId)
+    : -1;
 
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {
@@ -216,6 +223,8 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                   index={index}
                   isChair={isChair}
                   isOwnItem={!!user && item.presenterIds.includes(userKey(user))}
+                  isPast={index < currentIndex}
+                  isCurrent={index === currentIndex}
                   onDelete={handleDelete}
                 />
               ))}
@@ -250,10 +259,23 @@ interface SortableAgendaItemProps {
   isChair: boolean;
   /** Whether the current user is one of this item's presenters. */
   isOwnItem: boolean;
+  /**
+   * True when this item sits strictly before the current one (i.e. it has
+   * been covered). Dimmed with reduced opacity and muted text. Never true
+   * for the current item itself.
+   */
+  isPast: boolean;
+  /**
+   * True when this item is the "current" one — its id equals
+   * `meeting.current.agendaItemId`. The row is painted with an orange
+   * highlight and the item name uses a higher-contrast, bolder colour so
+   * the actively-discussed row stands out from the rest of the list.
+   */
+  isCurrent: boolean;
   onDelete: (id: string) => void;
 }
 
-function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: SortableAgendaItemProps) {
+function SortableAgendaItem({ item, index, isChair, isOwnItem, isPast, isCurrent, onDelete }: SortableAgendaItemProps) {
   const { meeting } = useMeetingState();
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
@@ -300,15 +322,23 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
     setEditing(false);
   }
 
+  // Background for the row: orange highlight for the current item wins
+  // over zebra striping. Dimming (opacity-60 + muted text) applies to
+  // items strictly before the current one, never to the current one.
+  const rowBackground = isCurrent
+    ? 'bg-orange-100 dark:bg-orange-900/50'
+    : index % 2 === 0
+      ? 'bg-white dark:bg-stone-900'
+      : 'bg-stone-100/50 dark:bg-stone-800/50';
+  const dimClasses = isPast ? 'opacity-60 text-stone-500 dark:text-stone-500' : '';
+
   // --- Editing mode: inline form ---
   if (editing) {
     return (
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
-          index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'
-        } ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
         <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
           {index + 1}
@@ -374,12 +404,8 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
       ref={setNodeRef}
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
-        isDragging
-          ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
-          : index % 2 === 0
-            ? 'bg-white dark:bg-stone-900'
-            : 'bg-stone-100/50 dark:bg-stone-800/50'
-      } ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
+      } ${dimClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${index + 1}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
@@ -389,8 +415,11 @@ function SortableAgendaItem({ item, index, isChair, isOwnItem, onDelete }: Sorta
       </span>
 
       <div className="flex-1 min-w-0">
-        {/* Item name */}
-        <InlineMarkdown className="font-medium text-stone-800 dark:text-stone-200 align-middle">
+        {/* Item name — the current row uses bolder, higher-contrast text
+            so the actively-discussed item reads as emphatic. */}
+        <InlineMarkdown
+          className={`${isCurrent ? 'font-semibold text-stone-900 dark:text-stone-50' : 'font-medium text-stone-800 dark:text-stone-200'} align-middle`}
+        >
           {item.name}
         </InlineMarkdown>
 

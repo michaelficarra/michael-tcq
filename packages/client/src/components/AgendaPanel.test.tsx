@@ -171,6 +171,70 @@ describe('AgendaPanel', () => {
     expect(screen.getByText(/ACME Corp/)).toBeInTheDocument();
   });
 
+  describe('Current item styling', () => {
+    const a: User = { ghid: 10, ghUsername: 'a', name: 'A', organisation: '' };
+
+    it('dims items strictly before the current one and highlights the current item', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { id: '1', name: 'Past item', presenterIds: ['a'] },
+          { id: '2', name: 'Current item', presenterIds: ['a'] },
+          { id: '3', name: 'Upcoming item', presenterIds: ['a'] },
+        ],
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      const pastLi = screen.getByText('Past item').closest('li')!;
+      const currentLi = screen.getByText('Current item').closest('li')!;
+      const upcomingLi = screen.getByText('Upcoming item').closest('li')!;
+
+      // Past: dimmed, NOT orange.
+      expect(pastLi.className).toMatch(/opacity-60/);
+      expect(pastLi.className).not.toMatch(/bg-orange-100/);
+
+      // Current: orange, NOT dimmed.
+      expect(currentLi.className).toMatch(/bg-orange-100/);
+      expect(currentLi.className).not.toMatch(/opacity-60/);
+
+      // Upcoming: neither.
+      expect(upcomingLi.className).not.toMatch(/opacity-60/);
+      expect(upcomingLi.className).not.toMatch(/bg-orange-100/);
+    });
+
+    it('gives the current item emphatic, higher-contrast text', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [{ id: '1', name: 'The current one', presenterIds: ['a'] }],
+        current: { agendaItemId: '1', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      // The item-name span picks up the emphatic class bundle on the current row.
+      const nameEl = screen.getByText('The current one');
+      expect(nameEl.className).toMatch(/font-semibold/);
+      expect(nameEl.className).toMatch(/text-stone-900/);
+    });
+
+    it('does not dim or highlight anything when no item is current', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { id: '1', name: 'Alpha', presenterIds: ['a'] },
+          { id: '2', name: 'Beta', presenterIds: ['a'] },
+        ],
+      });
+      renderAgenda(meeting);
+
+      for (const name of ['Alpha', 'Beta']) {
+        const li = screen.getByText(name).closest('li')!;
+        expect(li.className).not.toMatch(/opacity-60/);
+        expect(li.className).not.toMatch(/bg-orange-100/);
+      }
+    });
+  });
+
   describe('Chair management', () => {
     const otherChair: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
 

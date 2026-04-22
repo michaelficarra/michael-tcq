@@ -42,6 +42,12 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           when connected, red when disconnected.
         </p>
 
+        <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Reading the Agenda</h4>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+          The <strong>Agenda</strong> tab lists the meeting's items in order. The item being discussed right now is
+          highlighted, and already-covered items are dimmed.
+        </p>
+
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">The Queue</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
           On the <strong>Queue</strong> tab, click one of the entry type buttons to join the speaker queue. You'll be

@@ -121,6 +121,8 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 
 The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and timebox duration if set. Items where the current user is one of the presenters are visually distinguished with a coloured left border.
 
+The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder.
+
 ## Queue
 
 The queue is the core of the application. It determines who speaks next.
