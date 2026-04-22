@@ -816,8 +816,12 @@ function SortableQueueEntry({
       {/* Drag handle — chairs can drag any entry, participants their own */}
       {canDrag && (
         <span
-          className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 cursor-grab active:cursor-grabbing
-                     select-none text-sm leading-none presentation-hidden"
+          // Chairs can drag entries in either direction, so ns-resize advertises vertical motion both ways.
+          // Non-chairs with canDrag === true always own this entry, and own entries can only move downward,
+          // so s-resize advertises the single legal direction.
+          className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
+            isChair ? 'cursor-ns-resize' : 'cursor-s-resize'
+          } select-none text-sm leading-none presentation-hidden`}
           aria-label={`Drag to reorder: ${entry.topic}`}
           {...attributes}
           {...listeners}

@@ -588,6 +588,34 @@ describe('QueuePanel', () => {
     expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
   });
 
+  // Chairs can drag entries up or down, so the cursor advertises both directions.
+  it('shows a north-south resize cursor on drag handles for chairs', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: first/i);
+    expect(handle.className).toMatch(/cursor-ns-resize/);
+    expect(handle.className).not.toMatch(/cursor-s-resize/);
+  });
+
+  // Non-chairs can only drag their own entry downward, so the cursor advertises only south.
+  it('shows a south-only resize cursor on drag handles for non-chairs on their own entry', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, otherUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: first/i);
+    expect(handle.className).toMatch(/cursor-s-resize/);
+    expect(handle.className).not.toMatch(/cursor-ns-resize/);
+  });
+
   // -- Accessibility --
 
   it('has accessible section headings', () => {
