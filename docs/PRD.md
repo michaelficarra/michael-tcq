@@ -94,7 +94,7 @@ The agenda is an ordered list of entries. Most entries are **agenda items**; int
 
 - **Name** — the title of the item
 - **Presenters** — one or more GitHub users who will introduce/present it (each shown with their GitHub avatar). An item must have at least one presenter; the first presenter becomes the current speaker when the meeting advances to the item.
-- **Timebox** (optional) — a duration in minutes. When an agenda item is completed (the chair advances past it), its timebox is automatically replaced with the actual elapsed time, rounded up to the nearest minute, so the agenda's estimates self-correct as the meeting progresses.
+- **Duration** (optional) — a duration in minutes. Before an item is reached, this is an estimate of how long it will take; once the chair advances past the item, the estimate is automatically replaced with the actual elapsed time, rounded up to the nearest minute, so the agenda's estimates self-correct as the meeting progresses. The agenda list labels the value as "Estimate" for current and future items and as "Duration" for past items.
 
 ### Chair Management
 
@@ -107,9 +107,9 @@ For regular chairs: they cannot remove themselves from the list (no remove icon 
 
 ### Agenda Management (Chair Only)
 
-- **Add** — Create a new agenda item by specifying a name, presenters (one or more GitHub usernames, comma-separated), and optional timebox. Presenter usernames are not validated against GitHub — unknown names are recorded as placeholder users. The form fields are: Agenda Item Name (flexible width), Presenters (pre-populated with current user), and Timebox in minutes.
-- **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and timeboxes. A presenter column or parenthetical may list multiple comma-separated names, each becoming a distinct presenter. Markdown formatting in item names is preserved.
-- **Edit** — Inline edit of an existing agenda item's name, presenters, and timebox.
+- **Add** — Create a new agenda item by specifying a name, presenters (one or more GitHub usernames, comma-separated), and an optional time estimate. Presenter usernames are not validated against GitHub — unknown names are recorded as placeholder users. The form fields are: Agenda Item Name (flexible width), Presenters (pre-populated with current user), and Estimate in minutes.
+- **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and estimated durations (TC39 agendas still label this column "timebox"; the parser maps it to the `duration` field). A presenter column or parenthetical may list multiple comma-separated names, each becoming a distinct presenter. Markdown formatting in item names is preserved.
+- **Edit** — Inline edit of an existing agenda item's name, presenters, and estimate/duration.
 - **Delete** — Remove an agenda item.
 - **Reorder** — Drag-and-drop to rearrange agenda items. The entire agenda item row is the drag target.
 
@@ -119,7 +119,7 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 
 ### Agenda Display
 
-The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and timebox duration if set. Items where the current user is one of the presenters are visually distinguished with a coloured left border.
+The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and the duration if set — labelled as an "Estimate" for current and future items and as a "Duration" for past items (since the value has been overwritten with the actual elapsed time). Items where the current user is one of the presenters are visually distinguished with a coloured left border.
 
 The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder.
 
@@ -133,10 +133,10 @@ A **session** is a named time block that visually groups a contiguous run of age
 - **Reorder** — Sessions can be dragged up and down like agenda items. Moving a session does not move the agenda items that were contained within it; containment is recomputed from the session's new position.
 - **Display** — A session renders as a distinct header row in the agenda list (bold, uppercase, with dividers). It shows three values formatted in a compact duration format (e.g. `45m`, `2h`, `5h15m`):
   - **capacity** — the session's duration
-  - **used** — the sum of timeboxes of the agenda items that fit within its capacity (items without a timebox count as 0m)
+  - **used** — the sum of durations of the agenda items that fit within its capacity (items without a duration count as 0m)
   - **remaining** — capacity − used, when the full run fits, OR
   - **overflow** — (run total − capacity) when the contiguous run of items that follows the session exceeds its capacity. The "overflow" label replaces the "remaining" label in that case, rendered in a warning colour.
-- **Containment** — The run of agenda items under a session starts at the item immediately after the session and ends at the next session header (or end of agenda). Items whose cumulative timeboxes stay within the capacity are rendered with a left/right margin so they sit visually "inside" the session. Items that would push the running sum past capacity are left unindented but still counted in the overflow calculation.
+- **Containment** — The run of agenda items under a session starts at the item immediately after the session and ends at the next session header (or end of agenda). Items whose cumulative durations stay within the capacity are rendered with a left/right margin so they sit visually "inside" the session. Items that would push the running sum past capacity are left unindented but still counted in the overflow calculation.
 
 ## Queue
 
@@ -226,7 +226,7 @@ When a speaker introduces a new topic, that topic becomes the "current topic" an
 
 The Queue tab displays live count-up timers on three elements:
 
-- **Current agenda item** — time since the agenda item started. If the item has a timebox, the timer turns bold red when the timebox is exceeded.
+- **Current agenda item** — time since the agenda item started. If the item has an estimate, the timer turns bold red when the estimate is exceeded.
 - **Current topic** — time since the current topic was introduced.
 - **Current speaker** — time since the current speaker began speaking.
 
@@ -357,7 +357,7 @@ Browser-native notifications can be enabled from the Preferences modal. The top-
 - **When a poll has started** — a chair has opened a new poll. The chair who started the poll is not notified about their own action.
 - **When a clarifying question is raised on your topic** — you are the current topic author, and someone else has queued a clarifying question. You are not notified about your own questions.
 - **When a point of order is raised** — another participant has added a point-of-order entry. The author of a point of order is not notified about their own. Off by default.
-- **When the current agenda item exceeds its time estimate** — a time-based notification that fires once, the moment the current agenda item crosses its timebox. Skipped if the item was already overrun when the page loaded. Off by default.
+- **When the current agenda item exceeds its time estimate** — a time-based notification that fires once, the moment the current agenda item crosses its estimate. Skipped if the item was already overrun when the page loaded. Off by default.
 
 If the user denies permission at the browser prompt (or permission was already denied for the site), the top-level toggle silently stays off. If permission is later revoked through browser settings, the next in-page transition detects the change, self-heals the preference back to off, and no notification is fired. Notifications fire regardless of whether the tab is in the foreground.
 

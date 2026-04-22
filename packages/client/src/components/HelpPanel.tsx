@@ -177,9 +177,13 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             On the <strong>Agenda</strong> tab, click <strong>New Agenda Item</strong> to add items. Each item has a
-            name, one or more presenters (comma-separated GitHub usernames), and an optional timebox in minutes. Drag
-            items to reorder them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items.
-            Agenda item names support basic inline markdown (bold, italic, strikethrough, code, and links).
+            name, one or more presenters (comma-separated GitHub usernames), and an optional time estimate in minutes.
+            Drag items to reorder them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove
+            items. Agenda item names support basic inline markdown (bold, italic, strikethrough, code, and links).
+          </p>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+            When an agenda item is completed, its estimate is automatically replaced with the actual duration it took,
+            rounded up to the nearest minute, so the agenda reflects real time spent as the meeting progresses.
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             You can <strong>import an agenda</strong> from a URL to a markdown document (e.g. a TC39 meeting agenda on
@@ -191,11 +195,11 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
             Click <strong>New Session</strong> to add a named time block — for example, "Tuesday morning" with a
             90&#8239;minute capacity. Sessions are interleaved with agenda items in the same list and can be dragged to
             reorder like items. A session visually groups the contiguous run of agenda items that follows it (stopping
-            at the next session header): items whose cumulative timeboxes fit within the session's capacity are indented
-            beneath it. Items without a timebox count as 0&#8239;minutes.
+            at the next session header): items whose cumulative durations fit within the session's capacity are indented
+            beneath it. Items without a duration count as 0&#8239;minutes.
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
-            Each session header shows its <strong>capacity</strong>, <strong>used</strong> (the sum of the timeboxes
+            Each session header shows its <strong>capacity</strong>, <strong>used</strong> (the sum of the durations
             that fit), and <strong>remaining</strong>. If the run below the session exceeds its capacity, the remaining
             label is replaced by an <strong>overflow</strong> indicator showing by how much — useful for spotting
             over-scheduled blocks at a glance.
@@ -243,7 +247,7 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             Count-up timers are shown for the current agenda item, current topic, and current speaker. The agenda item
-            timer turns bold red when the timebox is exceeded.
+            timer turns bold red when the estimate is exceeded.
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Copy and Restore Queue</h4>

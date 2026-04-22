@@ -36,7 +36,7 @@ describe('AgendaForm', () => {
 
     expect(screen.getByLabelText('Agenda Item Name')).toBeInTheDocument();
     expect(screen.getByLabelText('Presenters')).toBeInTheDocument();
-    expect(screen.getByLabelText('Timebox')).toBeInTheDocument();
+    expect(screen.getByLabelText('Estimate')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
@@ -72,8 +72,8 @@ describe('AgendaForm', () => {
       target: { value: 'Test Item' },
     });
 
-    // Fill in timebox
-    fireEvent.change(screen.getByLabelText('Timebox'), {
+    // Fill in estimate
+    fireEvent.change(screen.getByLabelText('Estimate'), {
       target: { value: '15' },
     });
 
@@ -83,27 +83,27 @@ describe('AgendaForm', () => {
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Test Item',
       presenterUsernames: ['alice'],
-      timebox: 15,
+      duration: 15,
     });
     expect(onSubmit).toHaveBeenCalled();
   });
 
-  it('omits timebox when empty', () => {
+  it('omits duration when the estimate field is empty', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
     renderForm(mockSocket);
 
     fireEvent.change(screen.getByLabelText('Agenda Item Name'), {
-      target: { value: 'No timebox' },
+      target: { value: 'No estimate' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
-      name: 'No timebox',
+      name: 'No estimate',
       presenterUsernames: ['alice'],
-      timebox: undefined,
+      duration: undefined,
     });
   });
 });

@@ -84,9 +84,9 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     ? meeting.agenda.findIndex((e) => isAgendaItem(e) && e.id === meeting.current.agendaItemId)
     : -1;
 
-  // Containment derived from the current agenda order + timeboxes. Sessions
+  // Containment derived from the current agenda order + durations. Sessions
   // collect the contiguous run of items that follow them (stopping at the
-  // next session header); items whose cumulative timeboxes stay within the
+  // next session header); items whose cumulative durations stay within the
   // session's capacity are rendered indented.
   const containment = computeContainment(meeting.agenda);
 
@@ -353,7 +353,7 @@ function SortableAgendaItem({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPresenters, setEditPresenters] = useState('');
-  const [editTimebox, setEditTimebox] = useState('');
+  const [editDuration, setEditDuration] = useState('');
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -369,7 +369,7 @@ function SortableAgendaItem({
   function startEditing() {
     setEditName(item.name);
     setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.ghUsername ?? k).join(', '));
-    setEditTimebox(item.timebox != null && item.timebox > 0 ? String(item.timebox) : '');
+    setEditDuration(item.duration != null && item.duration > 0 ? String(item.duration) : '');
     setEditing(true);
   }
 
@@ -383,13 +383,13 @@ function SortableAgendaItem({
       .filter((s) => s.length > 0);
     if (!trimmedName || presenterUsernames.length === 0) return;
 
-    const timeboxMinutes = parseInt(editTimebox, 10);
+    const durationMinutes = parseInt(editDuration, 10);
 
     socket?.emit('agenda:edit', {
       id: item.id,
       name: trimmedName,
       presenterUsernames,
-      timebox: timeboxMinutes > 0 ? timeboxMinutes : null,
+      duration: durationMinutes > 0 ? durationMinutes : null,
     });
     setEditing(false);
   }
@@ -445,12 +445,12 @@ function SortableAgendaItem({
           />
           <input
             type="number"
-            value={editTimebox}
-            onChange={(e) => setEditTimebox(e.target.value)}
+            value={editDuration}
+            onChange={(e) => setEditDuration(e.target.value)}
             min="0"
             max="999"
             placeholder="min"
-            aria-label="Timebox in minutes"
+            aria-label={isPast ? 'Duration in minutes' : 'Estimate in minutes'}
             className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-16
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
@@ -508,10 +508,16 @@ function SortableAgendaItem({
           />
         ))}
 
-        {/* Timebox */}
-        {item.timebox != null && item.timebox > 0 && (
-          <span className="ml-2 text-sm text-stone-400 dark:text-stone-500 align-middle">
-            {formatShortDuration(item.timebox)}
+        {/* Duration — labelled as the actual "duration" for past items
+            (completed: value has been rewritten to the real elapsed time)
+            and as an "estimate" for current and future items. */}
+        {item.duration != null && item.duration > 0 && (
+          <span
+            className="ml-2 text-sm text-stone-400 dark:text-stone-500 align-middle"
+            title={isPast ? 'Duration' : 'Estimate'}
+            aria-label={`${isPast ? 'Duration' : 'Estimate'}: ${formatShortDuration(item.duration)}`}
+          >
+            {formatShortDuration(item.duration)}
           </span>
         )}
       </div>
@@ -544,10 +550,10 @@ function SortableAgendaItem({
 interface SortableSessionProps {
   session: Session;
   isChair: boolean;
-  /** Sum of timeboxes of the contained (fitting) items following this session. */
+  /** Sum of durations of the contained (fitting) items following this session. */
   used: number;
   /**
-   * Sum of timeboxes across the full contiguous run that follows this
+   * Sum of durations across the full contiguous run that follows this
    * session, including items past capacity. When this exceeds capacity we
    * show "overflow" instead of "remaining".
    */

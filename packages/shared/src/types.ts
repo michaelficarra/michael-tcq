@@ -21,7 +21,12 @@ export interface AgendaItem {
   name: string;
   /** Ordered, non-empty list of presenter user keys. First presenter becomes the initial speaker when the item is advanced to. */
   presenterIds: UserKey[];
-  timebox?: number; // duration in minutes
+  /**
+   * Duration in minutes. For current/future items this is the chair's
+   * estimate; for past (completed) items it is the actual elapsed time,
+   * rounded up, written back on completion.
+   */
+  duration?: number;
 }
 
 /**

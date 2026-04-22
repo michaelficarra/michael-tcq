@@ -348,13 +348,13 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       const presenters = presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
 
-      // The schema already constrains timebox to a positive integer; undefined = no timebox.
-      meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.timebox);
+      // The schema already constrains duration to a positive integer; undefined = no estimate.
+      meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.duration);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
     });
 
     // --- agenda:edit ---
-    // Chair edits an existing agenda item's name, presenters, or timebox.
+    // Chair edits an existing agenda item's name, presenters, or duration.
     socket.on('agenda:edit', (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
@@ -365,7 +365,7 @@ export function registerSocketHandlers(
       const parsed = parsePayload(AgendaEditPayloadSchema, payload, socket);
       if (!parsed) return;
 
-      const updates: { name?: string; presenters?: User[]; timebox?: number | null } = {};
+      const updates: { name?: string; presenters?: User[]; duration?: number | null } = {};
 
       if (parsed.name !== undefined) updates.name = parsed.name;
 
@@ -374,9 +374,9 @@ export function registerSocketHandlers(
         updates.presenters = parsed.presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
       }
 
-      if (parsed.timebox !== undefined) {
-        // null clears the timebox; 0 or negative also clears it
-        updates.timebox = parsed.timebox === null || parsed.timebox <= 0 ? null : parsed.timebox;
+      if (parsed.duration !== undefined) {
+        // null clears the duration; 0 or negative also clears it
+        updates.duration = parsed.duration === null || parsed.duration <= 0 ? null : parsed.duration;
       }
 
       const edited = meetingManager.editAgendaItem(joinedMeetingId, parsed.id, updates);
@@ -913,10 +913,10 @@ export function registerSocketHandlers(
 
         const durationMs = new Date(now).getTime() - new Date(outgoingStartTime).getTime();
 
-        // Replace the outgoing item's timebox with the actual elapsed time,
-        // rounded up to the nearest minute. Turns the timebox into a
-        // self-correcting estimate for future re-use of the agenda.
-        outgoingItem.timebox = Math.ceil(durationMs / 60000);
+        // Replace the outgoing item's duration with the actual elapsed time,
+        // rounded up to the nearest minute. An item's estimated duration
+        // becomes its realised duration on completion.
+        outgoingItem.duration = Math.ceil(durationMs / 60000);
 
         // Append agenda-item-finished
         meeting.log.push({

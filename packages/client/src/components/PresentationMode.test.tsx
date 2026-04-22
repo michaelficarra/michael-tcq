@@ -244,7 +244,7 @@ describe('Presentation mode', () => {
     it('keeps agenda item content visible', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser, bob: otherUser },
-        agenda: [{ id: '1', name: 'Visible Item', presenterIds: ['bob'], timebox: 15 }],
+        agenda: [{ id: '1', name: 'Visible Item', presenterIds: ['bob'], duration: 15 }],
       });
       renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 

@@ -142,7 +142,7 @@ describe('MeetingManager', () => {
       expect(item).not.toBeNull();
       expect(item!.name).toBe('Item One');
       expect(meeting.users[item!.presenterIds[0]]).toEqual(testUser);
-      expect(item!.timebox).toBe(20);
+      expect(item!.duration).toBe(20);
       expect(meeting.agenda).toHaveLength(1);
       expect(meeting.agenda[0].id).toBe(item!.id);
     });
@@ -168,10 +168,10 @@ describe('MeetingManager', () => {
       expect(item1!.id).not.toBe(item2!.id);
     });
 
-    it('allows omitting timebox', () => {
+    it('allows omitting duration', () => {
       const meeting = manager.create([testUser]);
-      const item = manager.addAgendaItem(meeting.id, 'No timebox', [testUser]);
-      expect(item!.timebox).toBeUndefined();
+      const item = manager.addAgendaItem(meeting.id, 'No duration', [testUser]);
+      expect(item!.duration).toBeUndefined();
     });
 
     it('stores multiple presenters in order', () => {
@@ -229,20 +229,20 @@ describe('MeetingManager', () => {
       expect(asItem(meeting.agenda[0]).presenterIds).toEqual([userKey(testUser)]);
     });
 
-    it('updates the timebox', () => {
+    it('updates the duration', () => {
       const meeting = manager.create([testUser]);
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
-      manager.editAgendaItem(meeting.id, item.id, { timebox: 30 });
-      expect(asItem(meeting.agenda[0]).timebox).toBe(30);
+      manager.editAgendaItem(meeting.id, item.id, { duration: 30 });
+      expect(asItem(meeting.agenda[0]).duration).toBe(30);
     });
 
-    it('clears the timebox when set to null', () => {
+    it('clears the duration when set to null', () => {
       const meeting = manager.create([testUser]);
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser], 10)!;
 
-      manager.editAgendaItem(meeting.id, item.id, { timebox: null });
-      expect(asItem(meeting.agenda[0]).timebox).toBeUndefined();
+      manager.editAgendaItem(meeting.id, item.id, { duration: null });
+      expect(asItem(meeting.agenda[0]).duration).toBeUndefined();
     });
 
     it('leaves unchanged fields alone', () => {
@@ -252,7 +252,7 @@ describe('MeetingManager', () => {
       manager.editAgendaItem(meeting.id, item.id, { name: 'Changed' });
       expect(meeting.agenda[0].name).toBe('Changed');
       expect(meeting.users[asItem(meeting.agenda[0]).presenterIds[0]]).toEqual(testUser);
-      expect(asItem(meeting.agenda[0]).timebox).toBe(15);
+      expect(asItem(meeting.agenda[0]).duration).toBe(15);
     });
 
     it('reflects edits to the current agenda item via the agenda array', () => {

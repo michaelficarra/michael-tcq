@@ -100,10 +100,10 @@ test.describe('Meeting Flow', () => {
     await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Item Two');
   });
 
-  test('completing an agenda item replaces its timebox with the actual elapsed time', async ({ page }) => {
+  test('completing an agenda item replaces its estimate with the actual elapsed duration', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
-    // Seed an obviously-wrong timebox on the first item (99 min → "1h39m")
+    // Seed an obviously-wrong estimate on the first item (99 min → "1h39m")
     // so we can verify it was overwritten rather than merely left alone.
     await addAgendaItem(page, 'Item One', 'admin', 99);
     await addAgendaItem(page, 'Item Two', 'admin');

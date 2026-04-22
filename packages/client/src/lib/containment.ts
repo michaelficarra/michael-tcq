@@ -2,7 +2,7 @@
  * Derive session containment metadata from the agenda.
  *
  * Walk the agenda in order. On each `Session` entry, start a new contiguous
- * run: each following `AgendaItem` (treated as 0 minutes when timebox is
+ * run: each following `AgendaItem` (treated as 0 minutes when duration is
  * undefined) is added to `runTotal`. Items are marked as contained only as
  * long as the running `used` stays within capacity — the contained set is a
  * strict contiguous **prefix** of the run. As soon as one item would push the
@@ -23,10 +23,10 @@ import { isAgendaItem, isSession } from '@tcq/shared';
 export interface Containment {
   /** For each agenda item that's contained, which session contains it. */
   containedBy: Map<string, string>;
-  /** For each session, the sum of timeboxes of its contained items. */
+  /** For each session, the sum of durations of its contained items. */
   used: Map<string, number>;
   /**
-   * For each session, the sum of timeboxes across the full contiguous run
+   * For each session, the sum of durations across the full contiguous run
    * (including items past the capacity line). Used to detect overflow.
    */
   runTotal: Map<string, number>;
@@ -61,7 +61,7 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
 
     if (!isAgendaItem(entry) || activeSessionId === null) continue;
 
-    const minutes = entry.timebox ?? 0;
+    const minutes = entry.duration ?? 0;
     activeRunTotal += minutes;
     runTotal.set(activeSessionId, activeRunTotal);
 

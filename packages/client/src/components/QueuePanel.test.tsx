@@ -88,7 +88,7 @@ describe('QueuePanel', () => {
           id: 'item-1',
           name: 'Discussion of proposal',
           presenterIds: ['alice'],
-          timebox: 20,
+          duration: 20,
         },
       ],
       current: currentOf({ agendaItemId: 'item-1' }),

@@ -358,13 +358,13 @@ describe('useMeetingNotifications', () => {
     expect(advanceCalls).toHaveLength(0);
   });
 
-  it('fires "Time limit reached" when the current agenda item crosses its timebox', () => {
+  it('fires "Time limit reached" when the current agenda item crosses its estimate', () => {
     vi.useFakeTimers();
     try {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], timebox: 5 }]; // 5-minute timebox
+      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }]; // 5-minute estimate
       const meeting = makeMeeting({
         agenda,
         current: {
@@ -397,7 +397,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:30:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], timebox: 5 }];
+      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
       // Start time was 30 minutes ago — deadline is 25 minutes in the past.
       const meeting = makeMeeting({
         agenda,
@@ -426,7 +426,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true }); // default: onAgendaItemOverrun false
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], timebox: 5 }];
+      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
       const meeting = makeMeeting({
         agenda,
         current: {

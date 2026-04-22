@@ -251,7 +251,7 @@ export function createMeetingRoutes(
               organisation: '',
             }))
           : [user];
-      meetingManager.addAgendaItem(meetingId, item.name, presenters, item.timebox);
+      meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }
 
     // Broadcast the updated state to all connected clients

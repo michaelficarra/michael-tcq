@@ -191,7 +191,7 @@ export class MeetingManager {
    * Returns the created item, or null if the meeting doesn't exist or
    * `presenters` is empty.
    */
-  addAgendaItem(meetingId: string, name: string, presenters: User[], timebox?: number): AgendaItem | null {
+  addAgendaItem(meetingId: string, name: string, presenters: User[], duration?: number): AgendaItem | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
@@ -202,7 +202,7 @@ export class MeetingManager {
       id: randomUUID(),
       name,
       presenterIds,
-      timebox,
+      duration,
     };
 
     meeting.agenda.push(item);
@@ -212,15 +212,15 @@ export class MeetingManager {
 
   /**
    * Edit an existing agenda item. Only the provided fields are updated;
-   * omitted fields are left unchanged. Pass `timebox: null` to clear
-   * the timebox. When `presenters` is provided it must be non-empty;
+   * omitted fields are left unchanged. Pass `duration: null` to clear
+   * the duration. When `presenters` is provided it must be non-empty;
    * an empty list is rejected (the call returns false without mutating).
    * Returns true if the item was found and updated.
    */
   editAgendaItem(
     meetingId: string,
     itemId: string,
-    updates: { name?: string; presenters?: User[]; timebox?: number | null },
+    updates: { name?: string; presenters?: User[]; duration?: number | null },
   ): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
@@ -236,10 +236,10 @@ export class MeetingManager {
       item.presenterIds = presenterIds;
     }
     if (updates.name !== undefined) item.name = updates.name;
-    if (updates.timebox === null) {
-      item.timebox = undefined;
-    } else if (updates.timebox !== undefined) {
-      item.timebox = updates.timebox;
+    if (updates.duration === null) {
+      item.duration = undefined;
+    } else if (updates.duration !== undefined) {
+      item.duration = updates.duration;
     }
 
     this.markDirty(meetingId);

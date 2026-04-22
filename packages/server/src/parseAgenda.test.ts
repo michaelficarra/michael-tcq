@@ -58,7 +58,7 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0].name).toBe("Secretary's Report");
   });
 
-  it('parses numbered list items with presenter and timebox', () => {
+  it('parses numbered list items with presenter and duration', () => {
     const md = `## Agenda items
 
 1. Secretary's Report (15m, Samina Husain)
@@ -66,8 +66,8 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(2);
-    expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], timebox: 15 });
-    expect(items[1]).toEqual({ name: 'Opening, welcome and roll call', presenters: ['Chair'], timebox: 10 });
+    expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], duration: 15 });
+    expect(items[1]).toEqual({ name: 'Opening, welcome and roll call', presenters: ['Chair'], duration: 10 });
   });
 
   it('parses numbered list items with multiple comma-separated presenters', () => {
@@ -78,11 +78,11 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(2);
-    expect(items[0]).toEqual({ name: 'Joint Report', presenters: ['Alice', 'Bob'], timebox: 15 });
+    expect(items[0]).toEqual({ name: 'Joint Report', presenters: ['Alice', 'Bob'], duration: 15 });
     expect(items[1]).toEqual({
       name: 'Co-chaired session',
       presenters: ['Chair', 'Co-chair'],
-      timebox: 20,
+      duration: 20,
     });
   });
 
@@ -93,7 +93,7 @@ describe('parseAgendaMarkdown', () => {
 `;
     const items = parseAgendaMarkdown(md);
     expect(items).toHaveLength(1);
-    expect(items[0]).toEqual({ name: "Project Editors' Reports", presenters: [], timebox: undefined });
+    expect(items[0]).toEqual({ name: "Project Editors' Reports", presenters: [], duration: undefined });
   });
 
   it('skips structural items like adjournment', () => {
@@ -112,7 +112,7 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0].name).toBe("Secretary's Report");
   });
 
-  it('parses table rows with stage, timebox, topic, presenter', () => {
+  it('parses table rows with stage, duration, topic, presenter', () => {
     const md = `## Agenda items
 
 1. Proposals
@@ -127,12 +127,12 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0]).toEqual({
       name: '[Temporal](https://github.com/tc39/proposal-temporal) for Stage 4',
       presenters: ['Philip Chimento'],
-      timebox: 30,
+      duration: 30,
     });
     expect(items[1]).toEqual({
       name: '[JSON.parseImmutable](https://github.com/tc39/proposal-json-parseimmutable) update',
       presenters: ['Peter Klecha'],
-      timebox: 15,
+      duration: 15,
     });
   });
 
@@ -166,7 +166,7 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0]).toEqual({
       name: 'Abort Protocol Discussion',
       presenters: ['James M Snell'],
-      timebox: 30,
+      duration: 30,
     });
   });
 

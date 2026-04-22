@@ -28,7 +28,7 @@ export interface NotificationPrefs {
   onClarifyingQuestionOnMyTopic: boolean;
   /** Fire when a new point-of-order entry is added (by someone other than you). */
   onPointOfOrder: boolean;
-  /** Fire when the current agenda item crosses its timebox deadline. Off by default. */
+  /** Fire when the current agenda item crosses its estimated deadline. Off by default. */
   onAgendaItemOverrun: boolean;
 }
 

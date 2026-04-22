@@ -79,7 +79,7 @@ export async function goToHelpTab(page: Page) {
  * Add an agenda item (must be on the Agenda tab as a chair).
  * `presenters` accepts a single username or an array; joined with commas.
  */
-export async function addAgendaItem(page: Page, name: string, presenters?: string | string[], timebox?: number) {
+export async function addAgendaItem(page: Page, name: string, presenters?: string | string[], estimate?: number) {
   // Open the form. Playwright's click auto-waits for the button to be actionable,
   // so this handles the race where the meeting state hasn't finished syncing yet
   // when the helper is called.
@@ -91,8 +91,11 @@ export async function addAgendaItem(page: Page, name: string, presenters?: strin
     const value = Array.isArray(presenters) ? presenters.join(', ') : presenters;
     await page.getByLabel('Presenters').fill(value);
   }
-  if (timebox !== undefined) {
-    await page.getByLabel(/timebox/i).fill(String(timebox));
+  if (estimate !== undefined) {
+    // `exact: true` avoids matching the display-side "Estimate: Xm" aria-label
+    // on already-rendered agenda items, which would otherwise make the locator
+    // ambiguous once an item with an estimate is in the list.
+    await page.getByLabel('Estimate', { exact: true }).fill(String(estimate));
   }
 
   // Count items before adding by checking visible item text

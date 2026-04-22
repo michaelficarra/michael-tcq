@@ -2,9 +2,9 @@
  * Form for adding a new agenda item.
  *
  * Fields: name (required), presenter GitHub username(s) — comma-separated,
- * at least one — (required), timebox in minutes (optional). Matches the
- * layout from the original screenshots: a horizontal row of labelled inputs
- * with Create/Cancel buttons.
+ * at least one — (required), estimated duration in minutes (optional).
+ * Matches the layout from the original screenshots: a horizontal row of
+ * labelled inputs with Create/Cancel buttons.
  */
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
@@ -23,7 +23,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
   const [name, setName] = useState('');
   // Default the presenters field to the current user's username
   const [presenters, setPresenters] = useState(user?.ghUsername ?? '');
-  const [timebox, setTimebox] = useState('');
+  const [estimate, setEstimate] = useState('');
 
   // Focus the name input when the form opens
   const nameRef = useRef<HTMLInputElement>(null);
@@ -41,14 +41,14 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
       .filter((s) => s.length > 0);
     if (!trimmedName || presenterUsernames.length === 0) return;
 
-    // Parse timebox: empty string or non-positive = no timebox
-    const timeboxMinutes = parseInt(timebox, 10);
-    const timeboxValue = timeboxMinutes > 0 ? timeboxMinutes : undefined;
+    // Parse estimate: empty string or non-positive = no estimate
+    const estimateMinutes = parseInt(estimate, 10);
+    const durationValue = estimateMinutes > 0 ? estimateMinutes : undefined;
 
     socket?.emit('agenda:add', {
       name: trimmedName,
       presenterUsernames,
-      timebox: timeboxValue,
+      duration: durationValue,
     });
 
     onSubmit();
@@ -100,18 +100,21 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
           </p>
         </div>
 
-        {/* Timebox field */}
+        {/* Estimate field */}
         <div className="w-24">
-          <label htmlFor="agenda-timebox" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
-            Timebox
+          <label
+            htmlFor="agenda-estimate"
+            className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+          >
+            Estimate
           </label>
           <input
-            id="agenda-timebox"
+            id="agenda-estimate"
             type="number"
             min="0"
             max="999"
-            value={timebox}
-            onChange={(e) => setTimebox(e.target.value)}
+            value={estimate}
+            onChange={(e) => setEstimate(e.target.value)}
             placeholder=""
             className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
                        dark:bg-stone-700 dark:text-stone-100

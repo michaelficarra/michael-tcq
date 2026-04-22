@@ -148,15 +148,15 @@ export function useMeetingNotifications(): void {
   }, [meeting, user, notificationsEnabled, setNotificationsEnabled, notificationPrefs]);
 
   // 5. Agenda item overrun — schedule a timer to fire when the current agenda
-  //    item crosses its timebox. Unlike the other notifications, this is a
+  //    item crosses its estimate. Unlike the other notifications, this is a
   //    time-based event rather than a state diff, so it uses setTimeout. Any
-  //    change to the item id, its name, its timebox, or the start time tears
+  //    change to the item id, its name, its duration, or the start time tears
   //    down and reschedules; permission / preference changes do the same.
   const currentAgendaId = meeting?.current.agendaItemId;
   const currentAgendaItem = currentAgendaId
     ? meeting?.agenda.find((e): e is AgendaItem => isAgendaItem(e) && e.id === currentAgendaId)
     : undefined;
-  const currentTimebox = currentAgendaItem?.timebox;
+  const currentEstimate = currentAgendaItem?.duration;
   const currentItemName = currentAgendaItem?.name;
   const currentItemStartTime = meeting?.current.agendaItemStartTime;
 
@@ -164,11 +164,11 @@ export function useMeetingNotifications(): void {
     if (!notificationsEnabled) return;
     if (!notificationPrefs.onAgendaItemOverrun) return;
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    if (!currentTimebox || !currentItemStartTime || !currentItemName) return;
+    if (!currentEstimate || !currentItemStartTime || !currentItemName) return;
 
     const startMs = Date.parse(currentItemStartTime);
     if (Number.isNaN(startMs)) return;
-    const deadlineMs = startMs + currentTimebox * 60_000;
+    const deadlineMs = startMs + currentEstimate * 60_000;
     const delay = deadlineMs - Date.now();
     // Don't fire retroactively: if the item was already overrun when the page
     // loaded (or when the timer becomes enabled), skip — the user likely knows.
@@ -176,7 +176,7 @@ export function useMeetingNotifications(): void {
 
     const timeoutId = window.setTimeout(() => {
       showNotification('Time limit reached', {
-        body: `"${currentItemName}" has passed its ${currentTimebox}-minute timebox.`,
+        body: `"${currentItemName}" has passed its ${currentEstimate}-minute estimate.`,
       });
     }, delay);
 
@@ -184,7 +184,7 @@ export function useMeetingNotifications(): void {
   }, [
     currentItemName,
     currentItemStartTime,
-    currentTimebox,
+    currentEstimate,
     notificationsEnabled,
     notificationPrefs.onAgendaItemOverrun,
   ]);

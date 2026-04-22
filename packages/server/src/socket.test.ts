@@ -304,14 +304,14 @@ describe('Socket.IO integration', () => {
 
       // Listen for the state update after adding
       const statePromise = waitForEvent<MeetingState>(client, 'state');
-      client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], timebox: 15 });
+      client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], duration: 15 });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
       const first = asItem(state.agenda[0]);
       expect(first.name).toBe('First item');
       expect(state.users[first.presenterIds[0]].ghUsername).toBe('testuser');
-      expect(first.timebox).toBe(15);
+      expect(first.duration).toBe(15);
     });
 
     it('broadcasts to all clients in the meeting', async () => {
@@ -1670,10 +1670,10 @@ describe('Socket.IO integration', () => {
       expect(updated.agenda.find((i) => i.id === updated.current.agendaItemId)?.name).toBe('First');
     });
 
-    it("replaces the completed item's timebox with the elapsed time rounded up to the nearest minute", async () => {
+    it("replaces the completed item's duration with the elapsed time rounded up to the nearest minute", async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      // Seed an obviously-wrong timebox so we can verify it was overwritten,
+      // Seed an obviously-wrong duration so we can verify it was overwritten,
       // not merely left alone.
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner], 999);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -1702,15 +1702,15 @@ describe('Socket.IO integration', () => {
           e.type === 'agenda-item-finished' && e.itemName === 'First',
       )!;
       expect(finished.duration).toBeGreaterThan(0);
-      expect(first.timebox).toBe(Math.ceil(finished.duration / 60000));
+      expect(first.duration).toBe(Math.ceil(finished.duration / 60000));
       // And specifically: the old 999 value was clobbered.
-      expect(first.timebox).toBeLessThan(999);
+      expect(first.duration).toBeLessThan(999);
     });
 
-    it("sets a timebox on completion even if the item didn't have one", async () => {
+    it("sets a duration on completion even if the item didn't have one", async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
-      // No timebox on First.
+      // No duration on First.
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
 
@@ -1720,7 +1720,7 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state1 = await statePromise;
       const firstId = state1.current.agendaItemId!;
-      expect(asItem(state1.agenda.find((i) => i.id === firstId)).timebox).toBeUndefined();
+      expect(asItem(state1.agenda.find((i) => i.id === firstId)).duration).toBeUndefined();
 
       // Same reason as above — ensure a positive elapsed duration.
       await new Promise((r) => setTimeout(r, 20));
@@ -1730,8 +1730,8 @@ describe('Socket.IO integration', () => {
       const state2 = await statePromise;
 
       const first = asItem(state2.agenda.find((i) => i.id === firstId));
-      expect(first.timebox).toBeGreaterThanOrEqual(1);
-      expect(Number.isInteger(first.timebox)).toBe(true);
+      expect(first.duration).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(first.duration)).toBe(true);
     });
   });
 

@@ -51,7 +51,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       agenda: [
-        { id: '1', name: 'First item', presenterIds: ['alice'], timebox: 20 },
+        { id: '1', name: 'First item', presenterIds: ['alice'], duration: 20 },
         { id: '2', name: 'Second item', presenterIds: ['alice'] },
       ],
     });
@@ -89,7 +89,7 @@ describe('AgendaPanel', () => {
 
     expect(screen.getByLabelText('Agenda Item Name')).toBeInTheDocument();
     expect(screen.getByLabelText('Presenters')).toBeInTheDocument();
-    expect(screen.getByLabelText('Timebox')).toBeInTheDocument();
+    expect(screen.getByLabelText('Estimate')).toBeInTheDocument();
   });
 
   it('shows delete buttons for chairs', () => {
@@ -393,8 +393,8 @@ describe('AgendaPanel', () => {
         users: { alice: chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Morning', capacity: 90 },
-          { id: 'a', name: 'First', presenterIds: ['alice'], timebox: 15 },
-          { id: 'b', name: 'Second', presenterIds: ['alice'], timebox: 30 },
+          { id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { id: 'b', name: 'Second', presenterIds: ['alice'], duration: 30 },
         ],
       });
       renderAgenda(meeting);
@@ -414,9 +414,9 @@ describe('AgendaPanel', () => {
         users: { alice: chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
-          { id: 'a', name: 'First', presenterIds: ['alice'], timebox: 15 },
-          { id: 'b', name: 'Second', presenterIds: ['alice'], timebox: 15 },
-          { id: 'c', name: 'Third', presenterIds: ['alice'], timebox: 10 },
+          { id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
+          { id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
         ],
       });
       renderAgenda(meeting);

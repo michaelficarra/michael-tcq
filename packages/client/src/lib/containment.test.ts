@@ -4,8 +4,8 @@ import { asUserKey } from '@tcq/shared';
 import { computeContainment } from './containment.js';
 
 /** Concise agenda-entry builders for test fixtures. */
-function item(id: string, timebox?: number): AgendaEntry {
-  return { id, name: id, presenterIds: [asUserKey('presenter')], timebox };
+function item(id: string, duration?: number): AgendaEntry {
+  return { id, name: id, presenterIds: [asUserKey('presenter')], duration };
 }
 function session(id: string, capacity: number): AgendaEntry {
   return { kind: 'session', id, name: id, capacity };
@@ -63,7 +63,7 @@ describe('computeContainment', () => {
     expect(runTotal.get('s')).toBe(40);
   });
 
-  it('treats items with no timebox as 0m and keeps them contained', () => {
+  it('treats items with no duration as 0m and keeps them contained', () => {
     const entries: AgendaEntry[] = [session('s', 30), item('a'), item('b', 10)];
     const { containedBy, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
@@ -107,7 +107,7 @@ describe('computeContainment', () => {
     expect(runTotal.get('s')).toBe(55);
   });
 
-  it('handles an item whose own timebox exceeds the remaining capacity', () => {
+  it('handles an item whose own duration exceeds the remaining capacity', () => {
     // Session capacity 20, first item 15 fits (used=15), next item 10
     // would push to 25 — doesn't fit, so remains uncontained but still
     // contributes to runTotal.

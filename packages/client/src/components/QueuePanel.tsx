@@ -303,14 +303,20 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               {currentAgendaItem.presenterIds.map((pid) => (
                 <UserBadge key={pid} user={meeting.users[pid]} size={18} />
               ))}
-              {currentAgendaItem.timebox != null && currentAgendaItem.timebox > 0 && (
-                <span className="ml-2">{formatShortDuration(currentAgendaItem.timebox)}</span>
+              {currentAgendaItem.duration != null && currentAgendaItem.duration > 0 && (
+                <span
+                  className="ml-2"
+                  title="Estimate"
+                  aria-label={`Estimate: ${formatShortDuration(currentAgendaItem.duration)}`}
+                >
+                  {formatShortDuration(currentAgendaItem.duration)}
+                </span>
               )}
               {agendaItemStartTime && (
                 <CountUpTimer
                   since={agendaItemStartTime}
                   className="ml-2 text-xs text-stone-400 dark:text-stone-500 tabular-nums"
-                  overAfterMinutes={currentAgendaItem.timebox}
+                  overAfterMinutes={currentAgendaItem.duration}
                 />
               )}
             </div>

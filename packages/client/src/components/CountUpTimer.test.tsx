@@ -52,7 +52,7 @@ describe('CountUpTimer', () => {
     expect(el).toBeInTheDocument();
   });
 
-  it('uses default styling when under the timebox', () => {
+  it('uses default styling when under the estimate', () => {
     const since = new Date(Date.now() - 60_000).toISOString(); // 1 min ago
     render(<CountUpTimer since={since} overAfterMinutes={5} />);
     const el = screen.getByText('1:00');
@@ -60,7 +60,7 @@ describe('CountUpTimer', () => {
     expect(el.className).not.toContain('text-red');
   });
 
-  it('switches to bold red when over the timebox', () => {
+  it('switches to bold red when over the estimate', () => {
     const since = new Date(Date.now() - 6 * 60_000).toISOString(); // 6 min ago
     render(<CountUpTimer since={since} overAfterMinutes={5} />);
     const el = screen.getByText('6:00');
@@ -68,7 +68,7 @@ describe('CountUpTimer', () => {
     expect(el.className).toContain('text-red-600');
   });
 
-  it('does not apply over styling when no timebox is set', () => {
+  it('does not apply over styling when no estimate is set', () => {
     const since = new Date(Date.now() - 60 * 60_000).toISOString(); // 1 hour ago
     render(<CountUpTimer since={since} />);
     const el = screen.getByText('1:00:00');

@@ -97,7 +97,7 @@ test.describe('Agenda tab', () => {
   });
 
   test.describe('Agenda Management (Chair Only)', () => {
-    test('add form has fields for name, presenters (pre-populated), and timebox', async ({ page }) => {
+    test('add form has fields for name, presenters (pre-populated), and estimate', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
@@ -110,7 +110,7 @@ test.describe('Agenda tab', () => {
       await expect(presentersInput).toBeVisible();
       // Presenters field should be pre-populated with the current user's username
       await expect(presentersInput).toHaveValue('admin');
-      await expect(page.getByLabel('Timebox')).toBeVisible();
+      await expect(page.getByLabel('Estimate')).toBeVisible();
 
       // Submit and cancel buttons
       await expect(page.getByRole('button', { name: 'Create' })).toBeVisible();
@@ -130,7 +130,7 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.getByText('1')).toBeVisible();
     });
 
-    test('items show number, name, presenter with avatar, and timebox if set', async ({ page }) => {
+    test('items show number, name, presenter with avatar, and estimate if set', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
@@ -166,7 +166,7 @@ test.describe('Agenda tab', () => {
       // Inline edit fields should appear
       await expect(page.getByLabel('Agenda item name')).toBeVisible();
       await expect(page.getByLabel('Presenters')).toBeVisible();
-      await expect(page.getByLabel('Timebox in minutes')).toBeVisible();
+      await expect(page.getByLabel('Estimate in minutes')).toBeVisible();
 
       // The name field should be pre-populated
       await expect(page.getByLabel('Agenda item name')).toHaveValue('Editable item');
@@ -300,7 +300,7 @@ test.describe('Agenda tab', () => {
       await expect(item).toHaveCSS('border-left-width', '3px');
     });
 
-    test('timebox renders in short duration format', async ({ page }) => {
+    test('estimate renders in short duration format', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 

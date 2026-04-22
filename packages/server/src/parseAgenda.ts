@@ -10,7 +10,8 @@ export interface ParsedAgendaItem {
   name: string;
   /** Ordered list of presenter names extracted from the source. May be empty — the caller substitutes a default. */
   presenters: string[];
-  timebox?: number; // minutes
+  /** Estimated duration in minutes, parsed from the source. */
+  duration?: number;
 }
 
 /**
@@ -64,10 +65,10 @@ export function cleanName(text: string): string {
 }
 
 /**
- * Parse a timebox string into minutes. Accepts formats like:
+ * Parse a duration string into minutes. Accepts formats like:
  * "30m", "30", "90m", "1h", "1h30m"
  */
-function parseTimebox(text: string): number | undefined {
+function parseDuration(text: string): number | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
 
@@ -83,10 +84,10 @@ function parseTimebox(text: string): number | undefined {
 
 /**
  * Parse a parenthetical suffix like "(Chair, 10m)" or "(15m, Alice, Bob)"
- * into a list of presenters and a timebox. Each non-timebox comma-separated
+ * into a list of presenters and a duration. Each non-duration comma-separated
  * token becomes its own presenter entry.
  */
-function parseParenthetical(paren: string): { presenters: string[]; timebox?: number } {
+function parseParenthetical(paren: string): { presenters: string[]; duration?: number } {
   // Split on commas and classify each part
   const parts = paren
     .split(',')
@@ -94,18 +95,18 @@ function parseParenthetical(paren: string): { presenters: string[]; timebox?: nu
     .filter((s) => s.length > 0);
 
   const presenters: string[] = [];
-  let timebox: number | undefined;
+  let duration: number | undefined;
 
   for (const part of parts) {
-    const tb = parseTimebox(part);
-    if (tb !== undefined) {
-      timebox = tb;
+    const d = parseDuration(part);
+    if (d !== undefined) {
+      duration = d;
     } else {
       presenters.push(part);
     }
   }
 
-  return { presenters, timebox };
+  return { presenters, duration };
 }
 
 /** Detect table header columns by matching known names. */
@@ -117,7 +118,9 @@ function parseTableHeader(headerRow: string): Map<string, number> {
     const cell = cells[i];
     if (cell === 'topic' || cell === 'proposal') columns.set('topic', i);
     else if (cell === 'presenter' || cell === 'champion') columns.set('presenter', i);
-    else if (cell === 'timebox') columns.set('timebox', i);
+    // TC39 agendas label this column "timebox"; we store it under the
+    // renamed internal key.
+    else if (cell === 'timebox') columns.set('duration', i);
     else if (cell === 'stage') columns.set('stage', i);
   }
 
@@ -208,7 +211,7 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
       if (tableColumns) {
         const topicIdx = tableColumns.get('topic');
         const presenterIdx = tableColumns.get('presenter');
-        const timeboxIdx = tableColumns.get('timebox');
+        const durationIdx = tableColumns.get('duration');
 
         const name = topicIdx !== undefined ? cleanName(rawCells[topicIdx]) : '';
         // Presenter cell may list multiple comma-separated names. stripMarkdown
@@ -220,11 +223,11 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
                 .map((s) => s.trim())
                 .filter((s) => s.length > 0)
             : [];
-        const rawTimebox = timeboxIdx !== undefined ? stripMarkdown(rawCells[timeboxIdx]) : '';
-        const timebox = parseTimebox(rawTimebox);
+        const rawDuration = durationIdx !== undefined ? stripMarkdown(rawCells[durationIdx]) : '';
+        const duration = parseDuration(rawDuration);
 
         if (name) {
-          items.push({ name, presenters, timebox });
+          items.push({ name, presenters, duration });
         }
       }
       continue;
@@ -263,11 +266,11 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
       const parenMatch = cleanedText.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
       if (parenMatch) {
         const name = parenMatch[1].trim();
-        const { presenters, timebox } = parseParenthetical(parenMatch[2]);
-        items.push({ name, presenters, timebox });
+        const { presenters, duration } = parseParenthetical(parenMatch[2]);
+        items.push({ name, presenters, duration });
       } else {
         // No parenthetical — use the whole text as the name
-        items.push({ name: cleanedText, presenters: [], timebox: undefined });
+        items.push({ name: cleanedText, presenters: [], duration: undefined });
       }
     }
   }

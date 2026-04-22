@@ -23,8 +23,8 @@ const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is
 export const AgendaAddPayloadSchema = z.object({
   name: requiredTrimmed('Agenda item name'),
   presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required'),
-  /** Duration in minutes; omit or 0 for no timebox. */
-  timebox: z.number().int().positive().optional(),
+  /** Estimated duration in minutes; omit or 0 for no estimate. */
+  duration: z.number().int().positive().optional(),
 });
 export type AgendaAddPayload = z.infer<typeof AgendaAddPayloadSchema>;
 
@@ -47,14 +47,14 @@ export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
 
 /**
  * Payload for editing an existing agenda item (chair only). All fields are
- * optional; omitted fields leave that attribute unchanged. `timebox: null`
- * explicitly clears a previously-set timebox.
+ * optional; omitted fields leave that attribute unchanged. `duration: null`
+ * explicitly clears a previously-set duration.
  */
 export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: z.string().trim().min(1, 'Agenda item name cannot be empty').optional(),
   presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required').optional(),
-  timebox: z.number().int().nullable().optional(),
+  duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
 
