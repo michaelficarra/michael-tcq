@@ -5,7 +5,7 @@ import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema }
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import { getAllMeetingStats, removeMeetingStats, broadcastMeetingState } from './socket.js';
+import { getActiveConnectionCount, broadcastMeetingState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser } from './session.js';
 
@@ -270,7 +270,6 @@ export function createMeetingRoutes(
       return;
     }
 
-    const stats = getAllMeetingStats();
     const meetings: {
       id: string;
       chairCount: number;
@@ -281,19 +280,19 @@ export function createMeetingRoutes(
       lastConnection: string;
     }[] = [];
 
-    // Iterate all meetings in the manager
-    // (we need access to the meeting data, not just stats)
+    // maxConcurrent and lastConnectionTime live on the persisted meeting
+    // state so they survive server restarts; currentConnections is live
+    // socket-room state maintained in memory.
     for (const meeting of meetingManager.listAll()) {
-      const s = stats.get(meeting.id);
-      const current = s?.currentConnections ?? 0;
+      const current = getActiveConnectionCount(meeting.id);
       meetings.push({
         id: meeting.id,
         chairCount: meeting.chairIds.length,
         agendaItemCount: meeting.agenda.length,
         queuedSpeakerCount: meeting.queue.orderedIds.length,
-        maxConcurrent: s?.maxConcurrent ?? 0,
+        maxConcurrent: meeting.operational.maxConcurrent ?? 0,
         currentConnections: current,
-        lastConnection: current > 0 ? 'now' : (s?.lastConnection ?? ''),
+        lastConnection: current > 0 ? 'now' : (meeting.operational.lastConnectionTime ?? ''),
       });
     }
 
@@ -315,7 +314,6 @@ export function createMeetingRoutes(
     }
 
     await meetingManager.remove(meetingId);
-    removeMeetingStats(meetingId);
     res.json({ ok: true });
   });
 

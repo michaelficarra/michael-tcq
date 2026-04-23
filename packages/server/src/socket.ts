@@ -139,42 +139,16 @@ function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): U
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 /**
- * Tracks how many sockets are connected to each meeting, used for
- * admin dashboard statistics and connection tracking.
+ * Tracks how many sockets are connected to each meeting. Ephemeral — reset
+ * when the process restarts. Persisted connection statistics (max
+ * concurrent, last connection time) live on `meeting.operational` so they
+ * survive restarts.
  */
 const meetingClientCounts = new Map<string, number>();
 
-/** Per-meeting connection statistics for the admin dashboard. */
-export interface MeetingStats {
-  /** Maximum number of concurrent connections observed. */
-  maxConcurrent: number;
-  /** ISO timestamp of the most recent connection, or 'now' if any socket is connected. */
-  lastConnection: string;
-  /** Current number of connections. */
-  currentConnections: number;
-}
-
-/** Tracks connection stats per meeting for admin reporting. */
-const meetingStats = new Map<string, MeetingStats>();
-
-/** Get the stats for a meeting, creating a default entry if needed. */
-function getStats(meetingId: string): MeetingStats {
-  let stats = meetingStats.get(meetingId);
-  if (!stats) {
-    stats = { maxConcurrent: 0, lastConnection: '', currentConnections: 0 };
-    meetingStats.set(meetingId, stats);
-  }
-  return stats;
-}
-
-/** Get stats for all meetings. */
-export function getAllMeetingStats(): Map<string, MeetingStats> {
-  return meetingStats;
-}
-
-/** Remove stats for a meeting (called on cleanup). */
-export function removeMeetingStats(meetingId: string): void {
-  meetingStats.delete(meetingId);
+/** Current active-connection count for a meeting (0 if unknown). */
+export function getActiveConnectionCount(meetingId: string): number {
+  return meetingClientCounts.get(meetingId) ?? 0;
 }
 
 /**
@@ -285,27 +259,14 @@ export function registerSocketHandlers(
 
       // Leave any previously joined meeting room
       if (joinedMeetingId) {
-        const prevStats = getStats(joinedMeetingId);
-        prevStats.currentConnections = Math.max(0, prevStats.currentConnections - 1);
-        if (prevStats.currentConnections === 0) {
-          prevStats.lastConnection = new Date().toISOString();
-        }
         socket.leave(joinedMeetingId);
-        decrementClientCount(io, joinedMeetingId);
+        decrementClientCount(io, joinedMeetingId, meetingManager);
       }
 
       // Join the new meeting room
       joinedMeetingId = meetingId;
       socket.join(meetingId);
       incrementClientCount(io, meetingId, meetingManager);
-
-      // Track connection stats for admin dashboard
-      const stats = getStats(meetingId);
-      stats.currentConnections++;
-      stats.lastConnection = 'now';
-      if (stats.currentConnections > stats.maxConcurrent) {
-        stats.maxConcurrent = stats.currentConnections;
-      }
 
       // Send the full current state to this socket only
       socket.emit('state', meeting);
@@ -1068,14 +1029,7 @@ export function registerSocketHandlers(
       });
 
       if (joinedMeetingId) {
-        // Update connection stats for admin dashboard
-        const stats = getStats(joinedMeetingId);
-        stats.currentConnections = Math.max(0, stats.currentConnections - 1);
-        if (stats.currentConnections === 0) {
-          stats.lastConnection = new Date().toISOString();
-        }
-
-        decrementClientCount(io, joinedMeetingId);
+        decrementClientCount(io, joinedMeetingId, meetingManager);
       }
     });
   });
@@ -1099,13 +1053,18 @@ function incrementClientCount(
   meetingManager: MeetingManager,
 ): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
-  meetingClientCounts.set(meetingId, current + 1);
+  const next = current + 1;
+  meetingClientCounts.set(meetingId, next);
 
-  // Update the persisted last-connection timestamp so the expiry
-  // sweep knows when the meeting was last active.
+  // Update the persisted last-connection timestamp so the expiry sweep
+  // knows when the meeting was last active, and bump the persisted
+  // max-concurrent high-water mark if this connection sets a new record.
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
     meeting.operational.lastConnectionTime = new Date().toISOString();
+    if ((meeting.operational.maxConcurrent ?? 0) < next) {
+      meeting.operational.maxConcurrent = next;
+    }
     meetingManager.markDirty(meetingId);
   }
 
@@ -1113,12 +1072,24 @@ function incrementClientCount(
 }
 
 /** Decrement the count of connected clients for a meeting. */
-function decrementClientCount(io: Server<ClientToServerEvents, ServerToClientEvents>, meetingId: string): void {
+function decrementClientCount(
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+  meetingId: string,
+  meetingManager: MeetingManager,
+): void {
   const current = meetingClientCounts.get(meetingId) ?? 0;
   const next = Math.max(0, current - 1);
 
   if (next === 0) {
     meetingClientCounts.delete(meetingId);
+    // The room is now empty — stamp the last-connection timestamp so the
+    // admin dashboard can display when activity ended and the expiry sweep
+    // restarts its 90-day window from this moment.
+    const meeting = meetingManager.get(meetingId);
+    if (meeting) {
+      meeting.operational.lastConnectionTime = new Date().toISOString();
+      meetingManager.markDirty(meetingId);
+    }
   } else {
     meetingClientCounts.set(meetingId, next);
   }

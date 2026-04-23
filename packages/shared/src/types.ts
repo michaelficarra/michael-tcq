@@ -275,10 +275,17 @@ export interface OperationalState {
    */
   lastAdvancementBy?: UserKey;
   /**
-   * ISO timestamp of the most recent client connection. Used to determine
-   * when to expire stale meetings (90 days after the last connection).
+   * ISO timestamp of the most recent connection event — set both when a
+   * client connects and when the last client disconnects. Used for the
+   * 90-day expiry sweep and surfaced on the admin dashboard as the
+   * "last connection" timestamp while no one is currently connected.
    */
   lastConnectionTime?: string;
+  /**
+   * Highest concurrent connection count ever observed for this meeting,
+   * persisted so the admin dashboard's "max connections" survives restarts.
+   */
+  maxConcurrent?: number;
 }
 
 export interface MeetingState {
