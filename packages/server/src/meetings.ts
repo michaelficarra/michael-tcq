@@ -13,6 +13,7 @@ import type {
 import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
+import { info, notice, error as logError, serialiseError } from './logger.js';
 
 /**
  * Register a user in a meeting's users map, returning their canonical key.
@@ -78,12 +79,10 @@ export class MeetingManager {
       }
     }
 
-    if (expired > 0) {
-      console.log(`Removed ${expired} expired meeting(s) from store`);
-    }
-    if (this.meetings.size > 0) {
-      console.log(`Restored ${this.meetings.size} meeting(s) from store`);
-    }
+    info('meetings_restored', {
+      restored: this.meetings.size,
+      expiredAtStartup: expired,
+    });
   }
 
   /** Create a new meeting with the given chairs. */
@@ -772,8 +771,11 @@ export class MeetingManager {
   /**
    * Write all dirty meetings to the persistent store.
    * Called periodically and after significant events.
+   *
+   * Returns the number of meetings written, so callers (the periodic
+   * timer) can skip emitting a log entry when there was nothing to do.
    */
-  async sync(): Promise<void> {
+  async sync(): Promise<number> {
     const promises: Promise<void>[] = [];
 
     for (const id of this.dirty) {
@@ -784,7 +786,9 @@ export class MeetingManager {
     }
 
     await Promise.all(promises);
+    const count = promises.length;
     this.dirty.clear();
+    return count;
   }
 
   /**
@@ -805,9 +809,19 @@ export class MeetingManager {
    */
   startPeriodicSync(intervalMs = 30_000): () => void {
     const timer = setInterval(() => {
-      this.sync().catch((err) => {
-        console.error('Periodic sync failed:', err);
-      });
+      const start = process.hrtime.bigint();
+      this.sync()
+        .then((count) => {
+          // Skip the log when there was nothing to sync — otherwise we'd
+          // emit a no-op line every 30 s on an idle server.
+          if (count > 0) {
+            const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+            info('periodic_sync_completed', { count, durationMs });
+          }
+        })
+        .catch((err) => {
+          logError('periodic_sync_failed', { error: serialiseError(err) });
+        });
     }, intervalMs);
 
     return () => clearInterval(timer);
@@ -820,29 +834,48 @@ export class MeetingManager {
    */
   startExpirySweep(intervalMs = 60 * 60 * 1000): () => void {
     const timer = setInterval(() => {
-      this.removeExpiredMeetings().catch((err) => {
-        console.error('Expiry sweep failed:', err);
-      });
+      const start = process.hrtime.bigint();
+      this.removeExpiredMeetings()
+        .then(({ scanned, expired }) => {
+          const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+          info('expiry_sweep_completed', { scanned, expired, durationMs });
+        })
+        .catch((err) => {
+          logError('expiry_sweep_failed', { error: serialiseError(err) });
+        });
     }, intervalMs);
 
     return () => clearInterval(timer);
   }
 
   /** Remove all meetings whose last connection is older than 90 days. */
-  private async removeExpiredMeetings(): Promise<void> {
+  private async removeExpiredMeetings(): Promise<{ scanned: number; expired: number }> {
     const now = Date.now();
     const expiredIds: string[] = [];
+    let scanned = 0;
 
     for (const meeting of this.meetings.values()) {
+      scanned++;
       if (this.isExpired(meeting, now)) {
         expiredIds.push(meeting.id);
       }
     }
 
     for (const id of expiredIds) {
-      console.log(`Expiring meeting ${id} (no connections in 90 days)`);
+      const meeting = this.meetings.get(id);
+      const lastConnectionTime = meeting?.operational.lastConnectionTime;
+      const ageDays = lastConnectionTime
+        ? Math.floor((now - new Date(lastConnectionTime).getTime()) / (24 * 60 * 60 * 1000))
+        : undefined;
+      notice('meeting_expired', {
+        meetingId: id,
+        ...(lastConnectionTime ? { lastConnectionTime } : {}),
+        ...(ageDays !== undefined ? { ageDays } : {}),
+      });
       await this.remove(id);
     }
+
+    return { scanned, expired: expiredIds.length };
   }
 
   /**

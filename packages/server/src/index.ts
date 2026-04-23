@@ -24,6 +24,9 @@ import { requireAuth } from './requireAuth.js';
 import { mockAuth, isOAuthConfigured } from './mockAuth.js';
 import { registerSocketHandlers } from './socket.js';
 import { versionHandler } from './versionRoute.js';
+import { httpLogger } from './httpLogger.js';
+import { errorHandler } from './errorHandler.js';
+import { info, error as logError, critical, serialiseError } from './logger.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -81,7 +84,7 @@ if (STORE_TYPE === 'firestore') {
 } else {
   // File-based store for local development
   const dataDir = process.env.DATA_DIR ?? join(process.cwd(), '.data', 'meetings');
-  console.log(`Using file store: ${dataDir}`);
+  info('file_store_initialised', { dataDir });
   const fileStore = new FileMeetingStore(dataDir);
   await fileStore.init();
   meetingStore = fileStore;
@@ -120,6 +123,11 @@ app.use(sessionMiddleware);
 // a fake user so features work without an OAuth App. Does nothing when
 // GITHUB_CLIENT_ID is set.
 app.use(mockAuth);
+
+// Structured access logging — emits a GCP HttpRequest-shaped entry when
+// each response finishes. Mounted after session/auth so req.session.user
+// is populated on the logged entry.
+app.use(httpLogger);
 
 // --- Auth routes (no requireAuth — these handle the login flow) ---
 
@@ -164,6 +172,10 @@ app.use((_req, res, next) => {
   });
 });
 
+// Error-handling middleware must be registered last so it catches errors
+// from every route and middleware above.
+app.use(errorHandler);
+
 // --- Socket.IO ---
 
 // Share the Express session with Socket.IO so that WebSocket connections
@@ -179,14 +191,24 @@ registerSocketHandlers(io, meetingManager);
 
 // --- Start ---
 
+// --- Process-level error handlers ---
+// Cloud Run recycles the instance on exit(1), which is safer than letting
+// the process continue in an undefined state after an uncaught error. We
+// log a CRITICAL entry first so the cause shows up in Cloud Logging even
+// though the exit will terminate any buffered writes.
+process.on('uncaughtException', (err) => {
+  critical('uncaught_exception', { error: serialiseError(err) });
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  critical('unhandled_rejection', { error: serialiseError(reason) });
+  process.exit(1);
+});
+
 async function start() {
   // Log which modes are active
-  console.log(`Persistence: ${STORE_TYPE}`);
-  if (isOAuthConfigured()) {
-    console.log('Authentication: GitHub OAuth');
-  } else {
-    console.log('Authentication: mock (set GITHUB_CLIENT_ID to enable OAuth)');
-  }
+  info('server_starting', { persistence: STORE_TYPE });
+  info('auth_mode', { mode: isOAuthConfigured() ? 'github_oauth' : 'mock' });
 
   // Restore any persisted meetings from the store. If this fails
   // (e.g. Firestore not yet set up), log the error but continue
@@ -195,7 +217,7 @@ async function start() {
   try {
     await meetingManager.restore();
   } catch (err) {
-    console.error('Failed to restore meetings from store (continuing anyway):', err);
+    logError('restore_failed', { error: serialiseError(err) });
   }
 
   // Start periodic sync (writes dirty meetings to the store every 30 seconds)
@@ -205,11 +227,11 @@ async function start() {
   meetingManager.startExpirySweep();
 
   httpServer.listen(PORT, () => {
-    console.log(`TCQ server listening on http://localhost:${PORT}`);
+    info('server_listening', { port: PORT });
   });
 }
 
 start().catch((err) => {
-  console.error('Failed to start server:', err);
+  critical('startup_failed', { error: serialiseError(err) });
   process.exit(1);
 });

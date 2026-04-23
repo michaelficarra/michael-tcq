@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import type { User } from '@tcq/shared';
 import { toSessionUser } from './session.js';
+import { warning, error as logError, serialiseError } from './logger.js';
 
 // OAuth configuration from environment variables
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
@@ -104,7 +105,7 @@ export function createAuthRoutes(): Router {
 
       const tokenData = await tokenRes.json();
       if (tokenData.error) {
-        console.error('GitHub OAuth token error:', tokenData.error_description);
+        warning('github_oauth_token_error', { description: tokenData.error_description });
         res.status(401).send('Authentication failed');
         return;
       }
@@ -120,7 +121,7 @@ export function createAuthRoutes(): Router {
       });
 
       if (!userRes.ok) {
-        console.error('GitHub user API error:', userRes.status);
+        warning('github_user_api_error', { status: userRes.status });
         res.status(401).send('Failed to fetch user profile');
         return;
       }
@@ -142,7 +143,7 @@ export function createAuthRoutes(): Router {
       delete req.session.returnTo;
       res.redirect(redirectTo);
     } catch (err) {
-      console.error('GitHub OAuth error:', err);
+      logError('github_oauth_error', { error: serialiseError(err) });
       res.status(500).send('Authentication failed');
     }
   });

@@ -229,6 +229,22 @@ The flow:
 - **Passport.js** — Adds `passport`, `passport-github2`, and a serialise/deserialise abstraction. For a single OAuth provider, the abstraction cost exceeds the benefit. If TCQ ever needed multiple OAuth providers, Passport would start making sense.
 - **Auth.js (NextAuth)** — Tightly coupled to Next.js. The standalone `@auth/core` exists but is less mature and less well-documented.
 
+## Logging and Observability
+
+All logging goes through a small zero-dependency module (`packages/server/src/logger.ts`) that writes one JSON object per line to stdout. Cloud Run's log agent ingests stdout/stderr and treats entries with a recognised `severity` field as structured `LogEntry` records, so no additional log-forwarding infrastructure is required.
+
+Every entry carries `severity`, `message`, `time`, `service`, and — when `GIT_SHA` is set at deploy time — the deployment commit SHA. Callers add domain-specific fields alongside those defaults.
+
+**Attribution.** Every log entry that names an acting user groups `ghid`, `ghUsername`, and `isAdmin` under a nested `user` field, so attribution stays together and does not collide with other top-level fields.
+
+**HTTP access log.** A middleware (`httpLogger.ts`) emits one entry per response via `res.on('finish')`. The HTTP details go inside a top-level `httpRequest` object matching the [`LogEntry.HttpRequest`](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#HttpRequest) schema (`requestMethod`, `requestUrl`, `status`, `latency`, `protocol`, `responseSize`, `userAgent`, `referer`, `remoteIp`), which Cloud Logging renders inline in the Logs Explorer and exposes as queryable attributes. 2xx/3xx responses log at `INFO`, 4xx at `WARNING`, 5xx at `ERROR`. The uptime-probe path `/api/health` is skipped to avoid log spam.
+
+**Socket.IO event log.** A per-socket middleware logs one entry per inbound event (`socket_event`), plus `socket_connected` / `socket_disconnected` at the connection lifecycle. Each entry carries the full payload under `args`, with entity IDs denormalised against the current meeting state — an `agenda:reorder` entry records the full agenda item being moved rather than an opaque UUID, a `queue:remove` records the full queue entry, `poll:react` records the selected option, `meeting:updateChairs` records the full user records for each named chair, and so on. Denormalisation is best-effort: unknown or stale ids are preserved verbatim so the entry still shows something useful.
+
+**Periodic task log.** `MeetingManager` emits structured entries for its background work: `meetings_restored` at startup, `periodic_sync_completed` when the 30-second dirty-meeting sweep wrote at least one meeting, `expiry_sweep_completed` for the hourly 90-day cleanup, and a `NOTICE`-level `meeting_expired` per removed meeting. Failures in either sweep log at `ERROR` and the timer keeps running.
+
+**Process-level error handlers.** `uncaughtException` and `unhandledRejection` handlers log at `CRITICAL` and exit with code 1 so Cloud Run recycles the instance rather than letting the process continue in an undefined state. An Express error-handling middleware (`errorHandler.ts`) catches thrown errors from routes (including rejected async handlers in Express 5), logs the stack at `ERROR` alongside the `httpRequest` shape, and responds with a 500 JSON body.
+
 ## Meeting ID Generation
 
 Meeting IDs are generated using the `human-id` library, which produces three lowercase words joined by hyphens (e.g. `bright-pine-lake`, `calm-wave-fox`). With over 15 million combinations, collisions are vanishingly unlikely. If a collision does occur with an active meeting, a new ID is generated.

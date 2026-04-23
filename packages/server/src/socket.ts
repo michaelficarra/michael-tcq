@@ -28,6 +28,8 @@ import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
+import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
+import { denormalisePayload, attributionFields } from './socketLogger.js';
 
 /**
  * Validate a wire payload against its Zod schema. On failure, emit an
@@ -214,10 +216,59 @@ export function registerSocketHandlers(
     // Socket.IO shares the Express session via middleware configured in index.ts.
     const user = getSocketUser(socket);
     if (!user) {
-      console.warn('Socket connected without authenticated session, disconnecting');
+      warning('socket_unauthenticated', { socketId: socket.id });
       socket.disconnect(true);
       return;
     }
+
+    info('socket_connected', {
+      socketId: socket.id,
+      ...attributionFields(user),
+    });
+
+    // Per-event logger — fires once per inbound packet before dispatch.
+    // Logs the event name, the full payload arguments (minus any ack
+    // callbacks, which aren't serialisable), and a convenience top-level
+    // `meetingId`. Entity IDs inside the payload are denormalised — we
+    // look each one up in the meeting state and substitute the entity
+    // itself, so a line like `agenda:reorder` shows the full agenda item
+    // being moved rather than an opaque UUID.
+    socket.use((packet, next) => {
+      const [event, ...args] = packet as [string, ...unknown[]];
+      // Drop functions (ack callbacks) from the serialised payload.
+      const rawArgs = args.filter((a) => typeof a !== 'function');
+      const firstArg = rawArgs[0];
+      const meetingId =
+        typeof firstArg === 'string'
+          ? firstArg
+          : firstArg && typeof firstArg === 'object' && 'meetingId' in firstArg
+            ? (firstArg as { meetingId?: string }).meetingId
+            : undefined;
+      // Resolve the meeting: prefer the already-joined room, fall back
+      // to the meetingId on the payload (covers the initial `join`).
+      const meeting =
+        (joinedMeetingId ? meetingManager.get(joinedMeetingId) : undefined) ??
+        (meetingId ? meetingManager.get(meetingId) : undefined);
+      const loggedArgs = rawArgs.map((a) => denormalisePayload(event, a, meeting));
+      const start = process.hrtime.bigint();
+      next();
+      // `next()` is synchronous for middleware — handler dispatch happens
+      // after middleware chain completes. We log the event here; handler
+      // latency isn't measurable from this vantage point since handlers
+      // are registered via socket.on and run asynchronously.
+      const latency = formatLatency(process.hrtime.bigint() - start);
+      info('socket_event', {
+        event,
+        socketId: socket.id,
+        ...attributionFields(user),
+        ...(meetingId ? { meetingId } : {}),
+        // Single-arg events (like `join: meetingId`) flatten to one value;
+        // multi-arg events keep the array form so positional relationships
+        // are preserved.
+        args: loggedArgs.length === 1 ? loggedArgs[0] : loggedArgs,
+        middlewareLatency: latency,
+      });
+    });
 
     // Track which meeting this socket has joined (at most one).
     let joinedMeetingId: string | null = null;
@@ -789,7 +840,11 @@ export function registerSocketHandlers(
 
       // Persist immediately — speaker changes are high-value events
       meetingManager.syncOne(joinedMeetingId).catch((err) => {
-        console.error('Failed to sync after speaker advancement:', err);
+        logError('meeting_sync_failed', {
+          meetingId: joinedMeetingId,
+          trigger: 'speaker_advanced',
+          error: serialiseError(err),
+        });
       });
     });
 
@@ -999,12 +1054,23 @@ export function registerSocketHandlers(
 
       // Persist immediately — agenda advancement is a high-value event
       meetingManager.syncOne(joinedMeetingId).catch((err) => {
-        console.error('Failed to sync after agenda advancement:', err);
+        logError('meeting_sync_failed', {
+          meetingId: joinedMeetingId,
+          trigger: 'agenda_advanced',
+          error: serialiseError(err),
+        });
       });
     });
 
     // --- disconnect ---
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      info('socket_disconnected', {
+        socketId: socket.id,
+        ...attributionFields(user),
+        reason,
+        ...(joinedMeetingId ? { meetingId: joinedMeetingId } : {}),
+      });
+
       if (joinedMeetingId) {
         // Update connection stats for admin dashboard (non-admin only)
         if (!user.isAdmin) {
