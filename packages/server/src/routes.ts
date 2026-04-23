@@ -273,20 +273,22 @@ export function createMeetingRoutes(
     const meetings: {
       id: string;
       createdAt: string;
-      participants: number;
+      participantUsernames: string[];
       currentConnections: number;
       lastConnection: string;
     }[] = [];
 
     // participantIds and lastConnectionTime live on the persisted meeting
     // state so they survive server restarts; currentConnections is live
-    // socket-room state maintained in memory.
+    // socket-room state maintained in memory. Participant keys are resolved
+    // to ghUsernames here so the client can render them without access to
+    // the full meeting users map.
     for (const meeting of meetingManager.listAll()) {
       const current = getActiveConnectionCount(meeting.id);
       meetings.push({
         id: meeting.id,
         createdAt: meeting.createdAt,
-        participants: meeting.participantIds.length,
+        participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.ghUsername ?? key),
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
       });

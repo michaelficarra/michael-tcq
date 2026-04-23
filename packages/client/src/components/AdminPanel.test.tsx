@@ -18,18 +18,24 @@ function renderPanel() {
   );
 }
 
+// Synthetic usernames for sample meetings: 12 for the first, 4 for the
+// second. Length stands in for the displayed count; the values populate
+// the tooltip.
+const pineParticipants = Array.from({ length: 12 }, (_, i) => `pine-user-${String(i + 1).padStart(2, '0')}`);
+const foxParticipants = Array.from({ length: 4 }, (_, i) => `fox-user-${String(i + 1).padStart(2, '0')}`);
+
 const sampleMeetings = [
   {
     id: 'bright-pine-lake',
     createdAt: '2026-04-22T09:00:00.000Z',
-    participants: 12,
+    participantUsernames: pineParticipants,
     currentConnections: 7,
     lastConnection: 'now',
   },
   {
     id: 'calm-wave-fox',
     createdAt: '2026-04-13T08:00:00.000Z',
-    participants: 4,
+    participantUsernames: foxParticipants,
     currentConnections: 0,
     lastConnection: '2026-04-13T12:00:00.000Z',
   },
@@ -63,6 +69,23 @@ describe('AdminPanel', () => {
       expect(screen.getByText('12')).toBeInTheDocument();
       // Last connection for first meeting (with current connection count)
       expect(screen.getByText('now (7)')).toBeInTheDocument();
+    });
+  });
+
+  it('shows the full participant list in the cell tooltip', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(sampleMeetings),
+    });
+
+    renderPanel();
+
+    // Locate each participants cell via its displayed count and assert the
+    // raw `title` attribute. `getByTitle` can't be used directly here
+    // because it normalises whitespace and would collapse the newlines.
+    await waitFor(() => {
+      expect(screen.getByText('12').closest('td')).toHaveAttribute('title', pineParticipants.join('\n'));
+      expect(screen.getByText('4').closest('td')).toHaveAttribute('title', foxParticipants.join('\n'));
     });
   });
 
