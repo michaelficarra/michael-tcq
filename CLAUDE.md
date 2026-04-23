@@ -49,6 +49,7 @@ Keep these up to date alongside code changes:
 - **`docs/CONTRIBUTING.md`** — development process changes.
 - **`docs/DEPLOYMENT.md`** — deployment process changes. The recommended and manual paths must stay in sync: any new provisioning step (API, IAM binding, resource) needs to appear in both the manual walkthrough and the bootstrap logic in `scripts/deploy.sh`.
 - **`scripts/deploy.sh`** — must mirror the manual steps in `docs/DEPLOYMENT.md`. Keep the bootstrap phases idempotent so re-runs after a partial failure just resume.
+- **`scripts/seed-meeting.sh`** — seeds a meeting with sample TC39 members, agenda items, sessions, and queue entries for development/demo. Keep in sync with changes to meeting REST endpoints (`/api/meetings`, `/api/dev/switch-user`), Socket.IO event names/payloads (`agenda:add`, `session:add`, `agenda:reorder`, `meeting:nextAgendaItem`, `queue:add`), and the shape of the broadcast `state`.
 - **`.github/workflows/ci.yml`** — development process changes.
 - **`CLAUDE.md`** - development process changes or project structure changes.
 
