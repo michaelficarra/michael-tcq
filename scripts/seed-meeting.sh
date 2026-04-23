@@ -67,11 +67,12 @@ rand_range() {
 RANDOM_MEMBERS=$(pick_random 20)
 readarray -t PEOPLE <<< "$RANDOM_MEMBERS"
 
-# Select 10-20 agenda items and 6-15 queue topics
-AGENDA_COUNT=$(rand_range 10 20)
+# Select 15-30 agenda items, 2-6 sessions to group them under, and 6-15 queue topics
+AGENDA_COUNT=$(rand_range 15 30)
+SESSION_COUNT=$(rand_range 2 6)
 QUEUE_COUNT=$(rand_range 6 15)
 
-echo "Seeding meeting with $AGENDA_COUNT agenda items and $QUEUE_COUNT queue topics"
+echo "Seeding meeting with $AGENDA_COUNT agenda items, $SESSION_COUNT sessions, and $QUEUE_COUNT queue topics"
 
 # Create a meeting with real TC39 members as chairs.
 MEETING_JSON=$(curl -sf -X POST "$SERVER/api/meetings" \
@@ -104,7 +105,7 @@ PEOPLE_JSON=$(printf '%s\n' "${PEOPLE[@]}" | node -e "
 # Connect via Socket.IO and set up the meeting content.
 # Uses a sequential queue of actions, waiting for a state broadcast
 # after each one before proceeding to the next.
-PEOPLE_JSON="$PEOPLE_JSON" AGENDA_COUNT="$AGENDA_COUNT" QUEUE_COUNT="$QUEUE_COUNT" CHAIR_COOKIE="$CHAIR_COOKIE" node -e "
+PEOPLE_JSON="$PEOPLE_JSON" AGENDA_COUNT="$AGENDA_COUNT" SESSION_COUNT="$SESSION_COUNT" QUEUE_COUNT="$QUEUE_COUNT" CHAIR_COOKIE="$CHAIR_COOKIE" node -e "
 const { io } = require('socket.io-client');
 const socket = io('$SERVER', {
   transports: ['websocket'],
@@ -114,7 +115,8 @@ const socket = io('$SERVER', {
 // People selected from TC39 membership (passed via env var); used as both
 // chairs (first few) and as the pool of potential presenters / queue authors.
 const people = JSON.parse(process.env.PEOPLE_JSON);
-const agendaCount = parseInt(process.env.AGENDA_COUNT, 20);
+const agendaCount = parseInt(process.env.AGENDA_COUNT, 10);
+const sessionCount = parseInt(process.env.SESSION_COUNT, 10);
 const queueCount = parseInt(process.env.QUEUE_COUNT, 10);
 
 // --- Pool of plausible agenda topics ---
@@ -267,6 +269,20 @@ const queuePool = [
   'Can the champion present updated slides at the next meeting?',
 ];
 
+// --- Pool of plausible session headers ---
+// Sessions are display-only blocks that group a contiguous run of agenda
+// items by capacity (minutes). TC39 plenaries typically run morning +
+// afternoon blocks of 3-4 hours over multiple days; we slice the first N
+// in order so the day labels stay sequential.
+const sessionPool = [
+  { name: 'Day 1 — Morning Session', capacity: 210 },
+  { name: 'Day 1 — Afternoon Session', capacity: 210 },
+  { name: 'Day 2 — Morning Session', capacity: 210 },
+  { name: 'Day 2 — Afternoon Session', capacity: 210 },
+  { name: 'Day 3 — Morning Session', capacity: 180 },
+  { name: 'Day 3 — Afternoon Session', capacity: 180 },
+];
+
 // Shuffle an array in place (Fisher-Yates)
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -276,8 +292,10 @@ function shuffle(arr) {
   return arr;
 }
 
-// Select random subsets
+// Select random subsets. Sessions are NOT shuffled — keeping their pool
+// order preserves the Day 1/2/3 sequencing.
 const selectedAgenda = shuffle([...agendaPool]).slice(0, agendaCount);
+const selectedSessions = sessionPool.slice(0, sessionCount);
 const selectedQueue = shuffle([...queuePool]).slice(0, queueCount).map(topic => ({ topic }));
 
 // Build the action sequence
@@ -305,7 +323,43 @@ selectedAgenda.forEach((item) => {
   actions.push(() => socket.emit('agenda:add', payload));
 });
 
-// Start the meeting (advance to the first agenda item)
+// Add sessions and slot them into evenly-spaced positions among the
+// already-added agenda items. The server appends new sessions to the end
+// (see addSession in packages/server/src/meetings.ts), so each session
+// takes two queued actions: emit session:add, then emit agenda:reorder
+// with the just-added session's id and the precomputed afterId.
+//
+// Targets are computed once on the first add — at that point no sessions
+// exist yet, so state.agenda is exactly the item list. With K sessions
+// across N items, session k goes immediately before item floor(k * N / K),
+// which corresponds to afterId = item[floor(k * N / K) - 1] (or null for
+// the very front).
+let sessionTargets = null;
+selectedSessions.forEach((session, k) => {
+  // Step 1: snapshot targets on first add, then emit session:add.
+  actions.push((state) => {
+    if (sessionTargets === null) {
+      const itemIds = state.agenda.filter(e => e.kind !== 'session').map(e => e.id);
+      const N = itemIds.length;
+      const K = selectedSessions.length;
+      sessionTargets = selectedSessions.map((_, i) => {
+        const idx = Math.floor(i * N / K);
+        return idx === 0 ? null : itemIds[idx - 1];
+      });
+    }
+    socket.emit('session:add', { name: session.name, capacity: session.capacity });
+  });
+  // Step 2: the just-added session is at the end of state.agenda; reorder
+  // it into its slot. Earlier sessions have already been moved out of the
+  // tail position, so 'last entry' unambiguously identifies the new one.
+  actions.push((state) => {
+    const newSessionId = state.agenda.at(-1).id;
+    socket.emit('agenda:reorder', { id: newSessionId, afterId: sessionTargets[k] });
+  });
+});
+
+// Start the meeting (advance to the first agenda item — the server skips
+// over session headers, so this lands on the first real item).
 actions.push((state) =>
   socket.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.currentAgendaItemId ?? null }, () => {})
 );
@@ -383,7 +437,10 @@ socket.on('state', (state) => {
     console.log('');
     console.log('Meeting seeded successfully!');
     console.log('');
-    console.log('  Agenda items:     ' + state.agenda.length);
+    const itemEntries = state.agenda.filter(e => e.kind !== 'session');
+    const sessionEntries = state.agenda.filter(e => e.kind === 'session');
+    console.log('  Agenda items:     ' + itemEntries.length);
+    console.log('  Sessions:         ' + sessionEntries.length);
     console.log('  Queue entries:    ' + state.queue.orderedIds.length);
     console.log('');
     state.queue.orderedIds.forEach((id, i) => {
