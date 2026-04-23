@@ -75,22 +75,7 @@ export class MeetingManager {
         expired++;
         await this.store.remove(meeting.id);
       } else {
-        // Backfill fields that predate this version. We can't reconstruct
-        // participant history, so participantIds starts empty and grows
-        // from the next join onwards. createdAt is approximated from the
-        // last-connection timestamp when unknown. markDirty so both
-        // backfills persist on the next write.
-        let dirty = false;
-        if (!meeting.createdAt) {
-          meeting.createdAt = meeting.operational.lastConnectionTime ?? new Date().toISOString();
-          dirty = true;
-        }
-        if (!meeting.participantIds) {
-          meeting.participantIds = [];
-          dirty = true;
-        }
         this.meetings.set(meeting.id, meeting);
-        if (dirty) this.markDirty(meeting.id);
       }
     }
 
@@ -129,6 +114,7 @@ export class MeetingManager {
       },
       operational: {
         lastConnectionTime: now,
+        maxConcurrent: 0,
       },
       log: [],
     };
@@ -216,6 +202,7 @@ export class MeetingManager {
     if (presenterIds.length === 0) return null;
 
     const item: AgendaItem = {
+      kind: 'item',
       id: randomUUID(),
       name,
       presenterIds,
@@ -880,15 +867,13 @@ export class MeetingManager {
     }
 
     for (const id of expiredIds) {
-      const meeting = this.meetings.get(id);
-      const lastConnectionTime = meeting?.operational.lastConnectionTime;
-      const ageDays = lastConnectionTime
-        ? Math.floor((now - new Date(lastConnectionTime).getTime()) / (24 * 60 * 60 * 1000))
-        : undefined;
+      const meeting = this.meetings.get(id)!;
+      const lastConnectionTime = meeting.operational.lastConnectionTime;
+      const ageDays = Math.floor((now - new Date(lastConnectionTime).getTime()) / (24 * 60 * 60 * 1000));
       notice('meeting_expired', {
         meetingId: id,
-        ...(lastConnectionTime ? { lastConnectionTime } : {}),
-        ...(ageDays !== undefined ? { ageDays } : {}),
+        lastConnectionTime,
+        ageDays,
       });
       await this.remove(id);
     }
@@ -898,13 +883,10 @@ export class MeetingManager {
 
   /**
    * Check whether a meeting has expired. A meeting expires 90 days after
-   * its most recent connection. Meetings without a lastConnectionTime
-   * are not considered expired.
+   * its most recent connection.
    */
   private isExpired(meeting: MeetingState, now: number): boolean {
-    const lastConnectionTime = meeting.operational.lastConnectionTime;
-    if (!lastConnectionTime) return false;
-    const lastConnection = new Date(lastConnectionTime).getTime();
+    const lastConnection = new Date(meeting.operational.lastConnectionTime).getTime();
     return now - lastConnection > MEETING_EXPIRY_MS;
   }
 }

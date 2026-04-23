@@ -21,12 +21,18 @@ export function makeMeeting(overrides?: Partial<MeetingState>, defaults: MakeMee
 
   return {
     id: defaults.id ?? 'test-meeting',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    participantIds: [],
     users: defaults.users ?? {},
     chairIds: defaults.chairIds ?? [],
     agenda: defaults.agenda ?? [],
     queue: queue ?? { entries: {}, orderedIds: [], closed: false },
     current: current ?? { topicSpeakers: [] },
-    operational: operational ?? {},
+    operational: {
+      lastConnectionTime: '2026-01-01T00:00:00.000Z',
+      maxConcurrent: 0,
+      ...operational,
+    },
     log: [],
     ...rest,
   };

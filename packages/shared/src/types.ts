@@ -17,6 +17,7 @@ export interface User {
 export type UserKey = string & { readonly __brand: 'UserKey' };
 
 export interface AgendaItem {
+  kind: 'item';
   id: string;
   name: string;
   /** Ordered, non-empty list of presenter user keys. First presenter becomes the initial speaker when the item is advanced to. */
@@ -35,10 +36,6 @@ export interface AgendaItem {
  * items in the same ordered list but are not themselves agenda items —
  * advancement skips over them, and the items they visually "contain" are
  * derived from the run that follows them in the agenda.
- *
- * The `kind: 'session'` tag discriminates `Session` from `AgendaItem` in
- * the `AgendaEntry` union; agenda items deliberately have no `kind` field
- * so existing persisted JSON loads unchanged.
  */
 export interface Session {
   kind: 'session';
@@ -50,7 +47,8 @@ export interface Session {
 
 /**
  * An entry in the agenda list: either an agenda item or a session header.
- * Use the `isSession` / `isAgendaItem` helpers to discriminate.
+ * Discriminated on `kind` (`'item' | 'session'`); use the
+ * `isSession` / `isAgendaItem` helpers in `./helpers.ts`.
  */
 export type AgendaEntry = AgendaItem | Session;
 
@@ -280,19 +278,19 @@ export interface OperationalState {
    * 90-day expiry sweep and surfaced on the admin dashboard as the
    * "last connection" timestamp while no one is currently connected.
    */
-  lastConnectionTime?: string;
+  lastConnectionTime: string;
   /**
    * Highest concurrent socket-connection count ever observed for this
    * meeting. Persisted so it survives restarts. Not currently surfaced in
    * the UI — retained as a historical metric for future use.
    */
-  maxConcurrent?: number;
+  maxConcurrent: number;
 }
 
 export interface MeetingState {
   id: string;
   /** ISO timestamp of when the meeting was first created. */
-  createdAt?: string;
+  createdAt: string;
   /**
    * Distinct UserKeys of everyone who has joined this meeting via a socket
    * connection. Unlike `users`, which accumulates anyone referenced in the
@@ -301,7 +299,7 @@ export interface MeetingState {
    * Used for the admin dashboard participant count and the exported-log
    * participant summary.
    */
-  participantIds?: UserKey[];
+  participantIds: UserKey[];
   /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];

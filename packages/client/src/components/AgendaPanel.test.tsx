@@ -51,8 +51,8 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       agenda: [
-        { id: '1', name: 'First item', presenterIds: ['alice'], duration: 20 },
-        { id: '2', name: 'Second item', presenterIds: ['alice'] },
+        { kind: 'item', id: '1', name: 'First item', presenterIds: ['alice'], duration: 20 },
+        { kind: 'item', id: '2', name: 'Second item', presenterIds: ['alice'] },
       ],
     });
     renderAgenda(meeting);
@@ -96,7 +96,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: '1', name: 'Deletable item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Deletable item', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -107,7 +107,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }, alice: chairUser },
       chairIds: ['other'],
-      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -121,7 +121,7 @@ describe('AgendaPanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: 'item-1', name: 'To delete', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: 'item-1', name: 'To delete', presenterIds: ['alice'] }],
     });
     renderAgenda(meeting, chairUser, mockSocket);
 
@@ -134,7 +134,7 @@ describe('AgendaPanel', () => {
     const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'B Corp' };
     const meeting = makeMeeting({
       users: { alice, bob },
-      agenda: [{ id: '1', name: 'Joint', presenterIds: ['alice', 'bob'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['alice', 'bob'] }],
     });
     renderAgenda(meeting);
 
@@ -147,7 +147,7 @@ describe('AgendaPanel', () => {
     const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
     const meeting = makeMeeting({
       users: { alice: chairUser, bob },
-      agenda: [{ id: '1', name: 'Joint', presenterIds: ['bob', 'alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['bob', 'alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -160,6 +160,7 @@ describe('AgendaPanel', () => {
       users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' } },
       agenda: [
         {
+          kind: 'item',
           id: '1',
           name: 'Test',
           presenterIds: ['alice'],
@@ -178,9 +179,9 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { id: '1', name: 'Past item', presenterIds: ['a'] },
-          { id: '2', name: 'Current item', presenterIds: ['a'] },
-          { id: '3', name: 'Upcoming item', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Past item', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Current item', presenterIds: ['a'] },
+          { kind: 'item', id: '3', name: 'Upcoming item', presenterIds: ['a'] },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -206,7 +207,7 @@ describe('AgendaPanel', () => {
     it('gives the current item emphatic, higher-contrast text', () => {
       const meeting = makeMeeting({
         users: { a },
-        agenda: [{ id: '1', name: 'The current one', presenterIds: ['a'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'The current one', presenterIds: ['a'] }],
         current: { agendaItemId: '1', topicSpeakers: [] },
       });
       renderAgenda(meeting);
@@ -221,8 +222,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { id: '1', name: 'Alpha', presenterIds: ['a'] },
-          { id: '2', name: 'Beta', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Alpha', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Beta', presenterIds: ['a'] },
         ],
       });
       renderAgenda(meeting);
@@ -393,8 +394,8 @@ describe('AgendaPanel', () => {
         users: { alice: chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Morning', capacity: 90 },
-          { id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { id: 'b', name: 'Second', presenterIds: ['alice'], duration: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 30 },
         ],
       });
       renderAgenda(meeting);
@@ -414,9 +415,9 @@ describe('AgendaPanel', () => {
         users: { alice: chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
-          { id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
-          { id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
         ],
       });
       renderAgenda(meeting);
@@ -433,9 +434,9 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { alice: chairUser },
         agenda: [
-          { id: 'a', name: 'First', presenterIds: ['alice'] },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'] },
           { kind: 'session', id: 's1', name: 'Block', capacity: 30 },
-          { id: 'b', name: 'Second', presenterIds: ['alice'] },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'] },
         ],
       });
       renderAgenda(meeting);

@@ -12,6 +12,7 @@ function makeMeeting(): MeetingState {
   const bob = makeUser(2, 'bob');
 
   const agendaItem: AgendaItem = {
+    kind: 'item',
     id: 'item-1',
     name: 'Item one',
     presenterIds: [userKey(alice)],
@@ -46,6 +47,8 @@ function makeMeeting(): MeetingState {
 
   return {
     id: 'meeting-x',
+    createdAt: '2026-04-22T00:00:00.000Z',
+    participantIds: [],
     users: { [userKey(alice)]: alice, [userKey(bob)]: bob },
     chairIds: [userKey(alice)],
     agenda: [agendaItem, session],
@@ -55,7 +58,7 @@ function makeMeeting(): MeetingState {
       closed: false,
     },
     current: { topic, speaker, topicSpeakers: [] },
-    operational: { lastConnectionTime: '2026-04-22T00:00:00.000Z' },
+    operational: { lastConnectionTime: '2026-04-22T00:00:00.000Z', maxConcurrent: 0 },
     log: [],
   };
 }
@@ -65,7 +68,7 @@ describe('denormalisePayload', () => {
     const meeting = makeMeeting();
     const out = denormalisePayload('agenda:reorder', { id: 'item-1', afterId: 'session-1' }, meeting);
     expect(out).toEqual({
-      id: { id: 'item-1', name: 'Item one', presenterIds: ['alice'], duration: 10 },
+      id: { kind: 'item', id: 'item-1', name: 'Item one', presenterIds: ['alice'], duration: 10 },
       afterId: { kind: 'session', id: 'session-1', name: 'Morning session', capacity: 60 },
     });
   });

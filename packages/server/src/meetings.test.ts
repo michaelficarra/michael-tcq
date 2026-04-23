@@ -115,12 +115,14 @@ describe('MeetingManager', () => {
     const testUserKey = userKey(testUser);
     await store.save({
       id: 'test-meeting',
+      createdAt: new Date().toISOString(),
+      participantIds: [],
       users: { [testUserKey]: testUser },
       chairIds: [testUserKey],
       agenda: [],
       queue: { entries: {}, orderedIds: [], closed: false },
       current: { topicSpeakers: [] },
-      operational: {},
+      operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0 },
       log: [],
     });
 

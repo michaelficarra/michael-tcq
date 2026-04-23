@@ -22,16 +22,12 @@ export function asUserKey(s: string): UserKey {
 
 /** Type guard: is this agenda entry a session header? */
 export function isSession(entry: AgendaEntry): entry is Session {
-  return 'kind' in entry && entry.kind === 'session';
+  return entry.kind === 'session';
 }
 
-/**
- * Type guard: is this agenda entry a regular agenda item? Discriminates
- * by absence of a `kind` field so existing persisted agenda items (which
- * have no `kind`) satisfy this without any migration.
- */
+/** Type guard: is this agenda entry a regular agenda item? */
 export function isAgendaItem(entry: AgendaEntry): entry is AgendaItem {
-  return !('kind' in entry);
+  return entry.kind === 'item';
 }
 
 /**

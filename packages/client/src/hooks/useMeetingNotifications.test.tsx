@@ -88,8 +88,8 @@ describe('useMeetingNotifications', () => {
   it('fires "Agenda advanced" when currentAgendaItemId changes after the meeting has started', () => {
     seedPreferences({ enabled: true });
     const agenda = [
-      { id: 'a', name: 'Opening', presenterIds: ['alice'] },
-      { id: 'b', name: 'Discussion', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'b', name: 'Discussion', presenterIds: ['bob'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -108,7 +108,7 @@ describe('useMeetingNotifications', () => {
 
   it('fires "Meeting started" (not "Agenda advanced") on the first agenda item transition', () => {
     seedPreferences({ enabled: true });
-    const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'] }];
+    const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'] }];
     const prev = makeMeeting({ agenda });
     const { rerender } = render(<Scene meeting={prev} />);
 
@@ -249,14 +249,14 @@ describe('useMeetingNotifications', () => {
   it('fires "Your agenda item is next" when the upcoming agenda item is yours', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
-      agenda: [{ id: 'a', name: 'Opening', presenterIds: ['bob'] }],
+      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['bob'] }],
       current: { topicSpeakers: [], agendaItemId: 'a' },
     });
     const { rerender } = render(<Scene meeting={prev} />);
 
     const agenda = [
-      { id: 'a', name: 'Opening', presenterIds: ['bob'] },
-      { id: 'b', name: 'My item', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'b', name: 'My item', presenterIds: ['alice'] },
     ];
     const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
@@ -270,15 +270,15 @@ describe('useMeetingNotifications', () => {
   it('fires "Your agenda item is next" when you are a co-presenter', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
-      agenda: [{ id: 'a', name: 'Opening', presenterIds: ['bob'] }],
+      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['bob'] }],
       current: { topicSpeakers: [], agendaItemId: 'a' },
     });
     const { rerender } = render(<Scene meeting={prev} />);
 
     // Upcoming item has bob as first presenter and alice as co-presenter.
     const agenda = [
-      { id: 'a', name: 'Opening', presenterIds: ['bob'] },
-      { id: 'b', name: 'Joint item', presenterIds: ['bob', 'alice'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'b', name: 'Joint item', presenterIds: ['bob', 'alice'] },
     ];
     const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
@@ -330,8 +330,8 @@ describe('useMeetingNotifications', () => {
   it('fires nothing when notifications are disabled', () => {
     seedPreferences({ enabled: false });
     const agenda = [
-      { id: 'a', name: 'A', presenterIds: ['alice'] },
-      { id: 'b', name: 'B', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['alice'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -345,8 +345,8 @@ describe('useMeetingNotifications', () => {
   it('respects per-event toggles (agenda-advance off)', () => {
     seedPreferences({ enabled: true, prefs: { onAgendaAdvance: false } });
     const agenda = [
-      { id: 'a', name: 'A', presenterIds: ['bob'] },
-      { id: 'b', name: 'B', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['bob'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -364,7 +364,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }]; // 5-minute estimate
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }]; // 5-minute estimate
       const meeting = makeMeeting({
         agenda,
         current: {
@@ -397,7 +397,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:30:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
       // Start time was 30 minutes ago — deadline is 25 minutes in the past.
       const meeting = makeMeeting({
         agenda,
@@ -426,7 +426,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true }); // default: onAgendaItemOverrun false
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
       const meeting = makeMeeting({
         agenda,
         current: {

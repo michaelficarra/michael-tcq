@@ -273,7 +273,6 @@ export function registerSocketHandlers(
       // when someone is referenced in an agenda item or queue entry even
       // without connecting.
       const joinerKey = userKey(user);
-      if (!meeting.participantIds) meeting.participantIds = [];
       if (!meeting.participantIds.includes(joinerKey)) {
         meeting.participantIds.push(joinerKey);
         meetingManager.markDirty(meetingId);
@@ -1075,7 +1074,7 @@ function incrementClientCount(
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
     meeting.operational.lastConnectionTime = new Date().toISOString();
-    if ((meeting.operational.maxConcurrent ?? 0) < next) {
+    if (meeting.operational.maxConcurrent < next) {
       meeting.operational.maxConcurrent = next;
     }
     meetingManager.markDirty(meetingId);

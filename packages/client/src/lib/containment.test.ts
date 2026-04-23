@@ -5,7 +5,7 @@ import { computeContainment } from './containment.js';
 
 /** Concise agenda-entry builders for test fixtures. */
 function item(id: string, duration?: number): AgendaEntry {
-  return { id, name: id, presenterIds: [asUserKey('presenter')], duration };
+  return { kind: 'item', id, name: id, presenterIds: [asUserKey('presenter')], duration };
 }
 function session(id: string, capacity: number): AgendaEntry {
   return { kind: 'session', id, name: id, capacity };

@@ -9,12 +9,14 @@ import { FileMeetingStore } from './fileStore.js';
 function makeMeeting(id: string): MeetingState {
   return {
     id,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    participantIds: [],
     users: {},
     chairIds: [],
     agenda: [],
     queue: { entries: {}, orderedIds: [], closed: false },
     current: { topicSpeakers: [] },
-    operational: {},
+    operational: { lastConnectionTime: '2026-01-01T00:00:00.000Z', maxConcurrent: 0 },
     log: [],
   };
 }

@@ -85,6 +85,7 @@ describe('QueuePanel', () => {
       users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' } },
       agenda: [
         {
+          kind: 'item',
           id: 'item-1',
           name: 'Discussion of proposal',
           presenterIds: ['alice'],
@@ -107,6 +108,7 @@ describe('QueuePanel', () => {
       users: { alice, bob },
       agenda: [
         {
+          kind: 'item',
           id: 'item-1',
           name: 'Joint session',
           presenterIds: ['alice', 'bob'],
@@ -126,7 +128,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
     });
     renderQueue(meeting, chairUser);
 
@@ -137,7 +139,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { bob: otherUser, alice: chairUser },
       chairIds: ['bob'],
-      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
     });
     renderQueue(meeting, chairUser);
 
@@ -158,7 +160,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
     });
     renderQueue(meeting, chairUser, mockSocket);
 
@@ -173,8 +175,8 @@ describe('QueuePanel', () => {
       users: { alice: chairUser },
       chairIds: ['alice'],
       agenda: [
-        { id: '1', name: 'First', presenterIds: ['alice'] },
-        { id: '2', name: 'Second', presenterIds: ['alice'] },
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
       ],
       current: currentOf({ agendaItemId: '1' }),
     });
@@ -187,7 +189,7 @@ describe('QueuePanel', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
-      agenda: [{ id: '1', name: 'Only', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['alice'] }],
       current: currentOf({ agendaItemId: '1' }),
     });
     renderQueue(meeting, chairUser);
@@ -200,8 +202,8 @@ describe('QueuePanel', () => {
       users: { bob: otherUser, alice: chairUser },
       chairIds: ['bob'],
       agenda: [
-        { id: '1', name: 'First', presenterIds: ['alice'] },
-        { id: '2', name: 'Second', presenterIds: ['alice'] },
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
       ],
       current: currentOf({ agendaItemId: '1' }),
     });
@@ -248,7 +250,7 @@ describe('QueuePanel', () => {
   it('shows a timer for the current agenda item', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      agenda: [{ id: '1', name: 'Item', presenterIds: ['alice'] }],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
       current: currentOf({
         agendaItemId: '1',
         agendaItemStartTime: new Date(Date.now() - 125_000).toISOString(),

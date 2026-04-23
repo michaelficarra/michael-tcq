@@ -285,10 +285,10 @@ export function createMeetingRoutes(
       const current = getActiveConnectionCount(meeting.id);
       meetings.push({
         id: meeting.id,
-        createdAt: meeting.createdAt ?? '',
-        participants: meeting.participantIds?.length ?? 0,
+        createdAt: meeting.createdAt,
+        participants: meeting.participantIds.length,
         currentConnections: current,
-        lastConnection: current > 0 ? 'now' : (meeting.operational.lastConnectionTime ?? ''),
+        lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
       });
     }
 

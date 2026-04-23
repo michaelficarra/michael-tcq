@@ -75,9 +75,9 @@ describe('meetingReducer', () => {
 
   describe('optimisticAgendaReorder action', () => {
     const agenda = [
-      { id: 'a', name: 'First', presenterIds: ['alice'] },
-      { id: 'b', name: 'Second', presenterIds: ['alice'] },
-      { id: 'c', name: 'Third', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'First', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'b', name: 'Second', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'c', name: 'Third', presenterIds: ['alice'] },
     ];
 
     it('moves an item forward (down the list)', () => {

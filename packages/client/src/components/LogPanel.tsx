@@ -448,7 +448,7 @@ function serialiseLog(meeting: MeetingState): string {
   // user who has connected via socket (tracked on `participantIds`) so
   // attendees who never spoke still appear in the table with 0s.
   const speakerTotals = new Map<string, number>();
-  for (const id of meeting.participantIds ?? []) {
+  for (const id of meeting.participantIds) {
     speakerTotals.set(id, 0);
   }
   for (const entry of meeting.log) {
