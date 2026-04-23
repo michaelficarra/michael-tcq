@@ -43,20 +43,18 @@ export async function switchUser(page: Page, username: string) {
 }
 
 /**
- * Click a tab by name and wait for it to become the active one. We wait for
- * the tabpanel to become visible rather than checking `aria-selected` on the
- * tab button: the latter requires the tab's entry in the accessibility tree
- * to be present at assertion time, and Firefox's a11y tree can be transiently
- * empty during React commits that follow a state broadcast — which produced
- * repeated Firefox-only CI flakes ("element(s) not found" for the tab locator
- * itself, despite the tab being in the DOM). All tab panels are always
- * mounted (see `MeetingPage.tsx`), so panel visibility is driven by the
- * `hidden` attribute and is a stable signal that the tab switch has
- * committed.
+ * Click a tab by name and wait for it to become the active one. The post-click
+ * assertion uses a CSS-based locator (`page.locator('[role="tab"]')`) rather
+ * than `getByRole('tab', ...)` because the latter goes through the browser's
+ * accessibility tree, and Firefox's a11y tree can be transiently empty during
+ * React commits that follow a state broadcast — which caused repeated
+ * Firefox-only CI flakes ("element(s) not found" for the tab locator itself,
+ * despite the tab being in the DOM). The CSS locator queries the DOM
+ * directly and is not subject to that timing.
  */
 async function switchToTab(page: Page, name: string) {
   await page.getByRole('tab', { name }).click();
-  await expect(page.getByRole('tabpanel', { name })).toBeVisible();
+  await expect(page.locator('[role="tab"]').filter({ hasText: name })).toHaveAttribute('aria-selected', 'true');
 }
 
 /** Navigate to the Agenda tab. */

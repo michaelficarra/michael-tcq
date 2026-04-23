@@ -38,10 +38,18 @@ export function relativeTime(iso: string, now: number): string {
 
 // A single 15-second interval drives every consumer of useNow via
 // useSyncExternalStore, instead of each instance creating its own setInterval.
+//
+// getSnapshot must return a stable reference between ticks — returning a
+// fresh Date.now() on every call violates useSyncExternalStore's contract
+// and causes React to throw "tearing" errors that unmount the subtree.
+// So we cache the current tick here and only advance it when the interval
+// fires, in the same step that notifies subscribers.
 
 const listeners = new Set<() => void>();
+let currentNow = Date.now();
 
 setInterval(() => {
+  currentNow = Date.now();
   for (const listener of listeners) listener();
 }, 15_000);
 
@@ -53,7 +61,7 @@ function subscribeNow(listener: () => void) {
 }
 
 function getNow() {
-  return Date.now();
+  return currentNow;
 }
 
 /** Hook returning the current wall-clock time, refreshed every 15s. */
