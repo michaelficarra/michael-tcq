@@ -7,12 +7,13 @@
  * speaker (no replies/clarifications) use a compact inline format.
  */
 
-import { useMemo, useSyncExternalStore } from 'react';
+import { useMemo } from 'react';
 import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
 import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { UserBadge } from './UserBadge.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
+import { RelativeTime as SharedRelativeTime } from '../lib/RelativeTime.js';
 
 // -- Time formatting helpers --
 
@@ -28,71 +29,17 @@ function formatDuration(ms: number): string {
   return `${hours} hr ${remainingMinutes} min`;
 }
 
-/**
- * Format a full timestamp for the tooltip, using the viewer's locale and
- * time zone. e.g. "13 April 2026, 14:32:07" or "4/13/2026, 2:32:07 PM".
- */
-function formatFullTimestamp(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-/** Compute a relative time string like "5 minutes ago". */
-function relativeTime(iso: string, now: number): string {
-  const diff = now - new Date(iso).getTime();
-  const seconds = Math.round(diff / 1000);
-  if (seconds < 5) return 'just now';
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-// -- Shared clock for relative timestamps --
-// A single 15-second interval drives all RelativeTime instances via
-// useSyncExternalStore, instead of each instance creating its own setInterval.
-// getNow returns Date.now() directly so the value is always fresh.
-
-const _listeners = new Set<() => void>();
-
-setInterval(() => {
-  for (const listener of _listeners) listener();
-}, 15_000);
-
-function subscribeNow(listener: () => void) {
-  _listeners.add(listener);
-  return () => {
-    _listeners.delete(listener);
-  };
-}
-
-function getNow() {
-  return Date.now();
-}
-
 // -- Relative time component --
+// Thin wrapper around the shared <RelativeTime> so log entries get the
+// consistent muted styling used throughout this panel without every call
+// site having to repeat the className.
 
 function RelativeTime({ timestamp }: { timestamp: string }) {
-  const now = useSyncExternalStore(subscribeNow, getNow);
-
   return (
-    <time
-      dateTime={timestamp}
-      title={formatFullTimestamp(timestamp)}
+    <SharedRelativeTime
+      timestamp={timestamp}
       className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap"
-    >
-      {relativeTime(timestamp, now)}
-    </time>
+    />
   );
 }
 

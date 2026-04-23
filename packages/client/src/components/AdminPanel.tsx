@@ -4,8 +4,9 @@
  * connection statistics and a delete button for each.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { RelativeTime } from '../lib/RelativeTime.js';
 
 interface MeetingInfo {
   id: string;
@@ -55,15 +56,12 @@ export function AdminPanel() {
   }
 
   /** Format the last connection time for display. */
-  function formatLastConnection(m: MeetingInfo): string {
+  function formatLastConnection(m: MeetingInfo): ReactNode {
     if (!m.lastConnection) return 'never';
     if (m.lastConnection === 'now') return `now (${m.currentConnections})`;
-    try {
-      const date = new Date(m.lastConnection);
-      return date.toLocaleString();
-    } catch {
-      return m.lastConnection;
-    }
+    // `lastConnection` is already an ISO string from the server; surface
+    // it verbatim in the tooltip so hovering shows the exact timestamp.
+    return <RelativeTime timestamp={m.lastConnection} title={m.lastConnection} />;
   }
 
   if (loading) {
