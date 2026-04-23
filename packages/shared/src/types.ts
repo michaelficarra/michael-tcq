@@ -282,8 +282,9 @@ export interface OperationalState {
    */
   lastConnectionTime?: string;
   /**
-   * Highest concurrent connection count ever observed for this meeting,
-   * persisted so the admin dashboard's "max connections" survives restarts.
+   * Highest concurrent socket-connection count ever observed for this
+   * meeting. Persisted so it survives restarts. Not currently surfaced in
+   * the UI — retained as a historical metric for future use.
    */
   maxConcurrent?: number;
 }
@@ -292,6 +293,15 @@ export interface MeetingState {
   id: string;
   /** ISO timestamp of when the meeting was first created. */
   createdAt?: string;
+  /**
+   * Distinct UserKeys of everyone who has joined this meeting via a socket
+   * connection. Unlike `users`, which accumulates anyone referenced in the
+   * meeting (chairs set at creation, agenda-item presenters, queue
+   * entrants, etc.), this list only grows when a user actually connects.
+   * Used for the admin dashboard participant count and the exported-log
+   * participant summary.
+   */
+  participantIds?: UserKey[];
   /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];

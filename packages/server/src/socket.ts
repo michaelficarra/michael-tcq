@@ -268,6 +268,17 @@ export function registerSocketHandlers(
       socket.join(meetingId);
       incrementClientCount(io, meetingId, meetingManager);
 
+      // Record this user in the persisted participants list if they
+      // haven't already joined. Distinct from `users`, which also grows
+      // when someone is referenced in an agenda item or queue entry even
+      // without connecting.
+      const joinerKey = userKey(user);
+      if (!meeting.participantIds) meeting.participantIds = [];
+      if (!meeting.participantIds.includes(joinerKey)) {
+        meeting.participantIds.push(joinerKey);
+        meetingManager.markDirty(meetingId);
+      }
+
       // Send the full current state to this socket only
       socket.emit('state', meeting);
     });
@@ -1059,6 +1070,8 @@ function incrementClientCount(
   // Update the persisted last-connection timestamp so the expiry sweep
   // knows when the meeting was last active, and bump the persisted
   // max-concurrent high-water mark if this connection sets a new record.
+  // maxConcurrent isn't currently surfaced in the UI but continues to
+  // accumulate so it's available if we decide to expose it again later.
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
     meeting.operational.lastConnectionTime = new Date().toISOString();

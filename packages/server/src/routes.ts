@@ -273,12 +273,12 @@ export function createMeetingRoutes(
     const meetings: {
       id: string;
       createdAt: string;
-      maxConcurrent: number;
+      participants: number;
       currentConnections: number;
       lastConnection: string;
     }[] = [];
 
-    // maxConcurrent and lastConnectionTime live on the persisted meeting
+    // participantIds and lastConnectionTime live on the persisted meeting
     // state so they survive server restarts; currentConnections is live
     // socket-room state maintained in memory.
     for (const meeting of meetingManager.listAll()) {
@@ -286,7 +286,7 @@ export function createMeetingRoutes(
       meetings.push({
         id: meeting.id,
         createdAt: meeting.createdAt ?? '',
-        maxConcurrent: meeting.operational.maxConcurrent ?? 0,
+        participants: meeting.participantIds?.length ?? 0,
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : (meeting.operational.lastConnectionTime ?? ''),
       });

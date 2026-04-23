@@ -444,8 +444,13 @@ function serialiseLog(meeting: MeetingState): string {
     lines.push('');
   }
 
-  // Participant summary sorted by total speaking time
+  // Participant summary sorted by total speaking time. Seed with every
+  // user who has connected via socket (tracked on `participantIds`) so
+  // attendees who never spoke still appear in the table with 0s.
   const speakerTotals = new Map<string, number>();
+  for (const id of meeting.participantIds ?? []) {
+    speakerTotals.set(id, 0);
+  }
   for (const entry of meeting.log) {
     if (entry.type === 'topic-discussed') {
       for (const s of entry.speakers) {

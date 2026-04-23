@@ -33,12 +33,12 @@ The meeting creator is the initial chair. In addition to all participant capabil
 
 Admins are designated by GitHub username via server configuration. In addition to all participant capabilities, admins can:
 
-- View a list of all active meetings on the home page, showing each meeting's ID, chair count, agenda item count, queued speaker count, maximum concurrent connections, and time of last non-admin connection.
+- View a list of all active meetings on the home page, showing each meeting's ID, creation time, distinct participant count, and last connection time. The creation and last-connection times render as relative durations (e.g. "3 hr ago") that update live, with the full ISO timestamp shown on hover. While at least one client is currently connected, the last-connection cell instead reads `now (N)`, where N is the current active-connection count (inclusive of every connected socket, admin or otherwise).
 - Delete any meeting (with a confirmation dialogue).
 - Edit the chair list for any meeting, even if they are not a chair themselves.
 - Remove themselves from the chair list, including when they are the last chair (allowing an empty chair list).
 
-Admin connections are excluded from connection statistics.
+The distinct participant count reflects how many unique users have joined the meeting via a socket connection — it is incremented on first join and is not affected by reconnections, additional tabs, or being added to an agenda item without connecting. Admins who join a meeting also count as participants.
 
 ## Authentication
 
@@ -311,7 +311,7 @@ The Log tab shows log entries in reverse chronological order (most recent first)
 
 ### Export
 
-The **Export** button downloads a Markdown file (named `{meeting-id}-{epoch-seconds}.md`) containing the full meeting log in chronological order (oldest events first). Agenda items are rendered as headings, speaker topics as nested lists with entry types in bold, and poll results as lists. All timestamps are UTC. The file ends with a **Participants** summary table listing every user who spoke during the meeting, sorted by total speaking time (descending). The button is hidden when the log is empty and in presentation mode.
+The **Export** button downloads a Markdown file (named `{meeting-id}-{epoch-seconds}.md`) containing the full meeting log in chronological order (oldest events first). Agenda items are rendered as headings, speaker topics as nested lists with entry types in bold, and poll results as lists. All timestamps are UTC. The file ends with a **Participants** summary table listing every user who has joined the meeting via a socket connection, sorted by total speaking time (descending); attendees who joined but never spoke are included with a duration of `0s`. The button is hidden when the log is empty and in presentation mode.
 
 ### Persistence
 

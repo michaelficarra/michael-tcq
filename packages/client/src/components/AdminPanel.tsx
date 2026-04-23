@@ -11,7 +11,7 @@ import { RelativeTime } from '../lib/RelativeTime.js';
 interface MeetingInfo {
   id: string;
   createdAt: string;
-  maxConcurrent: number;
+  participants: number;
   currentConnections: number;
   lastConnection: string;
 }
@@ -81,7 +81,7 @@ export function AdminPanel() {
               <tr className="border-b border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-left">
                 <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Meeting ID</th>
                 <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Created</th>
-                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Max Connections</th>
+                <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Participants</th>
                 <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400">Last Connection</th>
                 <th className="px-4 py-2 font-medium text-stone-600 dark:text-stone-400"></th>
               </tr>
@@ -100,7 +100,7 @@ export function AdminPanel() {
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">
                     {m.createdAt ? <RelativeTime timestamp={m.createdAt} title={m.createdAt} /> : '—'}
                   </td>
-                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.maxConcurrent}</td>
+                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.participants}</td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{formatLastConnection(m)}</td>
                   <td className="px-4 py-2 text-right">
                     <button

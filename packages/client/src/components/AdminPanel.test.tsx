@@ -21,14 +21,14 @@ const sampleMeetings = [
   {
     id: 'bright-pine-lake',
     createdAt: '2026-04-22T09:00:00.000Z',
-    maxConcurrent: 12,
+    participants: 12,
     currentConnections: 7,
     lastConnection: 'now',
   },
   {
     id: 'calm-wave-fox',
     createdAt: '2026-04-13T08:00:00.000Z',
-    maxConcurrent: 4,
+    participants: 4,
     currentConnections: 0,
     lastConnection: '2026-04-13T12:00:00.000Z',
   },
@@ -58,7 +58,7 @@ describe('AdminPanel', () => {
     renderPanel();
 
     await waitFor(() => {
-      // Max concurrent for first meeting
+      // Participants count for first meeting
       expect(screen.getByText('12')).toBeInTheDocument();
       // Last connection for first meeting (with current connection count)
       expect(screen.getByText('now (7)')).toBeInTheDocument();

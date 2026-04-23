@@ -86,7 +86,7 @@ describe('Admin endpoints', () => {
       expect(body).toHaveLength(2);
       expect(body[0]).toHaveProperty('id');
       expect(body[0]).toHaveProperty('createdAt');
-      expect(body[0]).toHaveProperty('maxConcurrent');
+      expect(body[0]).toHaveProperty('participants');
       expect(body[0]).toHaveProperty('lastConnection');
     });
 
