@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminPanel } from './AdminPanel.js';
+import { formatFullTimestamp } from '../lib/timeFormat.js';
 
 const mockFetch = vi.fn();
 beforeEach(() => {
@@ -65,7 +66,7 @@ describe('AdminPanel', () => {
     });
   });
 
-  it('renders the created-at column with the raw ISO timestamp as tooltip', async () => {
+  it('renders the created-at column with a locale-formatted timestamp as tooltip', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(sampleMeetings),
@@ -74,8 +75,10 @@ describe('AdminPanel', () => {
     renderPanel();
 
     await waitFor(() => {
-      expect(screen.getByTitle('2026-04-22T09:00:00.000Z')).toBeInTheDocument();
-      expect(screen.getByTitle('2026-04-13T08:00:00.000Z')).toBeInTheDocument();
+      // Titles are formatted in the viewer's locale + time zone, so compute
+      // the expected strings rather than hard-coding them.
+      expect(screen.getByTitle(formatFullTimestamp('2026-04-22T09:00:00.000Z'))).toBeInTheDocument();
+      expect(screen.getByTitle(formatFullTimestamp('2026-04-13T08:00:00.000Z'))).toBeInTheDocument();
     });
   });
 

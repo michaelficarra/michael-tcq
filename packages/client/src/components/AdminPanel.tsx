@@ -57,9 +57,7 @@ export function AdminPanel() {
   function formatLastConnection(m: MeetingInfo): ReactNode {
     if (!m.lastConnection) return 'never';
     if (m.lastConnection === 'now') return `now (${m.currentConnections})`;
-    // `lastConnection` is already an ISO string from the server; surface
-    // it verbatim in the tooltip so hovering shows the exact timestamp.
-    return <RelativeTime timestamp={m.lastConnection} title={m.lastConnection} />;
+    return <RelativeTime timestamp={m.lastConnection} />;
   }
 
   if (loading) {
@@ -98,7 +96,7 @@ export function AdminPanel() {
                     </Link>
                   </td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">
-                    {m.createdAt ? <RelativeTime timestamp={m.createdAt} title={m.createdAt} /> : '—'}
+                    {m.createdAt ? <RelativeTime timestamp={m.createdAt} /> : '—'}
                   </td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{m.participants}</td>
                   <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{formatLastConnection(m)}</td>

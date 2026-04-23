@@ -6,18 +6,10 @@
 
 import { formatFullTimestamp, relativeTime, useNow } from './timeFormat.js';
 
-export function RelativeTime({
-  timestamp,
-  title,
-  className,
-}: {
-  timestamp: string;
-  title?: string;
-  className?: string;
-}) {
+export function RelativeTime({ timestamp, className }: { timestamp: string; className?: string }) {
   const now = useNow();
   return (
-    <time dateTime={timestamp} title={title ?? formatFullTimestamp(timestamp)} className={className}>
+    <time dateTime={timestamp} title={formatFullTimestamp(timestamp)} className={className}>
       {relativeTime(timestamp, now)}
     </time>
   );
