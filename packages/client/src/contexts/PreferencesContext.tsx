@@ -101,8 +101,7 @@ function getNotificationPrefs(): NotificationPrefs {
   try {
     const stored = localStorage.getItem(NOTIFICATION_PREFS_STORAGE_KEY);
     if (!stored) return DEFAULT_NOTIFICATION_PREFS;
-    const parsed = JSON.parse(stored) as Partial<NotificationPrefs>;
-    return { ...DEFAULT_NOTIFICATION_PREFS, ...parsed };
+    return JSON.parse(stored) as NotificationPrefs;
   } catch {
     return DEFAULT_NOTIFICATION_PREFS;
   }
