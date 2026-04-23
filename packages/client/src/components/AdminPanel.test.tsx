@@ -20,18 +20,14 @@ function renderPanel() {
 const sampleMeetings = [
   {
     id: 'bright-pine-lake',
-    chairCount: 2,
-    agendaItemCount: 5,
-    queuedSpeakerCount: 3,
+    createdAt: '2026-04-22T09:00:00.000Z',
     maxConcurrent: 12,
     currentConnections: 7,
     lastConnection: 'now',
   },
   {
     id: 'calm-wave-fox',
-    chairCount: 1,
-    agendaItemCount: 0,
-    queuedSpeakerCount: 0,
+    createdAt: '2026-04-13T08:00:00.000Z',
     maxConcurrent: 4,
     currentConnections: 0,
     lastConnection: '2026-04-13T12:00:00.000Z',
@@ -66,6 +62,20 @@ describe('AdminPanel', () => {
       expect(screen.getByText('12')).toBeInTheDocument();
       // Last connection for first meeting (with current connection count)
       expect(screen.getByText('now (7)')).toBeInTheDocument();
+    });
+  });
+
+  it('renders the created-at column with the raw ISO timestamp as tooltip', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(sampleMeetings),
+    });
+
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getByTitle('2026-04-22T09:00:00.000Z')).toBeInTheDocument();
+      expect(screen.getByTitle('2026-04-13T08:00:00.000Z')).toBeInTheDocument();
     });
   });
 

@@ -290,6 +290,8 @@ export interface OperationalState {
 
 export interface MeetingState {
   id: string;
+  /** ISO timestamp of when the meeting was first created. */
+  createdAt?: string;
   /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];

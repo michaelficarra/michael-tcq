@@ -85,37 +85,23 @@ describe('Admin endpoints', () => {
       const body = await res.json();
       expect(body).toHaveLength(2);
       expect(body[0]).toHaveProperty('id');
-      expect(body[0]).toHaveProperty('chairCount');
-      expect(body[0]).toHaveProperty('agendaItemCount');
-      expect(body[0]).toHaveProperty('queuedSpeakerCount');
+      expect(body[0]).toHaveProperty('createdAt');
       expect(body[0]).toHaveProperty('maxConcurrent');
       expect(body[0]).toHaveProperty('lastConnection');
     });
 
-    it('returns correct counts', async () => {
-      const meeting = manager.create([
-        { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
-        { ghid: 2, ghUsername: 'other', name: 'Other', organisation: '' },
-      ]);
-      manager.addAgendaItem(meeting.id, 'Item 1', [
-        { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
-      ]);
-      manager.addAgendaItem(meeting.id, 'Item 2', [
-        { ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' },
-      ]);
-      manager.addQueueEntry(meeting.id, 'topic', 'Topic', {
-        ghid: 1,
-        ghUsername: 'testuser',
-        name: 'Test',
-        organisation: '',
-      });
+    it('records createdAt at meeting creation time', async () => {
+      const before = new Date().toISOString();
+      manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const after = new Date().toISOString();
 
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
       const body = await res.json();
 
-      expect(body[0].chairCount).toBe(2);
-      expect(body[0].agendaItemCount).toBe(2);
-      expect(body[0].queuedSpeakerCount).toBe(1);
+      expect(body[0].createdAt).toBeTruthy();
+      // createdAt should fall within the bracket around the create() call.
+      expect(body[0].createdAt >= before).toBe(true);
+      expect(body[0].createdAt <= after).toBe(true);
     });
 
     it('returns empty array when no meetings exist', async () => {

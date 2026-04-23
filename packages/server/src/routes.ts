@@ -272,9 +272,7 @@ export function createMeetingRoutes(
 
     const meetings: {
       id: string;
-      chairCount: number;
-      agendaItemCount: number;
-      queuedSpeakerCount: number;
+      createdAt: string;
       maxConcurrent: number;
       currentConnections: number;
       lastConnection: string;
@@ -287,9 +285,7 @@ export function createMeetingRoutes(
       const current = getActiveConnectionCount(meeting.id);
       meetings.push({
         id: meeting.id,
-        chairCount: meeting.chairIds.length,
-        agendaItemCount: meeting.agenda.length,
-        queuedSpeakerCount: meeting.queue.orderedIds.length,
+        createdAt: meeting.createdAt ?? '',
         maxConcurrent: meeting.operational.maxConcurrent ?? 0,
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : (meeting.operational.lastConnectionTime ?? ''),

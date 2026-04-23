@@ -75,7 +75,18 @@ export class MeetingManager {
         expired++;
         await this.store.remove(meeting.id);
       } else {
-        this.meetings.set(meeting.id, meeting);
+        // Backfill createdAt for meetings that predate the field. We can't
+        // know the real creation time, so approximate with the persisted
+        // last-connection timestamp (and markDirty so the approximation
+        // persists on the next write, meaning the dashboard value is
+        // stable across restarts).
+        if (!meeting.createdAt) {
+          meeting.createdAt = meeting.operational.lastConnectionTime ?? new Date().toISOString();
+          this.meetings.set(meeting.id, meeting);
+          this.markDirty(meeting.id);
+        } else {
+          this.meetings.set(meeting.id, meeting);
+        }
       }
     }
 
@@ -96,8 +107,10 @@ export class MeetingManager {
       return key;
     });
 
+    const now = new Date().toISOString();
     const meeting: MeetingState = {
       id,
+      createdAt: now,
       users,
       chairIds,
       agenda: [],
@@ -110,7 +123,7 @@ export class MeetingManager {
         topicSpeakers: [],
       },
       operational: {
-        lastConnectionTime: new Date().toISOString(),
+        lastConnectionTime: now,
       },
       log: [],
     };
