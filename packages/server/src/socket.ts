@@ -146,11 +146,11 @@ const meetingClientCounts = new Map<string, number>();
 
 /** Per-meeting connection statistics for the admin dashboard. */
 export interface MeetingStats {
-  /** Maximum number of concurrent non-admin connections observed. */
+  /** Maximum number of concurrent connections observed. */
   maxConcurrent: number;
-  /** ISO timestamp of the most recent non-admin connection, or 'now' if connected. */
+  /** ISO timestamp of the most recent connection, or 'now' if any socket is connected. */
   lastConnection: string;
-  /** Current number of non-admin connections. */
+  /** Current number of connections. */
   currentConnections: number;
 }
 
@@ -285,12 +285,10 @@ export function registerSocketHandlers(
 
       // Leave any previously joined meeting room
       if (joinedMeetingId) {
-        if (!user.isAdmin) {
-          const prevStats = getStats(joinedMeetingId);
-          prevStats.currentConnections = Math.max(0, prevStats.currentConnections - 1);
-          if (prevStats.currentConnections === 0) {
-            prevStats.lastConnection = new Date().toISOString();
-          }
+        const prevStats = getStats(joinedMeetingId);
+        prevStats.currentConnections = Math.max(0, prevStats.currentConnections - 1);
+        if (prevStats.currentConnections === 0) {
+          prevStats.lastConnection = new Date().toISOString();
         }
         socket.leave(joinedMeetingId);
         decrementClientCount(io, joinedMeetingId);
@@ -301,14 +299,12 @@ export function registerSocketHandlers(
       socket.join(meetingId);
       incrementClientCount(io, meetingId, meetingManager);
 
-      // Track connection stats for admin dashboard (non-admin only)
-      if (!user.isAdmin) {
-        const stats = getStats(meetingId);
-        stats.currentConnections++;
-        stats.lastConnection = 'now';
-        if (stats.currentConnections > stats.maxConcurrent) {
-          stats.maxConcurrent = stats.currentConnections;
-        }
+      // Track connection stats for admin dashboard
+      const stats = getStats(meetingId);
+      stats.currentConnections++;
+      stats.lastConnection = 'now';
+      if (stats.currentConnections > stats.maxConcurrent) {
+        stats.maxConcurrent = stats.currentConnections;
       }
 
       // Send the full current state to this socket only
@@ -1072,13 +1068,11 @@ export function registerSocketHandlers(
       });
 
       if (joinedMeetingId) {
-        // Update connection stats for admin dashboard (non-admin only)
-        if (!user.isAdmin) {
-          const stats = getStats(joinedMeetingId);
-          stats.currentConnections = Math.max(0, stats.currentConnections - 1);
-          if (stats.currentConnections === 0) {
-            stats.lastConnection = new Date().toISOString();
-          }
+        // Update connection stats for admin dashboard
+        const stats = getStats(joinedMeetingId);
+        stats.currentConnections = Math.max(0, stats.currentConnections - 1);
+        if (stats.currentConnections === 0) {
+          stats.lastConnection = new Date().toISOString();
         }
 
         decrementClientCount(io, joinedMeetingId);
