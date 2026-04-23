@@ -23,6 +23,7 @@ import { createAuthRoutes } from './auth.js';
 import { requireAuth } from './requireAuth.js';
 import { mockAuth, isOAuthConfigured } from './mockAuth.js';
 import { registerSocketHandlers } from './socket.js';
+import { versionHandler } from './versionRoute.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -130,6 +131,9 @@ app.use('/auth', createAuthRoutes());
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Version endpoint: returns the deployed commit SHA, or 204 in dev.
+app.get('/api/version', versionHandler);
 
 // All other /api routes require an authenticated session
 app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io));

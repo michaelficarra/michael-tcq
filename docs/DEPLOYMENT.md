@@ -204,6 +204,7 @@ The script reads all configuration from `.env.production`, builds the image, pus
 - **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
 - **`--session-affinity`** — Routes reconnecting clients to the same instance.
 - **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 5. No key file needed in production.
+- **`GIT_SHA`** — `scripts/deploy.sh` sets this to `git rev-parse HEAD` on every deploy and passes it to Cloud Run via `--set-env-vars`. The server exposes it at `GET /api/version` (plain text, public) so monitoring tools can identify which commit is running. In development the variable is unset and the endpoint returns 204.
 
 ## Checking Deployment Status
 

@@ -428,8 +428,14 @@ ensure_artifact_registry() {
 # ---------------------------------------------------------------------------
 
 compute_env_vars() {
+  # Record the commit we're shipping so the server can expose it at /api/version.
+  # ensure_clean_working_tree() already ran, so HEAD is what's actually in the image.
+  local git_sha
+  git_sha="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
+
   ENV_VARS="STORE=${STORE:-firestore}"
   ENV_VARS+=",SESSION_SECRET=${SESSION_SECRET}"
+  ENV_VARS+=",GIT_SHA=${git_sha}"
   [ -n "${GITHUB_CLIENT_ID:-}" ]       && ENV_VARS+=",GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"
   [ -n "${GITHUB_CLIENT_SECRET:-}" ]   && ENV_VARS+=",GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}"
   [ -n "${GITHUB_CALLBACK_URL:-}" ]    && ENV_VARS+=",GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"
