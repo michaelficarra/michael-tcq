@@ -44,15 +44,19 @@ export async function switchUser(page: Page, username: string) {
 
 /**
  * Click a tab by name and wait for it to become the active one. We wait for
- * `aria-selected="true"` rather than returning immediately after click so
- * that callers that assert against the newly-active panel don't race React's
- * state commit — this has been a source of Firefox-only CI flakiness in the
- * past.
+ * the tabpanel to become visible rather than checking `aria-selected` on the
+ * tab button: the latter requires the tab's entry in the accessibility tree
+ * to be present at assertion time, and Firefox's a11y tree can be transiently
+ * empty during React commits that follow a state broadcast — which produced
+ * repeated Firefox-only CI flakes ("element(s) not found" for the tab locator
+ * itself, despite the tab being in the DOM). All tab panels are always
+ * mounted (see `MeetingPage.tsx`), so panel visibility is driven by the
+ * `hidden` attribute and is a stable signal that the tab switch has
+ * committed.
  */
 async function switchToTab(page: Page, name: string) {
-  const tab = page.getByRole('tab', { name });
-  await tab.click();
-  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name }).click();
+  await expect(page.getByRole('tabpanel', { name })).toBeVisible();
 }
 
 /** Navigate to the Agenda tab. */
