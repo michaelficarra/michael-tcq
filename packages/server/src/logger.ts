@@ -12,6 +12,8 @@
  * wrestle with transport configuration in production.
  */
 
+import { recordError } from './errorBuffer.js';
+
 /** GCP LogSeverity values, in ascending order of urgency. */
 export type Severity = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 
@@ -31,10 +33,11 @@ export function log(severity: Severity, message: string, fields: LogFields = {})
   // reflected without needing to re-import the module.
   const gitSha = process.env.GIT_SHA;
 
+  const time = new Date().toISOString();
   const entry: LogFields = {
     severity,
     message,
-    time: new Date().toISOString(),
+    time,
     service: SERVICE,
     ...(gitSha ? { gitSha } : {}),
     ...fields,
@@ -52,6 +55,13 @@ export function log(severity: Severity, message: string, fields: LogFields = {})
   }
 
   process.stdout.write(line + '\n');
+
+  // Mirror ERROR/CRITICAL entries into the in-memory ring used by the
+  // admin diagnostics endpoint. Done after stdout so a buffer failure
+  // could never block the canonical Cloud Logging stream.
+  if (severity === 'ERROR' || severity === 'CRITICAL') {
+    recordError({ timestamp: time, severity, message, fields });
+  }
 }
 
 export const debug = (message: string, fields?: LogFields): void => log('DEBUG', message, fields);

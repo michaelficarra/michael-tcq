@@ -8,6 +8,7 @@ import { isOAuthConfigured } from './mockAuth.js';
 import { getActiveConnectionCount, broadcastMeetingState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser } from './session.js';
+import { getRecentErrors, getErrorCount } from './errorBuffer.js';
 
 /**
  * REST routes for meeting management.
@@ -295,6 +296,63 @@ export function createMeetingRoutes(
     }
 
     res.json(meetings);
+  });
+
+  // Operational diagnostics for admins — surfaced on the home page so
+  // operators can spot problems without shelling into Cloud Logging.
+  // The shape is intentionally a single snapshot to keep the client
+  // polling logic simple; refresh cadence lives on the client.
+  router.get('/admin/diagnostics', (req, res) => {
+    const user = req.session.user;
+    if (!user || !user.isAdmin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const allMeetings = meetingManager.listAll();
+    // Sum unique participants across meetings (per-meeting unique, not
+    // global unique — a user in two meetings counts twice). This matches
+    // how `participantIds` is used elsewhere and keeps the aggregation cheap.
+    let totalParticipants = 0;
+    let totalMeetingConnections = 0;
+    for (const m of allMeetings) {
+      totalParticipants += m.participantIds.length;
+      totalMeetingConnections += getActiveConnectionCount(m.id);
+    }
+
+    const uptimeSeconds = Math.floor(process.uptime());
+    const mem = process.memoryUsage();
+
+    res.json({
+      process: {
+        uptimeSeconds,
+        startedAt: new Date(Date.now() - uptimeSeconds * 1000).toISOString(),
+        nodeVersion: process.version,
+        gitSha: process.env.GIT_SHA ?? null,
+        memory: {
+          rss: mem.rss,
+          heapUsed: mem.heapUsed,
+          heapTotal: mem.heapTotal,
+          external: mem.external,
+        },
+      },
+      meetings: {
+        totalActive: allMeetings.length,
+        totalParticipants,
+        totalConnections: totalMeetingConnections,
+      },
+      sockets: {
+        // `engine.clientsCount` includes connections that haven't joined a
+        // meeting room yet, so it's strictly ≥ totalConnections above.
+        // Defensively read it: the test harness passes a stub `io` without
+        // an `engine`, and we don't want diagnostics to break those tests.
+        totalClients: io.engine?.clientsCount ?? 0,
+      },
+      errors: {
+        totalSinceStart: getErrorCount(),
+        recent: getRecentErrors(),
+      },
+    });
   });
 
   // Delete a meeting (admin only).

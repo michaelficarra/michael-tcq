@@ -7,6 +7,8 @@ import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
+import { error as logError, critical as logCritical } from './logger.js';
+import { resetErrorBuffer } from './errorBuffer.js';
 
 /** A no-op in-memory store for tests. */
 class InMemoryStore implements MeetingStore {
@@ -191,6 +193,87 @@ describe('Admin endpoints', () => {
       const result = manager.updateChairs(meeting.id, []);
       expect(result).toBe(true);
       expect(manager.get(meeting.id)!.chairIds).toHaveLength(0);
+    });
+  });
+
+  describe('GET /api/admin/diagnostics', () => {
+    // The diagnostics endpoint mirrors recent error logs through the
+    // shared errorBuffer module — reset between tests so cross-test
+    // pollution can't make assertions about counts flake.
+    beforeEach(() => {
+      resetErrorBuffer();
+      // Suppress real stdout writes so test output stays clean while
+      // exercising the logger → errorBuffer pipeline.
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    });
+
+    it('rejects non-admin users with 403', async () => {
+      vi.stubEnv('ADMIN_USERNAMES', 'someone-else');
+      const res = await fetch(`${baseUrl}/api/admin/diagnostics`);
+      expect(res.status).toBe(403);
+    });
+
+    it('returns the expected shape for admin users', async () => {
+      const res = await fetch(`${baseUrl}/api/admin/diagnostics`);
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body).toMatchObject({
+        process: {
+          uptimeSeconds: expect.any(Number),
+          startedAt: expect.any(String),
+          nodeVersion: expect.any(String),
+          memory: {
+            rss: expect.any(Number),
+            heapUsed: expect.any(Number),
+            heapTotal: expect.any(Number),
+            external: expect.any(Number),
+          },
+        },
+        meetings: {
+          totalActive: 0,
+          totalParticipants: 0,
+          totalConnections: 0,
+        },
+        sockets: {
+          totalClients: expect.any(Number),
+        },
+        errors: {
+          totalSinceStart: expect.any(Number),
+          recent: expect.any(Array),
+        },
+      });
+      // gitSha is null when unset, string when set — never undefined.
+      expect(body.process.gitSha === null || typeof body.process.gitSha === 'string').toBe(true);
+    });
+
+    it('aggregates active meetings', async () => {
+      manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      manager.create([
+        { ghid: 2, ghUsername: 'b', name: 'B', organisation: '' },
+        { ghid: 3, ghUsername: 'c', name: 'C', organisation: '' },
+      ]);
+
+      const body = await (await fetch(`${baseUrl}/api/admin/diagnostics`)).json();
+      expect(body.meetings.totalActive).toBe(2);
+      // participantIds is populated by socket joins, not by meeting
+      // creation, so without a real socket the count stays at 0.
+      expect(body.meetings.totalParticipants).toBe(0);
+      expect(body.meetings.totalConnections).toBe(0);
+    });
+
+    it('surfaces logged ERROR/CRITICAL entries through the diagnostics endpoint', async () => {
+      logError('http_request_error', { error: { message: 'simulated failure' } });
+      logCritical('process_panic');
+
+      const body = await (await fetch(`${baseUrl}/api/admin/diagnostics`)).json();
+      expect(body.errors.totalSinceStart).toBe(2);
+      expect(body.errors.recent).toHaveLength(2);
+      // Newest-first ordering.
+      expect(body.errors.recent[0].message).toBe('process_panic');
+      expect(body.errors.recent[0].severity).toBe('CRITICAL');
+      expect(body.errors.recent[1].message).toBe('http_request_error');
+      expect(body.errors.recent[1].detail).toBe('simulated failure');
     });
   });
 

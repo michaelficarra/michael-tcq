@@ -245,6 +245,8 @@ Every entry carries `severity`, `message`, `time`, `service`, and — when `GIT_
 
 **Process-level error handlers.** `uncaughtException` and `unhandledRejection` handlers log at `CRITICAL` and exit with code 1 so Cloud Run recycles the instance rather than letting the process continue in an undefined state. An Express error-handling middleware (`errorHandler.ts`) catches thrown errors from routes (including rejected async handlers in Express 5), logs the stack at `ERROR` alongside the `httpRequest` shape, and responds with a 500 JSON body.
 
+**In-memory error ring (`errorBuffer.ts`).** Every `ERROR` or `CRITICAL` log line is mirrored into a 50-entry FIFO ring kept in process memory, alongside a monotonic counter of total errors recorded since startup. The ring is exposed through `GET /api/admin/diagnostics` so the admin diagnostics panel on the home page can surface recent failures without requiring access to Cloud Logging. State is process-local — when Cloud Run cycles the instance the ring resets, which is acceptable because the canonical record of errors lives in Cloud Logging. The buffer is bounded so a flood of errors can't grow memory unbounded; older entries are evicted FIFO and the counter still increments so admins can see that errors are happening even if the entries themselves have rolled off.
+
 ## Meeting ID Generation
 
 Meeting IDs are generated using the `human-id` library, which produces three lowercase words joined by hyphens (e.g. `bright-pine-lake`, `calm-wave-fox`). With over 15 million combinations, collisions are vanishingly unlikely. If a collision does occur with an active meeting, a new ID is generated.

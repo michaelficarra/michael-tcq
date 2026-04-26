@@ -10,6 +10,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { AdminPanel } from '../components/AdminPanel.js';
+import { DiagnosticsPanel } from '../components/DiagnosticsPanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
 import { UserMenu } from '../components/UserMenu.js';
@@ -101,8 +102,13 @@ function JoinTab() {
         <NewMeetingCard />
       </div>
 
-      {/* Admin panel — only shown for admin users */}
-      {isAdmin && <AdminPanel />}
+      {/* Admin sections — only shown for admin users */}
+      {isAdmin && (
+        <>
+          <AdminPanel />
+          <DiagnosticsPanel />
+        </>
+      )}
     </div>
   );
 }

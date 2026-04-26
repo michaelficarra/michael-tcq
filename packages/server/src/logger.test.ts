@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { log, info, warning, serialiseError, formatLatency } from './logger.js';
+import { log, info, warning, error, critical, serialiseError, formatLatency } from './logger.js';
+import { getRecentErrors, getErrorCount, resetErrorBuffer } from './errorBuffer.js';
 
 function captureStdout(): {
   restore: () => void;
@@ -61,6 +62,35 @@ describe('logger.log', () => {
     const entry = JSON.parse(capture.lines()[0]);
     expect(entry.severity).toBe('WARNING');
     expect(entry.reason).toBe('x');
+  });
+
+  describe('errorBuffer mirroring', () => {
+    beforeEach(() => {
+      resetErrorBuffer();
+    });
+
+    it('records ERROR entries to the buffer', () => {
+      const before = getErrorCount();
+      error('boom', { foo: 1 });
+      expect(getErrorCount()).toBe(before + 1);
+      const [entry] = getRecentErrors();
+      expect(entry.severity).toBe('ERROR');
+      expect(entry.message).toBe('boom');
+    });
+
+    it('records CRITICAL entries to the buffer', () => {
+      critical('on_fire');
+      const [entry] = getRecentErrors();
+      expect(entry.severity).toBe('CRITICAL');
+      expect(entry.message).toBe('on_fire');
+    });
+
+    it('does not record INFO/WARNING entries', () => {
+      info('routine');
+      warning('soft');
+      expect(getErrorCount()).toBe(0);
+      expect(getRecentErrors()).toHaveLength(0);
+    });
   });
 });
 
