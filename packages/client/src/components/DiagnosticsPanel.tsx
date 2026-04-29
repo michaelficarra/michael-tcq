@@ -96,7 +96,7 @@ function ProcessSection({ info }: { info: ProcessInfo }) {
       <Row label="CPU time" value={formatUptime(Math.floor(info.cpuSeconds))} />
       <Row label="Node" value={info.nodeVersion} />
       <Row label="Git SHA" value={info.gitSha ? <code className="font-mono">{info.gitSha.slice(0, 12)}</code> : '—'} />
-      <Row label="RSS" value={formatBytes(info.memory.rss)} />
+      <Row label={<abbr title="Resident Set Size">RSS</abbr>} value={formatBytes(info.memory.rss)} />
       <Row label="Heap" value={`${formatBytes(info.memory.heapUsed)} / ${formatBytes(info.memory.heapTotal)}`} />
     </Section>
   );
@@ -179,7 +179,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
       <dt className="text-stone-500 dark:text-stone-400">{label}</dt>
