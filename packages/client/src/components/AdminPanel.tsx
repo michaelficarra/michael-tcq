@@ -86,7 +86,10 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
             </thead>
             <tbody>
               {meetings.map((m) => (
-                <tr key={m.id} className="border-b border-stone-100 dark:border-stone-700 last:border-b-0">
+                <tr
+                  key={m.id}
+                  className="border-b border-stone-100 dark:border-stone-700 last:border-b-0 hover:bg-stone-100 dark:hover:bg-stone-800/50 transition-colors"
+                >
                   <td className="px-4 py-2">
                     <Link
                       to={`/meeting/${m.id}`}

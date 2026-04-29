@@ -79,7 +79,7 @@ export function DiagnosticsPanel({ refreshTick }: { refreshTick: number }) {
       </h2>
 
       <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
           <ProcessSection info={data.process} />
           <MeetingsSection
             totalActive={data.meetings.totalActive}
@@ -214,7 +214,7 @@ function ErrorsSection({ totalSinceStart, recent }: { totalSinceStart: number; r
         <div className="max-h-48 overflow-y-auto border border-stone-200 dark:border-stone-700 rounded text-xs">
           <ul className="divide-y divide-stone-100 dark:divide-stone-700">
             {recent.map((e, i) => (
-              <li key={i} className="px-2 py-1.5 flex gap-2">
+              <li key={i} className="px-2 py-1.5 flex gap-2 even:bg-stone-100 dark:even:bg-stone-800/50">
                 <span
                   className={`shrink-0 font-medium uppercase ${
                     e.severity === 'CRITICAL' ? 'text-red-700 dark:text-red-300' : 'text-red-600 dark:text-red-400'
@@ -250,14 +250,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">
         {title}
       </h3>
-      <dl className="text-sm space-y-1">{children}</dl>
+      <dl className="text-sm">{children}</dl>
     </div>
   );
 }
 
 function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className="flex justify-between gap-4 px-2 py-0.5 even:bg-stone-100 dark:even:bg-stone-800/50">
       <dt className="text-stone-500 dark:text-stone-400">{label}</dt>
       <dd className="text-stone-700 dark:text-stone-300 text-right">{value}</dd>
     </div>
