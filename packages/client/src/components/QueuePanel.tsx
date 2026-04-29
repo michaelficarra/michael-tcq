@@ -116,31 +116,63 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
     useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
-  // Track whether the current drag is a non-chair self-drag (downward only).
-  // When true, the drag modifier clamps upward movement.
-  const restrictUpwardRef = useRef(false);
+  // Holds the index range the dragged entry is permitted to occupy, plus
+  // its start index. `null` means unrestricted (chair, or no active drag).
+  // Non-chair owners are bounded above by the top of their own contiguous
+  // block — they may reorder among their own entries but never jump ahead
+  // of someone else's entry.
+  const dragBoundsRef = useRef<{
+    currentIndex: number;
+    minIndex: number;
+    maxIndex: number;
+  } | null>(null);
 
-  /** Called when a drag starts — determine if we need to restrict direction. */
+  /** Called when a drag starts — compute the legal index range for the move. */
   function handleDragStart(event: DragStartEvent) {
     if (!meeting || !user) return;
-    const entry = meeting.queue.entries[event.active.id as string];
-    if (!entry) return;
-    const isOwner = entry.userId === userKey(user);
-    // Restrict upward movement for non-chair owners
-    restrictUpwardRef.current = isOwner && !isChair;
+    const entries = meeting.queue.orderedIds.map((id) => meeting.queue.entries[id]).filter(Boolean);
+    const currentIndex = entries.findIndex((e) => e.id === event.active.id);
+    if (currentIndex === -1) return;
+
+    if (isChair) {
+      // Chairs may move any entry anywhere — no clamp needed.
+      dragBoundsRef.current = null;
+      return;
+    }
+
+    const ownerKey = userKey(user);
+    const entry = entries[currentIndex];
+    if (entry.userId !== ownerKey) {
+      // Non-owner non-chair shouldn't be able to drag (no handle), but be
+      // defensive: pin the entry in place.
+      dragBoundsRef.current = { currentIndex, minIndex: currentIndex, maxIndex: currentIndex };
+      return;
+    }
+
+    // Walk upward from the entry to find the top of the contiguous block of
+    // own-owned entries above it. The entry can move up to that index but
+    // no further. Downward movement is unconstrained.
+    let minIndex = currentIndex;
+    for (let i = currentIndex - 1; i >= 0 && entries[i].userId === ownerKey; i--) {
+      minIndex = i;
+    }
+    dragBoundsRef.current = { currentIndex, minIndex, maxIndex: entries.length - 1 };
   }
 
   /**
-   * Custom dnd-kit modifier that prevents dragging above the starting
-   * position. Used for non-chair participants who can only defer (move
-   * down), not jump ahead.
+   * Custom dnd-kit modifier that clamps the dragged entry's vertical
+   * translation so it cannot leave the index range computed at drag start.
+   * Heights are taken from the active node; rows in this list are roughly
+   * uniform so this is a close approximation. The server is the
+   * authoritative validator regardless.
    */
-  const restrictDownwardOnly: Modifier = useCallback(({ transform }) => {
-    if (restrictUpwardRef.current && transform.y < 0) {
-      // Clamp upward movement to zero
-      return { ...transform, y: 0 };
-    }
-    return transform;
+  const restrictDragBounds: Modifier = useCallback(({ transform, activeNodeRect }) => {
+    const bounds = dragBoundsRef.current;
+    if (!bounds || !activeNodeRect) return transform;
+    const h = activeNodeRect.height;
+    const minY = (bounds.minIndex - bounds.currentIndex) * h;
+    const maxY = (bounds.maxIndex - bounds.currentIndex) * h;
+    return { ...transform, y: Math.max(minY, Math.min(maxY, transform.y)) };
   }, []);
 
   // Whether the restore queue textarea is open
@@ -219,12 +251,22 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
    */
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    // Clear bounds whether or not we end up dispatching, so a follow-up
+    // chair drag isn't accidentally constrained by a stale entry.
+    const bounds = dragBoundsRef.current;
+    dragBoundsRef.current = null;
+
     if (!over || active.id === over.id || !meeting) return;
 
     const items = queuedSpeakers;
     const oldIndex = items.findIndex((e) => e.id === active.id);
     const newIndex = items.findIndex((e) => e.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
+
+    // If bounds were active, reject drops outside the legal range without
+    // dispatching — the entry visually snaps back. The server would reject
+    // anyway, but checking here avoids an optimistic update that flickers.
+    if (bounds && (newIndex < bounds.minIndex || newIndex > bounds.maxIndex)) return;
 
     // Determine what entry the dragged item should come after.
     // If dropped at position 0, afterId is null (move to beginning).
@@ -513,7 +555,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            modifiers={[restrictDownwardOnly]}
+            modifiers={[restrictDragBounds]}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
@@ -704,8 +746,16 @@ function SortableQueueEntry({
     }
   }, []);
 
-  // Chairs can drag any entry; participants can drag their own entries
-  const canDrag = isChair || isOwnEntry;
+  // Whether this entry has any legal upward / downward move from its
+  // current position. Chairs may move past anyone; non-chair owners may
+  // only move up across their own contiguous block above.
+  const canMoveUp = isChair ? index > 0 : isOwnEntry && index > 0 && queue[index - 1].userId === entry.userId;
+  const canMoveDown = (isChair || isOwnEntry) && index < queue.length - 1;
+  // Drag handle is only rendered when at least one direction is possible —
+  // this naturally hides it for non-owners and for the no-valid-moves case
+  // (e.g. a single-entry queue, or an own entry pinned at the bottom under
+  // a non-owner entry).
+  const canDrag = (isChair || isOwnEntry) && (canMoveUp || canMoveDown);
 
   /**
    * Compute which types this entry can legally be changed to without
@@ -861,14 +911,14 @@ function SortableQueueEntry({
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
       } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
     >
-      {/* Drag handle — chairs can drag any entry, participants their own */}
+      {/* Drag handle — rendered only when the entry has at least one legal
+          move from its current position. The cursor advertises which
+          directions are legal: ns-resize for both, n-resize for up only,
+          s-resize for down only. */}
       {canDrag && (
         <span
-          // Chairs can drag entries in either direction, so ns-resize advertises vertical motion both ways.
-          // Non-chairs with canDrag === true always own this entry, and own entries can only move downward,
-          // so s-resize advertises the single legal direction.
           className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
-            isChair ? 'cursor-ns-resize' : 'cursor-s-resize'
+            canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
           } select-none text-sm leading-none presentation-hidden`}
           aria-label={`Drag to reorder: ${entry.topic}`}
           {...attributes}

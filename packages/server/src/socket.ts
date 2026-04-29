@@ -691,23 +691,42 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Non-chair owners can only move their entry downward (defer).
-      // Validate that the target position (afterId) is at or after
-      // the entry's current position.
+      // Non-chair owners may move their entry downward freely (defer), and
+      // upward only across other entries they themselves own — i.e. they may
+      // reorder among their own contiguous block but never jump ahead of
+      // someone else.
       if (isOwner && !isChairUser) {
         const meeting = meetingManager.get(joinedMeetingId);
         if (meeting) {
           const currentIndex = meeting.queue.orderedIds.indexOf(parsed.id);
+          // Compute the target index after the move, mirroring the math in
+          // meetingManager.reorderQueueEntry: the entry is removed first,
+          // then inserted just after `afterId` (or at index 0 if null).
+          let targetIndex: number;
           if (parsed.afterId === null) {
-            // Moving to the beginning — that's moving up, not allowed
-            socket.emit('error', 'You can only move your entry to a later position');
-            return;
+            targetIndex = 0;
+          } else {
+            const afterIndex = meeting.queue.orderedIds.indexOf(parsed.afterId);
+            if (afterIndex === -1) {
+              // afterId isn't in the queue; let reorderQueueEntry below
+              // produce the canonical "Invalid queue reorder" error.
+              targetIndex = currentIndex;
+            } else {
+              targetIndex = afterIndex < currentIndex ? afterIndex + 1 : afterIndex;
+            }
           }
-          const afterIndex = meeting.queue.orderedIds.indexOf(parsed.afterId);
-          if (afterIndex < currentIndex) {
-            // Target is above current position — moving up, not allowed
-            socket.emit('error', 'You can only move your entry to a later position');
-            return;
+          // Only upward moves require validation; downward and no-op moves
+          // are always allowed for an owner.
+          if (targetIndex < currentIndex) {
+            const ownerKey = userKey(user);
+            // Every entry being jumped over (the slice the moving entry
+            // would pass through) must belong to the same owner.
+            const jumpedOver = meeting.queue.orderedIds.slice(targetIndex, currentIndex);
+            const allOwned = jumpedOver.every((id) => meeting.queue.entries[id]?.userId === ownerKey);
+            if (!allOwned) {
+              socket.emit('error', 'You can only move your entry above your own entries');
+              return;
+            }
           }
         }
       }

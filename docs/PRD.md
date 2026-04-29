@@ -190,7 +190,9 @@ The user's own queue entries are visually distinguished with a coloured left bor
 
 ### Queue Reordering
 
-Chairs can drag-and-drop any queue entry to reorder it. Participants can drag their own entries, but only downward (deferring their position — they cannot jump ahead of others).
+Chairs can drag-and-drop any queue entry to reorder it. Participants can drag their own entries downward freely (deferring their position) and upward only across other entries they themselves own — that is, they may reorder among their own contiguous block but never jump ahead of someone else's entry.
+
+The hover cursor on each drag handle reflects the legal directions for that specific entry: a north-south double arrow when both up and down are available, a south arrow when only deferring is possible, and a north arrow when only upward movement within the participant's own block is possible. The handle is omitted entirely when no move is possible (for example, a chair viewing a single-entry queue, or a participant whose only entry sits at the bottom under someone else's).
 
 When an entry is moved, its type changes based on direction:
 

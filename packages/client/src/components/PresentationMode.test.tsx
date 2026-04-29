@@ -114,10 +114,15 @@ describe('Presentation mode', () => {
     });
 
     it('hides drag handles on queue entries', () => {
+      // Two entries so the drag handle renders — with a single-entry queue
+      // there are no valid moves and the handle is omitted entirely.
       const meeting = makeMeeting({
         queue: {
-          entries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
-          orderedIds: ['q1'],
+          entries: {
+            q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' },
+            q2: { id: 'q2', type: 'topic', topic: 'Other topic', userId: 'alice' },
+          },
+          orderedIds: ['q1', 'q2'],
           closed: false,
         },
       });
@@ -128,8 +133,11 @@ describe('Presentation mode', () => {
         ),
       );
 
-      const handle = screen.getByLabelText(/drag to reorder/i);
-      expect(handle.className).toContain('presentation-hidden');
+      const handles = screen.getAllByLabelText(/drag to reorder/i);
+      expect(handles).not.toHaveLength(0);
+      for (const handle of handles) {
+        expect(handle.className).toContain('presentation-hidden');
+      }
     });
 
     it('hides edit/delete buttons on queue entries', () => {

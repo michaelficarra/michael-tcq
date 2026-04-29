@@ -711,32 +711,175 @@ describe('QueuePanel', () => {
     expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
   });
 
-  // Chairs can drag entries up or down, so the cursor advertises both directions.
-  it('shows a north-south resize cursor on drag handles for chairs', () => {
+  // -- Drag-handle cursor: chair --
+  // The cursor reflects the directions the entry may actually move in.
+
+  it('shows ns-resize on a chair drag handle for a middle entry', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } }, ['q1']),
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'Middle', userId: 'bob' },
+          q3: { id: 'q3', type: 'topic', topic: 'Last', userId: 'bob' },
+        },
+        ['q1', 'q2', 'q3'],
+      ),
     });
     renderQueue(meeting, chairUser);
 
-    const handle = screen.getByLabelText(/drag to reorder: first/i);
+    const handle = screen.getByLabelText(/drag to reorder: middle/i);
     expect(handle.className).toMatch(/cursor-ns-resize/);
-    expect(handle.className).not.toMatch(/cursor-s-resize/);
+    expect(handle.className).not.toMatch(/cursor-n-resize\b/);
+    expect(handle.className).not.toMatch(/cursor-s-resize\b/);
   });
 
-  // Non-chairs can only drag their own entry downward, so the cursor advertises only south.
-  it('shows a south-only resize cursor on drag handles for non-chairs on their own entry', () => {
+  it('shows s-resize on a chair drag handle for the top entry', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser, bob: otherUser },
       chairIds: ['alice'],
-      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'First', userId: 'bob' } }, ['q1']),
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'Top', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'Bottom', userId: 'bob' },
+        },
+        ['q1', 'q2'],
+      ),
+    });
+    renderQueue(meeting, chairUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: top/i);
+    expect(handle.className).toMatch(/cursor-s-resize/);
+    expect(handle.className).not.toMatch(/cursor-ns-resize/);
+  });
+
+  it('shows n-resize on a chair drag handle for the bottom entry', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'Top', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'Bottom', userId: 'bob' },
+        },
+        ['q1', 'q2'],
+      ),
+    });
+    renderQueue(meeting, chairUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: bottom/i);
+    expect(handle.className).toMatch(/cursor-n-resize/);
+    expect(handle.className).not.toMatch(/cursor-ns-resize/);
+  });
+
+  it('hides the chair drag handle on a single-entry queue (no valid moves)', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Only', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
+  });
+
+  // -- Drag-handle cursor: non-chair owner --
+
+  it('shows ns-resize on a non-chair drag handle when own is above and something is below', () => {
+    // [other, mine, mine, other] — viewer is bob (non-chair). The middle
+    // own entry has bob's own entry directly above and an other-user entry
+    // below, so it can move both up (within its own block) and down.
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'AliceTop', userId: 'alice' },
+          q2: { id: 'q2', type: 'topic', topic: 'BobOne', userId: 'bob' },
+          q3: { id: 'q3', type: 'topic', topic: 'BobTwo', userId: 'bob' },
+          q4: { id: 'q4', type: 'topic', topic: 'AliceBottom', userId: 'alice' },
+        },
+        ['q1', 'q2', 'q3', 'q4'],
+      ),
     });
     renderQueue(meeting, otherUser);
 
-    const handle = screen.getByLabelText(/drag to reorder: first/i);
+    const handle = screen.getByLabelText(/drag to reorder: bobtwo/i);
+    expect(handle.className).toMatch(/cursor-ns-resize/);
+  });
+
+  it('shows s-resize on a non-chair drag handle when no own is above but something is below', () => {
+    // [other, mine, other] — bob's only own entry has alice's entry above
+    // (no upward movement allowed) and alice's entry below (can defer).
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'AliceTop', userId: 'alice' },
+          q2: { id: 'q2', type: 'topic', topic: 'BobMid', userId: 'bob' },
+          q3: { id: 'q3', type: 'topic', topic: 'AliceBottom', userId: 'alice' },
+        },
+        ['q1', 'q2', 'q3'],
+      ),
+    });
+    renderQueue(meeting, otherUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: bobmid/i);
     expect(handle.className).toMatch(/cursor-s-resize/);
     expect(handle.className).not.toMatch(/cursor-ns-resize/);
+  });
+
+  it('shows n-resize on a non-chair drag handle when own is above and nothing is below', () => {
+    // [mine, mine] at the bottom — bob may move up within his block but
+    // there's nothing below to defer to.
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'BobOne', userId: 'bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'BobTwo', userId: 'bob' },
+        },
+        ['q1', 'q2'],
+      ),
+    });
+    renderQueue(meeting, otherUser);
+
+    const handle = screen.getByLabelText(/drag to reorder: bobtwo/i);
+    expect(handle.className).toMatch(/cursor-n-resize/);
+    expect(handle.className).not.toMatch(/cursor-ns-resize/);
+  });
+
+  it('hides the non-chair drag handle when no own is above and nothing is below', () => {
+    // [other, mine] — bob's only own entry is at the bottom under alice's.
+    // No move is possible, so the handle is hidden entirely.
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf(
+        {
+          q1: { id: 'q1', type: 'topic', topic: 'AliceTop', userId: 'alice' },
+          q2: { id: 'q2', type: 'topic', topic: 'BobLast', userId: 'bob' },
+        },
+        ['q1', 'q2'],
+      ),
+    });
+    renderQueue(meeting, otherUser);
+
+    expect(screen.queryByLabelText(/drag to reorder: boblast/i)).not.toBeInTheDocument();
+  });
+
+  it('hides the non-chair drag handle when the queue contains only their entry', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'BobOnly', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, otherUser);
+
+    expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
   });
 
   // -- Accessibility --
