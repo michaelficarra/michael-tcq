@@ -62,4 +62,4 @@ ENV NODE_ENV=production
 EXPOSE 8080
 
 # Run the compiled server
-CMD ["node", "packages/server/dist/index.js"]
+CMD ["npm", "start", "-w", "packages/server"]
