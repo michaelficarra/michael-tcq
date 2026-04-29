@@ -150,6 +150,12 @@ function AgendaItemFinishedEntry({
           />
         </div>
         <ParticipantList participantIds={entry.participantIds} users={users} />
+        {entry.conclusion && (
+          <div className="mt-1.5 text-sm text-stone-700 dark:text-stone-300">
+            <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Conclusion:</span>
+            <InlineMarkdown>{entry.conclusion}</InlineMarkdown>
+          </div>
+        )}
         {entry.remainingQueue && (
           <details className="mt-1.5">
             <summary className="text-xs text-stone-400 dark:text-stone-500 cursor-pointer hover:text-stone-600 dark:hover:text-stone-300">
@@ -399,6 +405,10 @@ function serialiseLog(meeting: MeetingState): string {
         );
         if (entry.participantIds.length > 0) {
           lines.push(`Participants: ${parts}`);
+        }
+        if (entry.conclusion) {
+          lines.push('');
+          lines.push(`**Conclusion:** ${entry.conclusion}`);
         }
         if (entry.remainingQueue) {
           lines.push('');

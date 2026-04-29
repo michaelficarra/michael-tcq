@@ -73,7 +73,7 @@ If a user navigates to a non-existent meeting, a clear error page is shown with 
 3. The chair clicks **Start Meeting** to advance to the first agenda item. The agenda item's first presenter automatically becomes the current speaker.
 4. Participants enter the queue to discuss the item.
 5. The chair advances through the queue.
-6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item** to advance, and the next item's first presenter becomes the current speaker. The queue and current topic are cleared. If entries remain in the queue, a confirmation dialogue warns that they will be cleared and shows the entry count.
+6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item**. A confirmation dialogue always opens (regardless of queue state) so the chair can record a free-form conclusion for the outgoing item; if entries remain in the queue, the dialogue also warns that they will be cleared and shows the entry count. On confirming, the next item's first presenter becomes the current speaker, the queue and current topic are cleared, the conclusion is saved on the outgoing item, and a snapshot of the conclusion appears in the meeting log for that "Finished" entry.
 7. This repeats until the agenda is exhausted.
 
 Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). The **Next Agenda Item** button is hidden when on the last agenda item.
@@ -96,6 +96,7 @@ The agenda is an ordered list of entries. Most entries are **agenda items**; int
 - **Name** — the title of the item
 - **Presenters** — one or more GitHub users who will introduce/present it (each shown with their GitHub avatar). An item must have at least one presenter; the first presenter becomes the current speaker when the meeting advances to the item.
 - **Duration** (optional) — a duration in minutes. Before an item is reached, this is an estimate of how long it will take; once the chair advances past the item, the estimate is automatically replaced with the actual elapsed time, rounded up to the nearest minute, so the agenda's estimates self-correct as the meeting progresses. The agenda list labels the value as "Estimate" for current and future items and as "Duration" for past items.
+- **Conclusion** (optional) — free-form text recording what was decided or concluded for the item. It is set or edited only via the Next Agenda Item confirmation dialogue (see "Advancing the Agenda" below); it is shown in the meeting log under the corresponding "Finished" entry and underneath the item in the agenda list once the item has been advanced past. If an item that already has a conclusion becomes the current item again (e.g. via reorder), the dialogue's textarea is pre-populated with the previously stored conclusion so the chair can edit or replace it.
 
 ### Chair Management
 
@@ -122,7 +123,7 @@ Agenda item names and queue entry topics support a limited subset of inline mark
 
 The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and the duration if set — labelled as an "Estimate" for current and future items and as a "Duration" for past items (since the value has been overwritten with the actual elapsed time). Items where the current user is one of the presenters are visually distinguished with a coloured left border.
 
-The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder.
+The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder. Past items that have a saved conclusion render the conclusion text underneath the item name (with inline markdown rendered).
 
 ### Sessions
 

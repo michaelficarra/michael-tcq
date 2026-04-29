@@ -126,6 +126,44 @@ describe('LogPanel', () => {
     expect(screen.queryByText('Remaining queue')).toBeNull();
   });
 
+  it('renders the conclusion on agenda-item-finished when present', () => {
+    renderLog(
+      makeMeeting({
+        log: [
+          {
+            type: 'agenda-item-finished',
+            timestamp: new Date().toISOString(),
+            chairId: 'alice',
+            itemName: 'Proposal A',
+            duration: 5 * 60 * 1000,
+            participantIds: [],
+            conclusion: 'Decided to advance to stage 3',
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText('Conclusion:')).toBeTruthy();
+    expect(screen.getByText('Decided to advance to stage 3')).toBeTruthy();
+  });
+
+  it('does not render Conclusion label when conclusion is absent', () => {
+    renderLog(
+      makeMeeting({
+        log: [
+          {
+            type: 'agenda-item-finished',
+            timestamp: new Date().toISOString(),
+            chairId: 'alice',
+            itemName: 'Proposal A',
+            duration: 5 * 60 * 1000,
+            participantIds: [],
+          },
+        ],
+      }),
+    );
+    expect(screen.queryByText('Conclusion:')).toBeNull();
+  });
+
   it('renders a compact topic-discussed entry for a single speaker', () => {
     const speakers: TopicSpeaker[] = [
       {

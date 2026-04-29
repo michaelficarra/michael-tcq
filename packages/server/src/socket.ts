@@ -975,6 +975,21 @@ export function registerSocketHandlers(
         // becomes its realised duration on completion.
         outgoingItem.duration = Math.ceil(durationMs / 60000);
 
+        // Persist the chair's conclusion onto the outgoing item, if provided.
+        // Trim and treat empty as "no conclusion" so revisits start from a
+        // clean slate when cleared. `undefined` (field omitted) leaves any
+        // existing conclusion untouched — but in the dialog flow the client
+        // always sends the field, so this branch only matters for callers
+        // that emit without a conclusion (e.g. tests).
+        let conclusionForLog: string | undefined;
+        if (parsed.conclusion !== undefined) {
+          const trimmed = parsed.conclusion.trim();
+          outgoingItem.conclusion = trimmed.length > 0 ? trimmed : undefined;
+          conclusionForLog = outgoingItem.conclusion;
+        } else {
+          conclusionForLog = outgoingItem.conclusion;
+        }
+
         // Append agenda-item-finished
         meeting.log.push({
           type: 'agenda-item-finished',
@@ -984,6 +999,7 @@ export function registerSocketHandlers(
           duration: durationMs,
           participantIds,
           remainingQueue,
+          conclusion: conclusionForLog,
         });
       }
 

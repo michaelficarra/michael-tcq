@@ -122,6 +122,23 @@ export async function startMeeting(page: Page) {
 }
 
 /**
+ * Advance past the current agenda item via the "Next Agenda Item" button.
+ * Always opens the confirmation dialog (so the chair can record a
+ * conclusion); this helper fills the conclusion if one is provided and
+ * then clicks Advance. Caller must already be on the Queue tab.
+ */
+export async function advanceAgenda(page: Page, conclusion?: string) {
+  await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+  const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+  await expect(dialog).toBeVisible();
+  if (conclusion !== undefined) {
+    await dialog.getByLabel(/conclusion/i).fill(conclusion);
+  }
+  await dialog.getByRole('button', { name: 'Advance' }).click();
+  await expect(dialog).not.toBeVisible();
+}
+
+/**
  * Add a queue entry by clicking one of the speaker control buttons.
  * Returns when the entry appears in the queue.
  */

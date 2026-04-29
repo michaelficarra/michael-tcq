@@ -2094,6 +2094,78 @@ describe('Socket.IO integration', () => {
         expect(finished.remainingQueue).toBeUndefined();
       }
     });
+
+    it('persists conclusion onto outgoing item and embeds it in the finished log entry', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start meeting (no outgoing item yet — conclusion is ignored on this hop)
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit(
+        'meeting:nextAgendaItem',
+        { currentAgendaItemId: null, conclusion: 'ignored — nothing to conclude' },
+        () => {},
+      );
+      let state = await statePromise;
+
+      // Advance past First with a conclusion
+      const firstId = state.current.agendaItemId!;
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId, conclusion: '  Decided X.  ' }, () => {});
+      state = await statePromise;
+
+      // Conclusion is trimmed and stored on the agenda item
+      const firstItem = state.agenda.find(
+        (e): e is import('@tcq/shared').AgendaItem => e.kind === 'item' && e.id === firstId,
+      );
+      expect(firstItem?.conclusion).toBe('Decided X.');
+
+      // Conclusion is embedded in the snapshot log entry
+      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      expect(finished).toBeDefined();
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.conclusion).toBe('Decided X.');
+      }
+    });
+
+    it('clears the conclusion when the chair submits a blank value', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Third', [owner]);
+
+      // Pre-seed a conclusion as if a previous advancement set one (e.g. revisit case).
+      const m = ctx.meetingManager.get(meeting.id)!;
+      const firstAgendaItem = m.agenda.find((e): e is import('@tcq/shared').AgendaItem => e.kind === 'item');
+      firstAgendaItem!.conclusion = 'old conclusion';
+
+      const client = await joinMeeting(meeting.id);
+
+      // Start
+      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
+      let state = await statePromise;
+
+      const firstId = state.current.agendaItemId!;
+
+      // Advance past First with an empty conclusion (chair cleared the textarea).
+      statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId, conclusion: '   ' }, () => {});
+      state = await statePromise;
+
+      const firstItem = state.agenda.find(
+        (e): e is import('@tcq/shared').AgendaItem => e.kind === 'item' && e.id === firstId,
+      );
+      expect(firstItem?.conclusion).toBeUndefined();
+
+      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.conclusion).toBeUndefined();
+      }
+    });
   });
 
   describe('queue:setClosed', () => {

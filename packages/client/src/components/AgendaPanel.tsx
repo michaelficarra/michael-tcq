@@ -520,6 +520,15 @@ function SortableAgendaItem({
             {formatShortDuration(item.duration)}
           </span>
         )}
+
+        {/* Conclusion — only shown for past items that have one. Authored
+            by the chair via the next-agenda confirmation dialog. */}
+        {isPast && item.conclusion && (
+          <div className="text-sm text-stone-600 dark:text-stone-400 mt-0.5">
+            <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Conclusion:</span>
+            <InlineMarkdown>{item.conclusion}</InlineMarkdown>
+          </div>
+        )}
       </div>
 
       {/* Edit and delete buttons — chairs only */}

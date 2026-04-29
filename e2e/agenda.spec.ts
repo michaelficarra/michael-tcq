@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { createMeeting, goToAgendaTab, addAgendaItem, switchUser } from './helpers.js';
+import {
+  createMeeting,
+  goToAgendaTab,
+  addAgendaItem,
+  switchUser,
+  startMeeting,
+  goToQueueTab,
+  goToLogTab,
+  advanceAgenda,
+} from './helpers.js';
 
 test.describe('Agenda tab', () => {
   test.describe('Chair Management', () => {
@@ -385,6 +394,36 @@ test.describe('Agenda tab', () => {
       const panel = page.getByRole('tabpanel', { name: 'Agenda' });
       await expect(panel.getByText('Block')).not.toBeVisible();
       await expect(panel.getByText('Kept item')).toBeVisible();
+    });
+  });
+
+  test.describe('Conclusions', () => {
+    test('chair can record a conclusion when advancing past an agenda item, and it shows in the log and agenda', async ({
+      page,
+    }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+      await addAgendaItem(page, 'First Item', 'admin');
+      await addAgendaItem(page, 'Second Item', 'admin');
+      await startMeeting(page);
+
+      // Dialog appears even with an empty queue; record a conclusion.
+      await advanceAgenda(page, 'Decided to revisit next week');
+
+      // Current item moved on
+      const queuePanel = page.getByRole('tabpanel', { name: 'Queue' });
+      await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Second Item');
+
+      // Log: finished entry shows the conclusion
+      await goToLogTab(page);
+      const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+      await expect(logPanel.getByText('Conclusion:')).toBeVisible();
+      await expect(logPanel.getByText('Decided to revisit next week')).toBeVisible();
+
+      // Agenda: past item shows the conclusion under its name
+      await goToAgendaTab(page);
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Decided to revisit next week')).toBeVisible();
     });
   });
 });

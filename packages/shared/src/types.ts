@@ -28,6 +28,13 @@ export interface AgendaItem {
    * rounded up, written back on completion.
    */
   duration?: number;
+  /**
+   * Free-form chair-authored conclusion for this agenda item. Set or
+   * edited via the next-agenda-item confirmation dialog at the moment the
+   * agenda is advanced past this item. Empty string and absent are
+   * equivalent and both mean "no conclusion".
+   */
+  conclusion?: string;
 }
 
 /**
@@ -132,6 +139,11 @@ export interface AgendaItemFinishedLog extends LogEntryBase {
    * Format: "Type: topic (username)" per line.
    */
   remainingQueue?: string;
+  /**
+   * Conclusion text snapshot, captured at the moment of advancement.
+   * Absent (or empty) when the chair left the conclusion field blank.
+   */
+  conclusion?: string;
 }
 
 export interface TopicDiscussedLog extends LogEntryBase {

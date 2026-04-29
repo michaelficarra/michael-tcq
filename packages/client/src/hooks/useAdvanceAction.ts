@@ -25,11 +25,22 @@ const DEBOUNCE_MS = 400;
 const COOLDOWN_MS = 2000;
 
 /**
+ * Optional extras the caller can attach to a `meeting:nextAgendaItem` fire.
+ * Only `conclusion` is supported today; ignored for `queue:next`.
+ */
+export interface AdvanceExtras {
+  /** Conclusion text for the outgoing agenda item (next-agenda only). */
+  conclusion?: string;
+}
+
+/**
  * Returns a `fire` function that emits an advancement event with the current
  * meeting state as a precondition payload, and a `disabled` flag that is
- * `true` while the debounce or cooldown period is active.
+ * `true` while the debounce or cooldown period is active. For
+ * `meeting:nextAgendaItem`, `fire` accepts optional extras (e.g. the
+ * chair-authored conclusion) which are forwarded into the emit payload.
  */
-export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disabled: boolean } {
+export function useAdvanceAction(event: AdvanceEvent): { fire: (extras?: AdvanceExtras) => void; disabled: boolean } {
   const socket = useSocket();
   const { meeting, user } = useMeetingState();
 
@@ -102,44 +113,54 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: () => void; disab
     };
   }, []);
 
-  const fire = useCallback(() => {
-    if (!socket || !meeting) return;
-    if (Date.now() < cooldownUntilRef.current) return;
+  const fire = useCallback(
+    (extras?: AdvanceExtras) => {
+      if (!socket || !meeting) return;
+      if (Date.now() < cooldownUntilRef.current) return;
 
-    // Debounce only applies to speaker advancement — agenda advancement
-    // has its own confirmation dialog and doesn't need rapid-click protection.
-    if (event === 'queue:next') {
-      const now = Date.now();
-      if (now - lastFireRef.current < DEBOUNCE_MS) return;
-      lastFireRef.current = now;
-    }
+      // Debounce only applies to speaker advancement — agenda advancement
+      // has its own confirmation dialog and doesn't need rapid-click protection.
+      if (event === 'queue:next') {
+        const now = Date.now();
+        if (now - lastFireRef.current < DEBOUNCE_MS) return;
+        lastFireRef.current = now;
+      }
 
-    if (event === 'queue:next') {
-      socket.emit(
-        event,
-        { currentSpeakerEntryId: meeting.current.speaker?.id ?? null },
-        (response: AdvanceResponse) => {
-          if (!response.ok && response.error) {
-            console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
-          }
-        },
-      );
-    } else {
-      socket.emit(event, { currentAgendaItemId: meeting.current.agendaItemId ?? null }, (response: AdvanceResponse) => {
-        if (!response.ok && response.error) {
-          console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
-        }
-      });
-    }
+      if (event === 'queue:next') {
+        socket.emit(
+          event,
+          { currentSpeakerEntryId: meeting.current.speaker?.id ?? null },
+          (response: AdvanceResponse) => {
+            if (!response.ok && response.error) {
+              console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
+            }
+          },
+        );
+      } else {
+        socket.emit(
+          event,
+          {
+            currentAgendaItemId: meeting.current.agendaItemId ?? null,
+            ...(extras?.conclusion !== undefined ? { conclusion: extras.conclusion } : {}),
+          },
+          (response: AdvanceResponse) => {
+            if (!response.ok && response.error) {
+              console.warn(`[useAdvanceAction] ${event} rejected:`, response.error);
+            }
+          },
+        );
+      }
 
-    // Disable the button for the debounce period so the user gets
-    // visual feedback that rapid clicks are being ignored.
-    if (event === 'queue:next') {
-      setDebounceActive(true);
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = setTimeout(() => setDebounceActive(false), DEBOUNCE_MS);
-    }
-  }, [socket, meeting, event]);
+      // Disable the button for the debounce period so the user gets
+      // visual feedback that rapid clicks are being ignored.
+      if (event === 'queue:next') {
+        setDebounceActive(true);
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = setTimeout(() => setDebounceActive(false), DEBOUNCE_MS);
+      }
+    },
+    [socket, meeting, event],
+  );
 
   return { fire, disabled: cooldown || debounceActive };
 }

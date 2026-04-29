@@ -8,6 +8,7 @@ import {
   goToHelpTab,
   addAgendaItem,
   startMeeting,
+  advanceAgenda,
 } from './helpers.js';
 
 test.describe('Creating a Meeting', () => {
@@ -94,7 +95,7 @@ test.describe('Meeting Flow', () => {
     await addAgendaItem(page, 'Item Two', 'admin');
     await startMeeting(page);
 
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
 
     const queuePanel = page.getByRole('tabpanel', { name: 'Queue' });
     await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('Item Two');
@@ -116,7 +117,7 @@ test.describe('Meeting Flow', () => {
     // Let a handful of ms elapse so the server sees a non-zero duration.
     await page.waitForTimeout(50);
 
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
 
     await goToAgendaTab(page);
     // Real elapsed time is milliseconds → Math.ceil rounds up to 1 minute.

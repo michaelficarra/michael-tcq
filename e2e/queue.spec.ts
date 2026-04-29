@@ -6,6 +6,7 @@ import {
   addAgendaItem,
   startMeeting,
   addQueueEntry,
+  advanceAgenda,
   queueSection,
   switchUser,
 } from './helpers.js';
@@ -475,7 +476,7 @@ test.describe('Queue Close / Open', () => {
     await expect(page.getByRole('button', { name: 'Open Queue' })).toBeVisible();
 
     // Advance to next agenda item
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
 
     // Queue should be reopened
     await expect(page.getByRole('button', { name: 'Close Queue' })).toBeVisible();

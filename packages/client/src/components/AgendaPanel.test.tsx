@@ -234,6 +234,39 @@ describe('AgendaPanel', () => {
         expect(li.className).not.toMatch(/bg-orange-100/);
       }
     });
+
+    it('shows the conclusion under a past item that has one', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'], conclusion: 'agreed unanimously' },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
+        ],
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      expect(screen.getByText('agreed unanimously')).toBeInTheDocument();
+    });
+
+    it('does not show a conclusion on the current or upcoming items even if one is set', () => {
+      // Setting `conclusion` on a current/future item should never happen in
+      // practice (the dialog only writes on advance), but if it did the UI
+      // must not surface it on those rows.
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'], conclusion: 'should be hidden — current' },
+          { kind: 'item', id: '3', name: 'Upcoming', presenterIds: ['a'], conclusion: 'should be hidden — upcoming' },
+        ],
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      expect(screen.queryByText('should be hidden — current')).not.toBeInTheDocument();
+      expect(screen.queryByText('should be hidden — upcoming')).not.toBeInTheDocument();
+    });
   });
 
   describe('Chair management', () => {

@@ -194,6 +194,13 @@ export type NextSpeakerPayload = z.infer<typeof NextSpeakerPayloadSchema>;
  */
 export const NextAgendaItemPayloadSchema = z.object({
   currentAgendaItemId: z.string().nullable(),
+  /**
+   * Conclusion text for the outgoing agenda item, captured from the
+   * confirmation dialog. Empty string clears any previously stored
+   * conclusion. Omitted when the meeting is being started (no outgoing
+   * item) — the server ignores it in that case.
+   */
+  conclusion: z.string().optional(),
 });
 export type NextAgendaItemPayload = z.infer<typeof NextAgendaItemPayloadSchema>;
 

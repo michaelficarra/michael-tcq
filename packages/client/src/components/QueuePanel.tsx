@@ -97,6 +97,12 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   // Whether the "advance agenda item" confirmation modal is open
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
 
+  // Draft of the conclusion text the chair is authoring in the dialog.
+  // Seeded from the outgoing item's existing conclusion at the moment the
+  // dialog is opened (see the Next Agenda Item button's onClick), so
+  // revisits show what was previously saved.
+  const [conclusionDraft, setConclusionDraft] = useState('');
+
   // Advancement actions with debounce + cooldown protection
   const { fire: handleNextAgendaItem } = useAdvanceAction('meeting:nextAgendaItem');
   const { fire: handleNextSpeaker, disabled: nextSpeakerDisabled } = useAdvanceAction('queue:next');
@@ -268,12 +274,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               {hasMoreAgendaItems && (
                 <button
                   onClick={() => {
-                    // Show confirmation if the queue has entries that will be cleared
-                    if (queuedSpeakers.length > 0) {
-                      setShowAdvanceConfirm(true);
-                      return;
-                    }
-                    handleNextAgendaItem();
+                    // Always show the dialog so the chair can record (or
+                    // edit) a conclusion for the outgoing item, regardless
+                    // of whether the queue has entries that need clearing.
+                    // Seed the draft from the outgoing item's saved
+                    // conclusion so revisits show what was last entered.
+                    setConclusionDraft(currentAgendaItem?.conclusion ?? '');
+                    setShowAdvanceConfirm(true);
                   }}
                   className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                              text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
@@ -328,7 +335,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                 agenda has at least one actual item (sessions don't count). */}
             {isChair && meeting.agenda.some((e) => isAgendaItem(e)) && (
               <button
-                onClick={handleNextAgendaItem}
+                onClick={() => handleNextAgendaItem()}
                 className="mt-2 border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
                            text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
               >
@@ -373,7 +380,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           {/* Next Speaker button — chair only, next to the heading */}
           {isChair && (currentSpeaker || queuedSpeakers.length > 0) && (
             <button
-              onClick={handleNextSpeaker}
+              onClick={() => handleNextSpeaker()}
               disabled={nextSpeakerDisabled}
               className={`text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                          transition-colors presentation-hidden ${
@@ -389,7 +396,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           {/* "I'm done speaking" button — non-chair active speaker only */}
           {!isChair && currentSpeaker && user && currentSpeaker.userId === userKey(user) && (
             <button
-              onClick={handleDoneSpeaking}
+              onClick={() => handleDoneSpeaking()}
               disabled={doneSpeakingDisabled}
               className={`text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                          transition-colors presentation-hidden ${
@@ -537,8 +544,10 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
         )}
       </section>
 
-      {/* Advance agenda item confirmation modal */}
-      {/* Advance agenda item confirmation modal */}
+      {/* Advance agenda item confirmation modal — always shown so the chair
+          has somewhere to record the outgoing item's conclusion. The
+          queue-clearing warning only renders when there are entries to
+          clear; the conclusion textarea always renders. */}
       {showAdvanceConfirm && (
         <div
           className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
@@ -548,14 +557,32 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           aria-modal="true"
         >
           <div
-            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
+            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Next Agenda Item</h3>
-            <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
-              Advancing to the next agenda item will clear the speaker queue ({queuedSpeakers.length}{' '}
-              {queuedSpeakers.length === 1 ? 'entry' : 'entries'}). Continue?
-            </p>
+            <label
+              htmlFor="agenda-conclusion"
+              className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+            >
+              Conclusion (optional)
+            </label>
+            <textarea
+              id="agenda-conclusion"
+              value={conclusionDraft}
+              onChange={(e) => setConclusionDraft(e.target.value)}
+              placeholder="What was decided or concluded for this item?"
+              rows={4}
+              className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-3
+                         dark:bg-stone-700 dark:text-stone-100
+                         focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            />
+            {queuedSpeakers.length > 0 && (
+              <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
+                Advancing to the next agenda item will clear the speaker queue ({queuedSpeakers.length}{' '}
+                {queuedSpeakers.length === 1 ? 'entry' : 'entries'}).
+              </p>
+            )}
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowAdvanceConfirm(false)}
@@ -567,8 +594,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               <button
                 autoFocus
                 onClick={() => {
+                  // Capture the draft before resetting state. The server
+                  // trims and treats blank as "clear conclusion".
+                  const conclusion = conclusionDraft;
                   setShowAdvanceConfirm(false);
-                  handleNextAgendaItem();
+                  handleNextAgendaItem({ conclusion });
                 }}
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer

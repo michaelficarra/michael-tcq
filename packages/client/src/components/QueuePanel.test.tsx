@@ -212,6 +212,127 @@ describe('QueuePanel', () => {
     expect(screen.queryByRole('button', { name: 'Next Agenda Item' })).not.toBeInTheDocument();
   });
 
+  // -- Advance confirmation dialog (with conclusion textarea) --
+
+  it('opens the advance dialog with an empty queue (always-show)', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+
+    // Dialog appears even though the queue is empty.
+    expect(screen.getByRole('dialog', { name: /confirm agenda advancement/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/conclusion/i)).toBeInTheDocument();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('hides the queue-clearing warning when the queue is empty', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    expect(screen.queryByText(/clear the speaker queue/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the queue-clearing warning when the queue is non-empty', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'pending', userId: 'alice' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    expect(screen.getByText(/clear the speaker queue/i)).toBeInTheDocument();
+  });
+
+  it('seeds the conclusion textarea from the current item’s saved conclusion (revisit case)', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'], conclusion: 'previously decided' },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    const textarea = screen.getByLabelText(/conclusion/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe('previously decided');
+  });
+
+  it('emits meeting:nextAgendaItem with the conclusion when Advance is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    const textarea = screen.getByLabelText(/conclusion/i);
+    fireEvent.change(textarea, { target: { value: 'agreed to revisit next week' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Advance' }));
+
+    expect(emit).toHaveBeenCalledWith(
+      'meeting:nextAgendaItem',
+      { currentAgendaItemId: '1', conclusion: 'agreed to revisit next week' },
+      expect.any(Function),
+    );
+  });
+
+  it('does not emit when Cancel is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    fireEvent.change(screen.getByLabelText(/conclusion/i), { target: { value: 'do not save me' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   // -- Current speaker section --
 
   it('shows "Nobody speaking yet" when there is no current speaker', () => {

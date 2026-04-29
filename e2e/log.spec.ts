@@ -7,6 +7,7 @@ import {
   addAgendaItem,
   startMeeting,
   addQueueEntry,
+  advanceAgenda,
   queueSection,
 } from './helpers.js';
 
@@ -53,7 +54,7 @@ test.describe('Log Tab', () => {
 
     // Advance to the second agenda item; wait for the scoped agenda region
     // (not just any occurrence of the text) to confirm state has propagated
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
     await expect(queueSection(page, 'Agenda Item')).toContainText('Beta Item');
 
     await goToLogTab(page);
@@ -103,7 +104,7 @@ test.describe('Log Tab', () => {
     await startMeeting(page);
 
     // Advance to second item; scope the wait to the queue's agenda region
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
     await expect(queueSection(page, 'Agenda Item')).toContainText('Group Two');
 
     await goToLogTab(page);
@@ -206,7 +207,7 @@ test.describe('Log Tab', () => {
     // Now advance to next item while staying on the log tab
     // Need to go to queue tab to click the button, then back to log
     await goToQueueTab(page);
-    await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+    await advanceAgenda(page);
     // Wait for the state broadcast to be applied — current agenda item updates to the new one
     await expect(queueSection(page, 'Agenda Item')).toContainText('Second RT Item');
 
