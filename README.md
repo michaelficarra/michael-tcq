@@ -58,6 +58,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Mock auth mode** — a built-in dev user-switcher allows testing with multiple identities without configuring GitHub OAuth.
 - **Modern, familiar tech stack** — built with React, Vite, Tailwind CSS, Express, and Socket.IO — widely known technologies that lower the contribution barrier. TypeScript throughout with strict mode.
 - **Easy local development** — `npm install && npm run dev` is all that's needed to start developing. No Docker, no external databases, no OAuth setup required. Mock auth is automatic. A seed script populates a meeting with sample data for quick testing. An extensive test suite covers server logic, socket events, permissions, and UI components.
+- **Easy production deployment** — `scripts/deploy.sh` is an interactive, idempotent bootstrap. The first run prompts for project details and provisions everything needed on Google Cloud (project, billing, APIs, Firestore, service accounts, Artifact Registry) — no hand-running `gcloud` commands, and partial progress survives Ctrl-C. Subsequent deploys are a single zero-prompt command: build, push, deploy.
 - **Well documented** — comprehensive docs covering [local development](docs/CONTRIBUTING.md), [production deployment](docs/DEPLOYMENT.md), [architecture decisions](docs/ARCHITECTURE.md), and a complete [product requirements document](docs/PRD.md).
 
 ## Screenshots
