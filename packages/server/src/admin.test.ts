@@ -204,7 +204,7 @@ describe('Admin endpoints', () => {
       resetErrorBuffer();
       // Suppress real stdout writes so test output stays clean while
       // exercising the logger → errorBuffer pipeline.
-      vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
     it('rejects non-admin users with 403', async () => {

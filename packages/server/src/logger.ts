@@ -1,11 +1,15 @@
 /**
  * Structured JSON logger for Cloud Logging.
  *
- * Emits one JSON object per line to stdout. Cloud Run's log agent ingests
- * stdout/stderr and treats entries with a recognised `severity` field as
- * structured LogEntry records. See:
+ * Emits one JSON object per line to stdout via `console.log`. Cloud Run's
+ * log agent ingests stdout/stderr and treats entries with a recognised
+ * `severity` field as structured LogEntry records. See:
  *   - https://cloud.google.com/logging/docs/structured-logging
  *   - https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry
+ *
+ * Going through `console.log` (rather than a raw `process.stdout.write`)
+ * lets vitest's console interception silence passing-test output via
+ * `--silent passed-only` while still surfacing logs from failing tests.
  *
  * The output is a zero-dependency line-delimited JSON stream — no pino,
  * winston, or bunyan. Keeping the surface small means we never have to
@@ -54,7 +58,7 @@ export function log(severity: Severity, message: string, fields: LogFields = {})
     return;
   }
 
-  process.stdout.write(line + '\n');
+  console.log(line);
 
   // Mirror ERROR/CRITICAL entries into the in-memory ring used by the
   // admin diagnostics endpoint. Done after stdout so a buffer failure

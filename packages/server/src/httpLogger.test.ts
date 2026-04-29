@@ -5,9 +5,8 @@ import { httpLogger } from './httpLogger.js';
 
 function captureStdout() {
   const lines: string[] = [];
-  const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
-    if (typeof chunk === 'string') lines.push(chunk);
-    return true;
+  const spy = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+    if (typeof line === 'string') lines.push(line);
   });
   return {
     restore: () => spy.mockRestore(),

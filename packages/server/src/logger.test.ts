@@ -7,11 +7,11 @@ function captureStdout(): {
   lines: () => string[];
 } {
   const lines: string[] = [];
-  // process.stdout.write has multiple overloads — the logger uses the
-  // (string) form, so stubbing that specifically is enough.
-  const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
-    if (typeof chunk === 'string') lines.push(chunk);
-    return true;
+  // The logger emits one JSON string per call via `console.log`. console.log
+  // appends its own newline outside the captured argument, so `lines` holds
+  // the JSON content without trailing whitespace.
+  const spy = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+    if (typeof line === 'string') lines.push(line);
   });
   return {
     restore: () => spy.mockRestore(),
@@ -39,7 +39,6 @@ describe('logger.log', () => {
     log('INFO', 'hello', { foo: 1 });
     const lines = capture.lines();
     expect(lines).toHaveLength(1);
-    expect(lines[0].endsWith('\n')).toBe(true);
     const entry = JSON.parse(lines[0]);
     expect(entry.severity).toBe('INFO');
     expect(entry.message).toBe('hello');
