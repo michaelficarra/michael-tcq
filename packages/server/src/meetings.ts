@@ -55,7 +55,12 @@ export class MeetingManager {
   /** Tracks which meetings have unsaved changes. */
   private dirty = new Set<string>();
 
-  /** Most recent successful periodic-sync wall-clock time (ISO). */
+  /**
+   * Most recent periodic-sync wall-clock time (ISO) where the sweep
+   * actually wrote ≥1 meeting. No-op sweeps (nothing dirty) do not
+   * update this — operators want "Last success" to mean bytes hit the
+   * store, not "the timer is alive".
+   */
   private lastSyncSucceededAt: string | null = null;
 
   /** Most recent failed periodic-sync wall-clock time (ISO). */
@@ -826,10 +831,13 @@ export class MeetingManager {
       const start = process.hrtime.bigint();
       this.sync()
         .then((count) => {
-          this.lastSyncSucceededAt = new Date().toISOString();
-          // Skip the log when there was nothing to sync — otherwise we'd
-          // emit a no-op line every 30 s on an idle server.
+          // A no-op sweep (nothing dirty) is not a "success" worth
+          // surfacing: it doesn't prove the store is reachable, and it
+          // would mask an outage by repeatedly bumping the timestamp on
+          // an idle server. Same gate suppresses the log line — otherwise
+          // we'd emit a no-op every 30 s.
           if (count > 0) {
+            this.lastSyncSucceededAt = new Date().toISOString();
             const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
             info('periodic_sync_completed', { count, durationMs });
           }
@@ -846,10 +854,14 @@ export class MeetingManager {
 
   /**
    * Snapshot of persistence-layer health for the admin diagnostics
-   * panel. `dirtyCount` is the *current* unsaved meeting backlog;
-   * the `lastSync*` timestamps describe the most recent periodic
-   * sweep result. A `lastSyncFailedAt` more recent than
-   * `lastSyncSucceededAt` indicates an ongoing persistence outage.
+   * panel. `dirtyCount` is the *current* unsaved meeting backlog.
+   * `lastSyncSucceededAt` is the last periodic sweep that actually
+   * wrote ≥1 meeting (no-op sweeps don't count — see the field
+   * declaration); `lastSyncFailedAt` / `lastSyncError` capture the
+   * last sweep that threw. A `lastSyncFailedAt` more recent than
+   * `lastSyncSucceededAt` indicates an ongoing persistence outage;
+   * a long-quiet system legitimately shows a stale (or null)
+   * `lastSyncSucceededAt` and that is not by itself a problem.
    */
   getPersistenceHealth(): {
     lastSyncSucceededAt: string | null;

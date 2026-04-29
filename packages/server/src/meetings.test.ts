@@ -138,6 +138,20 @@ describe('MeetingManager', () => {
       expect(health.dirtyCount).toBe(0);
     });
 
+    it('does not update lastSyncSucceededAt when the periodic sweep has nothing to do', async () => {
+      // No-op sweeps must not bump "Last success" — the field should
+      // mean "bytes hit the store recently", not "the timer is alive".
+      const mgr = new MeetingManager(new InMemoryStore());
+      const stop = mgr.startPeriodicSync(20);
+      // Wait long enough for several intervals to fire on an idle manager.
+      await new Promise((r) => setTimeout(r, 80));
+      stop();
+      const health = mgr.getPersistenceHealth();
+      expect(health.lastSyncSucceededAt).toBeNull();
+      expect(health.lastSyncFailedAt).toBeNull();
+      expect(health.dirtyCount).toBe(0);
+    });
+
     it('records lastSyncFailedAt and the error message when the store throws', async () => {
       class FailingStore extends InMemoryStore {
         async save(): Promise<void> {
