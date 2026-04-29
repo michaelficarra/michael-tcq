@@ -108,6 +108,55 @@ describe('MeetingManager', () => {
     expect(loaded!.id).toBe(meeting.id);
   });
 
+  describe('getPersistenceHealth', () => {
+    it('reports zero state on a fresh manager', () => {
+      const health = manager.getPersistenceHealth();
+      expect(health).toEqual({
+        lastSyncSucceededAt: null,
+        lastSyncFailedAt: null,
+        lastSyncError: null,
+        dirtyCount: 0,
+      });
+    });
+
+    it('reflects the current dirty backlog', () => {
+      manager.create([testUser]);
+      manager.create([otherUser]);
+      expect(manager.getPersistenceHealth().dirtyCount).toBe(2);
+    });
+
+    it('records lastSyncSucceededAt after a successful periodic sweep', async () => {
+      const mgr = new MeetingManager(new InMemoryStore());
+      mgr.create([testUser]);
+      const stop = mgr.startPeriodicSync(20);
+      // Wait for the first interval to fire and the sync to complete.
+      await new Promise((r) => setTimeout(r, 80));
+      stop();
+      const health = mgr.getPersistenceHealth();
+      expect(health.lastSyncSucceededAt).not.toBeNull();
+      expect(health.lastSyncFailedAt).toBeNull();
+      expect(health.dirtyCount).toBe(0);
+    });
+
+    it('records lastSyncFailedAt and the error message when the store throws', async () => {
+      class FailingStore extends InMemoryStore {
+        async save(): Promise<void> {
+          throw new Error('firestore unreachable');
+        }
+      }
+      const mgr = new MeetingManager(new FailingStore());
+      mgr.create([testUser]);
+      const stop = mgr.startPeriodicSync(20);
+      await new Promise((r) => setTimeout(r, 80));
+      stop();
+      const health = mgr.getPersistenceHealth();
+      expect(health.lastSyncFailedAt).not.toBeNull();
+      expect(health.lastSyncError).toBe('firestore unreachable');
+      // Dirty backlog should still hold the unsynced meeting.
+      expect(health.dirtyCount).toBeGreaterThan(0);
+    });
+  });
+
   it('restore recovers meetings from the store', async () => {
     const store = new InMemoryStore();
 

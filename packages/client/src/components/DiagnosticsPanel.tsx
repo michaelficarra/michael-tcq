@@ -28,10 +28,19 @@ interface ErrorEntry {
   detail?: string;
 }
 
+interface PersistenceHealth {
+  lastSyncSucceededAt: string | null;
+  lastSyncFailedAt: string | null;
+  lastSyncError: string | null;
+  dirtyCount: number;
+}
+
 interface Diagnostics {
   process: ProcessInfo;
   meetings: { totalActive: number; totalParticipants: number; totalConnections: number };
   sockets: { totalClients: number };
+  http: { total: number; clientErrors: number; serverErrors: number };
+  persistence: PersistenceHealth;
   errors: { totalSinceStart: number; recent: ErrorEntry[] };
 }
 
@@ -78,6 +87,8 @@ export function DiagnosticsPanel() {
             totalConnections={data.meetings.totalConnections}
             totalClients={data.sockets.totalClients}
           />
+          <HttpSection counters={data.http} />
+          <PersistenceSection health={data.persistence} />
           <ErrorsSection totalSinceStart={data.errors.totalSinceStart} recent={data.errors.recent} />
         </div>
       </div>
@@ -121,6 +132,69 @@ function MeetingsSection({
       <Row label="Total participants" value={totalParticipants} />
       <Row label="Live meeting connections" value={totalConnections} />
       <Row label="Total Socket.IO clients" value={totalClients} />
+    </Section>
+  );
+}
+
+function HttpSection({ counters }: { counters: { total: number; clientErrors: number; serverErrors: number } }) {
+  // Pre-compute the error rate so the panel surfaces the ratio rather
+  // than asking the operator to do mental arithmetic.
+  const errorRate =
+    counters.total === 0
+      ? '—'
+      : `${(((counters.clientErrors + counters.serverErrors) / counters.total) * 100).toFixed(1)}%`;
+  return (
+    <Section title="HTTP (since start)">
+      <Row label="Total responses" value={counters.total.toLocaleString()} />
+      <Row label="4xx" value={counters.clientErrors.toLocaleString()} />
+      <Row label="5xx" value={counters.serverErrors.toLocaleString()} />
+      <Row label="Error rate" value={errorRate} />
+    </Section>
+  );
+}
+
+function PersistenceSection({ health }: { health: PersistenceHealth }) {
+  // A failed sync more recent than the last success — or any non-empty
+  // backlog combined with a stale success — flags an active outage.
+  const failing =
+    health.lastSyncFailedAt !== null &&
+    (health.lastSyncSucceededAt === null || health.lastSyncFailedAt > health.lastSyncSucceededAt);
+  return (
+    <Section title="Persistence">
+      <Row
+        label="Dirty backlog"
+        value={
+          <span className={health.dirtyCount > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}>
+            {health.dirtyCount}
+          </span>
+        }
+      />
+      <Row
+        label="Last success"
+        value={health.lastSyncSucceededAt ? <RelativeTime timestamp={health.lastSyncSucceededAt} /> : 'never'}
+      />
+      <Row
+        label="Last failure"
+        value={
+          health.lastSyncFailedAt ? (
+            <span className={failing ? 'text-red-600 dark:text-red-400' : undefined}>
+              <RelativeTime timestamp={health.lastSyncFailedAt} />
+            </span>
+          ) : (
+            'never'
+          )
+        }
+      />
+      {health.lastSyncError && (
+        <Row
+          label="Last error"
+          value={
+            <span className="text-red-600 dark:text-red-400 truncate max-w-[16rem]" title={health.lastSyncError}>
+              {health.lastSyncError}
+            </span>
+          }
+        />
+      )}
     </Section>
   );
 }

@@ -9,6 +9,7 @@ import { getActiveConnectionCount, broadcastMeetingState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser } from './session.js';
 import { getRecentErrors, getErrorCount } from './errorBuffer.js';
+import { getHttpCounters } from './httpCounters.js';
 
 /**
  * REST routes for meeting management.
@@ -354,6 +355,14 @@ export function createMeetingRoutes(
         // an `engine`, and we don't want diagnostics to break those tests.
         totalClients: io.engine?.clientsCount ?? 0,
       },
+      // Cumulative HTTP traffic since process start. Health-probe hits
+      // are excluded — the counter increments inside httpLogger, which
+      // skips `/api/health`.
+      http: getHttpCounters(),
+      // Persistence health from the periodic 30-s sync sweep. A
+      // `lastSyncFailedAt` newer than `lastSyncSucceededAt` (or a
+      // growing `dirtyCount`) means the store is failing silently.
+      persistence: meetingManager.getPersistenceHealth(),
       errors: {
         totalSinceStart: getErrorCount(),
         recent: getRecentErrors(),

@@ -17,6 +17,7 @@
 
 import type { RequestHandler } from 'express';
 import { log, formatLatency } from './logger.js';
+import { recordHttpResponse } from './httpCounters.js';
 
 /** Truncate strings we log to avoid unbounded field sizes. */
 const USER_AGENT_MAX = 200;
@@ -119,6 +120,10 @@ export const httpLogger: RequestHandler = (req, res, next) => {
       httpRequest,
       ...buildUserFields(req),
     });
+
+    // Update the diagnostic counters after logging. Health-check skipping
+    // happens above, so the uptime probe doesn't pollute these totals.
+    recordHttpResponse(res.statusCode);
   });
 
   next();

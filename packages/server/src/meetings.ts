@@ -55,6 +55,15 @@ export class MeetingManager {
   /** Tracks which meetings have unsaved changes. */
   private dirty = new Set<string>();
 
+  /** Most recent successful periodic-sync wall-clock time (ISO). */
+  private lastSyncSucceededAt: string | null = null;
+
+  /** Most recent failed periodic-sync wall-clock time (ISO). */
+  private lastSyncFailedAt: string | null = null;
+
+  /** Message from the most recent sync failure (helps spot Firestore outages). */
+  private lastSyncError: string | null = null;
+
   private store: MeetingStore;
 
   constructor(store: MeetingStore) {
@@ -817,6 +826,7 @@ export class MeetingManager {
       const start = process.hrtime.bigint();
       this.sync()
         .then((count) => {
+          this.lastSyncSucceededAt = new Date().toISOString();
           // Skip the log when there was nothing to sync — otherwise we'd
           // emit a no-op line every 30 s on an idle server.
           if (count > 0) {
@@ -825,11 +835,34 @@ export class MeetingManager {
           }
         })
         .catch((err) => {
+          this.lastSyncFailedAt = new Date().toISOString();
+          this.lastSyncError = err instanceof Error ? err.message : String(err);
           logError('periodic_sync_failed', { error: serialiseError(err) });
         });
     }, intervalMs);
 
     return () => clearInterval(timer);
+  }
+
+  /**
+   * Snapshot of persistence-layer health for the admin diagnostics
+   * panel. `dirtyCount` is the *current* unsaved meeting backlog;
+   * the `lastSync*` timestamps describe the most recent periodic
+   * sweep result. A `lastSyncFailedAt` more recent than
+   * `lastSyncSucceededAt` indicates an ongoing persistence outage.
+   */
+  getPersistenceHealth(): {
+    lastSyncSucceededAt: string | null;
+    lastSyncFailedAt: string | null;
+    lastSyncError: string | null;
+    dirtyCount: number;
+  } {
+    return {
+      lastSyncSucceededAt: this.lastSyncSucceededAt,
+      lastSyncFailedAt: this.lastSyncFailedAt,
+      lastSyncError: this.lastSyncError,
+      dirtyCount: this.dirty.size,
+    };
   }
 
   /**

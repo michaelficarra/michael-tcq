@@ -18,6 +18,13 @@ const sample = {
   },
   meetings: { totalActive: 3, totalParticipants: 27, totalConnections: 18 },
   sockets: { totalClients: 21 },
+  http: { total: 1234, clientErrors: 12, serverErrors: 4 },
+  persistence: {
+    lastSyncSucceededAt: '2026-04-29T09:55:00.000Z',
+    lastSyncFailedAt: null,
+    lastSyncError: null,
+    dirtyCount: 0,
+  },
   errors: {
     totalSinceStart: 2,
     recent: [
@@ -77,6 +84,41 @@ describe('DiagnosticsPanel', () => {
     await waitFor(() => {
       expect(screen.getByText(/no errors recorded/i)).toBeInTheDocument();
     });
+  });
+
+  it('renders HTTP counters and an error rate', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(sample) });
+    render(<DiagnosticsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('HTTP (since start)')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Total responses').nextSibling?.textContent).toBe('1,234');
+    // (12 + 4) / 1234 → 1.3%
+    expect(screen.getByText('Error rate').nextSibling?.textContent).toBe('1.3%');
+  });
+
+  it('renders persistence health and flags an active outage', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ...sample,
+          persistence: {
+            lastSyncSucceededAt: '2026-04-29T09:00:00.000Z',
+            lastSyncFailedAt: '2026-04-29T09:30:00.000Z',
+            lastSyncError: 'firestore unreachable',
+            dirtyCount: 4,
+          },
+        }),
+    });
+    render(<DiagnosticsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Persistence')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Dirty backlog').nextSibling?.textContent).toBe('4');
+    expect(screen.getByText('firestore unreachable')).toBeInTheDocument();
   });
 
   it('renders recent errors with severity badges', async () => {

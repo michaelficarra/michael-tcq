@@ -238,6 +238,17 @@ describe('Admin endpoints', () => {
         sockets: {
           totalClients: expect.any(Number),
         },
+        http: {
+          total: expect.any(Number),
+          clientErrors: expect.any(Number),
+          serverErrors: expect.any(Number),
+        },
+        persistence: {
+          lastSyncSucceededAt: null,
+          lastSyncFailedAt: null,
+          lastSyncError: null,
+          dirtyCount: expect.any(Number),
+        },
         errors: {
           totalSinceStart: expect.any(Number),
           recent: expect.any(Array),
