@@ -118,6 +118,21 @@ describe('Meeting REST routes', () => {
 
       expect(res.status).toBe(400);
     });
+
+    // Users may copy GitHub-style `@handle` strings into the chair input;
+    // the schema strips a leading `@` and surrounding whitespace so the
+    // resolved chair matches the bare username.
+    it('accepts a leading @ and surrounding whitespace on chair usernames', async () => {
+      const res = await fetch(`${baseUrl}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chairs: [' @testuser ', '@ alice'] }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.chairIds).toEqual(['testuser', 'alice']);
+    });
   });
 
   describe('GET /api/meetings/:id', () => {

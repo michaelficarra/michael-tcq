@@ -11,18 +11,28 @@
  */
 
 import { z } from 'zod';
+import { normaliseGithubUsername } from './helpers.js';
 import type { MeetingState } from './types.js';
 import { QueueEntryTypeSchema } from './types.js';
 
 /** Non-empty trimmed string with a human-readable "required" message. */
 const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is required`);
 
+/**
+ * GitHub-username field: accepts an optional leading `@` and surrounding
+ * whitespace, normalises to the bare username, then enforces non-empty.
+ * The error `msg` surfaces in the UI when the field is empty after
+ * normalisation (e.g. the user sent only whitespace or a bare `@`).
+ */
+const githubUsername = (msg = 'Username is required') =>
+  z.string().transform(normaliseGithubUsername).pipe(z.string().min(1, msg));
+
 // -- Payloads for client-to-server events --
 
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
   name: requiredTrimmed('Agenda item name'),
-  presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required'),
+  presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required'),
   /** Estimated duration in minutes; omit or 0 for no estimate. */
   duration: z.number().int().positive().optional(),
 });
@@ -53,7 +63,7 @@ export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
 export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: z.string().trim().min(1, 'Agenda item name cannot be empty').optional(),
-  presenterUsernames: z.array(z.string().trim().min(1)).min(1, 'At least one presenter is required').optional(),
+  presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required').optional(),
   duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
@@ -103,7 +113,7 @@ export const QueueAddPayloadSchema = z.object({
    * Optional: GitHub username to add the entry as. Chair only. When omitted,
    * the entry is added as the current session user.
    */
-  asUsername: z.string().trim().min(1).optional(),
+  asUsername: githubUsername().optional(),
   /**
    * Precondition for `type: 'reply'` — the `speakerId` of the CurrentTopic
    * the client saw when the user initiated the reply. The server rejects the
@@ -173,7 +183,7 @@ export type PollReactPayload = z.infer<typeof PollReactPayloadSchema>;
  * least one chair must remain (except when an admin performs the update).
  */
 export const ChairsUpdatePayloadSchema = z.object({
-  usernames: z.array(z.string().trim().min(1)),
+  usernames: z.array(githubUsername()),
 });
 export type ChairsUpdatePayload = z.infer<typeof ChairsUpdatePayloadSchema>;
 
@@ -219,13 +229,13 @@ export interface AdvanceResponse {
 
 /** POST /api/meetings — create a new meeting. */
 export const CreateMeetingBodySchema = z.object({
-  chairs: z.array(z.string().trim().min(1)).min(1, 'At least one chair username is required'),
+  chairs: z.array(githubUsername()).min(1, 'At least one chair username is required'),
 });
 export type CreateMeetingBody = z.infer<typeof CreateMeetingBodySchema>;
 
 /** POST /api/dev/switch-user — switch the mock identity (dev mode only). */
 export const SwitchUserBodySchema = z.object({
-  username: requiredTrimmed('Username'),
+  username: githubUsername('Username is required'),
 });
 export type SwitchUserBody = z.infer<typeof SwitchUserBodySchema>;
 

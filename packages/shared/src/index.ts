@@ -72,4 +72,11 @@ export {
   ImportAgendaBodySchema,
 } from './messages.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
-export { userKey, asUserKey, isSession, isAgendaItem, formatShortDuration } from './helpers.js';
+export {
+  userKey,
+  asUserKey,
+  isSession,
+  isAgendaItem,
+  formatShortDuration,
+  normaliseGithubUsername,
+} from './helpers.js';

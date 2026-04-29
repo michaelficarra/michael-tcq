@@ -387,6 +387,58 @@ describe('AgendaPanel', () => {
         usernames: ['alice'],
       });
     });
+
+    // Users may type or paste handles in GitHub-style `@name` form; the
+    // chair-add input strips a leading `@` and surrounding whitespace
+    // before the username is added.
+    it('strips a leading @ and surrounding whitespace from the new chair username', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: ' @newperson ' } });
+      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+
+      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+        usernames: ['alice', 'newperson'],
+      });
+    });
+  });
+
+  describe('inline edit', () => {
+    // Edit the presenters of an existing item using comma-separated
+    // `@name` handles — each entry is normalised before emit.
+    it('strips a leading @ and surrounding whitespace from edited presenters', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        chairIds: ['alice'],
+        agenda: [{ kind: 'item', id: '1', name: 'Topic', presenterIds: ['alice'] }],
+      });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      // Open the inline edit form on the only item
+      fireEvent.click(screen.getByRole('button', { name: /^edit topic$/i }));
+
+      const presentersInput = screen.getByLabelText('Presenters');
+      fireEvent.change(presentersInput, {
+        target: { value: ' @alice , @ bob, charlie ' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+      expect(emit).toHaveBeenCalledWith('agenda:edit', {
+        id: '1',
+        name: 'Topic',
+        presenterUsernames: ['alice', 'bob', 'charlie'],
+        duration: null,
+      });
+    });
   });
 
   describe('sessions', () => {

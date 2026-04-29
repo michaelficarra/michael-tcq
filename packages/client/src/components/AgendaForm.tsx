@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
+import { normaliseGithubUsername } from '@tcq/shared';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 
@@ -37,7 +38,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
     const trimmedName = name.trim();
     const presenterUsernames = presenters
       .split(',')
-      .map((s) => s.trim())
+      .map(normaliseGithubUsername)
       .filter((s) => s.length > 0);
     if (!trimmedName || presenterUsernames.length === 0) return;
 
@@ -95,9 +96,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
-            GitHub username(s), comma-separated (omit the @)
-          </p>
+          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">GitHub username(s), comma-separated</p>
         </div>
 
         {/* Estimate field */}

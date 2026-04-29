@@ -336,6 +336,31 @@ describe('Socket.IO integration', () => {
       expect(state2.agenda[0].name).toBe('Broadcast test');
     });
 
+    // Users may type or paste presenter handles in GitHub-style `@name`
+    // form; the schema strips a leading `@` and surrounding whitespace
+    // before the handler resolves the presenter to a user.
+    it('strips a leading @ and surrounding whitespace from presenter usernames', async () => {
+      const meeting = ctx.meetingManager.create([
+        {
+          ghid: 1,
+          ghUsername: 'testuser',
+          name: 'Test User',
+          organisation: 'Test Org',
+        },
+      ]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      client.emit('agenda:add', { name: 'Presenter cleanup', presenterUsernames: [' @testuser ', '@ alice'] });
+      const state = await statePromise;
+
+      const first = asItem(state.agenda[0]);
+      expect(first.presenterIds).toHaveLength(2);
+      expect(state.users[first.presenterIds[0]].ghUsername).toBe('testuser');
+      expect(state.users[first.presenterIds[1]].ghUsername).toBe('alice');
+    });
+
     it('rejects add from non-chair', async () => {
       // Create meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([

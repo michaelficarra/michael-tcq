@@ -34,6 +34,7 @@ import {
   QUEUE_ENTRY_PRIORITY,
   formatShortDuration,
   isAgendaItem,
+  normaliseGithubUsername,
   userKey,
 } from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
@@ -231,7 +232,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
       const parenMatch = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
       if (parenMatch) {
         rest = parenMatch[1].trim();
-        asUsername = parenMatch[2].trim();
+        asUsername = normaliseGithubUsername(parenMatch[2]);
       }
 
       const type = parseEntryType(typeLabel);

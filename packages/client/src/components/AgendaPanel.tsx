@@ -30,7 +30,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaItem, Session } from '@tcq/shared';
-import { formatShortDuration, isAgendaItem, isSession, userKey } from '@tcq/shared';
+import { formatShortDuration, isAgendaItem, isSession, normaliseGithubUsername, userKey } from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { computeContainment } from '../lib/containment.js';
@@ -379,7 +379,7 @@ function SortableAgendaItem({
     const trimmedName = editName.trim();
     const presenterUsernames = editPresenters
       .split(',')
-      .map((s) => s.trim())
+      .map(normaliseGithubUsername)
       .filter((s) => s.length > 0);
     if (!trimmedName || presenterUsernames.length === 0) return;
 
@@ -438,7 +438,7 @@ function SortableAgendaItem({
             required
             aria-label="Presenters"
             placeholder="alice, bob"
-            title="GitHub usernames, comma-separated (omit the @)"
+            title="GitHub usernames, comma-separated"
             className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-40
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
@@ -748,7 +748,7 @@ function ChairsSection() {
   /** Add a new chair by username. */
   function handleAdd(e: FormEvent) {
     e.preventDefault();
-    const username = addValue.trim();
+    const username = normaliseGithubUsername(addValue);
     if (!username) return;
 
     const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.ghUsername ?? id);

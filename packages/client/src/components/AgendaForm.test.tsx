@@ -88,6 +88,32 @@ describe('AgendaForm', () => {
     expect(onSubmit).toHaveBeenCalled();
   });
 
+  // Users may type or paste presenter handles in GitHub-style `@name`
+  // form, including in comma-separated lists; the form strips a leading
+  // `@` and surrounding whitespace per entry before emitting.
+  it('strips a leading @ and surrounding whitespace from comma-separated presenters', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    renderForm(mockSocket);
+
+    fireEvent.change(screen.getByLabelText('Agenda Item Name'), {
+      target: { value: 'Item' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Presenters'), {
+      target: { value: ' @alice , @ bob, charlie ' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(emit).toHaveBeenCalledWith('agenda:add', {
+      name: 'Item',
+      presenterUsernames: ['alice', 'bob', 'charlie'],
+      duration: undefined,
+    });
+  });
+
   it('omits duration when the estimate field is empty', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;

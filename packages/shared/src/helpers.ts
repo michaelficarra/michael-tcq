@@ -20,6 +20,23 @@ export function asUserKey(s: string): UserKey {
   return s as UserKey;
 }
 
+/**
+ * Normalise a GitHub-username text input by trimming surrounding
+ * whitespace and stripping a single leading `@` (with any whitespace
+ * between the `@` and the name). Returns the bare username; an empty
+ * string indicates the input was nothing but whitespace and/or `@`.
+ *
+ * Examples:
+ *   "alice"       → "alice"
+ *   " alice "     → "alice"
+ *   "@alice"      → "alice"
+ *   " @ alice "   → "alice"
+ *   " @ "         → ""
+ */
+export function normaliseGithubUsername(raw: string): string {
+  return raw.trim().replace(/^@\s*/, '');
+}
+
 /** Type guard: is this agenda entry a session header? */
 export function isSession(entry: AgendaEntry): entry is Session {
   return entry.kind === 'session';

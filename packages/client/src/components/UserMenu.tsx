@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { normaliseGithubUsername } from '@tcq/shared';
 import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { UserBadge } from './UserBadge.js';
@@ -236,7 +237,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const trimmed = username.trim();
+    const trimmed = normaliseGithubUsername(username);
     if (!trimmed || switching) return;
 
     setSwitching(true);
