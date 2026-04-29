@@ -13,7 +13,7 @@ beforeEach(() => {
 function renderPanel() {
   return render(
     <MemoryRouter>
-      <AdminPanel />
+      <AdminPanel refreshTick={0} />
     </MemoryRouter>,
   );
 }

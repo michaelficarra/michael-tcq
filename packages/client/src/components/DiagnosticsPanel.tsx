@@ -44,7 +44,7 @@ interface Diagnostics {
   errors: { totalSinceStart: number; recent: ErrorEntry[] };
 }
 
-export function DiagnosticsPanel() {
+export function DiagnosticsPanel({ refreshTick }: { refreshTick: number }) {
   const [data, setData] = useState<Diagnostics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,12 +61,12 @@ export function DiagnosticsPanel() {
     }
   }, []);
 
+  // The shared timer in AdminSection drives both this panel and the
+  // AdminPanel above it on the same tick — so they stay in lockstep
+  // instead of drifting on two independent intervals.
   useEffect(() => {
     fetchDiagnostics();
-    // Mirrors the AdminPanel cadence so the two sections refresh together.
-    const interval = setInterval(fetchDiagnostics, 10_000);
-    return () => clearInterval(interval);
-  }, [fetchDiagnostics]);
+  }, [fetchDiagnostics, refreshTick]);
 
   if (loading || !data) {
     return null;

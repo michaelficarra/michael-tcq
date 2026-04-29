@@ -6,7 +6,7 @@
  * - "Help" — usage guide (shared HelpPanel component).
  */
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { AdminPanel } from '../components/AdminPanel.js';
@@ -103,13 +103,34 @@ function JoinTab() {
       </div>
 
       {/* Admin sections — only shown for admin users */}
-      {isAdmin && (
-        <>
-          <AdminPanel />
-          <DiagnosticsPanel />
-        </>
-      )}
+      {isAdmin && <AdminSection />}
     </div>
+  );
+}
+
+// -- Admin section (owns the shared refresh timer) --
+
+/**
+ * Wraps the two admin panels and drives both of their refreshes from a
+ * single setInterval, so the meetings list and the diagnostics snapshot
+ * fetch on exactly the same tick rather than on two independent timers
+ * that happen to share a cadence.
+ */
+function AdminSection() {
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshTick((t) => t + 1);
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <>
+      <AdminPanel refreshTick={refreshTick} />
+      <DiagnosticsPanel refreshTick={refreshTick} />
+    </>
   );
 }
 

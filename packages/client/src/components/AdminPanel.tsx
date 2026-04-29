@@ -16,7 +16,7 @@ interface MeetingInfo {
   lastConnection: string;
 }
 
-export function AdminPanel() {
+export function AdminPanel({ refreshTick }: { refreshTick: number }) {
   const [meetings, setMeetings] = useState<MeetingInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -35,12 +35,12 @@ export function AdminPanel() {
     }
   }, []);
 
+  // Refresh cadence is owned by the parent AdminSection so this panel and
+  // the DiagnosticsPanel beside it actually fetch on the same tick rather
+  // than drifting apart on independent intervals.
   useEffect(() => {
     fetchMeetings();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchMeetings, 10_000);
-    return () => clearInterval(interval);
-  }, [fetchMeetings]);
+  }, [fetchMeetings, refreshTick]);
 
   /** Delete a meeting after confirmation. */
   async function handleDelete(meetingId: string) {

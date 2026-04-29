@@ -38,13 +38,13 @@ describe('DiagnosticsPanel', () => {
   it('renders nothing while loading', () => {
     // fetch never resolves, so the component stays in loading state
     mockFetch.mockReturnValue(new Promise(() => {}));
-    const { container } = render(<DiagnosticsPanel />);
+    const { container } = render(<DiagnosticsPanel refreshTick={0} />);
     expect(container.firstChild).toBeNull();
   });
 
   it('renders process, meetings, and socket stats after loading', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(sample) });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Admin — Diagnostics')).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('DiagnosticsPanel', () => {
       ok: true,
       json: () => Promise.resolve({ ...sample, process: { ...sample.process, gitSha: null } }),
     });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
     await waitFor(() => {
       expect(screen.getByText('Git SHA').nextSibling?.textContent).toBe('—');
     });
@@ -80,7 +80,7 @@ describe('DiagnosticsPanel', () => {
       ok: true,
       json: () => Promise.resolve({ ...sample, errors: { totalSinceStart: 0, recent: [] } }),
     });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
     await waitFor(() => {
       expect(screen.getByText(/no errors recorded/i)).toBeInTheDocument();
     });
@@ -88,7 +88,7 @@ describe('DiagnosticsPanel', () => {
 
   it('renders HTTP counters and an error rate', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(sample) });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('HTTP (since start)')).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('DiagnosticsPanel', () => {
           },
         }),
     });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Persistence')).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('DiagnosticsPanel', () => {
 
   it('renders recent errors with severity badges', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(sample) });
-    render(<DiagnosticsPanel />);
+    render(<DiagnosticsPanel refreshTick={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('process_panic')).toBeInTheDocument();
