@@ -387,6 +387,21 @@ ensure_firestore() {
   fi
 }
 
+ensure_session_ttl_policy() {
+  local db_id="${FIRESTORE_DATABASE_ID:-(default)}"
+  # Enable a Firestore TTL policy on the `expireAt` field of the `sessions`
+  # collection so expired session documents are pruned automatically. The
+  # custom parser in packages/server/src/sessionDocParser.ts populates this
+  # field with cookie expiry + 24h. Re-applying an already-enabled TTL is a
+  # no-op, so this is safe to re-run.
+  echo "Ensuring Firestore TTL policy on sessions.expireAt..."
+  gcloud firestore fields ttls update expireAt \
+    --collection-group=sessions \
+    --database="$db_id" \
+    --project="$GCP_PROJECT_ID" \
+    --enable-ttl --quiet >/dev/null
+}
+
 ensure_service_account() {
   if ! gcloud iam service-accounts describe "$GCP_SERVICE_ACCOUNT" \
          --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
@@ -573,6 +588,7 @@ EOF
   ensure_billing_linked
   ensure_apis
   ensure_firestore
+  ensure_session_ttl_policy
   ensure_service_account
   ensure_artifact_registry
 

@@ -17,6 +17,7 @@ import './session.js'; // session type augmentation
 import { MeetingManager } from './meetings.js';
 import { FileMeetingStore } from './fileStore.js';
 import { FirestoreMeetingStore } from './firestoreStore.js';
+import { sessionDocParser } from './sessionDocParser.js';
 import type { MeetingStore } from './store.js';
 import { createMeetingRoutes } from './routes.js';
 import { createAuthRoutes } from './auth.js';
@@ -80,6 +81,10 @@ if (STORE_TYPE === 'firestore') {
   sessionStore = new FirestoreStore({
     database: db,
     collection: 'sessions',
+    // Custom parser writes a top-level `expireAt` Timestamp so the Firestore
+    // TTL policy on `sessions.expireAt` can prune expired session docs. See
+    // sessionDocParser.ts for the buffer rationale.
+    parser: sessionDocParser,
   });
 } else {
   // File-based store for local development
@@ -105,7 +110,7 @@ const sessionMiddleware = session({
     // NODE_ENV is set to 'production' in the Dockerfile.
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 });
 

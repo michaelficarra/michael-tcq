@@ -85,7 +85,19 @@ Or with a custom database ID:
 gcloud firestore databases create --location=us-central1 --database=<your-database-id>
 ```
 
-### 5. Create a service account for Cloud Run
+### 5. Enable a TTL policy on the `sessions` collection
+
+_Why:_ The session store writes one document per login. Without TTL, the `sessions` collection grows unboundedly. The server populates a top-level `expireAt` `Timestamp` (cookie expiry + 24h) on every session write; this policy tells Firestore to delete documents whose `expireAt` is in the past.
+
+```sh
+gcloud firestore fields ttls update expireAt \
+  --collection-group=sessions \
+  --enable-ttl
+```
+
+If you used a custom database ID in step 4, add `--database=<your-database-id>`.
+
+### 6. Create a service account for Cloud Run
 
 _Why:_ Cloud Run needs an identity that can read and write Firestore without shipping a key file. The first IAM binding grants the service account access to Firestore; the second grants the deploying user the right to attach this service account to a Cloud Run revision.
 
@@ -101,7 +113,7 @@ gcloud projects add-iam-policy-binding <your-project-id> \
   --role="roles/iam.serviceAccountUser"
 ```
 
-### 6. Create an Artifact Registry repository
+### 7. Create an Artifact Registry repository
 
 _Why:_ Cloud Run pulls the TCQ image from somewhere; Artifact Registry is Google's first-party Docker registry. The second command registers a Docker credential helper so `docker push` can authenticate.
 
@@ -110,7 +122,7 @@ gcloud artifacts repositories create tcq --repository-format=docker --location=u
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-### 7. Write `.env.production`
+### 8. Write `.env.production`
 
 _Why:_ `scripts/deploy.sh` reads every value it needs from this file. The `GITHUB_*` fields come later — they depend on the Cloud Run URL, which doesn't exist until after the first deploy.
 
@@ -140,7 +152,7 @@ Generate a random session secret with:
 head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 40
 ```
 
-### 8. First deploy (without OAuth)
+### 9. First deploy (without OAuth)
 
 _Why:_ GitHub OAuth needs the Cloud Run URL, and you don't know it until the service exists. Deploy once with mock auth to get the URL.
 
@@ -150,7 +162,7 @@ _Why:_ GitHub OAuth needs the Cloud Run URL, and you don't know it until the ser
 
 The script warns that GitHub OAuth isn't configured — the server will run in mock auth mode. Note the **service URL** it prints at the end.
 
-### 9. Register a GitHub OAuth App
+### 10. Register a GitHub OAuth App
 
 _Why:_ this is the one step that can't be automated — GitHub's API doesn't expose OAuth App creation.
 
@@ -168,7 +180,7 @@ If the pre-fill link doesn't work for you, register manually at [GitHub Develope
 - **Homepage URL:** `https://<your-cloud-run-url>`
 - **Authorization callback URL:** `https://<your-cloud-run-url>/auth/github/callback`
 
-### 10. Redeploy with OAuth
+### 11. Redeploy with OAuth
 
 _Why:_ the server reads GitHub credentials at boot, so they have to be baked into a fresh Cloud Run revision.
 
@@ -203,8 +215,9 @@ The script reads all configuration from `.env.production`, builds the image, pus
 
 - **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
 - **`--session-affinity`** — Routes reconnecting clients to the same instance.
-- **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 5. No key file needed in production.
+- **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 6. No key file needed in production.
 - **`GIT_SHA`** — `scripts/deploy.sh` sets this to `git rev-parse HEAD` on every deploy and passes it to Cloud Run via `--set-env-vars`. The server exposes it at `GET /api/version` (plain text, public) so monitoring tools can identify which commit is running. In development the variable is unset and the endpoint returns 204.
+- **Pre-existing session documents** — Session docs written before TTL was enabled have no `expireAt` field, so the policy will not delete them. They are stale (the cookies themselves expired long ago) and can be deleted in one shot via the Firestore console, or left in place to be overwritten on next login under the same session ID.
 
 ## Checking Deployment Status
 

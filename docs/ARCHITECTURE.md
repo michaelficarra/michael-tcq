@@ -207,6 +207,8 @@ When the last client disconnects from a meeting, a cleanup timer starts (e.g. 5 
 
 User sessions are also stored in Firestore, using a Firestore-backed session store for `express-session`. This keeps the persistence layer unified (one backing store rather than two) and means sessions survive container restarts, so users do not need to re-authenticate after a redeployment.
 
+The session cookie has a 7-day lifetime. To prevent the `sessions` collection from growing unboundedly, a custom doc parser writes a top-level `expireAt` `Timestamp` on every session write, and a Firestore TTL policy on `sessions.expireAt` deletes expired documents automatically. `expireAt` is set to **cookie expiry + 24 hours** (so 8 days from session creation): the buffer prevents the race where express-session would still accept a cookie but Firestore has already deleted the backing document. Firestore TTL deletion is best-effort and may run up to ~24h after the timestamp passes, so the explicit buffer is layered on top of that.
+
 For local development, sessions use the default in-memory session store (express-session's `MemoryStore`). This means sessions are lost on server restart, which is acceptable for development.
 
 ### Socket.IO Session Sharing

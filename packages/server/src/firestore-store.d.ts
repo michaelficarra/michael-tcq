@@ -15,6 +15,15 @@ declare module 'firestore-store' {
     database: Firestore;
     /** The collection name to store sessions in. Defaults to 'sessions'. */
     collection?: string;
+    /**
+     * Optional custom doc parser. Each session doc is run through
+     * `save(session)` on write and `read(doc)` on read. Defaults to a parser
+     * that JSON-stringifies the whole session into a single `session` field.
+     */
+    parser?: {
+      read(doc: unknown): unknown;
+      save(session: unknown): unknown;
+    };
   }
 
   interface FirestoreStoreClass {
