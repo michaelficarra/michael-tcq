@@ -90,12 +90,14 @@ export function DiagnosticsPanel() {
 function ProcessSection({ info }: { info: ProcessInfo }) {
   return (
     <Section title="Process">
-      <Row label="Uptime" value={formatUptime(info.uptimeSeconds)} />
-      {/* CPU time vs uptime: on a host that throttles or pauses idle */}
-      {/* containers (e.g. Cloud Run), this can lag uptime substantially. */}
-      <Row label="CPU time" value={formatUptime(Math.floor(info.cpuSeconds))} />
+      {/* Identity first — confirms what's deployed before anything else. */}
       <Row label="Node" value={info.nodeVersion} />
       <Row label="Git SHA" value={info.gitSha ? <code className="font-mono">{info.gitSha.slice(0, 12)}</code> : '—'} />
+      {/* Lifetime — uptime is wall-clock; CPU time only ticks while the */}
+      {/* kernel actually schedules us, so it lags on throttled hosts. */}
+      <Row label="Uptime" value={formatUptime(info.uptimeSeconds)} />
+      <Row label="CPU time" value={formatUptime(Math.floor(info.cpuSeconds))} />
+      {/* Memory last. */}
       <Row label={<abbr title="Resident Set Size">RSS</abbr>} value={formatBytes(info.memory.rss)} />
       <Row label="Heap" value={`${formatBytes(info.memory.heapUsed)} / ${formatBytes(info.memory.heapTotal)}`} />
     </Section>
