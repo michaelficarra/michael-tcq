@@ -11,7 +11,7 @@ beforeEach(() => {
 const sample = {
   process: {
     uptimeSeconds: 90_061, // 1d 1h 1m
-    startedAt: '2026-04-25T09:00:00.000Z',
+    cpuSeconds: 3_661.5, // 1h 1m — lagging uptime, simulating a throttled host
     nodeVersion: 'v22.12.0',
     gitSha: 'abc123def4567890',
     memory: { rss: 200 * 1024 * 1024, heapUsed: 50 * 1024 * 1024, heapTotal: 80 * 1024 * 1024, external: 0 },
@@ -44,6 +44,9 @@ describe('DiagnosticsPanel', () => {
     });
 
     expect(screen.getByText('1d 1h 1m')).toBeInTheDocument();
+    // CPU time floors to 3661s → "1h 1m" — distinct from uptime so we
+    // can verify the wall-clock-vs-active-time gap is rendered.
+    expect(screen.getByText('CPU time').nextSibling?.textContent).toBe('1h 1m');
     expect(screen.getByText('v22.12.0')).toBeInTheDocument();
     // SHA is truncated to 12 chars.
     expect(screen.getByText('abc123def456')).toBeInTheDocument();

@@ -10,7 +10,7 @@ import { RelativeTime } from '../lib/RelativeTime.js';
 
 interface ProcessInfo {
   uptimeSeconds: number;
-  startedAt: string;
+  cpuSeconds: number;
   nodeVersion: string;
   gitSha: string | null;
   memory: {
@@ -91,7 +91,9 @@ function ProcessSection({ info }: { info: ProcessInfo }) {
   return (
     <Section title="Process">
       <Row label="Uptime" value={formatUptime(info.uptimeSeconds)} />
-      <Row label="Started" value={<RelativeTime timestamp={info.startedAt} />} />
+      {/* CPU time vs uptime: on a host that throttles or pauses idle */}
+      {/* containers (e.g. Cloud Run), this can lag uptime substantially. */}
+      <Row label="CPU time" value={formatUptime(Math.floor(info.cpuSeconds))} />
       <Row label="Node" value={info.nodeVersion} />
       <Row label="Git SHA" value={info.gitSha ? <code className="font-mono">{info.gitSha.slice(0, 12)}</code> : '—'} />
       <Row label="RSS" value={formatBytes(info.memory.rss)} />

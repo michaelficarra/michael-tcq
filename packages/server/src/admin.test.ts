@@ -221,7 +221,7 @@ describe('Admin endpoints', () => {
       expect(body).toMatchObject({
         process: {
           uptimeSeconds: expect.any(Number),
-          startedAt: expect.any(String),
+          cpuSeconds: expect.any(Number),
           nodeVersion: expect.any(String),
           memory: {
             rss: expect.any(Number),

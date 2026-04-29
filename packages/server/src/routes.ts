@@ -322,11 +322,17 @@ export function createMeetingRoutes(
 
     const uptimeSeconds = Math.floor(process.uptime());
     const mem = process.memoryUsage();
+    // CPU time only ticks while the kernel actually schedules this process,
+    // so on Cloud Run (where CPU is throttled outside of request handling)
+    // it lags wall-clock uptime. The gap is a useful signal of how active
+    // the instance has been.
+    const cpu = process.cpuUsage();
+    const cpuSeconds = (cpu.user + cpu.system) / 1_000_000;
 
     res.json({
       process: {
         uptimeSeconds,
-        startedAt: new Date(Date.now() - uptimeSeconds * 1000).toISOString(),
+        cpuSeconds,
         nodeVersion: process.version,
         gitSha: process.env.GIT_SHA ?? null,
         memory: {
