@@ -1358,10 +1358,10 @@ describe('Socket.IO integration', () => {
       const response = await ackPromise;
 
       expect(response.ok).toBe(false);
-      expect(response.error).toMatch(/only chairs or the current speaker/i);
+      expect(response.error).toMatch(/only chairs/i);
     });
 
-    it('allows the current speaker (non-chair) to advance via "I\'m done speaking"', async () => {
+    it('rejects the current speaker (non-chair) from advancing', async () => {
       const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
       const speaker = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([chair]);
@@ -1377,26 +1377,8 @@ describe('Socket.IO integration', () => {
       });
       const response = await ackPromise;
 
-      expect(response.ok).toBe(true);
-    });
-
-    it('rejects non-chair non-speaker from advancing', async () => {
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
-      const otherUser = { ghid: 50, ghUsername: 'someone', name: 'Someone', organisation: '' };
-      const meeting = ctx.meetingManager.create([chair]);
-      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Their topic', otherUser);
-      // Advance to make otherUser the current speaker (not testuser)
-      ctx.meetingManager.nextSpeaker(meeting.id);
-
-      const client = await joinMeeting(meeting.id);
-
-      const ackPromise = new Promise<any>((resolve) => {
-        client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, resolve);
-      });
-      const response = await ackPromise;
-
       expect(response.ok).toBe(false);
-      expect(response.error).toMatch(/only chairs or the current speaker/i);
+      expect(response.error).toMatch(/only chairs/i);
     });
 
     it('accepts advancement after unrelated mutations (queue edit)', async () => {

@@ -107,7 +107,6 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   // Advancement actions with debounce + cooldown protection
   const { fire: handleNextAgendaItem } = useAdvanceAction('meeting:nextAgendaItem');
   const { fire: handleNextSpeaker, disabled: nextSpeakerDisabled } = useAdvanceAction('queue:next');
-  const { fire: handleDoneSpeaking, disabled: doneSpeakingDisabled } = useAdvanceAction('queue:next');
 
   // Drag-and-drop sensors with keyboard support for accessibility.
   // Options are hoisted to module scope so useSensor's internal useMemo
@@ -433,22 +432,6 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                          }`}
             >
               Next Speaker
-            </button>
-          )}
-
-          {/* "I'm done speaking" button — non-chair active speaker only */}
-          {!isChair && currentSpeaker && user && currentSpeaker.userId === userKey(user) && (
-            <button
-              onClick={() => handleDoneSpeaking()}
-              disabled={doneSpeakingDisabled}
-              className={`text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                         transition-colors presentation-hidden ${
-                           doneSpeakingDisabled
-                             ? 'opacity-50 cursor-not-allowed text-stone-400 dark:text-stone-500'
-                             : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer'
-                         }`}
-            >
-              I&rsquo;m done speaking
             </button>
           )}
         </div>

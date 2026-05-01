@@ -105,13 +105,6 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           .
         </p>
 
-        <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">When You&rsquo;re Speaking</h4>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
-          When you are the active speaker, an <strong>I&rsquo;m done speaking</strong> button appears next to the
-          &ldquo;Speaking&rdquo; heading. Click it to voluntarily yield the floor and advance to the next speaker in the
-          queue, without waiting for a chair to do it for you.
-        </p>
-
         <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Polls</h4>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           When a chair starts a poll, a panel of reaction buttons appears. Click any button to indicate your sentiment —

@@ -755,10 +755,9 @@ export function registerSocketHandlers(
     });
 
     // --- queue:next ---
-    // Advances to the next speaker. Allowed for chairs and the current speaker
-    // ("I'm done speaking"). Uses a precondition check on the current speaker
-    // entry ID to prevent double-advancement. Uses an ack callback so the
-    // client can detect conflicts.
+    // Advances to the next speaker (chair-only). Uses a precondition check on
+    // the current speaker entry ID to prevent double-advancement. Uses an ack
+    // callback so the client can detect conflicts.
     socket.on('queue:next', (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
@@ -773,12 +772,9 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Allow chairs and the current speaker to advance.
       const actorId = userKey(user);
-      const isChair = meetingManager.isChair(joinedMeetingId, user);
-      const isCurrentSpeaker = meeting.current.speaker?.userId === actorId;
-      if (!isChair && !isCurrentSpeaker) {
-        respond({ ok: false, error: 'Only chairs or the current speaker can advance' });
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        respond({ ok: false, error: 'Only chairs can advance the speaker' });
         return;
       }
 

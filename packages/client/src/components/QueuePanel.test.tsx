@@ -487,43 +487,6 @@ describe('QueuePanel', () => {
     expect(emit).toHaveBeenCalledWith('queue:next', { currentSpeakerEntryId: 's1' }, expect.any(Function));
   });
 
-  // -- "I'm done speaking" button --
-
-  it('shows "I\'m done speaking" for non-chair active speaker', () => {
-    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'bob' };
-    const meeting = makeMeeting({
-      users: { alice: chairUser, bob: otherUser },
-      chairIds: ['alice'],
-      current: currentOf({ speaker: speakerOf(entry) }),
-    });
-    renderQueue(meeting, otherUser);
-    expect(screen.getByRole('button', { name: /done speaking/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Next Speaker' })).not.toBeInTheDocument();
-  });
-
-  it('hides "I\'m done speaking" for non-chair who is not the active speaker', () => {
-    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' };
-    const meeting = makeMeeting({
-      users: { alice: chairUser, bob: otherUser },
-      chairIds: ['alice'],
-      current: currentOf({ speaker: speakerOf(entry) }),
-    });
-    renderQueue(meeting, otherUser);
-    expect(screen.queryByRole('button', { name: /done speaking/i })).not.toBeInTheDocument();
-  });
-
-  it('hides "I\'m done speaking" for chairs (they see "Next Speaker" instead)', () => {
-    const entry: QueueEntry = { id: 's1', type: 'topic', topic: 'Topic', userId: 'alice' };
-    const meeting = makeMeeting({
-      users: { alice: chairUser },
-      chairIds: ['alice'],
-      current: currentOf({ speaker: speakerOf(entry) }),
-    });
-    renderQueue(meeting, chairUser);
-    expect(screen.queryByRole('button', { name: /done speaking/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next Speaker' })).toBeInTheDocument();
-  });
-
   // -- Delete buttons on queue entries --
 
   it('shows delete button on own queue entries', () => {
