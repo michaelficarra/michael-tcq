@@ -857,7 +857,7 @@ function SortableQueueEntry({
         {/* Placeholder for drag handle column */}
         {canDrag && <span className="w-4" />}
 
-        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center">
+        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
           {index + 1}
         </span>
 
@@ -932,7 +932,7 @@ function SortableQueueEntry({
       )}
 
       {/* Position number */}
-      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center">
+      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
         {index + 1}
       </span>
 
