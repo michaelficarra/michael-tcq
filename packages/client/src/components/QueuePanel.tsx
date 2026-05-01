@@ -26,6 +26,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaItem, QueueEntry, QueueEntryType } from '@tcq/shared';
 import {
@@ -129,6 +130,11 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
 
   /** Called when a drag starts — compute the legal index range for the move. */
   function handleDragStart(event: DragStartEvent) {
+    // Clear any stale bounds before computing fresh ones — guards against the
+    // (currently impossible but cheap-to-prevent) case where a previous drag
+    // ended without firing handleDragEnd / handleDragCancel and one of the
+    // early returns below leaves bounds unset for this drag.
+    dragBoundsRef.current = null;
     if (!meeting || !user) return;
     const entries = meeting.queue.orderedIds.map((id) => meeting.queue.entries[id]).filter(Boolean);
     const currentIndex = entries.findIndex((e) => e.id === event.active.id);
@@ -242,6 +248,14 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
 
     setRestoreText('');
     setShowRestore(false);
+  }
+
+  /**
+   * Drag cancellation (e.g. Escape pressed mid-drag) — clear bounds so the
+   * next drag computes a fresh range. handleDragEnd does not fire on cancel.
+   */
+  function handleDragCancel() {
+    dragBoundsRef.current = null;
   }
 
   /**
@@ -539,8 +553,13 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            modifiers={[restrictDragBounds]}
+            // Order matters: built-ins run first to lock the X axis and keep
+            // the ghost inside the queue list (the parent <ol>), then our
+            // custom modifier clamps Y to the legal index range computed at
+            // drag start.
+            modifiers={[restrictToVerticalAxis, restrictToParentElement, restrictDragBounds]}
             onDragStart={handleDragStart}
+            onDragCancel={handleDragCancel}
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={meeting.queue.orderedIds} strategy={verticalListSortingStrategy}>

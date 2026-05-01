@@ -28,6 +28,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import type { AgendaItem, Session } from '@tcq/shared';
 import { formatShortDuration, isAgendaItem, isSession, normaliseGithubUsername, userKey } from '@tcq/shared';
@@ -238,7 +239,16 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
           )}
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          // Lock the drag ghost to vertical motion and keep it inside the
+          // agenda list (the parent <ol>) — the list is strictly vertical
+          // and chairs are the only ones who can drag (SortableContext is
+          // disabled for non-chairs below).
+          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+          onDragEnd={handleDragEnd}
+        >
           <SortableContext
             items={meeting.agenda.map((i) => i.id)}
             strategy={verticalListSortingStrategy}
