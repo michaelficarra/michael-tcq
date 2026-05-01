@@ -4,6 +4,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { formatDeadline, formatFullTimestamp, relativeTime } from '../lib/timeFormat.js';
 
 interface CountUpTimerProps {
   /** ISO timestamp to count up from. */
@@ -53,16 +54,43 @@ export function CountUpTimer({ since, className, overAfterMinutes }: CountUpTime
 
   const elapsed = now - new Date(since).getTime();
   const isOver = overAfterMinutes != null && elapsed > overAfterMinutes * 60_000;
+  const hasEstimate = overAfterMinutes != null && overAfterMinutes > 0;
 
   const defaultClass = 'text-xs text-stone-400 dark:text-stone-500 tabular-nums';
   const overClass = 'text-xs font-bold text-red-600 dark:text-red-400 tabular-nums';
 
+  // The timebox-end annotation: only meaningful when an estimate is set.
+  // Before the deadline → projected wall-clock end time (with day suffix
+  // when it crosses midnight). After the deadline → relative time since
+  // the estimate was exceeded, with the full deadline timestamp on hover.
+  let annotation = null;
+  if (hasEstimate) {
+    const deadlineMs = new Date(since).getTime() + overAfterMinutes * 60_000;
+    const deadlineIso = new Date(deadlineMs).toISOString();
+    if (isOver) {
+      annotation = (
+        <span className="ml-1 text-xs text-stone-500 dark:text-stone-400" title={formatFullTimestamp(deadlineIso)}>
+          (exceeded estimate {relativeTime(deadlineIso, now)})
+        </span>
+      );
+    } else {
+      annotation = (
+        <span className="ml-1 text-xs text-stone-500 dark:text-stone-400">
+          (expected to end by {formatDeadline(deadlineIso, now)})
+        </span>
+      );
+    }
+  }
+
   return (
-    <span
-      className={isOver ? overClass : (className ?? defaultClass)}
-      title={`Since ${new Date(since).toLocaleString()}`}
-    >
-      {formatElapsed(elapsed)}
+    <span>
+      <span
+        className={isOver ? overClass : (className ?? defaultClass)}
+        title={`Since ${new Date(since).toLocaleString()}`}
+      >
+        {formatElapsed(elapsed)}
+      </span>
+      {annotation}
     </span>
   );
 }

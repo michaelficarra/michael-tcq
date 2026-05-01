@@ -394,6 +394,57 @@ test.describe('Timers', () => {
     const speaking = queueSection(page, 'Speaking');
     await expect(speaking.getByText(/\d+:\d{2}/)).toBeVisible();
   });
+
+  test('agenda item without an estimate shows no timebox annotation', async ({ page }) => {
+    // setupStartedMeeting adds "Item 1" with no estimate.
+    const agendaItem = queueSection(page, 'Agenda Item');
+    await expect(agendaItem.getByText(/expected to end by|exceeded estimate/)).not.toBeVisible();
+  });
+});
+
+// The timebox annotation tests need their own meeting setup (with an
+// estimate set) and one of them installs a fake clock before any
+// navigation, so they live in a separate describe block.
+test.describe('Agenda timer — timebox annotation', () => {
+  test('shows "expected to end by HH:MM" when an estimate is set and not yet exceeded', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    // 60-min estimate is comfortably larger than any test runtime, so the
+    // assertion never races into the "exceeded" branch.
+    await addAgendaItem(page, 'Long item', undefined, 60);
+    await startMeeting(page);
+
+    const agendaItem = queueSection(page, 'Agenda Item');
+    // Regex tolerates both 24h ("14:30") and 12h ("2:30 PM") locales.
+    await expect(agendaItem.getByText(/expected to end by \d{1,2}:\d{2}(\s?[AP]M)?/)).toBeVisible();
+  });
+
+  test('shows "exceeded estimate" with a tooltip after the estimate elapses', async ({ page }) => {
+    // Install Playwright's fake clock before navigation so the agenda
+    // start time and the post-fast-forward "now" both observe the same
+    // mocked clock. Without this, the server would record a real wall-
+    // clock start time and the client's subsequent fastForward wouldn't
+    // affect it.
+    await page.clock.install();
+
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Short item', undefined, 1); // 1-min estimate
+    await startMeeting(page);
+
+    // Fast-forward 2 minutes past the start, putting elapsed > estimate.
+    // Pass milliseconds to avoid ambiguity in Playwright's string formats.
+    await page.clock.fastForward(2 * 60_000);
+
+    const agendaItem = queueSection(page, 'Agenda Item');
+    const annotation = agendaItem.getByText(/exceeded estimate/);
+    await expect(annotation).toBeVisible();
+    // The full timestamp tooltip should be present (its exact formatting
+    // is locale-specific, so we only assert non-empty).
+    const title = await annotation.getAttribute('title');
+    expect(title).toBeTruthy();
+    expect(title?.length).toBeGreaterThan(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

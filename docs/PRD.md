@@ -231,7 +231,9 @@ When a speaker introduces a new topic, that topic becomes the "current topic" an
 
 The Queue tab displays live count-up timers on three elements:
 
-- **Current agenda item** — time since the agenda item started. If the item has an estimate, the timer turns bold red when the estimate is exceeded.
+- **Current agenda item** — time since the agenda item started. If the item has an estimate, the timer turns bold red when the estimate is exceeded, and is annotated with the projected end time:
+  - Before the estimate is reached, the annotation reads "expected to end by HH:MM" using the viewer's local time and locale (12- or 24-hour format follows the locale). When the projected end time falls on the next local day, "tomorrow" is appended; for two or more days out, an explicit weekday and date are appended (e.g. "expected to end by 09:00 on Wed, 4 May").
+  - Once the estimate is exceeded, the annotation switches to "exceeded estimate <relative time> ago" (e.g. "4 min ago", "1d ago"), and hovering it shows the full timestamp at which the estimate was exceeded.
 - **Current topic** — time since the current topic was introduced.
 - **Current speaker** — time since the current speaker began speaking.
 

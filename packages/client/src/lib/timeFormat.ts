@@ -22,6 +22,43 @@ export function formatFullTimestamp(iso: string): string {
   });
 }
 
+/**
+ * Format the wall-clock time of a future deadline, with a calendar-day
+ * suffix when the deadline isn't on the same local day as `nowMs`:
+ *   - same day:     "06:32"
+ *   - next day:     "06:32 tomorrow"
+ *   - 2+ days out:  "06:32 on Wed, 3 May"
+ *
+ * Time is locale-formatted (12h vs 24h follows the viewer's locale).
+ * `nowMs` lets the suffix update live as midnight passes.
+ */
+export function formatDeadline(deadlineIso: string, nowMs: number): string {
+  const deadline = new Date(deadlineIso);
+  const time = deadline.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const dayDiff = localDayDiff(new Date(nowMs), deadline);
+  if (dayDiff <= 0) return time;
+  if (dayDiff === 1) return `${time} tomorrow`;
+  const date = deadline.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  return `${time} on ${date}`;
+}
+
+// Calendar-day delta in the viewer's local timezone. setHours(0,0,0,0)
+// operates in local time, so DST transitions don't bias the day count.
+function localDayDiff(from: Date, to: Date): number {
+  const f = new Date(from);
+  f.setHours(0, 0, 0, 0);
+  const t = new Date(to);
+  t.setHours(0, 0, 0, 0);
+  return Math.round((t.getTime() - f.getTime()) / 86_400_000);
+}
+
 /** Compute a relative time string like "5 min ago". */
 export function relativeTime(iso: string, now: number): string {
   const diff = now - new Date(iso).getTime();
