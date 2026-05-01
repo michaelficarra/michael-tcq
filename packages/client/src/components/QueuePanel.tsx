@@ -833,10 +833,11 @@ function SortableQueueEntry({
           entry.type === 'point-of-order'
             ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        } ${entry.type === 'point-of-order' ? '' : `border-l-3 ${isOwnEntry ? 'border-l-teal-500 dark:border-l-teal-500' : 'border-l-transparent'}`}`}
       >
-        {/* Placeholder for drag handle column */}
-        {canDrag && <span className="w-4" />}
+        {/* Placeholder for drag handle column — always present so editing-mode
+            rows align with display-mode rows that have a real handle. */}
+        <span className="w-4" />
 
         <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center">
           {index + 1}
@@ -893,15 +894,15 @@ function SortableQueueEntry({
           : entry.type === 'point-of-order'
             ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
             : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-      } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      } ${entry.type === 'point-of-order' ? '' : `border-l-3 ${isOwnEntry ? 'border-l-teal-500 dark:border-l-teal-500' : 'border-l-transparent'}`}`}
     >
-      {/* Drag handle — rendered only when the entry has at least one legal
-          move from its current position. The cursor advertises which
-          directions are legal: ns-resize for both, n-resize for up only,
-          s-resize for down only. */}
-      {canDrag && (
+      {/* Drag handle column — the column is always present so rows align
+          regardless of whether the entry can be moved. The glyph and drag
+          listeners are only attached when at least one direction is legal:
+          ns-resize for both, n-resize for up only, s-resize for down only. */}
+      {canDrag ? (
         <span
-          className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
+          className={`inline-flex justify-center w-4 text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
             canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
           } select-none text-sm leading-none presentation-hidden`}
           aria-label={`Drag to reorder: ${entry.topic}`}
@@ -910,6 +911,8 @@ function SortableQueueEntry({
         >
           ⠿
         </span>
+      ) : (
+        <span className="w-4 presentation-hidden" aria-hidden="true" />
       )}
 
       {/* Position number */}

@@ -413,7 +413,7 @@ function SortableAgendaItem({
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} border-l-3 ${isOwnItem ? 'border-l-teal-500 dark:border-l-teal-500' : 'border-l-transparent'}`}
       >
         <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
           {displayNumber}
@@ -480,7 +480,7 @@ function SortableAgendaItem({
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
-      } ${dimClasses} ${containedClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      } ${dimClasses} ${containedClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} border-l-3 ${isOwnItem ? 'border-l-teal-500 dark:border-l-teal-500' : 'border-l-transparent'}`}
       aria-label={isChair ? `Drag to reorder item ${displayNumber}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
