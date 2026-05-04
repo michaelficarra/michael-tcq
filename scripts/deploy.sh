@@ -27,7 +27,7 @@
 #
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
-#     GITHUB_CALLBACK_URL
+#     GITHUB_CALLBACK_URL, CUSTOM_DOMAIN
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -503,7 +503,14 @@ ensure_github_oauth() {
   fi
 
   local url callback
-  url="$(get_service_url)"
+  # Prefer a custom domain when one is configured: the OAuth App should be
+  # registered against the URL users will actually visit, so that the
+  # Authorization callback URL stays valid after a domain switch.
+  if [ -n "${CUSTOM_DOMAIN:-}" ]; then
+    url="https://${CUSTOM_DOMAIN}"
+  else
+    url="$(get_service_url)"
+  fi
   if [ -z "$url" ]; then
     echo "Couldn't determine service URL; skipping OAuth setup." >&2
     return 0

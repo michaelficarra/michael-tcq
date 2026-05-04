@@ -211,6 +211,78 @@ After the initial setup, deploying is a single command:
 
 The script reads all configuration from `.env.production`, builds the image, pushes it, and deploys.
 
+## Custom Domain (optional)
+
+By default the service is reachable at the auto-assigned `https://<service>-<hash>-<region>.run.app` URL. To put your own domain in front of it — keeping the DNS zone wherever you already manage it — there are four moving parts: a Cloud Run domain mapping (which provisions a managed TLS cert), the DNS records the mapping prints, the GitHub OAuth App's callback URL, and the `GITHUB_CALLBACK_URL` env var the server reads at boot.
+
+A DNS record alone isn't enough: Cloud Run returns 404 for any `Host` header that hasn't been bound to a service via a domain mapping.
+
+### 1. Verify domain ownership
+
+_Why:_ Cloud Run won't create a domain mapping for a domain you haven't proven you control. This is a one-time per-account step that opens Google Search Console in a browser.
+
+```sh
+gcloud domains verify <your-domain>
+```
+
+### 2. Create the Cloud Run domain mapping
+
+_Why:_ this binds the hostname to your Cloud Run service and requests a managed TLS certificate. It also tells you exactly which DNS records to add.
+
+```sh
+gcloud beta run domain-mappings create \
+  --service=<CLOUD_RUN_SERVICE> \
+  --domain=<your-domain> \
+  --region=<GCP_REGION>
+
+gcloud beta run domain-mappings describe \
+  --domain=<your-domain> \
+  --region=<GCP_REGION> \
+  --format='value(status.resourceRecords)'
+```
+
+Use the same `CLOUD_RUN_SERVICE` and `GCP_REGION` values as in `.env.production`.
+
+### 3. Add the records to your DNS zone
+
+_Why:_ the records the previous step printed are how DNS resolution finally points at Google's edge. An apex domain gets `A` + `AAAA` records; a subdomain gets a single `CNAME` to `ghs.googlehosted.com`.
+
+Apply them in your registrar / DNS provider's zone editor. The managed certificate provisions automatically once DNS resolves correctly — typically a few minutes, occasionally up to ~15. Check with:
+
+```sh
+gcloud beta run domain-mappings describe \
+  --domain=<your-domain> \
+  --region=<GCP_REGION>
+```
+
+`CertificateProvisioned: True` means TLS is live.
+
+### 4. Update the GitHub OAuth App
+
+_Why:_ GitHub will reject any `redirect_uri` that doesn't match the OAuth App's registered callback URL. If you skip this step, sign-in fails with a `redirect_uri mismatch` error after the domain switch.
+
+In GitHub → Settings → Developer settings → OAuth Apps → your TCQ app, set:
+
+- **Homepage URL:** `https://<your-domain>`
+- **Authorization callback URL:** `https://<your-domain>/auth/github/callback`
+
+### 5. Update `.env.production` and redeploy
+
+_Why:_ the server reads `GITHUB_CALLBACK_URL` at boot to construct the OAuth redirect, so the new value has to be baked into a fresh Cloud Run revision. Setting `CUSTOM_DOMAIN` makes future runs of `deploy.sh` (specifically the OAuth bootstrap path that runs when `GITHUB_CLIENT_ID` is missing) use your domain instead of the `.run.app` URL.
+
+Add to `.env.production`:
+
+```
+CUSTOM_DOMAIN=<your-domain>
+GITHUB_CALLBACK_URL=https://<your-domain>/auth/github/callback
+```
+
+Then:
+
+```sh
+./scripts/deploy.sh
+```
+
 ## Configuration Notes
 
 - **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
