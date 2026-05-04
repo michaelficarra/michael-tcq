@@ -211,6 +211,63 @@ After the initial setup, deploying is a single command:
 
 The script reads all configuration from `.env.production`, builds the image, pushes it, and deploys.
 
+## Deploying from a Different Machine
+
+The deploy script is self-contained, but a few pieces of state live outside the repo. Once an initial deploy has been done from one machine, here's what a second machine needs to take over.
+
+### 1. Transfer `.env.production`
+
+_Why:_ it's gitignored (it contains `SESSION_SECRET` and `GITHUB_CLIENT_SECRET`), so it never reaches the new machine via `git clone`. Without it, `deploy.sh` would re-prompt for everything and generate a fresh `SESSION_SECRET` — invalidating every existing user session on the next deploy.
+
+Copy it across with `scp` or any secure channel (avoid pasting into a chat client). If a secret leaks in transit, rotate it: regenerate the GitHub OAuth Client Secret in GitHub's developer settings, and let `deploy.sh` write a new `SESSION_SECRET` by deleting the line from `.env.production` before re-running.
+
+### 2. Install Docker
+
+_Why:_ the script builds the image locally and pushes it to Artifact Registry; it doesn't shell out to a remote builder. The script doesn't install Docker for you.
+
+Follow [Docker's install instructions](https://docs.docker.com/get-docker/) for your platform and confirm the daemon is running (`docker info`).
+
+### 3. Install and authenticate gcloud
+
+_Why:_ the script offers to install gcloud (via Homebrew or the official tarball) but won't run `gcloud auth login` for you, since that opens a browser and handles poorly when driven by a non-interactive parent.
+
+```sh
+gcloud auth login
+gcloud config set project <your-project-id>
+```
+
+### 4. Confirm your gcloud account has the right IAM roles
+
+_Why:_ deploying touches three different services, each with its own permission. If any are missing, the relevant step fails with a 403 partway through. Owners and editors already have all of these; for a least-privilege deployer, grant:
+
+| Role                                                     | Why                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `roles/run.admin`                                        | Update the Cloud Run service and its env vars.                   |
+| `roles/artifactregistry.writer`                          | Push the Docker image to the `tcq` Artifact Registry repository. |
+| `roles/iam.serviceAccountUser` on `$GCP_SERVICE_ACCOUNT` | Attach the Cloud Run service account to a new revision.          |
+
+Grant with:
+
+```sh
+gcloud projects add-iam-policy-binding <your-project-id> \
+  --member="user:<deployer-email>" \
+  --role="roles/run.admin"
+# ...repeat for the other two roles.
+```
+
+### 5. Clone the repo at the commit you want to ship
+
+_Why:_ the image is tagged `:latest` and `GIT_SHA` is read from `git rev-parse HEAD` at deploy time. The script also refuses to deploy from a dirty tree, so a fresh clone (or a clean checkout of an existing one) is the simplest starting state.
+
+```sh
+git clone <repo-url>
+cd <repo>
+# Drop .env.production into the project root, then:
+./scripts/deploy.sh
+```
+
+What you do **not** need on the new machine: `service-account.json` (only used by local code that talks to Firestore directly; production gets its credentials from the Cloud Run service account).
+
 ## Custom Domain (optional)
 
 By default the service is reachable at the auto-assigned `https://<service>-<hash>-<region>.run.app` URL. To put your own domain in front of it — keeping the DNS zone wherever you already manage it — there are four moving parts: a Cloud Run domain mapping (which provisions a managed TLS cert), the DNS records the mapping prints, the GitHub OAuth App's callback URL, and the `GITHUB_CALLBACK_URL` env var the server reads at boot.
