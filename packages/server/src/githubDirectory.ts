@@ -475,7 +475,40 @@ async function tier3Search(session: SessionUser, query: string, limit: number): 
   }));
 }
 
-// -- Public entry point --------------------------------------------------
+// -- Public entry points -------------------------------------------------
+
+/**
+ * Tier-1 + tier-2 ranking only. Synchronous — neither candidate source
+ * touches the network. Shared by `searchUsers` (which may then escalate
+ * to tier 3) and by the agenda-import resolver (which intentionally
+ * stops here). Does **not** trigger the background cache refresh; that
+ * side-effect is autocomplete-only.
+ */
+export function searchUsersLocal(
+  session: SessionUser,
+  query: string,
+  meeting: MeetingState | undefined,
+  limit: number,
+): DirectoryUser[] {
+  const tier1 = rankMatches(query, meetingUserCandidates(meeting), limit);
+
+  // Mock-auth mode: tier 2 is backed by the static seed list (acts as
+  // the single "org" in dev). In OAuth mode, tier 2 comes from the
+  // searcher's org-membership cache.
+  const tier2Candidates = isOAuthConfigured()
+    ? orgMemberCandidates(session.ghid)
+    : DEV_USERS.map<DirectoryUser>((u) => ({
+        ghid: u.ghid,
+        login: u.login,
+        name: u.name,
+        organisation: u.organisation ?? '',
+        avatarUrl: u.avatarUrl,
+        badge: 'org',
+      }));
+  const tier2 = rankMatches(query, tier2Candidates, limit);
+
+  return mergeTiered([tier1, tier2], limit);
+}
 
 /**
  * Answer one autocomplete request. Returns up to `limit` deduped users in
@@ -488,21 +521,9 @@ export async function searchUsers(
   meeting: MeetingState | undefined,
   limit: number = DEFAULT_AUTOCOMPLETE_LIMIT,
 ): Promise<DirectoryUser[]> {
-  // Mock-auth mode: no GitHub calls at all. Tier 1 (meeting users) still
-  // works locally; tier 2 is backed by the static seed list (acts as the
-  // single "org" in dev); tier 3 is skipped.
+  // Mock-auth mode: no GitHub calls at all. Tier 3 is skipped entirely.
   if (!isOAuthConfigured()) {
-    const tier1 = rankMatches(query, meetingUserCandidates(meeting), limit);
-    const seedCandidates: DirectoryUser[] = DEV_USERS.map((u) => ({
-      ghid: u.ghid,
-      login: u.login,
-      name: u.name,
-      organisation: u.organisation ?? '',
-      avatarUrl: u.avatarUrl,
-      badge: 'org',
-    }));
-    const tier2 = rankMatches(query, seedCandidates, limit);
-    return mergeTiered([tier1, tier2], limit);
+    return searchUsersLocal(session, query, meeting, limit);
   }
 
   // Stale caches → kick off a refresh in the background, but answer this
@@ -515,11 +536,9 @@ export async function searchUsers(
     });
   }
 
-  const tier1 = rankMatches(query, meetingUserCandidates(meeting), limit);
-  const tier2 = rankMatches(query, orgMemberCandidates(session.ghid), limit);
+  const preTier3 = searchUsersLocal(session, query, meeting, limit);
 
   // Skip tier 3 if tiers 1+2 alone (after dedup) already fill the dropdown.
-  const preTier3 = mergeTiered([tier1, tier2], limit);
   if (preTier3.length >= limit) return preTier3;
 
   // Skip tier 3 for empty queries — `/search/users?q=` is rejected by
@@ -527,7 +546,25 @@ export async function searchUsers(
   if (query.trim().length === 0) return preTier3;
 
   const tier3 = await tier3Search(session, query, limit);
-  return mergeTiered([tier1, tier2, tier3], limit);
+  return mergeTiered([preTier3, tier3], limit);
+}
+
+/**
+ * Used by agenda import to bind a free-text presenter name to a real
+ * user when — and only when — the directory has exactly one tier-1+2
+ * match. Tier 3 (global GitHub search) is intentionally skipped: we
+ * only auto-bind to people the importer has reason to know.
+ */
+export function resolvePresenterFromDirectory(
+  session: SessionUser,
+  query: string,
+  meeting: MeetingState | undefined,
+): DirectoryUser | null {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return null;
+  // Ask for two so we can distinguish "exactly one match" from "more than one".
+  const results = searchUsersLocal(session, trimmed, meeting, 2);
+  return results.length === 1 ? results[0] : null;
 }
 
 /**

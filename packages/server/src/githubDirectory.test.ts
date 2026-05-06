@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { MeetingState } from '@tcq/shared';
-import { searchUsers, warmDirectoryForUser, setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
+import {
+  searchUsers,
+  resolvePresenterFromDirectory,
+  warmDirectoryForUser,
+  setFetchForTesting,
+  resetDirectoryForTesting,
+} from './githubDirectory.js';
 import type { SessionUser } from './session.js';
 
 /**
@@ -511,6 +517,155 @@ describe('githubDirectory', () => {
       for (const r of results) {
         expect(matchesQuery('mike', r.login, r.name, r.organisation)).toBe(true);
       }
+    });
+  });
+
+  describe('resolvePresenterFromDirectory', () => {
+    /**
+     * Seed an OAuth-mode org cache for the searcher with two tc39 members:
+     *   - alice / Alice Anderson / Acme
+     *   - allison / Allison Brown / Bumble
+     * so a query like "Alice Anderson" has exactly one tier-2 match while
+     * "al" has two.
+     */
+    async function seedOAuthCache(session: SessionUser) {
+      restoreFetch = setFetchForTesting(async (url, init) => {
+        if (url === 'https://api.github.com/graphql') {
+          const org = await readGraphqlOrg(init);
+          if (org === 'tc39') {
+            return graphqlMembersResponse([
+              { databaseId: 100, login: 'alice', name: 'Alice Anderson', company: 'Acme', avatarUrl: 'a.png' },
+              { databaseId: 101, login: 'allison', name: 'Allison Brown', company: 'Bumble', avatarUrl: 'b.png' },
+            ]);
+          }
+          throw new Error(`unexpected GraphQL org: ${org}`);
+        }
+        if (url.endsWith('/user/orgs?per_page=100')) {
+          return jsonResponse([{ login: 'tc39' }]);
+        }
+        throw new Error(`unexpected url: ${url}`);
+      });
+      await warmDirectoryForUser(session);
+    }
+
+    /**
+     * After warming the cache, swap to a fetch hook that fails any
+     * `/search/users` call. The resolver must never invoke tier 3, so any
+     * call to that URL is a regression.
+     */
+    function forbidTier3() {
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.includes('/search/users')) {
+          throw new Error('tier 3 (/search/users) must not be invoked by the resolver');
+        }
+        throw new Error(`unexpected url: ${url}`);
+      });
+    }
+
+    it('returns the sole tier-1 match', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      const meeting = makeMeeting({
+        bob: { ghid: 7, ghUsername: 'bob', name: 'Bob Smith' },
+      });
+      const hit = resolvePresenterFromDirectory(session, 'Bob Smith', meeting);
+      expect(hit).not.toBeNull();
+      expect(hit?.login).toBe('bob');
+      expect(hit?.badge).toBe('meeting');
+    });
+
+    it('returns the sole tier-2 match', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      // "Alice Anderson" only matches Alice — Allison shares the prefix "al"
+      // but not the full display name.
+      const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', undefined);
+      expect(hit).not.toBeNull();
+      expect(hit?.login).toBe('alice');
+      expect(hit?.badge).toBe('org');
+    });
+
+    it('returns null when zero candidates match', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      const hit = resolvePresenterFromDirectory(session, 'nonexistent-presenter', undefined);
+      expect(hit).toBeNull();
+    });
+
+    it('returns null when more than one candidate matches', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      // Both alice and allison match "al" by login prefix → ambiguous.
+      const hit = resolvePresenterFromDirectory(session, 'al', undefined);
+      expect(hit).toBeNull();
+    });
+
+    it('counts a tier-1 + tier-2 overlap on the same user as one match', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      // Tier 1: meeting copy of alice (ghid 100, same as the org cache).
+      // Tier 2: org copy of alice (ghid 100). mergeTiered dedupes by ghid,
+      // so the resolver still sees exactly one match — and it should resolve.
+      // We use a query precise enough that allison (the other org member
+      // matching "al") doesn't match.
+      const meeting = makeMeeting({
+        alice: { ghid: 100, ghUsername: 'alice', name: 'Alice Anderson' },
+      });
+      const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', meeting);
+      expect(hit).not.toBeNull();
+      expect(hit?.login).toBe('alice');
+      // Tier 1 wins on overlap.
+      expect(hit?.badge).toBe('meeting');
+    });
+
+    it('returns null for empty or whitespace-only queries', async () => {
+      const session = makeSession();
+      await seedOAuthCache(session);
+      forbidTier3();
+
+      expect(resolvePresenterFromDirectory(session, '', undefined)).toBeNull();
+      expect(resolvePresenterFromDirectory(session, '   ', undefined)).toBeNull();
+    });
+
+    describe('mock-auth mode', () => {
+      beforeEach(() => {
+        delete process.env.GITHUB_CLIENT_ID;
+      });
+
+      it('resolves uniquely against the DEV_USERS seed list with no network calls', async () => {
+        const fetchMock = vi.fn();
+        restoreFetch = setFetchForTesting(fetchMock as never);
+
+        // "Daniel Ehrenberg" is exactly one DEV_USERS entry (login littledan).
+        const session = makeSession({ accessToken: undefined });
+        const hit = resolvePresenterFromDirectory(session, 'Daniel Ehrenberg', undefined);
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(hit).not.toBeNull();
+        expect(hit?.login).toBe('littledan');
+      });
+
+      it('returns null when DEV_USERS produces multiple matches', async () => {
+        const fetchMock = vi.fn();
+        restoreFetch = setFetchForTesting(fetchMock as never);
+
+        // "Daniel" matches at least Daniel Rosenwasser, Daniel Veditz, and
+        // Daniel Ehrenberg — 3 hits, far more than 1.
+        const session = makeSession({ accessToken: undefined });
+        const hit = resolvePresenterFromDirectory(session, 'Daniel', undefined);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(hit).toBeNull();
+      });
     });
   });
 });

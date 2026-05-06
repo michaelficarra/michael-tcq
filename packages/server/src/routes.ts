@@ -5,7 +5,12 @@ import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema }
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import { searchUsers, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
+import {
+  searchUsers,
+  resolvePresenterFromDirectory,
+  DEFAULT_AUTOCOMPLETE_LIMIT,
+  type DirectoryUser,
+} from './githubDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
@@ -308,18 +313,44 @@ export function createMeetingRoutes(
       return;
     }
 
-    // Add each item to the meeting, bypassing GitHub username validation.
-    // If no presenters were parsed, fall back to the importing user so the
-    // item still has at least one presenter.
+    // Resolve unique presenter names against the local directory (tier 1
+    // + tier 2 only — meeting users and the importer's org members). When
+    // a name yields exactly one match, bind the imported item to that
+    // real user; otherwise (0 or 2+ matches) keep today's free-text
+    // placeholder behaviour. Resolution is per-name, so the comma-split
+    // presenters of a single cell can be a mix of resolved and placeholder
+    // entries. Names appearing across multiple items are resolved once.
+    const resolved = new Map<string, DirectoryUser>();
+    const seenKeys = new Set<string>();
+    for (const item of items) {
+      for (const raw of item.presenters) {
+        const dedupKey = raw.trim().toLowerCase();
+        if (dedupKey.length === 0 || seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+        const hit = resolvePresenterFromDirectory(user, raw, meeting);
+        if (hit) resolved.set(dedupKey, hit);
+      }
+    }
+
+    // Add each item to the meeting. If no presenters were parsed, fall
+    // back to the importing user so the item still has at least one
+    // presenter.
     for (const item of items) {
       const presenters: User[] =
         item.presenters.length > 0
-          ? item.presenters.map((name) => ({
-              ghid: 0,
-              ghUsername: name,
-              name,
-              organisation: '',
-            }))
+          ? item.presenters.map((name) => {
+              const hit = resolved.get(name.trim().toLowerCase());
+              return hit
+                ? {
+                    ghid: hit.ghid,
+                    // Canonical login from the directory — `userKey` will
+                    // lowercase it when storing in `meeting.users`.
+                    ghUsername: hit.login,
+                    name: hit.name,
+                    organisation: hit.organisation,
+                  }
+                : { ghid: 0, ghUsername: name, name, organisation: '' };
+            })
           : [user];
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }

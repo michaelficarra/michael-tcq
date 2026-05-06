@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { User } from '@tcq/shared';
@@ -250,6 +250,252 @@ describe('Meeting REST routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toHaveLength(1);
+    });
+  });
+
+  describe('POST /api/meetings/:id/import-agenda', () => {
+    /**
+     * Test environment runs without GITHUB_CLIENT_ID set, so the directory
+     * resolver takes the mock-auth branch: tier 1 = the meeting's `users`
+     * map, tier 2 = the static DEV_USERS seed list. We exercise both tiers
+     * here without any network mocking — except for intercepting the route's
+     * own outbound `fetch` of the markdown URL, which we do with a wrapper
+     * around `globalThis.fetch` so the inner test-server request keeps
+     * working unchanged.
+     */
+    const fixtureUrl = 'https://test-fixture.invalid/agenda.md';
+    let fixtureBody = '';
+    const realFetch = globalThis.fetch;
+
+    beforeEach(() => {
+      fixtureBody = '';
+      globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : (input as URL | Request).toString();
+        if (url === fixtureUrl) {
+          return Promise.resolve(
+            new Response(fixtureBody, {
+              status: 200,
+              headers: { 'Content-Type': 'text/markdown' },
+            }),
+          );
+        }
+        return realFetch(input as never, init);
+      }) as typeof fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = realFetch;
+    });
+
+    /**
+     * Create a meeting where TEST_USER (`testuser`, ghid 1) is the chair so
+     * the import endpoint accepts the request. Optionally seed extra users
+     * into the meeting's `users` map to give tier 1 something to match.
+     */
+    function createMeetingWith(extraUsers: User[] = []): string {
+      const meeting = manager.create([TEST_USER, ...extraUsers]);
+      // `create` makes every input a chair; trim back to just testuser so
+      // chair membership is tested explicitly.
+      manager.updateChairs(meeting.id, [TEST_USER]);
+      return meeting.id;
+    }
+
+    async function importAgenda(meetingId: string, body: string) {
+      fixtureBody = body;
+      const res = await fetch(`${baseUrl}/api/meetings/${meetingId}/import-agenda`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fixtureUrl }),
+      });
+      return res;
+    }
+
+    async function getMeeting(meetingId: string) {
+      const res = await fetch(`${baseUrl}/api/meetings/${meetingId}`);
+      expect(res.status).toBe(200);
+      return res.json();
+    }
+
+    /** Pull the `User` record stored against an agenda item's first presenter. */
+    function firstPresenter(meeting: any, itemIndex: number): User {
+      const item = meeting.agenda[itemIndex];
+      const key = item.presenterIds[0];
+      return meeting.users[key];
+    }
+
+    it('resolves a unique tier-2 (DEV_USERS) name to the real user', async () => {
+      // "Daniel Ehrenberg" is exactly one DEV_USERS entry (login littledan).
+      const meetingId = createMeetingWith();
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Temporal Update | Daniel Ehrenberg | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda).toHaveLength(1);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(189835);
+      expect(presenter.ghUsername).toBe('littledan');
+      expect(presenter.name).toBe('Daniel Ehrenberg');
+      expect(presenter.organisation).toBe('Bloomberg');
+    });
+
+    it('resolves a unique tier-1 (meeting user) name to the real user', async () => {
+      // Seed an extra meeting user that the imported name will match.
+      const extra: User = {
+        ghid: 42,
+        ghUsername: 'phlpchm',
+        name: 'Philip Chimento',
+        organisation: 'Igalia',
+      };
+      const meetingId = createMeetingWith([extra]);
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Temporal | Philip Chimento | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(42);
+      expect(presenter.ghUsername).toBe('phlpchm');
+      expect(presenter.name).toBe('Philip Chimento');
+    });
+
+    it('falls back to a placeholder when no candidate matches', async () => {
+      const meetingId = createMeetingWith();
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Item | Q9zzzqq Unknown | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(0);
+      expect(presenter.ghUsername).toBe('Q9zzzqq Unknown');
+      expect(presenter.name).toBe('Q9zzzqq Unknown');
+    });
+
+    it('falls back to a placeholder when more than one candidate matches', async () => {
+      const meetingId = createMeetingWith();
+      // "Daniel" matches several DEV_USERS (Rosenwasser, Veditz, Ehrenberg) →
+      // ambiguous → placeholder.
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Item | Daniel | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(0);
+      expect(presenter.ghUsername).toBe('Daniel');
+    });
+
+    it('falls back to the importing user when no presenters are parsed', async () => {
+      // Numbered-list item with no parenthetical → empty presenter list →
+      // route falls back to TEST_USER.
+      const meetingId = createMeetingWith();
+      const md = ['## Agenda Items', '', '1. Standalone item with no presenter'].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(1);
+      expect(presenter.ghUsername).toBe('testuser');
+    });
+
+    it('resolves comma-separated presenters per-name (mixed resolved + placeholder)', async () => {
+      const meetingId = createMeetingWith();
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Item | Daniel Ehrenberg, Q9zzzqq Unknown | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const item = meeting.agenda[0];
+      expect(item.presenterIds).toHaveLength(2);
+
+      const first = meeting.users[item.presenterIds[0]];
+      const second = meeting.users[item.presenterIds[1]];
+      expect(first.ghid).toBe(189835);
+      expect(first.ghUsername).toBe('littledan');
+      expect(second.ghid).toBe(0);
+      expect(second.ghUsername).toBe('Q9zzzqq Unknown');
+    });
+
+    it('resolves every entry when all comma-separated presenters match uniquely', async () => {
+      // Two distinct DEV_USERS entries: Daniel Ehrenberg → littledan,
+      // Allen Wirfs-Brock → allenwb.
+      const meetingId = createMeetingWith();
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Item | Daniel Ehrenberg, Allen Wirfs-Brock | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const item = meeting.agenda[0];
+      expect(item.presenterIds).toHaveLength(2);
+      const logins = item.presenterIds.map((k: string) => meeting.users[k].ghUsername).sort();
+      expect(logins).toEqual(['allenwb', 'littledan']);
+    });
+
+    it('resolves a name appearing across multiple items to the same user', async () => {
+      const meetingId = createMeetingWith();
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| First | Daniel Ehrenberg | 30 |',
+        '| Second | Daniel Ehrenberg | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda).toHaveLength(2);
+      const firstKey = meeting.agenda[0].presenterIds[0];
+      const secondKey = meeting.agenda[1].presenterIds[0];
+      expect(firstKey).toBe(secondKey);
+      expect(meeting.users[firstKey].ghid).toBe(189835);
     });
   });
 
