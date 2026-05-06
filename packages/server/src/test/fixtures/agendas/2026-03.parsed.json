@@ -7,9 +7,11 @@
     "duration": 10
   },
   {
-    "name": "Secretary's Report (15m, Samina Husain - [slides](./tc39-2026-009.pdf))",
-    "presenters": [],
-    "duration": null
+    "name": "Secretary's Report",
+    "presenters": [
+      "Samina Husain - slides"
+    ],
+    "duration": 15
   },
   {
     "name": "Election of the 2026 Chair Group, Convenors, and [Editors](https://github.com/tc39/Reflector/issues/574)",

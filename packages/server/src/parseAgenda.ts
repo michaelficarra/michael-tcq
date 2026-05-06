@@ -83,27 +83,127 @@ function parseDuration(text: string): number | undefined {
 }
 
 /**
- * Parse a parenthetical suffix like "(Chair, 10m)" or "(15m, Alice, Bob)"
- * into a list of presenters and a duration. Each non-duration comma-separated
- * token becomes its own presenter entry.
+ * Find the trailing balanced `(...)` group in `text`. Walks right-to-left
+ * tracking paren depth so a parenthetical's content can itself contain
+ * balanced `()` pairs — most often markdown link URLs like `[slides](./x.pdf)`
+ * — without the boundary regex tripping on the inner `)`.
+ *
+ * Returns null when `text` doesn't end with `)` or no matching open paren
+ * is found. The returned `name` keeps everything before the open paren
+ * (trimmed); `paren` is the inner content, exclusive of the brackets.
+ */
+function extractTrailingParen(text: string): { name: string; paren: string } | null {
+  const trimmed = text.trimEnd();
+  if (!trimmed.endsWith(')')) return null;
+  let depth = 0;
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    const c = trimmed[i];
+    if (c === ')') depth++;
+    else if (c === '(') {
+      depth--;
+      if (depth === 0) {
+        return {
+          name: trimmed.slice(0, i).trim(),
+          paren: trimmed.slice(i + 1, trimmed.length - 1),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * True iff the entire (trimmed) input is a single balanced markdown link
+ * `[text](url)` with nothing else around it. Used to recognise trailing
+ * `([slides](./x.pdf))` and slides/notes tokens as supplementary metadata
+ * rather than presenter content.
+ */
+function isPureMarkdownLink(s: string): boolean {
+  const t = s.trim();
+  if (!t.startsWith('[') || !t.endsWith(')')) return false;
+  // Find the matching closing `]` for the opening `[`, accounting for nesting.
+  let bracketDepth = 0;
+  let closeBracket = -1;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '[') bracketDepth++;
+    else if (t[i] === ']') {
+      bracketDepth--;
+      if (bracketDepth === 0) {
+        closeBracket = i;
+        break;
+      }
+    }
+  }
+  if (closeBracket === -1 || t[closeBracket + 1] !== '(') return false;
+  // Verify the `(...)` after the `]` covers the entire remainder of t.
+  let parenDepth = 0;
+  for (let i = closeBracket + 1; i < t.length; i++) {
+    if (t[i] === '(') parenDepth++;
+    else if (t[i] === ')') {
+      parenDepth--;
+      if (parenDepth === 0) return i === t.length - 1;
+    }
+  }
+  return false;
+}
+
+/**
+ * Like `extractTrailingParen`, but peels off any number of trailing
+ * pure-markdown-link parentheticals (slides / notes metadata) before
+ * reporting the actual presenter parenthetical. TC39 agendas frequently
+ * tack a `([slides](./x.pdf))` group onto the end of an item — sometimes
+ * after a separate `(presenter, duration)` group — and we want the
+ * presenter info, not the slides link.
+ */
+function extractPresenterMeta(text: string): { name: string; paren: string } | null {
+  let cur = text.trimEnd();
+  // Bound the loop defensively; in practice TC39 items never nest more
+  // than two trailing parentheticals.
+  for (let peel = 0; peel < 5; peel++) {
+    const m = extractTrailingParen(cur);
+    if (!m || m.name.length === 0) return null;
+    if (isPureMarkdownLink(m.paren)) {
+      cur = m.name;
+      continue;
+    }
+    return m;
+  }
+  return null;
+}
+
+/**
+ * Separator pattern for presenter lists. Matches `,`, `&`, or a
+ * whitespace-bounded `and` (case-insensitive). The whitespace bounds on
+ * `and` keep names that happen to contain the substring — "Anderson",
+ * "Sandstone", "Andrew" — from being split mid-word.
+ */
+const PRESENTER_SEPARATOR = /\s+and\s+|[,&]/i;
+
+/**
+ * Parse a parenthetical suffix like "(Chair, 10m)", "(15m, Alice & Bob)",
+ * "(15m, Alice and Bob)", or "(15m, Samina Husain - [slides](./x.pdf))"
+ * into a list of presenters and a duration. `,`, `&`, and whitespace-
+ * bounded `and` are all accepted as separators (TC39 agendas use them
+ * interchangeably, sometimes mixed). Each token has markdown stripped so
+ * an inline `[Alice](url)` link doesn't leak into the stored name;
+ * tokens that are *only* a markdown link are dropped (they're slides/
+ * notes metadata, not presenters).
  */
 function parseParenthetical(paren: string): { presenters: string[]; duration?: number } {
-  // Split on commas and classify each part
   const parts = paren
-    .split(',')
+    .split(PRESENTER_SEPARATOR)
     .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+    .filter((s) => s.length > 0 && !isPureMarkdownLink(s));
 
   const presenters: string[] = [];
   let duration: number | undefined;
 
-  for (const part of parts) {
-    const d = parseDuration(part);
-    if (d !== undefined) {
-      duration = d;
-    } else {
-      presenters.push(part);
-    }
+  for (const raw of parts) {
+    const cleaned = stripMarkdown(raw);
+    if (cleaned.length === 0) continue;
+    const d = parseDuration(cleaned);
+    if (d !== undefined) duration = d;
+    else presenters.push(cleaned);
   }
 
   return { presenters, duration };
@@ -214,12 +314,14 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
         const durationIdx = tableColumns.get('duration');
 
         const name = topicIdx !== undefined ? cleanName(rawCells[topicIdx]) : '';
-        // Presenter cell may list multiple comma-separated names. stripMarkdown
-        // flattens link syntax first, so "[Alice](url), [Bob](url)" splits cleanly.
+        // Presenter cell may list multiple names separated by `,`, `&`,
+        // or a whitespace-bounded `and` (or a mix). stripMarkdown
+        // flattens link syntax first, so "[Alice](url), [Bob](url) &
+        // [Carol](url)" splits cleanly.
         const presenters =
           presenterIdx !== undefined
             ? stripMarkdown(rawCells[presenterIdx])
-                .split(',')
+                .split(PRESENTER_SEPARATOR)
                 .map((s) => s.trim())
                 .filter((s) => s.length > 0)
             : [];
@@ -262,12 +364,13 @@ export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
       // Use cleaned (markdown-preserving) text for the name
       const cleanedText = cleanName(listMatch[1]);
 
-      // Try to extract parenthetical at end: "Name (presenter, Xm)"
-      const parenMatch = cleanedText.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+      // Try to extract a trailing balanced "(...)" — works even when the
+      // parenthetical contains its own `()` pairs (markdown link URLs).
+      // Trailing slides/notes metadata parens are peeled off automatically.
+      const parenMatch = extractPresenterMeta(cleanedText);
       if (parenMatch) {
-        const name = parenMatch[1].trim();
-        const { presenters, duration } = parseParenthetical(parenMatch[2]);
-        items.push({ name, presenters, duration });
+        const { presenters, duration } = parseParenthetical(parenMatch.paren);
+        items.push({ name: parenMatch.name, presenters, duration });
       } else {
         // No parenthetical — use the whole text as the name
         items.push({ name: cleanedText, presenters: [], duration: undefined });

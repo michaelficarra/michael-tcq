@@ -7,9 +7,11 @@
     "duration": null
   },
   {
-    "name": "Secretary's Report (15m, Samina Husain) ([slides](./tc39-2025-038.pdf))",
-    "presenters": [],
-    "duration": null
+    "name": "Secretary's Report",
+    "presenters": [
+      "Samina Husain"
+    ],
+    "duration": 15
   },
   {
     "name": "Project Editors’ Reports",
@@ -120,7 +122,8 @@
   {
     "name": "Update on [proposal-module-global](https://github.com/endojs/proposal-module-global), ([slides](https://github.com/endojs/proposal-module-global/blob/main/slides/2025-09-stage1-update.pdf))",
     "presenters": [
-      "ZB Tenerowicz and Kris Kowal"
+      "ZB Tenerowicz",
+      "Kris Kowal"
     ],
     "duration": 30
   },

@@ -91,6 +91,89 @@ describe('parseAgendaMarkdown', () => {
     });
   });
 
+  it('supports `&` as a presenter separator (with and without surrounding `,`)', () => {
+    const md = `## Agenda items
+
+1. Joint Report (15m, Alice & Bob)
+1. Three way (15m, Alice, Bob & Carol)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({ name: 'Joint Report', presenters: ['Alice', 'Bob'], duration: 15 });
+    expect(items[1]).toEqual({ name: 'Three way', presenters: ['Alice', 'Bob', 'Carol'], duration: 15 });
+  });
+
+  it('supports `and` as a presenter separator (case-insensitive, mixed with `,` and `&`)', () => {
+    const md = `## Agenda items
+
+1. Joint Report (15m, Alice and Bob)
+1. Oxford and (15m, Alice, Bob, and Carol)
+1. Mixed (15m, Alice & Bob and Carol)
+1. Capital And (15m, Alice And Bob)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(4);
+    expect(items[0]).toEqual({ name: 'Joint Report', presenters: ['Alice', 'Bob'], duration: 15 });
+    expect(items[1]).toEqual({ name: 'Oxford and', presenters: ['Alice', 'Bob', 'Carol'], duration: 15 });
+    expect(items[2]).toEqual({ name: 'Mixed', presenters: ['Alice', 'Bob', 'Carol'], duration: 15 });
+    expect(items[3]).toEqual({ name: 'Capital And', presenters: ['Alice', 'Bob'], duration: 15 });
+  });
+
+  it('does not split presenter names that merely contain the substring `and`', () => {
+    // "Anderson", "Sandstone", "Andrew" all contain "and" mid-word — the
+    // whitespace-bounded separator rule must leave them intact.
+    const md = `## Agenda items
+
+1. Item (15m, Sandra Anderson)
+1. Two (15m, Alex Sandstone and Bob Andrew)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(2);
+    expect(items[0].presenters).toEqual(['Sandra Anderson']);
+    expect(items[1].presenters).toEqual(['Alex Sandstone', 'Bob Andrew']);
+  });
+
+  it('extracts the parenthetical even when it contains a markdown link URL', () => {
+    // Real TC39 pattern: a slides link sits *inside* the presenter token,
+    // separated from the presenter name with " - ". The inner `)` of the
+    // link's URL must not terminate the parenthetical match early.
+    const md = `## Agenda items
+
+1. Secretary's Report (15m, Samina Husain - [slides](./tc39-2026-009.pdf))
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(1);
+    expect(items[0].name).toBe("Secretary's Report");
+    expect(items[0].duration).toBe(15);
+    // Markdown is stripped so the URL doesn't leak into the presenter string.
+    expect(items[0].presenters).toEqual(['Samina Husain - slides']);
+  });
+
+  it('drops bare-link presenter tokens (slides/notes metadata)', () => {
+    // Another real TC39 shape: the slides link is a separate comma-token
+    // inside the same parenthetical. It looks syntactically like a
+    // presenter, but it's metadata; we filter it out.
+    const md = `## Agenda items
+
+1. Secretary's Report (15m, Samina Husain, [slides](./tc39-2024-016.pdf))
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], duration: 15 });
+  });
+
+  it('peels off a trailing slides parenthetical to find the presenter parenthetical', () => {
+    // Real TC39 pattern: TWO trailing parentheticals — `(presenter, time)
+    // ([slides](url))`. We want the presenter info, not the slides link.
+    const md = `## Agenda items
+
+1. Secretary's Report (15m, Samina Husain) ([slides](./tc39-2025-005.pdf))
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], duration: 15 });
+  });
+
   it('parses numbered list items without parenthetical', () => {
     const md = `## Agenda items
 
@@ -150,11 +233,21 @@ describe('parseAgendaMarkdown', () => {
     |:-----:|:-------:|-------|-----------|
     | 2 | 30m | Joint Proposal | Alice, Bob |
     | 1 | 15m | With links | [Alice](https://a.example), [Bob](https://b.example) |
+    | 2 | 20m | Ampersand | Alice & Bob |
+    | 2 | 25m | Mixed separators | Alice, Bob & Carol |
+    | 2 | 25m | And separator | Alice and Bob |
+    | 2 | 25m | Oxford and | Alice, Bob, and Carol |
+    | 2 | 25m | And in name | Sandra Anderson and Bob |
 `;
     const items = parseAgendaMarkdown(md);
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(7);
     expect(items[0].presenters).toEqual(['Alice', 'Bob']);
     expect(items[1].presenters).toEqual(['Alice', 'Bob']);
+    expect(items[2].presenters).toEqual(['Alice', 'Bob']);
+    expect(items[3].presenters).toEqual(['Alice', 'Bob', 'Carol']);
+    expect(items[4].presenters).toEqual(['Alice', 'Bob']);
+    expect(items[5].presenters).toEqual(['Alice', 'Bob', 'Carol']);
+    expect(items[6].presenters).toEqual(['Sandra Anderson', 'Bob']);
   });
 
   it('parses tables without a stage column', () => {

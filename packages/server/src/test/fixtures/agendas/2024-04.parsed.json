@@ -7,9 +7,11 @@
     "duration": null
   },
   {
-    "name": "Secretary's Report (15m, Samina Husain, [slides](tc39-2024-016.pdf))",
-    "presenters": [],
-    "duration": null
+    "name": "Secretary's Report",
+    "presenters": [
+      "Samina Husain"
+    ],
+    "duration": 15
   },
   {
     "name": "Project Editors’ Reports",
@@ -234,7 +236,8 @@
   {
     "name": "[Signals](https://github.com/proposal-signals/proposal-signals) for Stage 1 ([slides](https://docs.google.com/presentation/d/1MJqndTS5RmTEwTbtLTPsEloc-a_MWR8daQINgDim2RA/edit#slide=id.g1f570b058be_0_573))",
     "presenters": [
-      "Daniel Ehrenberg and Jatin Ramanathan"
+      "Daniel Ehrenberg",
+      "Jatin Ramanathan"
     ],
     "duration": 60
   },

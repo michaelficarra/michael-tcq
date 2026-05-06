@@ -7,14 +7,18 @@
     "duration": null
   },
   {
-    "name": "Secretary's Report (15m, Samina Husain) ([slides](./tc39-2025-005.pdf))",
-    "presenters": [],
-    "duration": null
+    "name": "Secretary's Report",
+    "presenters": [
+      "Samina Husain"
+    ],
+    "duration": 15
   },
   {
-    "name": "Election of the 2025 [Chair Group](https://github.com/tc39/Reflector/issues/548), Editors, and Convenors (15m, Aki Rose Braun) ([slides]())",
-    "presenters": [],
-    "duration": null
+    "name": "Election of the 2025 [Chair Group](https://github.com/tc39/Reflector/issues/548), Editors, and Convenors",
+    "presenters": [
+      "Aki Rose Braun"
+    ],
+    "duration": 15
   },
   {
     "name": "Project Editors’ Reports",
