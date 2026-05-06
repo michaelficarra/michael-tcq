@@ -47,6 +47,8 @@ Users authenticate via GitHub OAuth. Their GitHub display name, username, and or
 
 When GitHub OAuth is not configured, the server runs in mock auth mode with a fake user, allowing development without creating an OAuth App. In mock auth mode, a dev user-switcher in the navigation bar allows switching between different mock identities.
 
+Logging in, logging out, or switching mock users in one browser tab is reflected in all other open tabs of the same browser without losing in-progress edits (form drafts, scroll position, open meeting view).
+
 ## Home Page
 
 The home page shows two cards side by side:

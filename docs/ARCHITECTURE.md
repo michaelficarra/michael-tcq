@@ -265,6 +265,10 @@ The flow:
 - **Passport.js** — Adds `passport`, `passport-github2`, and a serialise/deserialise abstraction. For a single OAuth provider, the abstraction cost exceeds the benefit. If TCQ ever needed multiple OAuth providers, Passport would start making sense.
 - **Auth.js (NextAuth)** — Tightly coupled to Next.js. The standalone `@auth/core` exists but is less mature and less well-documented.
 
+### Cross-Tab Auth Sync
+
+The session cookie is shared across tabs in the same browser, so the server-side identity is always coherent — but each tab maintains its own React `AuthContext` user state. To keep all open tabs in sync after a login, logout, or dev-mode user switch, the client uses a `BroadcastChannel('tcq:auth')`. After every `/api/me` fetch, `AuthContext` compares the observed identity to a marker in `localStorage` (`tcq:auth:ghid`); on a mismatch, it updates the marker and posts an `auth-changed` message. Receiving tabs re-fetch `/api/me` rather than reloading, so ephemeral state (form drafts, scroll position, the open meeting view) is preserved. The new identity propagates from `AuthContext` into `MeetingContext`, and `useSocketConnection` re-handshakes the WebSocket because `user.ghid` is in its effect dependencies — necessary because socket auth is captured once at handshake from the session cookie.
+
 ## Logging and Observability
 
 All logging goes through a small zero-dependency module (`packages/server/src/logger.ts`) that writes one JSON object per line to stdout. Cloud Run's log agent ingests stdout/stderr and treats entries with a recognised `severity` field as structured `LogEntry` records, so no additional log-forwarding infrastructure is required.

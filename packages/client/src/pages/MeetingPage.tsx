@@ -58,7 +58,7 @@ function MeetingPageInner() {
   const { meeting, connected, activeConnections, error } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
-  const socket = useSocketConnection(meetingId ?? '');
+  const socket = useSocketConnection(meetingId ?? '', user?.ghid ?? null);
 
   // Push the authenticated user from AuthContext into MeetingContext
   // so that components like useIsChair() can check permissions.

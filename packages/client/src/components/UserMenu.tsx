@@ -245,7 +245,6 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
     setSwitching(false);
     setOpen(false);
     setUsername('');
-    window.location.reload();
   }
 
   if (!open) {
