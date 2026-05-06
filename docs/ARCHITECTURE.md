@@ -77,8 +77,8 @@ tcq/
 │           ├── mockAuth.ts      # Mock auth for development
 │           └── requireAuth.ts   # Auth middleware for API routes
 ├── scripts/
-│   ├── seed-meeting.sh          # Populate a meeting with sample data
-│   └── deploy.sh               # Build, push, and deploy to Cloud Run
+│   ├── seed-meeting.mjs         # Populate a meeting with sample data
+│   └── deploy.sh                # Build, push, and deploy to Cloud Run
 └── docs/                        # PRD, Architecture, Contributing, Deployment
 ```
 
