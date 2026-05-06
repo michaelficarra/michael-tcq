@@ -11,6 +11,7 @@ import { useMemo } from 'react';
 import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
 import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
+import { useMeetingLog } from '../hooks/useMeetingLog.js';
 import { UserBadge } from './UserBadge.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { RelativeTime as SharedRelativeTime } from '../lib/RelativeTime.js';
@@ -375,11 +376,11 @@ function serialiseSpeakers(speakers: TopicSpeaker[], users: Record<string, User>
   return lines.join('\n');
 }
 
-function serialiseLog(meeting: MeetingState): string {
+function serialiseLog(meeting: MeetingState, log: LogEntry[]): string {
   const lines: string[] = ['# Meeting Log', ''];
   const users = meeting.users;
 
-  for (const entry of meeting.log) {
+  for (const entry of log) {
     switch (entry.type) {
       case 'meeting-started':
         lines.push(`Meeting started — ${userName(users, entry.chairId)} (${formatTimestamp(entry.timestamp)})`);
@@ -461,7 +462,7 @@ function serialiseLog(meeting: MeetingState): string {
   for (const id of meeting.participantIds) {
     speakerTotals.set(id, 0);
   }
-  for (const entry of meeting.log) {
+  for (const entry of log) {
     if (entry.type === 'topic-discussed') {
       for (const s of entry.speakers) {
         speakerTotals.set(s.userId, (speakerTotals.get(s.userId) ?? 0) + (s.duration ?? 0));
@@ -503,7 +504,11 @@ function downloadFile(text: string, filename: string) {
 
 export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const { meeting } = useMeetingState();
-  const reversedLog = useMemo(() => (meeting ? [...meeting.log].reverse() : []), [meeting]);
+  // The log is fetched separately from the realtime state to keep
+  // broadcasts small. The hook handles initial fetch + push-driven
+  // refresh in response to `log:dirty` socket events.
+  const { entries: log } = useMeetingLog(meeting?.id);
+  const reversedLog = useMemo(() => [...log].reverse(), [log]);
 
   // When hidden (not the active tab) or meeting state not yet loaded, render
   // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
@@ -529,7 +534,7 @@ export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
 
       {!isEmpty && (
         <button
-          onClick={() => downloadFile(serialiseLog(meeting), `${meeting.id}-${Math.floor(Date.now() / 1000)}.md`)}
+          onClick={() => downloadFile(serialiseLog(meeting, log), `${meeting.id}-${Math.floor(Date.now() / 1000)}.md`)}
           className="float-right ml-4 mb-2 text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                      text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
         >

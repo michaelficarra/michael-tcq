@@ -1,31 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { AgendaEntry, AgendaItem, MeetingState } from '@tcq/shared';
+import type { AgendaEntry, AgendaItem } from '@tcq/shared';
 import { isAgendaItem, userKey } from '@tcq/shared';
-import type { MeetingStore } from './store.js';
 import { MeetingManager, ensureUser } from './meetings.js';
+import { InMemoryStore } from './test/inMemoryStore.js';
 
 /** Narrow an entry we expect to be an agenda item — fails the test if it's not. */
 function asItem(entry: AgendaEntry | undefined): AgendaItem {
   if (!entry || !isAgendaItem(entry)) throw new Error('expected an AgendaItem');
   return entry;
-}
-
-/** A no-op in-memory store for unit tests. */
-class InMemoryStore implements MeetingStore {
-  private data = new Map<string, MeetingState>();
-
-  async save(meeting: MeetingState): Promise<void> {
-    this.data.set(meeting.id, structuredClone(meeting));
-  }
-  async load(meetingId: string): Promise<MeetingState | null> {
-    return this.data.get(meetingId) ?? null;
-  }
-  async loadAll(): Promise<MeetingState[]> {
-    return [...this.data.values()];
-  }
-  async remove(meetingId: string): Promise<void> {
-    this.data.delete(meetingId);
-  }
 }
 
 const testUser = {
@@ -186,7 +168,6 @@ describe('MeetingManager', () => {
       queue: { entries: {}, orderedIds: [], closed: false },
       current: { topicSpeakers: [] },
       operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0 },
-      log: [],
     });
 
     // Create a new manager and restore from the store

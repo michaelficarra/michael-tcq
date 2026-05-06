@@ -109,6 +109,14 @@ export interface TopicSpeaker {
 }
 
 interface LogEntryBase {
+  /**
+   * Stable identifier for this log entry. Used as the cursor for the
+   * `GET /api/meetings/:id/log?since=<id>` endpoint and as the ETag value
+   * for conditional requests, so a client polling after a `log:dirty`
+   * push can ask for "everything after this id" and receive an empty 304
+   * if it is already current.
+   */
+  id: string;
   /** ISO timestamp when this event occurred. */
   timestamp: string;
 }
@@ -328,6 +336,4 @@ export interface MeetingState {
   poll?: ActivePoll;
   /** Operational plumbing (advancement attribution, last-connection tracking). */
   operational: OperationalState;
-  /** Append-only log of meeting events, displayed in the Logs tab. */
-  log: LogEntry[];
 }

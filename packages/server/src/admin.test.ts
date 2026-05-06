@@ -1,31 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import type { MeetingState, User } from '@tcq/shared';
+import type { User } from '@tcq/shared';
 import { userKey } from '@tcq/shared';
-import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { error as logError, critical as logCritical } from './logger.js';
 import { resetErrorBuffer } from './errorBuffer.js';
-
-/** A no-op in-memory store for tests. */
-class InMemoryStore implements MeetingStore {
-  private data = new Map<string, MeetingState>();
-  async save(meeting: MeetingState) {
-    this.data.set(meeting.id, structuredClone(meeting));
-  }
-  async load(meetingId: string) {
-    return this.data.get(meetingId) ?? null;
-  }
-  async loadAll() {
-    return [...this.data.values()];
-  }
-  async remove(meetingId: string) {
-    this.data.delete(meetingId);
-  }
-}
+import { InMemoryStore } from './test/inMemoryStore.js';
 
 /** The admin user for these tests. */
 const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin', organisation: '' };

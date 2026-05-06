@@ -262,6 +262,17 @@ export interface ServerToClientEvents {
    * each contribute 1.
    */
   activeConnections: (count: number) => void;
+
+  /**
+   * Notification that the meeting log has new entries. Carries the id
+   * of the latest entry so a client that has already fetched up to that
+   * id can short-circuit. Emitted to every socket in the meeting room
+   * each time `MeetingManager.appendLog` runs. The payload is tiny by
+   * design — clients fetch the actual entries via
+   * `GET /api/meetings/:id/log?since=<theirCursor>` so the realtime
+   * channel never carries log bodies.
+   */
+  'log:dirty': (latestId: string) => void;
 }
 
 /** Events clients send to the server. */

@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import type { ZodType } from 'zod';
-import type { ClientToServerEvents, ServerToClientEvents, User, UserKey, MeetingState } from '@tcq/shared';
+import type { ClientToServerEvents, LogEntry, ServerToClientEvents, User, UserKey, MeetingState } from '@tcq/shared';
 import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
@@ -86,9 +86,16 @@ function finaliseLastSpeakerDuration(meeting: MeetingState, now: string): void {
 /**
  * Finalise the current topic group into a TopicDiscussedLog entry
  * and append it to the meeting log. Resets the topic-group accumulator.
+ * Returns the appended entry, or null if there was no topic group to
+ * finalise.
  */
-function finaliseTopicGroup(meeting: MeetingState, chairId: UserKey, now: string): void {
-  if (meeting.current.topicSpeakers.length === 0) return;
+async function finaliseTopicGroup(
+  meetingManager: MeetingManager,
+  meeting: MeetingState,
+  chairId: UserKey,
+  now: string,
+): Promise<LogEntry | null> {
+  if (meeting.current.topicSpeakers.length === 0) return null;
 
   finaliseLastSpeakerDuration(meeting, now);
 
@@ -96,7 +103,7 @@ function finaliseTopicGroup(meeting: MeetingState, chairId: UserKey, now: string
   const firstStart = new Date(speakers[0].startTime).getTime();
   const duration = new Date(now).getTime() - firstStart;
 
-  meeting.log.push({
+  const stored = await meetingManager.appendLog(meeting.id, {
     type: 'topic-discussed',
     timestamp: speakers[0].startTime,
     chairId,
@@ -106,6 +113,7 @@ function finaliseTopicGroup(meeting: MeetingState, chairId: UserKey, now: string
   });
 
   meeting.current.topicSpeakers = [];
+  return stored;
 }
 
 /**
@@ -113,11 +121,15 @@ function finaliseTopicGroup(meeting: MeetingState, chairId: UserKey, now: string
  * that occurred after a given timestamp (the agenda item start).
  * Excludes Point of Order speakers.
  */
-function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): UserKey[] {
+function collectParticipantIds(
+  meetingManager: MeetingManager,
+  meeting: MeetingState,
+  sinceTimestamp: string,
+): UserKey[] {
   const seen = new Set<UserKey>();
 
   // Gather from finalised topic groups
-  for (const entry of meeting.log) {
+  for (const entry of meetingManager.getLog(meeting.id)) {
     if (entry.type !== 'topic-discussed') continue;
     if (entry.timestamp < sinceTimestamp) continue;
     for (const speaker of entry.speakers) {
@@ -133,6 +145,22 @@ function collectParticipantIds(meeting: MeetingState, sinceTimestamp: string): U
   }
 
   return [...seen];
+}
+
+/**
+ * Notify all sockets in a meeting room that the log has new entries.
+ * The payload carries only the latest entry id; clients fetch the
+ * actual data via `GET /api/meetings/:id/log?since=<theirCursor>`.
+ * No-op when `latestId` is null, which happens when an attempted
+ * `appendLog` returned null (e.g. the meeting was just removed).
+ */
+function emitLogDirty(
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+  meetingId: string,
+  latestId: string | null,
+): void {
+  if (latestId === null) return;
+  io.to(meetingId).emit('log:dirty', latestId);
 }
 
 /** A Socket with our typed events and session user attached. */
@@ -758,7 +786,7 @@ export function registerSocketHandlers(
     // Advances to the next speaker (chair-only). Uses a precondition check on
     // the current speaker entry ID to prevent double-advancement. Uses an ack
     // callback so the client can detect conflicts.
-    socket.on('queue:next', (payload, ack?) => {
+    socket.on('queue:next', async (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
 
@@ -799,8 +827,10 @@ export function registerSocketHandlers(
       finaliseLastSpeakerDuration(meeting, now);
 
       // If the next speaker starts a new topic, finalise the current topic group
+      let topicLogId: string | null = null;
       if (nextEntry && nextEntry.type === 'topic') {
-        finaliseTopicGroup(meeting, actorId, now);
+        const topicEntry = await finaliseTopicGroup(meetingManager, meeting, actorId, now);
+        if (topicEntry) topicLogId = topicEntry.id;
       }
 
       const newSpeaker = meetingManager.nextSpeaker(joinedMeetingId);
@@ -818,6 +848,7 @@ export function registerSocketHandlers(
 
       meeting.operational.lastAdvancementBy = actorId;
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitLogDirty(io, joinedMeetingId, topicLogId);
       respond({ ok: true });
 
       // Persist immediately — speaker changes are high-value events
@@ -859,7 +890,7 @@ export function registerSocketHandlers(
 
     // --- poll:stop ---
     // Chair stops the poll. Clears all reactions and appends a poll-ran log entry.
-    socket.on('poll:stop', () => {
+    socket.on('poll:stop', async () => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
         socket.emit('error', 'Only chairs can stop a poll');
@@ -874,6 +905,7 @@ export function registerSocketHandlers(
 
       // Build the log entry before stopPoll clears the active poll
       const poll = meeting.poll;
+      let pollLog: LogEntry | null = null;
       if (poll) {
         // Count distinct voters
         const voterSet = new Set<string>();
@@ -890,7 +922,7 @@ export function registerSocketHandlers(
           }))
           .sort((a, b) => b.count - a.count);
 
-        meeting.log.push({
+        pollLog = await meetingManager.appendLog(joinedMeetingId, {
           type: 'poll-ran',
           timestamp: poll.startTime,
           startChairId: poll.startChairId,
@@ -905,6 +937,7 @@ export function registerSocketHandlers(
       meetingManager.stopPoll(joinedMeetingId);
 
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitLogDirty(io, joinedMeetingId, pollLog?.id ?? null);
     });
 
     // --- poll:react ---
@@ -930,7 +963,7 @@ export function registerSocketHandlers(
     // Uses a precondition check on the current agenda item ID to prevent
     // double-advancement, and persists immediately as a high-value mutation.
     // Uses an ack callback so the client can detect conflicts.
-    socket.on('meeting:nextAgendaItem', (payload, ack?) => {
+    socket.on('meeting:nextAgendaItem', async (payload, ack?) => {
       // ack is optional — clients may emit without a callback
       const respond = typeof ack === 'function' ? ack : () => {};
 
@@ -963,13 +996,19 @@ export function registerSocketHandlers(
       const outgoingItem = meetingManager.getCurrentAgendaItem(joinedMeetingId);
       const outgoingStartTime = meeting.current.agendaItemStartTime;
 
+      // Track the most recently appended log entry id so we can emit a
+      // single log:dirty at the end with the final cursor — clients
+      // catch up on every prior append in one fetch.
+      let latestLogId: string | null = null;
+
       // Finalise log entries for the outgoing agenda item
       if (outgoingItem && outgoingStartTime) {
         // Finalise the current topic group
-        finaliseTopicGroup(meeting, chairId, now);
+        const topicEntry = await finaliseTopicGroup(meetingManager, meeting, chairId, now);
+        if (topicEntry) latestLogId = topicEntry.id;
 
         // Collect participants from all topic groups during this item
-        const participantIds = collectParticipantIds(meeting, outgoingStartTime);
+        const participantIds = collectParticipantIds(meetingManager, meeting, outgoingStartTime);
 
         // Serialise the remaining queue if non-empty
         const remainingQueue =
@@ -1006,7 +1045,7 @@ export function registerSocketHandlers(
         }
 
         // Append agenda-item-finished
-        meeting.log.push({
+        const finishedEntry = await meetingManager.appendLog(joinedMeetingId, {
           type: 'agenda-item-finished',
           timestamp: now,
           chairId,
@@ -1016,6 +1055,7 @@ export function registerSocketHandlers(
           remainingQueue,
           conclusion: conclusionForLog,
         });
+        if (finishedEntry) latestLogId = finishedEntry.id;
       }
 
       // nextAgendaItem seeds current.speaker, current.topicSpeakers (with the
@@ -1025,29 +1065,36 @@ export function registerSocketHandlers(
       const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
       if (!nextItem) {
         respond({ ok: false, error: 'No more agenda items' });
+        // Even if we can't advance, prior appendLog calls (topic group
+        // finalisation, agenda-item-finished) may have produced log
+        // entries that connected clients should learn about.
+        emitLogDirty(io, joinedMeetingId, latestLogId);
         return;
       }
 
       // Append meeting-started or agenda-item-started
       if (isFirstItem) {
-        meeting.log.push({
+        const startedEntry = await meetingManager.appendLog(joinedMeetingId, {
           type: 'meeting-started',
           timestamp: now,
           chairId,
         });
+        if (startedEntry) latestLogId = startedEntry.id;
       }
 
-      meeting.log.push({
+      const itemStartedEntry = await meetingManager.appendLog(joinedMeetingId, {
         type: 'agenda-item-started',
         timestamp: now,
         chairId,
         itemName: nextItem.name,
         itemPresenterIds: nextItem.presenterIds,
       });
+      if (itemStartedEntry) latestLogId = itemStartedEntry.id;
 
       meeting.operational.lastAdvancementBy = chairId;
       meetingManager.markDirty(joinedMeetingId);
       broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitLogDirty(io, joinedMeetingId, latestLogId);
       respond({ ok: true });
 
       // Persist immediately — agenda advancement is a high-value event

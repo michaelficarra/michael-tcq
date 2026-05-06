@@ -33,7 +33,6 @@ export function makeMeeting(overrides?: Partial<MeetingState>, defaults: MakeMee
       maxConcurrent: 0,
       ...operational,
     },
-    log: [],
     ...rest,
   };
 }

@@ -7,16 +7,16 @@ import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import type {
   AgendaEntry,
   AgendaItem,
-  MeetingState,
   ClientToServerEvents,
+  MeetingState,
   ServerToClientEvents,
   User,
 } from '@tcq/shared';
 import { asUserKey, isAgendaItem } from '@tcq/shared';
-import type { MeetingStore } from './store.js';
 import { MeetingManager } from './meetings.js';
 import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
+import { InMemoryStore } from './test/inMemoryStore.js';
 
 // --- Helpers ---
 
@@ -24,23 +24,6 @@ import { toSessionUser } from './session.js';
 function asItem(entry: AgendaEntry | undefined): AgendaItem {
   if (!entry || !isAgendaItem(entry)) throw new Error('expected an AgendaItem');
   return entry;
-}
-
-/** A no-op in-memory store for tests. */
-class InMemoryStore implements MeetingStore {
-  private data = new Map<string, MeetingState>();
-  async save(meeting: MeetingState) {
-    this.data.set(meeting.id, structuredClone(meeting));
-  }
-  async load(meetingId: string) {
-    return this.data.get(meetingId) ?? null;
-  }
-  async loadAll() {
-    return [...this.data.values()];
-  }
-  async remove(meetingId: string) {
-    this.data.delete(meetingId);
-  }
 }
 
 /** Typed client socket matching our event interfaces (reversed: client receives ServerToClient). */
@@ -1937,7 +1920,8 @@ describe('Socket.IO integration', () => {
 
       const first = asItem(state2.agenda.find((i) => i.id === firstId));
       // Pin to the log's duration to prove the exact Math.ceil(ms / 60000) relationship.
-      const finished = state2.log.find(
+      const log = ctx.meetingManager.getLog(meeting.id);
+      const finished = log.find(
         (e): e is Extract<typeof e, { type: 'agenda-item-finished' }> =>
           e.type === 'agenda-item-finished' && e.itemName === 'First',
       )!;
@@ -2021,12 +2005,13 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
       const statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      const state = await statePromise;
+      await statePromise;
 
-      expect(state.log).toHaveLength(2);
-      expect(state.log[0].type).toBe('meeting-started');
-      expect(state.log[1].type).toBe('agenda-item-started');
-      expect(state.log[1].type === 'agenda-item-started' && state.log[1].itemName).toBe('First Item');
+      const log = ctx.meetingManager.getLog(meeting.id);
+      expect(log).toHaveLength(2);
+      expect(log[0].type).toBe('meeting-started');
+      expect(log[1].type).toBe('agenda-item-started');
+      expect(log[1].type === 'agenda-item-started' && log[1].itemName).toBe('First Item');
     });
 
     it('logs agenda-item-finished when advancing to the next item', async () => {
@@ -2047,13 +2032,14 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       // Should have: meeting-started, item-started(First), topic-discussed (intro), item-finished(First), item-started(Second)
-      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      const log = ctx.meetingManager.getLog(meeting.id);
+      const finished = log.find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
       expect(finished!.type === 'agenda-item-finished' && finished!.itemName).toBe('First Item');
       expect(finished!.type === 'agenda-item-finished' && finished!.duration).toBeGreaterThanOrEqual(0);
       expect(finished!.type === 'agenda-item-finished' && finished!.participantIds).toHaveLength(1);
 
-      const secondStarted = state.log.filter((e) => e.type === 'agenda-item-started');
+      const secondStarted = log.filter((e) => e.type === 'agenda-item-started');
       expect(secondStarted).toHaveLength(2);
     });
 
@@ -2078,7 +2064,7 @@ describe('Socket.IO integration', () => {
       state = await statePromise;
 
       // The introductory topic group should be finalised in the log
-      const topicEntries = state.log.filter((e) => e.type === 'topic-discussed');
+      const topicEntries = ctx.meetingManager.getLog(meeting.id).filter((e) => e.type === 'topic-discussed');
       expect(topicEntries).toHaveLength(1);
       expect(topicEntries[0].type === 'topic-discussed' && topicEntries[0].speakers).toHaveLength(1);
 
@@ -2165,7 +2151,7 @@ describe('Socket.IO integration', () => {
       client.emit('poll:stop');
       state = await statePromise;
 
-      const pollEntry = state.log.find((e) => e.type === 'poll-ran');
+      const pollEntry = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'poll-ran');
       expect(pollEntry).toBeDefined();
       if (pollEntry?.type === 'poll-ran') {
         expect(pollEntry.totalVoters).toBe(1);
@@ -2196,7 +2182,7 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
 
-      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
       if (finished?.type === 'agenda-item-finished') {
         expect(finished.remainingQueue).toBeDefined();
@@ -2222,7 +2208,7 @@ describe('Socket.IO integration', () => {
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
 
-      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
       if (finished?.type === 'agenda-item-finished') {
         expect(finished.remainingQueue).toBeUndefined();
@@ -2258,7 +2244,7 @@ describe('Socket.IO integration', () => {
       expect(firstItem?.conclusion).toBe('Decided X.');
 
       // Conclusion is embedded in the snapshot log entry
-      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
       if (finished?.type === 'agenda-item-finished') {
         expect(finished.conclusion).toBe('Decided X.');
@@ -2295,7 +2281,7 @@ describe('Socket.IO integration', () => {
       );
       expect(firstItem?.conclusion).toBeUndefined();
 
-      const finished = state.log.find((e) => e.type === 'agenda-item-finished');
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       if (finished?.type === 'agenda-item-finished') {
         expect(finished.conclusion).toBeUndefined();
       }

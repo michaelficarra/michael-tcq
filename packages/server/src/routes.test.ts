@@ -1,28 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import type { MeetingState, User } from '@tcq/shared';
-import type { MeetingStore } from './store.js';
+import type { User } from '@tcq/shared';
+import { asUserKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
-
-/** A no-op in-memory store for unit tests. */
-class InMemoryStore implements MeetingStore {
-  private data = new Map<string, MeetingState>();
-  async save(meeting: MeetingState) {
-    this.data.set(meeting.id, structuredClone(meeting));
-  }
-  async load(meetingId: string) {
-    return this.data.get(meetingId) ?? null;
-  }
-  async loadAll() {
-    return [...this.data.values()];
-  }
-  async remove(meetingId: string) {
-    this.data.delete(meetingId);
-  }
-}
+import { InMemoryStore } from './test/inMemoryStore.js';
 
 /**
  * Helper: make a request to the Express app without starting a real HTTP server.
@@ -156,6 +140,97 @@ describe('Meeting REST routes', () => {
     it('returns 404 for a non-existent meeting', async () => {
       const res = await fetch(`${baseUrl}/api/meetings/no-such-meeting`);
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/meetings/:id/log', () => {
+    it('returns 404 for a non-existent meeting', async () => {
+      const res = await fetch(`${baseUrl}/api/meetings/no-such-meeting/log`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns the empty array and an empty-cursor ETag for a meeting with no log entries', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('ETag')).toBe('""');
+      expect(res.headers.get('Cache-Control')).toBe('private, must-revalidate');
+      const body = await res.json();
+      expect(body).toEqual([]);
+    });
+
+    it('returns all entries on a fresh fetch and exposes the latest id as the ETag', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const e1 = await manager.appendLog(meeting.id, {
+        type: 'meeting-started',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        chairId: asUserKey('a'),
+      });
+      const e2 = await manager.appendLog(meeting.id, {
+        type: 'agenda-item-started',
+        timestamp: '2026-01-01T00:01:00.000Z',
+        chairId: asUserKey('a'),
+        itemName: 'First',
+        itemPresenterIds: [asUserKey('a')],
+      });
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('ETag')).toBe(`"${e2!.id}"`);
+      const body = await res.json();
+      expect(body).toHaveLength(2);
+      expect(body[0].id).toBe(e1!.id);
+      expect(body[1].id).toBe(e2!.id);
+    });
+
+    it('returns 304 when If-None-Match matches the current ETag', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const entry = await manager.appendLog(meeting.id, {
+        type: 'meeting-started',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        chairId: asUserKey('a'),
+      });
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`, {
+        headers: { 'If-None-Match': `"${entry!.id}"` },
+      });
+      expect(res.status).toBe(304);
+    });
+
+    it('returns only entries after the cursor when ?since is provided', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const e1 = await manager.appendLog(meeting.id, {
+        type: 'meeting-started',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        chairId: asUserKey('a'),
+      });
+      const e2 = await manager.appendLog(meeting.id, {
+        type: 'agenda-item-started',
+        timestamp: '2026-01-01T00:01:00.000Z',
+        chairId: asUserKey('a'),
+        itemName: 'First',
+        itemPresenterIds: [asUserKey('a')],
+      });
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log?since=${e1!.id}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0].id).toBe(e2!.id);
+    });
+
+    it('falls back to returning the full log when the ?since cursor is unknown', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      await manager.appendLog(meeting.id, {
+        type: 'meeting-started',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        chairId: asUserKey('a'),
+      });
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log?since=unknown-cursor`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
     });
   });
 });

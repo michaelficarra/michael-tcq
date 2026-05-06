@@ -1,9 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { MeetingState, User, LogEntry, TopicSpeaker } from '@tcq/shared';
 import { LogPanel } from './LogPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
+
+// LogPanel reads the meeting log via the useMeetingLog hook (which
+// itself calls fetch + listens for log:dirty). For unit tests we
+// short-circuit the hook with a deterministic, in-memory entries
+// array so each test can assert against a known log slice without
+// spinning up a server or a fetch mock.
+vi.mock('../hooks/useMeetingLog.js', () => ({
+  useMeetingLog: vi.fn(() => ({ entries: [], loading: false })),
+}));
+import { useMeetingLog } from '../hooks/useMeetingLog.js';
+
+const mockUseMeetingLog = vi.mocked(useMeetingLog);
 
 const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
 const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'ACME' };
@@ -13,7 +25,16 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides, { id: 'test', users: { alice, bob, carol }, chairIds: ['alice'] });
 }
 
-function renderLog(meeting: MeetingState) {
+/**
+ * `log` is supplied without `id`s — the helper assigns sequential ids
+ * so tests don't have to. The values themselves are not asserted on,
+ * just used for React keys.
+ */
+type LogFixture = Omit<LogEntry, 'id'>;
+
+function renderLog(meeting: MeetingState, log: LogFixture[] = []) {
+  const entries = log.map((entry, i) => ({ ...entry, id: `e${i}` }) as LogEntry);
+  mockUseMeetingLog.mockReturnValue({ entries, loading: false });
   return render(
     <TestMeetingProvider meeting={meeting}>
       <LogPanel />
@@ -28,35 +49,27 @@ describe('LogPanel', () => {
   });
 
   it('renders a meeting-started entry', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'meeting-started',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'meeting-started',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+      },
+    ]);
     expect(screen.getByText('Meeting started')).toBeTruthy();
     expect(screen.getByText('Alice')).toBeTruthy();
   });
 
   it('renders an agenda-item-started entry with "Started:" prefix', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-started',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-            itemName: 'Proposal A',
-            itemPresenterIds: ['bob'],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-started',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+        itemName: 'Proposal A',
+        itemPresenterIds: ['bob'],
+      },
+    ]);
     expect(screen.getByText('Started:')).toBeTruthy();
     expect(screen.getByText('Proposal A')).toBeTruthy();
     // Chair badge should be shown (not the item presenter)
@@ -64,20 +77,16 @@ describe('LogPanel', () => {
   });
 
   it('renders an agenda-item-finished entry with duration, chair, and participants', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-finished',
-            timestamp: new Date().toISOString(),
-            chairId: 'carol',
-            itemName: 'Proposal A',
-            duration: 15 * 60 * 1000, // 15 min
-            participantIds: ['alice', 'bob'],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-finished',
+        timestamp: new Date().toISOString(),
+        chairId: 'carol',
+        itemName: 'Proposal A',
+        duration: 15 * 60 * 1000, // 15 min
+        participantIds: ['alice', 'bob'],
+      },
+    ]);
     expect(screen.getByText('Finished:')).toBeTruthy();
     expect(screen.getByText('Proposal A')).toBeTruthy();
     expect(screen.getByText('15 min')).toBeTruthy();
@@ -89,78 +98,62 @@ describe('LogPanel', () => {
   });
 
   it('renders remaining queue in a disclosure on agenda-item-finished', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-finished',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-            itemName: 'Proposal A',
-            duration: 5 * 60 * 1000,
-            participantIds: [],
-            remainingQueue: 'New Topic: Leftover (bob)',
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-finished',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+        itemName: 'Proposal A',
+        duration: 5 * 60 * 1000,
+        participantIds: [],
+        remainingQueue: 'New Topic: Leftover (bob)',
+      },
+    ]);
     expect(screen.getByText('Remaining queue')).toBeTruthy();
     expect(screen.getByText('New Topic: Leftover (bob)')).toBeTruthy();
   });
 
   it('does not show remaining queue when absent', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-finished',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-            itemName: 'Proposal A',
-            duration: 5 * 60 * 1000,
-            participantIds: [],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-finished',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+        itemName: 'Proposal A',
+        duration: 5 * 60 * 1000,
+        participantIds: [],
+      },
+    ]);
     expect(screen.queryByText('Remaining queue')).toBeNull();
   });
 
   it('renders the conclusion on agenda-item-finished when present', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-finished',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-            itemName: 'Proposal A',
-            duration: 5 * 60 * 1000,
-            participantIds: [],
-            conclusion: 'Decided to advance to stage 3',
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-finished',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+        itemName: 'Proposal A',
+        duration: 5 * 60 * 1000,
+        participantIds: [],
+        conclusion: 'Decided to advance to stage 3',
+      },
+    ]);
     expect(screen.getByText('Conclusion:')).toBeTruthy();
     expect(screen.getByText('Decided to advance to stage 3')).toBeTruthy();
   });
 
   it('does not render Conclusion label when conclusion is absent', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'agenda-item-finished',
-            timestamp: new Date().toISOString(),
-            chairId: 'alice',
-            itemName: 'Proposal A',
-            duration: 5 * 60 * 1000,
-            participantIds: [],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'agenda-item-finished',
+        timestamp: new Date().toISOString(),
+        chairId: 'alice',
+        itemName: 'Proposal A',
+        duration: 5 * 60 * 1000,
+        participantIds: [],
+      },
+    ]);
     expect(screen.queryByText('Conclusion:')).toBeNull();
   });
 
@@ -174,20 +167,16 @@ describe('LogPanel', () => {
         duration: 3 * 60 * 1000,
       },
     ];
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'topic-discussed',
-            timestamp: speakers[0].startTime,
-            chairId: 'alice',
-            topicName: 'My discussion point',
-            speakers,
-            duration: 3 * 60 * 1000,
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'topic-discussed',
+        timestamp: speakers[0].startTime,
+        chairId: 'alice',
+        topicName: 'My discussion point',
+        speakers,
+        duration: 3 * 60 * 1000,
+      },
+    ]);
     // Topic text shown once (compact format, no nested rows)
     const matches = screen.getAllByText('My discussion point');
     expect(matches).toHaveLength(1);
@@ -207,20 +196,16 @@ describe('LogPanel', () => {
         duration: 60 * 1000,
       },
     ];
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'topic-discussed',
-            timestamp: speakers[0].startTime,
-            chairId: 'alice',
-            topicName: 'Main point',
-            speakers,
-            duration: 3 * 60 * 1000,
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'topic-discussed',
+        timestamp: speakers[0].startTime,
+        chairId: 'alice',
+        topicName: 'Main point',
+        speakers,
+        duration: 3 * 60 * 1000,
+      },
+    ]);
     // Topic name appears once in the heading, not duplicated as a nested row
     const topicMatches = screen.getAllByText('Main point');
     expect(topicMatches).toHaveLength(1);
@@ -233,24 +218,20 @@ describe('LogPanel', () => {
   });
 
   it('renders a poll-ran entry with chair, voters, and results', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'poll-ran',
-            timestamp: new Date().toISOString(),
-            startChairId: 'alice',
-            endChairId: 'alice',
-            duration: 2 * 60 * 1000,
-            totalVoters: 5,
-            results: [
-              { emoji: '👍', label: 'Yes', count: 4 },
-              { emoji: '👎', label: 'No', count: 1 },
-            ],
-          },
+    renderLog(makeMeeting(), [
+      {
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'alice',
+        endChairId: 'alice',
+        duration: 2 * 60 * 1000,
+        totalVoters: 5,
+        results: [
+          { emoji: '👍', label: 'Yes', count: 4 },
+          { emoji: '👎', label: 'No', count: 1 },
         ],
-      }),
-    );
+      },
+    ]);
     expect(screen.getByText('Ran a poll')).toBeTruthy();
     expect(screen.getByText('2 min')).toBeTruthy();
     expect(screen.getByText('5 voters')).toBeTruthy();
@@ -260,42 +241,34 @@ describe('LogPanel', () => {
   });
 
   it('shows both chairs on poll-ran when start and end chairs differ', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'poll-ran',
-            timestamp: new Date().toISOString(),
-            startChairId: 'alice',
-            endChairId: 'bob',
-            duration: 60 * 1000,
-            totalVoters: 1,
-            results: [{ emoji: '👍', label: 'Yes', count: 1 }],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'alice',
+        endChairId: 'bob',
+        duration: 60 * 1000,
+        totalVoters: 1,
+        results: [{ emoji: '👍', label: 'Yes', count: 1 }],
+      },
+    ]);
     expect(screen.getByText('Alice')).toBeTruthy();
     expect(screen.getByText('Bob')).toBeTruthy();
   });
 
   it('renders a poll-ran entry with topic when provided', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'poll-ran',
-            timestamp: new Date().toISOString(),
-            startChairId: 'alice',
-            endChairId: 'alice',
-            topic: 'Should we advance?',
-            duration: 60 * 1000,
-            totalVoters: 3,
-            results: [{ emoji: '👍', label: 'Yes', count: 3 }],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'alice',
+        endChairId: 'alice',
+        topic: 'Should we advance?',
+        duration: 60 * 1000,
+        totalVoters: 3,
+        results: [{ emoji: '👍', label: 'Yes', count: 3 }],
+      },
+    ]);
     expect(screen.getByText(/Should we advance\?/)).toBeTruthy();
   });
 
@@ -316,11 +289,10 @@ describe('LogPanel', () => {
   it('renders entries in reverse chronological order', () => {
     const t1 = '2026-01-01T10:00:00Z';
     const t2 = '2026-01-01T10:05:00Z';
-    const log: LogEntry[] = [
+    renderLog(makeMeeting(), [
       { type: 'meeting-started', timestamp: t1, chairId: 'alice' },
       { type: 'agenda-item-started', timestamp: t2, chairId: 'alice', itemName: 'Item 1', itemPresenterIds: ['alice'] },
-    ];
-    renderLog(makeMeeting({ log }));
+    ]);
     const started = screen.getByText('Meeting started');
     const item = screen.getByText('Started:');
     // In the DOM, the agenda-item-started (later timestamp) should come before meeting-started
@@ -328,7 +300,7 @@ describe('LogPanel', () => {
   });
 
   it('renders a separator after agenda-item-started entries', () => {
-    const log: LogEntry[] = [
+    const { container } = renderLog(makeMeeting(), [
       { type: 'meeting-started', timestamp: '2026-01-01T10:00:00Z', chairId: 'alice' },
       {
         type: 'agenda-item-started',
@@ -352,29 +324,24 @@ describe('LogPanel', () => {
         itemName: 'Item 2',
         itemPresenterIds: ['bob'],
       },
-    ];
-    const { container } = renderLog(makeMeeting({ log }));
+    ]);
     const separators = container.querySelectorAll('hr');
     // Separator after each agenda-item-started except the last in the reversed list
     expect(separators.length).toBeGreaterThanOrEqual(1);
   });
 
   it('uses singular "voter" for a single voter', () => {
-    renderLog(
-      makeMeeting({
-        log: [
-          {
-            type: 'poll-ran',
-            timestamp: new Date().toISOString(),
-            startChairId: 'alice',
-            endChairId: 'alice',
-            duration: 60 * 1000,
-            totalVoters: 1,
-            results: [{ emoji: '👍', label: 'Yes', count: 1 }],
-          },
-        ],
-      }),
-    );
+    renderLog(makeMeeting(), [
+      {
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'alice',
+        endChairId: 'alice',
+        duration: 60 * 1000,
+        totalVoters: 1,
+        results: [{ emoji: '👍', label: 'Yes', count: 1 }],
+      },
+    ]);
     expect(screen.getByText('1 voter')).toBeTruthy();
   });
 });

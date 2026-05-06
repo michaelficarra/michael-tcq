@@ -144,6 +144,7 @@ The server exposes a small number of REST endpoints:
 | `/api/me`               | GET    | Return current authenticated user (includes `mockAuth` flag) |
 | `/api/meetings`         | POST   | Create a new meeting                                         |
 | `/api/meetings/:id`     | GET    | Get a meeting's current state                                |
+| `/api/meetings/:id/log` | GET    | Fetch the meeting log (supports `?since=<id>` and ETag)      |
 | `/api/dev/switch-user`  | POST   | Switch mock auth identity (dev mode only)                    |
 
 All other interaction happens over Socket.IO. The server also serves the Vite-built client assets in production and has a catch-all for client-side routing.
@@ -192,6 +193,24 @@ The primary copy of meeting state lives in memory on the server as a `Map<string
 - **Cleanup** — When a meeting is deleted from memory (after all clients have disconnected and the cleanup timer expires), its Firestore document is also deleted.
 
 **Why Firestore?** Firestore is a managed, serverless document database on GCP with an Always Free tier of 50,000 reads, 20,000 writes, and 20,000 deletes per day, plus 1 GiB of storage. Meeting state is a natural fit for a document model — each meeting is a single JSON document. At ~50 users and a handful of active meetings, the free tier is more than sufficient. There is no infrastructure to manage and no connection pooling to configure.
+
+### Meeting Log: Decoupled from Realtime State
+
+The per-meeting **log** (the timeline shown on the Logs tab — `meeting-started`, `agenda-item-started`, `agenda-item-finished`, `topic-discussed`, `poll-ran` entries) is intentionally **not** part of `MeetingState`. State broadcasts go to every connected socket on every mutation, and the log grows monotonically over a multi-day meeting; if it rode along, broadcasts would balloon as the meeting progressed.
+
+**Decoupling.** Logs are stored separately from the main meeting document:
+
+- In memory, `MeetingManager` holds a parallel `Map<meetingId, LogEntry[]>`.
+- In Firestore, each meeting has a `log` subcollection (`meetings/{id}/log/{entryId}`), one document per entry. Each persisted doc carries an internal `_seq` field so `loadLog`/`loadAllLogs` can return entries in append order — the `LogEntry.timestamp` field is the _event time_ (e.g. a `topic-discussed` carries the speaker's start time), which can predate the append, so it is not a valid sort key.
+- In the file store (local dev), each meeting's log is a sibling JSON file (`{id}.log.json`) — the simplest read-modify-write loop is fine at dev volumes.
+
+**Wire protocol.**
+
+- The dedicated REST endpoint `GET /api/meetings/:id/log` serves entries. It supports `?since=<entryId>` to return only entries after a cursor and uses the latest entry id as an `ETag`; clients send `If-None-Match` and the server returns `304 Not Modified` when nothing has changed.
+- The server emits a `log:dirty` Socket.IO event (carrying just the latest entry id) to the meeting room whenever an entry is appended. Clients viewing the Logs tab use this signal to fetch via REST. There is no polling — the freshness signal is push-driven, the data path is HTTP.
+- On the client, the `useMeetingLog` hook owns the cursor + ETag and re-fetches on `log:dirty`, on socket reconnect (in case a `log:dirty` was missed during the disconnect window), and on `visibilitychange` becoming visible (in case background-tab throttling delayed an event handler).
+
+**Why this split?** The log is append-only, low-frequency, and view-optional — exactly the kind of data HTTP conditional GET was designed for. Keeping it off the realtime channel keeps state broadcasts small (and stops them from growing as the meeting goes on), while still giving the Logs tab effectively-live updates.
 
 **For local development**, Firestore is replaced by a filesystem-backed implementation that writes meeting state as JSON files to disk. See the [Local Development](#local-development) section for details on the persistence adapter interface.
 

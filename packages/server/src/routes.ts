@@ -136,6 +136,51 @@ export function createMeetingRoutes(
     res.json(meeting);
   });
 
+  // --- Get a meeting's log ---
+  // The log is served separately from the realtime state to keep state
+  // broadcasts small. Clients fetch on Logs-tab open and re-fetch when
+  // they receive a `log:dirty` socket event. ETag/If-None-Match lets a
+  // client whose cursor matches the server's latest skip the response
+  // body entirely (returns 304). The optional `?since=<entryId>` query
+  // returns only entries strictly after that cursor — the typical case
+  // for refetches triggered by `log:dirty`.
+  router.get('/meetings/:id/log', (req, res) => {
+    const meetingId = req.params.id;
+    if (!meetingManager.has(meetingId)) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    // The full log determines the current cursor (the id of the latest
+    // entry, or empty string if the log is empty). This is independent
+    // of whatever slice we return in the body.
+    const fullLog = meetingManager.getLog(meetingId);
+    const latestId = fullLog.length > 0 ? fullLog[fullLog.length - 1].id : '';
+    const etag = `"${latestId}"`;
+
+    res.set('ETag', etag);
+    // The response is the same for every authenticated participant, but
+    // access is auth-gated by the session middleware — `private` keeps
+    // it out of shared caches (CDNs, corporate proxies) so the data
+    // never reaches a party who hasn't been through auth. `must-revalidate`
+    // forces the browser to round-trip the ETag on every use, so a
+    // cached body can't outlive the next `log:dirty` push.
+    res.set('Cache-Control', 'private, must-revalidate');
+
+    // If the client already has the latest cursor, short-circuit. This
+    // is the racy-second-fetch case: a `log:dirty` arrives, the client
+    // fetches, and a duplicate `log:dirty` lands before the response
+    // is processed. The second fetch finds nothing new and 304s.
+    if (req.header('If-None-Match') === etag) {
+      res.status(304).end();
+      return;
+    }
+
+    const since = typeof req.query.since === 'string' ? req.query.since : undefined;
+    const entries = meetingManager.getLogSince(meetingId, since);
+    res.json(entries);
+  });
+
   // --- Import agenda from a markdown URL ---
 
   router.post('/meetings/:id/import-agenda', async (req, res) => {

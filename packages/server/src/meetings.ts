@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   AgendaItem,
   CurrentSpeaker,
+  LogEntry,
   MeetingState,
   QueueEntry,
   QueueEntryType,
@@ -48,9 +49,29 @@ function dedupeKeys(keys: UserKey[]): UserKey[] {
 /** How long (in ms) a meeting is retained after its most recent connection. */
 const MEETING_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
+/**
+ * `Omit` distributed over a discriminated union. Plain `Omit<LogEntry, 'id'>`
+ * collapses to the shared keys only (just `timestamp`) because TS computes
+ * `keyof T` against the union, losing per-variant fields. The conditional
+ * `T extends unknown` re-distributes so each variant is omitted individually
+ * — `Omit<MeetingStartedLog, 'id'> | Omit<AgendaItemStartedLog, 'id'> | ...`
+ * — keeping callers' literal payloads type-checked against their variant.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type LogEntryInput = DistributiveOmit<LogEntry, 'id'>;
+
 export class MeetingManager {
   /** The canonical in-memory state for all active meetings. */
   private meetings = new Map<string, MeetingState>();
+
+  /**
+   * Per-meeting log entries in append order. Held in memory alongside
+   * the meeting state but kept off `MeetingState` itself so it never
+   * rides on the realtime broadcast — clients fetch it via the dedicated
+   * `GET /api/meetings/:id/log` endpoint and are notified of new
+   * entries via the `log:dirty` socket event.
+   */
+  private logs = new Map<string, LogEntry[]>();
 
   /** Tracks which meetings have unsaved changes. */
   private dirty = new Set<string>();
@@ -76,11 +97,12 @@ export class MeetingManager {
   }
 
   /**
-   * Restore meetings from the persistent store into memory.
-   * Called once on server startup.
+   * Restore meetings (and their per-meeting logs) from the persistent
+   * store into memory. Called once on server startup.
    */
   async restore(): Promise<void> {
     const meetings = await this.store.loadAll();
+    const allLogs = await this.store.loadAllLogs();
     const now = Date.now();
     let expired = 0;
 
@@ -90,6 +112,7 @@ export class MeetingManager {
         await this.store.remove(meeting.id);
       } else {
         this.meetings.set(meeting.id, meeting);
+        this.logs.set(meeting.id, allLogs.get(meeting.id) ?? []);
       }
     }
 
@@ -130,10 +153,10 @@ export class MeetingManager {
         lastConnectionTime: now,
         maxConcurrent: 0,
       },
-      log: [],
     };
 
     this.meetings.set(id, meeting);
+    this.logs.set(id, []);
     this.markDirty(id);
     return meeting;
   }
@@ -165,8 +188,68 @@ export class MeetingManager {
   /** Remove a meeting from memory and the persistent store. */
   async remove(id: string): Promise<void> {
     this.meetings.delete(id);
+    this.logs.delete(id);
     this.dirty.delete(id);
     await this.store.remove(id);
+  }
+
+  // -- Log accessors --
+
+  /**
+   * Append a log entry to a meeting's log. Assigns a stable id, stores
+   * the entry in memory, and persists it to the store. Returns the
+   * stored entry (with its assigned id) so callers can pass it to a
+   * `log:dirty` socket emit.
+   *
+   * The persisted write happens immediately rather than via the dirty
+   * flag — log entries are independent appends, not part of the meeting
+   * state document, so there's no batching benefit and pushing through
+   * straight away gives Firestore a chance to record them before the
+   * next process restart. Persistence errors are logged but don't fail
+   * the in-memory append: a brief Firestore outage shouldn't break the
+   * user-facing flow, mirroring how `sync` swallows write failures.
+   */
+  async appendLog(meetingId: string, entry: LogEntryInput): Promise<LogEntry | null> {
+    if (!this.meetings.has(meetingId)) return null;
+    const stored = { ...entry, id: randomUUID() } as LogEntry;
+    let log = this.logs.get(meetingId);
+    if (!log) {
+      log = [];
+      this.logs.set(meetingId, log);
+    }
+    log.push(stored);
+    try {
+      await this.store.appendLog(meetingId, stored);
+    } catch (err) {
+      logError('log_append_failed', {
+        meetingId,
+        entryId: stored.id,
+        error: serialiseError(err),
+      });
+    }
+    return stored;
+  }
+
+  /** Return the full log for a meeting in append order. */
+  getLog(meetingId: string): LogEntry[] {
+    return this.logs.get(meetingId) ?? [];
+  }
+
+  /**
+   * Return the slice of the log strictly after the entry with id
+   * `sinceId`. If `sinceId` is undefined, returns the full log. If
+   * `sinceId` is the id of the most recent entry, returns an empty
+   * array. If `sinceId` is unknown (e.g. truncated cursor or restart
+   * after a meeting wipe), falls back to the full log so the client
+   * still gets useful data.
+   */
+  getLogSince(meetingId: string, sinceId: string | undefined): LogEntry[] {
+    const log = this.logs.get(meetingId);
+    if (!log) return [];
+    if (sinceId === undefined) return log.slice();
+    const index = log.findIndex((entry) => entry.id === sinceId);
+    if (index === -1) return log.slice();
+    return log.slice(index + 1);
   }
 
   /** Mark a meeting as having unsaved changes. */
