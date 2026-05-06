@@ -7,7 +7,7 @@
 # Vite-built client assets and handles Socket.IO connections.
 
 # --- Stage 1: Build ---
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ RUN npm run build -w packages/client
 RUN npm run build -w packages/server
 
 # --- Stage 2: Production image ---
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 

@@ -65,6 +65,9 @@ export function DiagnosticsPanel({ refreshTick }: { refreshTick: number }) {
   // AdminPanel above it on the same tick — so they stay in lockstep
   // instead of drifting on two independent intervals.
   useEffect(() => {
+    // Intentional polled fetch; the eventual setState updates are async,
+    // not synchronous within the effect body.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDiagnostics();
   }, [fetchDiagnostics, refreshTick]);
 

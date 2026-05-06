@@ -74,6 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Intentional initial fetch; the eventual setState updates are async,
+    // not synchronous within the effect body.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMe();
   }, [fetchMe]);
 

@@ -665,12 +665,12 @@ describe('Socket.IO integration', () => {
       // Start meeting — intro speaker is current, no current.topic yet
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      await statePromise;
 
       // Add a topic-type entry and advance to it — this sets current.topic
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'topic', topic: 'Real topic' });
-      state = await statePromise;
+      let state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
@@ -2033,12 +2033,12 @@ describe('Socket.IO integration', () => {
       // Start meeting (advance to first item)
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      const state = await statePromise;
 
       // Advance to second item
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
-      state = await statePromise;
+      await statePromise;
 
       // Should have: meeting-started, item-started(First), topic-discussed (intro), item-finished(First), item-started(Second)
       const log = ctx.meetingManager.getLog(meeting.id);
@@ -2061,12 +2061,12 @@ describe('Socket.IO integration', () => {
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      await statePromise;
 
       // Add a new topic to the queue and advance
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'topic', topic: 'My topic' });
-      state = await statePromise;
+      let state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
@@ -2091,14 +2091,14 @@ describe('Socket.IO integration', () => {
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      await statePromise;
 
       // Add a reply and advance to it. current.topic is undefined at this
       // point (the agenda intro doesn't count as a queued topic), so the
       // precondition is explicitly null.
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'reply', topic: 'My reply', currentTopicSpeakerId: null });
-      state = await statePromise;
+      let state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
@@ -2119,12 +2119,12 @@ describe('Socket.IO integration', () => {
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      await statePromise;
 
       // Add a point-of-order and advance to it
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'point-of-order', topic: 'POO' });
-      state = await statePromise;
+      let state = await statePromise;
 
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
@@ -2148,17 +2148,17 @@ describe('Socket.IO integration', () => {
           { emoji: '👎', label: 'No' },
         ],
       });
-      let state = await statePromise;
+      const state = await statePromise;
 
       // React to an option
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('poll:react', { optionId: state.poll!.options[0].id });
-      state = await statePromise;
+      await statePromise;
 
       // Stop the poll
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('poll:stop');
-      state = await statePromise;
+      await statePromise;
 
       const pollEntry = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'poll-ran');
       expect(pollEntry).toBeDefined();
@@ -2179,17 +2179,17 @@ describe('Socket.IO integration', () => {
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      await statePromise;
 
       // Add entries to the queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('queue:add', { type: 'topic', topic: 'Leftover topic' });
-      state = await statePromise;
+      const state = await statePromise;
 
       // Advance to next agenda item (leaving the queue non-empty)
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
-      state = await statePromise;
+      await statePromise;
 
       const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
@@ -2210,12 +2210,12 @@ describe('Socket.IO integration', () => {
       // Start meeting
       let statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
-      let state = await statePromise;
+      const state = await statePromise;
 
       // Advance to next item with empty queue
       statePromise = waitForEvent<MeetingState>(client, 'state');
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
-      state = await statePromise;
+      await statePromise;
 
       const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
       expect(finished).toBeDefined();
