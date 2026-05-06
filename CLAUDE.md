@@ -47,6 +47,7 @@ Keep these up to date alongside code changes:
 - **`docs/PRD.md`** — any user-facing functionality change, described in enough detail to reproduce. Do not be overly prescriptive about incidental things like styling, size, or positioning.
 - **`docs/ARCHITECTURE.md`** — architectural changes.
 - **`docs/CONTRIBUTING.md`** — development process changes.
+- **`docs/TESTING.md`** — when adding/removing a test suite or changing a runner, environment, or test-file location.
 - **`docs/DEPLOYMENT.md`** — deployment process changes. The recommended and manual paths must stay in sync: any new provisioning step (API, IAM binding, resource) needs to appear in both the manual walkthrough and the bootstrap logic in `scripts/deploy.sh`.
 - **`scripts/deploy.sh`** — must mirror the manual steps in `docs/DEPLOYMENT.md`. Keep the bootstrap phases idempotent so re-runs after a partial failure just resume.
 - **`scripts/seed-meeting.sh`** — seeds a meeting with sample TC39 members, agenda items, sessions, and queue entries for development/demo. Keep in sync with changes to meeting REST endpoints (`/api/meetings`, `/api/dev/switch-user`), Socket.IO event names/payloads (`agenda:add`, `session:add`, `agenda:reorder`, `meeting:nextAgendaItem`, `queue:add`), and the shape of the broadcast `state`.
@@ -55,4 +56,4 @@ Keep these up to date alongside code changes:
 
 ## Testing
 
-Every feature should come with tests. Features that impact the PRD should also have end-to-end Playwright tests in `e2e/`.
+Every feature should come with tests. Features that impact the PRD should also have end-to-end Playwright tests in `e2e/`. See [`docs/TESTING.md`](docs/TESTING.md) for a breakdown of the suites — what each covers, why it exists, and which files belong to it.

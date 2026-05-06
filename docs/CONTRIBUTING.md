@@ -94,6 +94,8 @@ npm run test:watch -w packages/client
 
 ## Unit and Integration Tests
 
+For a description of each suite — what it covers and why it exists — see [`TESTING.md`](TESTING.md). The rest of this section focuses on running and debugging the tests.
+
 Tests use [Vitest](https://vitest.dev/).
 
 Run server and client tests together:
