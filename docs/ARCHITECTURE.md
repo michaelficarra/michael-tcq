@@ -161,6 +161,8 @@ Socket.IO is the right transport for TCQ because it directly maps to the applica
 
 **Per-message compression.** The Socket.IO server is configured with `perMessageDeflate: { threshold: 1024 }`. Socket.IO v4 disables WebSocket compression by default because most apps emit many small messages where DEFLATE adds CPU overhead without meaningful savings; TCQ is the opposite case — every state mutation broadcasts the full `MeetingState` (a repetitive JSON document with many shared keys), so compression typically halves on-the-wire size. The threshold skips compression for sub-1 KB messages (acks, small admin events) where it is not worth the work.
 
+**MessagePack parser.** Both ends use `socket.io-msgpack-parser` (`parser: msgpackParser` on the server constructor and the client `io()` call). MessagePack encodes typed values directly — numbers as a few bytes rather than decimal strings, booleans as a single byte rather than `"true"` — so the pre-compression baseline is roughly 20–40 % smaller than JSON. The two parsers must match: a JSON client cannot decode an msgpack server. Note that msgpack is stricter than JSON about `undefined`: `JSON.stringify` silently drops keys whose value is `undefined`, while msgpack-parser will encode them. Keep emit payloads explicitly free of `undefined` properties — the existing TypeScript types make this hard to violate accidentally.
+
 ### Message Architecture
 
 The server is the single source of truth. The flow for every state change is:

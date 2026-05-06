@@ -12,6 +12,7 @@ import express from 'express';
 import session from 'express-session';
 import { createServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
+import msgpackParser from 'socket.io-msgpack-parser';
 import type { ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
 import './session.js'; // session type augmentation
 import { MeetingManager } from './meetings.js';
@@ -57,6 +58,12 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpSe
   // entry shapes, log entries). The threshold skips compression for
   // anything under 1 KB so acks and tiny events stay uncompressed.
   perMessageDeflate: { threshold: 1024 },
+  // Replace the default JSON parser with MessagePack. Encodes typed
+  // values directly (a number is a few bytes, not a decimal string;
+  // a boolean is one byte, not "true"), so payloads are 20–40 % smaller
+  // before compression kicks in. The client must be configured with
+  // the same parser — see `packages/client/src/hooks/useSocketConnection.ts`.
+  parser: msgpackParser,
 });
 
 const PORT = process.env.PORT ?? 3000;

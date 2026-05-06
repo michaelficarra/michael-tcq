@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
+import msgpackParser from 'socket.io-msgpack-parser';
 import type { TypedSocket } from '../contexts/SocketContext.js';
 import { useMeetingDispatch } from '../contexts/MeetingContext.js';
 
@@ -20,8 +21,11 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
   useEffect(() => {
     // Connect to the server. In development, the Vite proxy forwards
     // /socket.io requests to the Express server, so no explicit URL is needed.
+    // The MessagePack parser must match the server's choice — see
+    // `packages/server/src/index.ts`.
     const socket: TypedSocket = io({
       transports: ['websocket', 'polling'],
+      parser: msgpackParser,
     });
 
     socketRef.current = socket;

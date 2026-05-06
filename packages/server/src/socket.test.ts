@@ -4,6 +4,7 @@ import session from 'express-session';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
+import msgpackParser from 'socket.io-msgpack-parser';
 import type {
   AgendaEntry,
   AgendaItem,
@@ -67,8 +68,14 @@ function createTestServer(user: User = TEST_USER): TestContext {
 
   const meetingManager = new MeetingManager(new InMemoryStore());
 
+  // Match the production parser choice (see packages/server/src/index.ts)
+  // so the existing handler tests double as integration coverage for the
+  // wire format — anything that's stringly JSON-clean but breaks under
+  // msgpack (e.g. an explicit `undefined` value sneaking into a payload)
+  // shows up here instead of in production.
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: { origin: '*', credentials: true },
+    parser: msgpackParser,
   });
 
   // Share session with Socket.IO (same as production setup)
@@ -98,6 +105,8 @@ function connectClient(baseUrl: string): TypedClientSocket {
     // Disable reconnection in tests so disconnects are clean
     reconnection: false,
     transports: ['websocket'],
+    // Must match the server-side parser configured above.
+    parser: msgpackParser,
   });
 }
 
