@@ -111,6 +111,12 @@ export class MeetingManager {
         expired++;
         await this.store.remove(meeting.id);
       } else {
+        // Backfill `operational.version` for meetings persisted before
+        // the field existed. Without this, the first `bumpVersion` would
+        // compute `undefined + 1 === NaN` and emit a corrupt version.
+        if (typeof meeting.operational.version !== 'number') {
+          meeting.operational.version = 0;
+        }
         this.meetings.set(meeting.id, meeting);
         this.logs.set(meeting.id, allLogs.get(meeting.id) ?? []);
       }
@@ -152,6 +158,10 @@ export class MeetingManager {
       operational: {
         lastConnectionTime: now,
         maxConcurrent: 0,
+        // Versioning starts at 0; the first state-mutation broadcast bumps
+        // to 1 before emitting. Clients use this counter to detect missed
+        // deltas (gap → request `state:resync`).
+        version: 0,
       },
     };
 
@@ -159,6 +169,20 @@ export class MeetingManager {
     this.logs.set(id, []);
     this.markDirty(id);
     return meeting;
+  }
+
+  /**
+   * Increment a meeting's `operational.version` and return the new value.
+   * Called by every server-side delta or full-state broadcast immediately
+   * before emitting, so each emit carries a strictly increasing version.
+   * Returns null if the meeting doesn't exist.
+   */
+  bumpVersion(id: string): number | null {
+    const meeting = this.meetings.get(id);
+    if (!meeting) return null;
+    meeting.operational.version += 1;
+    this.markDirty(id);
+    return meeting.operational.version;
   }
 
   /** Get a meeting by ID, or undefined if it doesn't exist. */

@@ -38,7 +38,7 @@ interface PersistenceHealth {
 interface Diagnostics {
   process: ProcessInfo;
   meetings: { totalActive: number; totalParticipants: number; totalConnections: number };
-  sockets: { totalClients: number };
+  sockets: { totalClients: number; stateResyncs: number };
   http: { total: number; clientErrors: number; serverErrors: number };
   persistence: PersistenceHealth;
   errors: { totalSinceStart: number; recent: ErrorEntry[] };
@@ -89,6 +89,7 @@ export function DiagnosticsPanel({ refreshTick }: { refreshTick: number }) {
             totalParticipants={data.meetings.totalParticipants}
             totalConnections={data.meetings.totalConnections}
             totalClients={data.sockets.totalClients}
+            stateResyncs={data.sockets.stateResyncs}
           />
           <HttpSection counters={data.http} />
           <PersistenceSection health={data.persistence} />
@@ -123,11 +124,13 @@ function MeetingsSection({
   totalParticipants,
   totalConnections,
   totalClients,
+  stateResyncs,
 }: {
   totalActive: number;
   totalParticipants: number;
   totalConnections: number;
   totalClients: number;
+  stateResyncs: number;
 }) {
   return (
     <Section title="Meetings & sockets">
@@ -135,6 +138,11 @@ function MeetingsSection({
       <Row label="Total participants" value={totalParticipants} />
       <Row label="Live meeting connections" value={totalConnections} />
       <Row label="Total Socket.IO clients" value={totalClients} />
+      {/* Cumulative since process start. Should stay near zero — a
+          rising count means clients are detecting gaps in the delta-
+          version sequence and self-healing via full-state replays.
+          Visible here as the canary for delta-broadcast bugs. */}
+      <Row label="State resyncs" value={stateResyncs.toLocaleString()} />
     </Section>
   );
 }

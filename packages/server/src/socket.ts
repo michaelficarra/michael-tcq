@@ -1,6 +1,14 @@
 import type { Server, Socket } from 'socket.io';
 import type { ZodType } from 'zod';
-import type { ClientToServerEvents, LogEntry, ServerToClientEvents, User, UserKey, MeetingState } from '@tcq/shared';
+import type {
+  AgendaItem,
+  ClientToServerEvents,
+  LogEntry,
+  ServerToClientEvents,
+  User,
+  UserKey,
+  MeetingState,
+} from '@tcq/shared';
 import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
@@ -30,6 +38,7 @@ import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
+import { recordStateResync } from './socketCounters.js';
 
 /**
  * Validate a wire payload against its Zod schema. On failure, emit an
@@ -180,10 +189,16 @@ export function getActiveConnectionCount(meetingId: string): number {
 }
 
 /**
- * Broadcast the full meeting state to all sockets in a meeting's room.
- * Called after every state mutation so all clients stay in sync.
+ * Broadcast the full `MeetingState` to all sockets in a meeting's room.
+ * Reserved for the resync path: bulk operations like agenda import
+ * where a single full-state emit is cheaper than dozens of typed deltas.
+ * The initial-join and `state:resync` replies use `socket.emit('state',
+ * ...)` directly to send to a single socket rather than the whole room.
+ *
+ * Mutation handlers should use `emitDelta` instead so connected clients
+ * receive only the changed fields rather than the entire `MeetingState`.
  */
-export function broadcastMeetingState(
+export function emitFullState(
   io: Server<ClientToServerEvents, ServerToClientEvents>,
   meetingManager: MeetingManager,
   meetingId: string,
@@ -197,6 +212,65 @@ export function broadcastMeetingState(
     // current speaker without explicitly setting operational.lastAdvancementBy.
     delete meeting.operational.lastAdvancementBy;
   }
+}
+
+/** The set of `ServerToClientEvents` that participate in version sequencing. */
+type DeltaEventName =
+  | 'chairs:updated'
+  | 'agenda:added'
+  | 'agenda:edited'
+  | 'agenda:deleted'
+  | 'agenda:reordered'
+  | 'queue:added'
+  | 'queue:edited'
+  | 'queue:removed'
+  | 'queue:reordered'
+  | 'queue:closedChanged'
+  | 'speaker:advanced'
+  | 'agenda:advanced'
+  | 'poll:started'
+  | 'poll:stopped'
+  | 'poll:reacted';
+
+type DeltaEventPayload<E extends DeltaEventName> = Parameters<ServerToClientEvents[E]>[0];
+
+/**
+ * Emit a versioned state-mutation delta to every socket in a meeting's
+ * room. Handles the per-meeting version bump and short-circuits if the
+ * meeting has been removed in the time between the handler starting
+ * and reaching the emit.
+ */
+function emitDelta<E extends DeltaEventName>(
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+  meetingManager: MeetingManager,
+  meetingId: string,
+  event: E,
+  payload: Omit<DeltaEventPayload<E>, 'version'>,
+): void {
+  const version = meetingManager.bumpVersion(meetingId);
+  if (version === null) return;
+  // Socket.IO's typed `emit` resolves to a per-event signature derived
+  // from `ServerToClientEvents[E]`, and TypeScript can't reconcile the
+  // 15-arm discriminated union here. The public `payload` type above
+  // still gives the call site full type safety; we route through `any`
+  // only at the emit boundary.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (io.to(meetingId).emit as (event: E, payload: any) => void)(event, { ...payload, version });
+}
+
+/**
+ * Build a small `users` map containing just the User records relevant to
+ * a delta — used to piggy-back newly-introduced user records onto the
+ * delta that first referenced them. The client merges these into its
+ * locally-cached `users` so it can render badges immediately without an
+ * extra fetch. Idempotent; passing already-known users is harmless.
+ */
+function usersRecordFor(users: User[]): Record<UserKey, User> {
+  const out: Record<UserKey, User> = {};
+  for (const u of users) {
+    out[userKey(u)] = u;
+  }
+  return out;
 }
 
 /**
@@ -310,6 +384,21 @@ export function registerSocketHandlers(
       socket.emit('state', meeting);
     });
 
+    // --- state:resync ---
+    // Client noticed a gap in the delta-version sequence and wants a
+    // fresh full-state snapshot. Reply only to the requesting socket so
+    // we don't re-broadcast to clients that are already up to date.
+    // Also bumps a server-wide counter — in steady state this should be
+    // near-zero per meeting; a rising count is the canary for a delta
+    // reducer silently mis-applying state on the client side.
+    socket.on('state:resync', () => {
+      if (!joinedMeetingId) return;
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      recordStateResync();
+      socket.emit('state', meeting);
+    });
+
     // --- meeting:updateChairs ---
     // Chairs or admins can update the list of chairs. For regular chairs:
     // at least one chair must remain, and they cannot remove themselves.
@@ -373,7 +462,12 @@ export function registerSocketHandlers(
       }
 
       meetingManager.updateChairs(joinedMeetingId, chairs);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const updated = meetingManager.get(joinedMeetingId);
+      if (!updated) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'chairs:updated', {
+        chairIds: updated.chairIds,
+        users: usersRecordFor(chairs),
+      });
     });
 
     // --- agenda:add ---
@@ -395,8 +489,12 @@ export function registerSocketHandlers(
       const presenters = presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
 
       // The schema already constrains duration to a positive integer; undefined = no estimate.
-      meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.duration);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const entry = meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.duration);
+      if (!entry) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:added', {
+        entry,
+        users: usersRecordFor(presenters),
+      });
     });
 
     // --- agenda:edit ---
@@ -431,7 +529,14 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      const entry = meeting?.agenda.find((e) => e.id === parsed.id);
+      if (!entry) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:edited', {
+        id: parsed.id,
+        entry,
+        users: updates.presenters ? usersRecordFor(updates.presenters) : undefined,
+      });
     });
 
     // --- agenda:delete ---
@@ -446,13 +551,22 @@ export function registerSocketHandlers(
       const parsed = parsePayload(AgendaDeletePayloadSchema, payload, socket);
       if (!parsed) return;
 
+      // `currentCleared` tells the client whether `current.agendaItemId` was
+      // wiped because we just deleted what was the current item. Compute it
+      // *before* the delete since the manager mutates `current` in place.
+      const meetingBefore = meetingManager.get(joinedMeetingId);
+      const wasCurrent = meetingBefore?.current.agendaItemId === parsed.id;
+
       const deleted = meetingManager.deleteAgendaItem(joinedMeetingId, parsed.id);
       if (!deleted) {
         socket.emit('error', 'Agenda item not found');
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:deleted', {
+        id: parsed.id,
+        currentCleared: !!wasCurrent,
+      });
     });
 
     // --- agenda:reorder ---
@@ -473,7 +587,11 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:reordered', {
+        orderedIds: meeting.agenda.map((e) => e.id),
+      });
     });
 
     // --- session:add ---
@@ -489,8 +607,10 @@ export function registerSocketHandlers(
       const parsed = parsePayload(SessionAddPayloadSchema, payload, socket);
       if (!parsed) return;
 
-      meetingManager.addSession(joinedMeetingId, parsed.name, parsed.capacity);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const session = meetingManager.addSession(joinedMeetingId, parsed.name, parsed.capacity);
+      if (!session) return;
+      // Sessions are agenda entries — they share the `agenda:added` channel.
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:added', { entry: session });
     });
 
     // --- session:edit ---
@@ -515,7 +635,10 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      const entry = meeting?.agenda.find((e) => e.id === parsed.id);
+      if (!entry) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:edited', { id: parsed.id, entry });
     });
 
     // --- session:delete ---
@@ -537,7 +660,12 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      // Sessions can't be the current agenda item (only items can), so
+      // `currentCleared` is always false here.
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:deleted', {
+        id: parsed.id,
+        currentCleared: false,
+      });
     });
 
     // --- queue:add ---
@@ -623,7 +751,14 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      const position = meeting.queue.orderedIds.indexOf(entry.id);
+      emitDelta(io, meetingManager, joinedMeetingId, 'queue:added', {
+        entry,
+        position,
+        users: usersRecordFor([entryUser]),
+      });
       respond({ ok: true });
     });
 
@@ -666,7 +801,12 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const updatedEntry = meetingManager.getQueueEntry(joinedMeetingId, parsed.id);
+      if (!updatedEntry) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'queue:edited', {
+        id: parsed.id,
+        entry: updatedEntry,
+      });
     });
 
     // --- queue:remove ---
@@ -692,7 +832,7 @@ export function registerSocketHandlers(
       }
 
       meetingManager.removeQueueEntry(joinedMeetingId, parsed.id);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'queue:removed', { id: parsed.id });
     });
 
     // --- queue:reorder ---
@@ -759,13 +899,27 @@ export function registerSocketHandlers(
         }
       }
 
+      // Snapshot the moved entry's type so we can tell the client about
+      // any priority-crossing type change applied by the manager.
+      const typeBefore = entry.type;
+
       const reordered = meetingManager.reorderQueueEntry(joinedMeetingId, parsed.id, parsed.afterId);
       if (!reordered) {
         socket.emit('error', 'Invalid queue reorder');
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      const movedAfter = meeting.queue.entries[parsed.id];
+      // Only include `updatedEntries` if the manager mutated the entry's
+      // type — clients can otherwise infer the new shape from existing
+      // local state plus the new ordering.
+      const updatedEntries = movedAfter && movedAfter.type !== typeBefore ? { [parsed.id]: movedAfter } : undefined;
+      emitDelta(io, meetingManager, joinedMeetingId, 'queue:reordered', {
+        orderedIds: [...meeting.queue.orderedIds],
+        updatedEntries,
+      });
     });
 
     // --- queue:setClosed ---
@@ -779,7 +933,9 @@ export function registerSocketHandlers(
       const parsed = parsePayload(QueueSetClosedPayloadSchema, payload, socket);
       if (!parsed) return;
       meetingManager.setQueueClosed(joinedMeetingId, parsed.closed);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'queue:closedChanged', {
+        closed: parsed.closed,
+      });
     });
 
     // --- queue:next ---
@@ -847,7 +1003,20 @@ export function registerSocketHandlers(
       }
 
       meeting.operational.lastAdvancementBy = actorId;
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'speaker:advanced', {
+        current: meeting.current,
+        queue: meeting.queue,
+        lastAdvancementBy: actorId,
+        // The actor's User record may have just been refreshed by
+        // `ensureUser` above (e.g. acquiring the session-only `isAdmin`
+        // flag), so carry it on the delta so the client cache picks up
+        // the latest fields rather than retaining an older placeholder.
+        users: { [actorId]: meeting.users[actorId] },
+      });
+      // Mirror the historical full-state broadcast behaviour: clear
+      // `lastAdvancementBy` after the emit so it only ever rides on the
+      // immediately-following delta.
+      delete meeting.operational.lastAdvancementBy;
       emitLogDirty(io, joinedMeetingId, topicLogId);
       respond({ ok: true });
 
@@ -885,7 +1054,9 @@ export function registerSocketHandlers(
         parsed.multiSelect !== false,
       );
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const updated = meetingManager.get(joinedMeetingId);
+      if (!updated?.poll) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'poll:started', { poll: updated.poll });
     });
 
     // --- poll:stop ---
@@ -936,7 +1107,7 @@ export function registerSocketHandlers(
 
       meetingManager.stopPoll(joinedMeetingId);
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'poll:stopped', {});
       emitLogDirty(io, joinedMeetingId, pollLog?.id ?? null);
     });
 
@@ -955,7 +1126,11 @@ export function registerSocketHandlers(
         return;
       }
 
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting?.poll) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'poll:reacted', {
+        reactions: [...meeting.poll.reactions],
+      });
     });
 
     // --- meeting:nextAgendaItem ---
@@ -1000,6 +1175,9 @@ export function registerSocketHandlers(
       // single log:dirty at the end with the final cursor — clients
       // catch up on every prior append in one fetch.
       let latestLogId: string | null = null;
+      // Collect any agenda items the handler mutates so we can carry
+      // them in the `agenda:advanced` delta's `agendaUpdates` map.
+      const agendaUpdates: Record<string, Partial<AgendaItem>> = {};
 
       // Finalise log entries for the outgoing agenda item
       if (outgoingItem && outgoingStartTime) {
@@ -1043,6 +1221,12 @@ export function registerSocketHandlers(
         } else {
           conclusionForLog = outgoingItem.conclusion;
         }
+
+        // Capture the outgoing item's mutated fields for the delta.
+        agendaUpdates[outgoingItem.id] = {
+          duration: outgoingItem.duration,
+          conclusion: outgoingItem.conclusion,
+        };
 
         // Append agenda-item-finished
         const finishedEntry = await meetingManager.appendLog(joinedMeetingId, {
@@ -1093,7 +1277,17 @@ export function registerSocketHandlers(
 
       meeting.operational.lastAdvancementBy = chairId;
       meetingManager.markDirty(joinedMeetingId);
-      broadcastMeetingState(io, meetingManager, joinedMeetingId);
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:advanced', {
+        current: meeting.current,
+        queue: meeting.queue,
+        agendaUpdates: Object.keys(agendaUpdates).length > 0 ? agendaUpdates : undefined,
+        lastAdvancementBy: chairId,
+        // Carry the chair's current User record so any field upgrades
+        // (e.g. promoting from a placeholder to a session-flagged
+        // record with `isAdmin`) propagate to client caches.
+        users: { [chairId]: meeting.users[chairId] },
+      });
+      delete meeting.operational.lastAdvancementBy;
       emitLogDirty(io, joinedMeetingId, latestLogId);
       respond({ ok: true });
 

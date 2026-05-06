@@ -5,11 +5,12 @@ import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema }
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import { getActiveConnectionCount, broadcastMeetingState } from './socket.js';
+import { getActiveConnectionCount, emitFullState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser } from './session.js';
 import { getRecentErrors, getErrorCount } from './errorBuffer.js';
 import { getHttpCounters } from './httpCounters.js';
+import { getSocketCounters } from './socketCounters.js';
 
 /**
  * REST routes for meeting management.
@@ -302,7 +303,9 @@ export function createMeetingRoutes(
     }
 
     // Broadcast the updated state to all connected clients
-    broadcastMeetingState(io, meetingManager, meetingId);
+    // Bulk import — a single full-state emit is cheaper than firing an
+    // `agenda:added` delta per imported item.
+    emitFullState(io, meetingManager, meetingId);
 
     res.json({ imported: items.length });
   });
@@ -399,6 +402,11 @@ export function createMeetingRoutes(
         // Defensively read it: the test harness passes a stub `io` without
         // an `engine`, and we don't want diagnostics to break those tests.
         totalClients: io.engine?.clientsCount ?? 0,
+        // Cumulative count of `state:resync` requests since process
+        // start. Should stay near zero — a rising number suggests the
+        // delta-broadcast path is dropping or mis-applying events and
+        // clients are repeatedly self-healing.
+        ...getSocketCounters(),
       },
       // Cumulative HTTP traffic since process start. Health-probe hits
       // are excluded — the counter increments inside httpLogger, which

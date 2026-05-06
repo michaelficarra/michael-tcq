@@ -2,7 +2,29 @@ import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import type { TypedSocket } from '../contexts/SocketContext.js';
-import { useMeetingDispatch } from '../contexts/MeetingContext.js';
+import { useMeetingDispatch, type MeetingAction } from '../contexts/MeetingContext.js';
+
+/**
+ * Discriminated-action types that mirror the server's delta event names.
+ * Listed here so the gap-detection wiring stays declarative.
+ */
+const DELTA_EVENT_TYPES = [
+  'chairs:updated',
+  'agenda:added',
+  'agenda:edited',
+  'agenda:deleted',
+  'agenda:reordered',
+  'queue:added',
+  'queue:edited',
+  'queue:removed',
+  'queue:reordered',
+  'queue:closedChanged',
+  'speaker:advanced',
+  'agenda:advanced',
+  'poll:started',
+  'poll:stopped',
+  'poll:reacted',
+] as const satisfies readonly Extract<MeetingAction, { delta: unknown }>['type'][];
 
 /**
  * Connect to the server via Socket.IO, join a meeting room, and dispatch
@@ -17,6 +39,17 @@ import { useMeetingDispatch } from '../contexts/MeetingContext.js';
 export function useSocketConnection(meetingId: string): TypedSocket | null {
   const dispatch = useMeetingDispatch();
   const socketRef = useRef<TypedSocket | null>(null);
+  // The version cursor lives in a ref rather than React state so the
+  // socket listeners can both read it and *write* it synchronously. If
+  // we mirrored `lastSeenVersion` from context via a useEffect, deltas
+  // arriving in the same JS turn as the bootstrap `state` event (very
+  // common on localhost) would see a stale ref — the effect doesn't run
+  // until after React commits the dispatch, but the next listener fires
+  // immediately when its frame is decoded. Owning the cursor in the ref
+  // avoids that race entirely. The reducer still tracks lastSeenVersion
+  // in state so other components can read it, but the cursor used for
+  // gap detection is what's in this ref.
+  const lastSeenVersionRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Connect to the server. In development, the Vite proxy forwards
@@ -52,10 +85,42 @@ export function useSocketConnection(meetingId: string): TypedSocket | null {
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
 
-    // The server sends the full meeting state whenever it changes
+    // The server sends the full meeting state on initial join, on
+    // automatic reconnect, and in response to a `state:resync` request.
+    // The bootstrap payload's `operational.version` reseeds the local
+    // version cursor used for gap detection on subsequent deltas.
     socket.on('state', (meeting) => {
+      // Reseed synchronously so any delta decoded in the same JS turn
+      // as this state event sees the up-to-date cursor.
+      lastSeenVersionRef.current = meeting.operational.version;
       dispatch({ type: 'state', meeting });
     });
+
+    // Wire up a gap-detecting listener for each typed delta event.
+    // Each listener:
+    //  - Drops the delta if no bootstrap `state` has arrived yet.
+    //  - Applies the delta if `version === lastSeen + 1`, advancing the
+    //    cursor *synchronously* so a back-to-back delta in the same
+    //    turn sees the new cursor before its own check runs.
+    //  - On a forward gap (`version > lastSeen + 1`), drops the delta
+    //    and asks the server for a fresh `state` snapshot — the replayed
+    //    snapshot reseeds the cursor and resumes streaming.
+    //  - Drops late or duplicate deltas silently.
+    for (const eventType of DELTA_EVENT_TYPES) {
+      socket.on(eventType, (delta: { version: number }) => {
+        const lastSeen = lastSeenVersionRef.current;
+        if (lastSeen === null) return;
+        const expected = lastSeen + 1;
+        if (delta.version === expected) {
+          lastSeenVersionRef.current = delta.version;
+          dispatch({ type: eventType, delta } as MeetingAction);
+          return;
+        }
+        if (delta.version > expected) {
+          socket.emit('state:resync');
+        }
+      });
+    }
 
     // The server broadcasts the current socket-connection count for
     // this meeting after each join/disconnect so the connection-status

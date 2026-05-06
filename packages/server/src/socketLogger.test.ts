@@ -58,7 +58,7 @@ function makeMeeting(): MeetingState {
       closed: false,
     },
     current: { topic, speaker, topicSpeakers: [] },
-    operational: { lastConnectionTime: '2026-04-22T00:00:00.000Z', maxConcurrent: 0 },
+    operational: { lastConnectionTime: '2026-04-22T00:00:00.000Z', maxConcurrent: 0, version: 0 },
   };
 }
 

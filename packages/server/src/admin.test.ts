@@ -220,6 +220,7 @@ describe('Admin endpoints', () => {
         },
         sockets: {
           totalClients: expect.any(Number),
+          stateResyncs: expect.any(Number),
         },
         http: {
           total: expect.any(Number),

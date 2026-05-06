@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
-import type { MeetingState, User } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
+import type { MeetingDeltaAction, MeetingState, User } from '@tcq/shared';
+import { applyDelta, userKey } from '@tcq/shared';
 
 // -- State --
 
@@ -24,6 +24,16 @@ export interface MeetingContextState {
 
   /** Error message from the server (e.g. "Meeting not found"). */
   error: string | null;
+
+  /**
+   * Highest `operational.version` we've successfully applied. Set from
+   * the bootstrap `state` event and incremented as delta events arrive.
+   * `null` before any state has loaded. Used by the socket listener to
+   * detect a missed delta — if an arriving delta's version isn't exactly
+   * `lastSeenVersion + 1`, the listener requests a `state:resync` and
+   * drops the delta.
+   */
+  lastSeenVersion: number | null;
 }
 
 const initialState: MeetingContextState = {
@@ -32,6 +42,7 @@ const initialState: MeetingContextState = {
   connected: false,
   activeConnections: 0,
   error: null,
+  lastSeenVersion: null,
 };
 
 // -- Actions --
@@ -43,13 +54,25 @@ export type MeetingAction =
   | { type: 'setActiveConnections'; count: number }
   | { type: 'setError'; error: string }
   | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
-  | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number };
+  | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number }
+  // Versioned delta actions — one per `ServerToClientEvents` delta event.
+  // Defined in `@tcq/shared` so the same union backs both the React
+  // reducer and the integration-test surrogate that verifies client and
+  // server stay byte-identical after every mutation.
+  | MeetingDeltaAction;
 
 export function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
   switch (action.type) {
     case 'state':
       // Full state replacement from the server — clears any previous error
-      return { ...state, meeting: action.meeting, error: null };
+      // and re-seeds the version cursor from the bootstrap snapshot. Used
+      // for initial join, automatic reconnect, and `state:resync` replies.
+      return {
+        ...state,
+        meeting: action.meeting,
+        lastSeenVersion: action.meeting.operational.version,
+        error: null,
+      };
     case 'setUser':
       return { ...state, user: action.user };
     case 'setConnected':
@@ -75,6 +98,29 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
         meeting: { ...state.meeting, queue: { ...state.meeting.queue, orderedIds } },
       };
     }
+    // Versioned delta cases — apply via `applyDelta` and bump
+    // `lastSeenVersion` to the delta's version.
+    case 'chairs:updated':
+    case 'agenda:added':
+    case 'agenda:edited':
+    case 'agenda:deleted':
+    case 'agenda:reordered':
+    case 'queue:added':
+    case 'queue:edited':
+    case 'queue:removed':
+    case 'queue:reordered':
+    case 'queue:closedChanged':
+    case 'speaker:advanced':
+    case 'agenda:advanced':
+    case 'poll:started':
+    case 'poll:stopped':
+    case 'poll:reacted':
+      if (!state.meeting) return state;
+      return {
+        ...state,
+        meeting: applyDelta(state.meeting, action),
+        lastSeenVersion: action.delta.version,
+      };
   }
 }
 

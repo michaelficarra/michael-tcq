@@ -26,7 +26,14 @@ export function TestMeetingProvider({
   activeConnections = 1,
   children,
 }: TestMeetingProviderProps) {
-  const state: MeetingContextState = { meeting, user, connected, activeConnections, error: null };
+  const state: MeetingContextState = {
+    meeting,
+    user,
+    connected,
+    activeConnections,
+    error: null,
+    lastSeenVersion: meeting?.operational.version ?? null,
+  };
 
   return (
     <MeetingStateContext value={state}>

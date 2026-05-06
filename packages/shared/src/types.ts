@@ -305,6 +305,15 @@ export interface OperationalState {
    * the UI — retained as a historical metric for future use.
    */
   maxConcurrent: number;
+  /**
+   * Monotonically increasing counter bumped on every state-mutating
+   * broadcast (full-state emit *or* typed delta event). Lets a client
+   * detect a missed delta — if the next delta's version skips an
+   * expected value, the client requests a `state:resync`. Persists with
+   * the rest of the operational state so a server restart resumes from
+   * the last persisted version rather than restarting numbering.
+   */
+  version: number;
 }
 
 export interface MeetingState {

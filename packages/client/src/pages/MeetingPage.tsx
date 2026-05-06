@@ -123,23 +123,21 @@ function MeetingPageInner() {
       if (meeting.queue.closed && !isChair && type !== 'point-of-order') return;
       setActiveTab('queue');
 
-      const currentIds = new Set(meeting.queue.orderedIds);
       const currentTopicSpeakerId = type === 'reply' ? (meeting.current.topic?.speakerId ?? null) : undefined;
 
-      // The server broadcasts state before firing the ack, so the state
-      // listener must be armed before we emit; the ack only tells us
-      // whether to keep it (success) or discard it (rejection).
-      const stateHandler = (newState: import('@tcq/shared').MeetingState) => {
-        const newId = newState.queue.orderedIds.find((id: string) => !currentIds.has(id));
-        if (newId) {
-          setAutoEditEntryId(newId);
-        }
+      // The server emits a `queue:added` delta before firing the ack, so
+      // the listener must be armed before we emit. The delta carries the
+      // new entry's id directly, so there's no need to diff orderedIds.
+      // The ack only tells us whether to keep the listener (success) or
+      // discard it (rejection — the server didn't broadcast anything).
+      const queueAddedHandler = (delta: import('@tcq/shared').QueueAddedDelta) => {
+        setAutoEditEntryId(delta.entry.id);
       };
-      socket.once('state', stateHandler);
+      socket.once('queue:added', queueAddedHandler);
 
       socket.emit('queue:add', { type, topic: placeholder, currentTopicSpeakerId }, (response) => {
         if (!response.ok) {
-          socket.off('state', stateHandler);
+          socket.off('queue:added', queueAddedHandler);
         }
       });
     },

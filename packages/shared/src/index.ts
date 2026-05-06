@@ -48,6 +48,21 @@ export type {
   CreateMeetingBody,
   SwitchUserBody,
   ImportAgendaBody,
+  ChairsUpdatedDelta,
+  AgendaAddedDelta,
+  AgendaEditedDelta,
+  AgendaDeletedDelta,
+  AgendaReorderedDelta,
+  QueueAddedDelta,
+  QueueEditedDelta,
+  QueueRemovedDelta,
+  QueueReorderedDelta,
+  QueueClosedChangedDelta,
+  SpeakerAdvancedDelta,
+  AgendaAdvancedDelta,
+  PollStartedDelta,
+  PollStoppedDelta,
+  PollReactedDelta,
 } from './messages.js';
 export {
   AgendaAddPayloadSchema,
@@ -80,3 +95,5 @@ export {
   formatShortDuration,
   normaliseGithubUsername,
 } from './helpers.js';
+export { applyDelta } from './applyDelta.js';
+export type { MeetingDeltaAction } from './applyDelta.js';

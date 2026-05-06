@@ -31,6 +31,7 @@ export function makeMeeting(overrides?: Partial<MeetingState>, defaults: MakeMee
     operational: {
       lastConnectionTime: '2026-01-01T00:00:00.000Z',
       maxConcurrent: 0,
+      version: 0,
       ...operational,
     },
     ...rest,

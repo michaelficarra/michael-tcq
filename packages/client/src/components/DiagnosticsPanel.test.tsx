@@ -17,7 +17,7 @@ const sample = {
     memory: { rss: 200 * 1024 * 1024, heapUsed: 50 * 1024 * 1024, heapTotal: 80 * 1024 * 1024, external: 0 },
   },
   meetings: { totalActive: 3, totalParticipants: 27, totalConnections: 18 },
-  sockets: { totalClients: 21 },
+  sockets: { totalClients: 21, stateResyncs: 0 },
   http: { total: 1234, clientErrors: 12, serverErrors: 4 },
   persistence: {
     lastSyncSucceededAt: '2026-04-29T09:55:00.000Z',

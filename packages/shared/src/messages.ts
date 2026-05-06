@@ -12,8 +12,125 @@
 
 import { z } from 'zod';
 import { normaliseGithubUsername } from './helpers.js';
-import type { MeetingState } from './types.js';
+import type {
+  ActivePoll,
+  AgendaEntry,
+  AgendaItem,
+  CurrentContext,
+  MeetingQueueState,
+  MeetingState,
+  QueueEntry,
+  Reaction,
+  Session,
+  User,
+  UserKey,
+} from './types.js';
 import { QueueEntryTypeSchema } from './types.js';
+
+/**
+ * Common envelope for every typed state-mutation delta. The `version`
+ * lets clients detect missed deltas (gap between expected and received)
+ * and request a `state:resync`. The `users` slot piggy-backs newly-
+ * introduced user records onto whatever delta first referenced them so
+ * the client can render badges immediately without an extra fetch.
+ */
+interface DeltaEnvelope {
+  version: number;
+  users?: Record<UserKey, User>;
+}
+
+/** Payload for `chairs:updated` — chair list replaced wholesale. */
+export type ChairsUpdatedDelta = DeltaEnvelope & { chairIds: UserKey[] };
+
+/** Payload for `agenda:added` — new agenda item or session header. */
+export type AgendaAddedDelta = DeltaEnvelope & { entry: AgendaEntry };
+
+/**
+ * Payload for `agenda:edited` — replacement entry for an existing
+ * agenda position. Sending the whole entry (rather than a partial diff)
+ * keeps the client reducer simple and the wire size is still small
+ * (~100 B) since the data shape is shallow.
+ */
+export type AgendaEditedDelta = DeltaEnvelope & {
+  id: string;
+  entry: AgendaEntry;
+};
+
+/**
+ * Payload for `agenda:deleted`. `currentCleared` is true when the
+ * deleted entry was the meeting's current agenda item — the server
+ * clears `current.agendaItemId` in that case and the client must too.
+ */
+export type AgendaDeletedDelta = DeltaEnvelope & { id: string; currentCleared: boolean };
+
+/** Payload for `agenda:reordered` — full new ordering of agenda entry ids. */
+export type AgendaReorderedDelta = DeltaEnvelope & { orderedIds: string[] };
+
+/**
+ * Payload for `queue:added`. `position` is the index into
+ * `queue.orderedIds` where the entry was inserted (priority-corrected
+ * by the server).
+ */
+export type QueueAddedDelta = DeltaEnvelope & { entry: QueueEntry; position: number };
+
+/** Payload for `queue:edited` — replacement entry for an existing queue id. */
+export type QueueEditedDelta = DeltaEnvelope & {
+  id: string;
+  entry: QueueEntry;
+};
+
+/** Payload for `queue:removed`. */
+export type QueueRemovedDelta = DeltaEnvelope & { id: string };
+
+/**
+ * Payload for `queue:reordered`. `updatedEntries` carries any entries
+ * whose `type` changed because the reorder crossed a priority boundary
+ * (see `MeetingManager.reorderQueueEntry`).
+ */
+export type QueueReorderedDelta = DeltaEnvelope & {
+  orderedIds: string[];
+  updatedEntries?: Record<string, Partial<QueueEntry>>;
+};
+
+/** Payload for `queue:closedChanged`. */
+export type QueueClosedChangedDelta = DeltaEnvelope & { closed: boolean };
+
+/**
+ * Payload for `speaker:advanced`. `current` and `queue` change together
+ * (next-speaker pops the queue head and updates current), so they
+ * travel as one delta to avoid the client observing a torn state.
+ * `lastAdvancementBy` mirrors the same field on `OperationalState` —
+ * it's per-event metadata clients use for cooldown heuristics, so we
+ * carry it on the delta rather than persisting it.
+ */
+export type SpeakerAdvancedDelta = DeltaEnvelope & {
+  current: CurrentContext;
+  queue: MeetingQueueState;
+  lastAdvancementBy: UserKey;
+};
+
+/**
+ * Payload for `agenda:advanced`. Bundles every field the agenda-advance
+ * handler mutates: a fresh `current`, a reset `queue`, and any
+ * `agendaUpdates` (the outgoing item gets its realised duration and
+ * conclusion written back). `log:dirty` fires alongside this for the
+ * accompanying log-entry appends.
+ */
+export type AgendaAdvancedDelta = DeltaEnvelope & {
+  current: CurrentContext;
+  queue: MeetingQueueState;
+  agendaUpdates?: Record<string, Partial<AgendaItem>>;
+  lastAdvancementBy: UserKey;
+};
+
+/** Payload for `poll:started`. */
+export type PollStartedDelta = DeltaEnvelope & { poll: ActivePoll };
+
+/** Payload for `poll:stopped`. */
+export type PollStoppedDelta = DeltaEnvelope;
+
+/** Payload for `poll:reacted` — full updated reactions array. */
+export type PollReactedDelta = DeltaEnvelope & { reactions: Reaction[] };
 
 /** Non-empty trimmed string with a human-readable "required" message. */
 const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is required`);
@@ -249,7 +366,12 @@ export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
 
 /** Events the server sends to connected clients. */
 export interface ServerToClientEvents {
-  /** Full meeting state — sent on join and after every mutation. */
+  /**
+   * Full meeting state — sent on initial join, on automatic reconnect,
+   * and in response to a client-initiated `state:resync` request. The
+   * realtime mutation path uses the typed delta events further down
+   * this interface; `state` is reserved for the resync codepath.
+   */
   state: (state: MeetingState) => void;
 
   /** Error message — sent when a client action fails validation. */
@@ -270,15 +392,47 @@ export interface ServerToClientEvents {
    * each time `MeetingManager.appendLog` runs. The payload is tiny by
    * design — clients fetch the actual entries via
    * `GET /api/meetings/:id/log?since=<theirCursor>` so the realtime
-   * channel never carries log bodies.
+   * channel never carries log bodies. This event is *not* part of the
+   * versioned delta stream — it has its own cursor (the latest entry id)
+   * and is independent of `MeetingState` versioning.
    */
   'log:dirty': (latestId: string) => void;
+
+  // ---- Versioned state-mutation deltas ----
+  // Each carries a per-meeting monotonic `version` (see
+  // `OperationalState.version`). Clients drop deltas whose version is
+  // not exactly `lastSeen + 1` and request `state:resync` on a gap.
+
+  'chairs:updated': (delta: ChairsUpdatedDelta) => void;
+  'agenda:added': (delta: AgendaAddedDelta) => void;
+  'agenda:edited': (delta: AgendaEditedDelta) => void;
+  'agenda:deleted': (delta: AgendaDeletedDelta) => void;
+  'agenda:reordered': (delta: AgendaReorderedDelta) => void;
+  'queue:added': (delta: QueueAddedDelta) => void;
+  'queue:edited': (delta: QueueEditedDelta) => void;
+  'queue:removed': (delta: QueueRemovedDelta) => void;
+  'queue:reordered': (delta: QueueReorderedDelta) => void;
+  'queue:closedChanged': (delta: QueueClosedChangedDelta) => void;
+  'speaker:advanced': (delta: SpeakerAdvancedDelta) => void;
+  'agenda:advanced': (delta: AgendaAdvancedDelta) => void;
+  'poll:started': (delta: PollStartedDelta) => void;
+  'poll:stopped': (delta: PollStoppedDelta) => void;
+  'poll:reacted': (delta: PollReactedDelta) => void;
 }
 
 /** Events clients send to the server. */
 export interface ClientToServerEvents {
   /** Join a meeting room by ID. */
   join: (meetingId: string) => void;
+
+  /**
+   * Request a full-state replay. Sent when a delta event arrives with a
+   * `version` greater than `lastSeen + 1` — i.e. the client missed at
+   * least one delta and needs to resync. The server responds by emitting
+   * `state` with the current full `MeetingState` (including the latest
+   * `operational.version`) to just the requesting socket.
+   */
+  'state:resync': () => void;
 
   /** Edit an existing agenda item (chair only). */
   'agenda:edit': (payload: AgendaEditPayload) => void;

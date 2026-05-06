@@ -18,6 +18,7 @@ import { MeetingManager } from './meetings.js';
 import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
+import { createClientSurrogate } from './test/clientSurrogate.js';
 
 // --- Helpers ---
 
@@ -117,6 +118,31 @@ function waitForEvent<T>(socket: TypedClientSocket, event: string): Promise<T> {
   });
 }
 
+/**
+ * Wait for the server to emit a state-change event back to this client
+ * (a mutation delta, a state resync, an error) and then resolve with the
+ * current canonical meeting state from the in-memory manager. Replaces
+ * the older `waitForEvent<MeetingState>(client, 'state')` pattern, which
+ * assumed every mutation re-broadcast the full state.
+ *
+ * `log:dirty` and `activeConnections` are ignored — they are
+ * notifications, not state-change broadcasts, and a stray late arrival
+ * from a previous mutation could otherwise resolve a fresh `waitForChange`
+ * before the new mutation has even reached the server.
+ */
+const IGNORED_EVENTS_FOR_WAIT = new Set(['log:dirty', 'activeConnections']);
+function waitForChange(socket: TypedClientSocket, mgr: MeetingManager, meetingId: string): Promise<MeetingState> {
+  return new Promise<MeetingState>((resolve, reject) => {
+    socket.onAny(function handler(event: string) {
+      if (IGNORED_EVENTS_FOR_WAIT.has(event)) return;
+      socket.offAny(handler);
+      const m = mgr.get(meetingId);
+      if (m) resolve(m);
+      else reject(new Error(`Meeting ${meetingId} no longer exists`));
+    });
+  });
+}
+
 // --- Tests ---
 
 describe('Socket.IO integration', () => {
@@ -159,7 +185,7 @@ describe('Socket.IO integration', () => {
 
     // Connect a client and join the meeting
     const client = makeClient();
-    const statePromise = waitForEvent<MeetingState>(client, 'state');
+    const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
 
     await new Promise<void>((resolve) => {
       client.on('connect', () => {
@@ -216,7 +242,9 @@ describe('Socket.IO integration', () => {
     // Join a meeting that doesn't exist
     client.emit('join', 'no-such-meeting');
 
-    // Wait a short time — no state event should arrive
+    // Wait a short time — no `state` event should arrive (the server
+    // emits `error` for an unknown meeting, but that's a different event
+    // and isn't what this test is asserting against).
     const received = await Promise.race([
       waitForEvent<MeetingState>(client, 'state').then(() => true),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 200)),
@@ -230,7 +258,7 @@ describe('Socket.IO integration', () => {
   /** Helper: connect a client, join a meeting, and wait for initial state. */
   async function joinMeeting(meetingId: string): Promise<TypedClientSocket> {
     const client = makeClient();
-    const statePromise = waitForEvent<MeetingState>(client, 'state');
+    const statePromise = waitForChange(client, ctx.meetingManager, meetingId);
     await new Promise<void>((r) => client.on('connect', r));
     client.emit('join', meetingId);
     await statePromise;
@@ -295,7 +323,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Listen for the state update after adding
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], duration: 15 });
       const state = await statePromise;
 
@@ -319,8 +347,8 @@ describe('Socket.IO integration', () => {
       const client1 = await joinMeeting(meeting.id);
       const client2 = await joinMeeting(meeting.id);
 
-      // Client 2 waits for the broadcast
-      const state2Promise = waitForEvent<MeetingState>(client2, 'state');
+      // Client 2 waits for the broadcast (now a delta, not a full state)
+      const state2Promise = waitForChange(client2, ctx.meetingManager, meeting.id);
       client1.emit('agenda:add', { name: 'Broadcast test', presenterUsernames: ['testuser'] });
       const state2 = await state2Promise;
 
@@ -343,7 +371,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:add', { name: 'Presenter cleanup', presenterUsernames: [' @testuser ', '@ alice'] });
       const state = await statePromise;
 
@@ -398,7 +426,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:delete', { id: item.id });
       const state = await statePromise;
 
@@ -424,7 +452,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Move C to the beginning (afterId: null)
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:reorder', { id: itemC.id, afterId: null });
       const state = await statePromise;
 
@@ -439,7 +467,7 @@ describe('Socket.IO integration', () => {
       const itemB = ctx.meetingManager.addAgendaItem(meeting.id, 'B', [owner])!;
 
       const client = await joinMeeting(meeting.id);
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:reorder', { id: session.id, afterId: null });
       const state = await statePromise;
 
@@ -455,7 +483,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('agenda:edit', { id: item.id, name: 'New name' });
       const state = await statePromise;
 
@@ -501,7 +529,7 @@ describe('Socket.IO integration', () => {
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('session:add', { name: 'Morning block', capacity: 90 });
       const state = await statePromise;
 
@@ -554,7 +582,7 @@ describe('Socket.IO integration', () => {
       const session = ctx.meetingManager.addSession(meeting.id, 'Old', 30)!;
 
       const client = await joinMeeting(meeting.id);
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('session:edit', { id: session.id, name: 'New', capacity: 45 });
       const state = await statePromise;
 
@@ -585,7 +613,7 @@ describe('Socket.IO integration', () => {
       ctx.meetingManager.addAgendaItem(meeting.id, 'Contained', [owner]);
 
       const client = await joinMeeting(meeting.id);
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('session:delete', { id: session.id });
       const state = await statePromise;
 
@@ -618,7 +646,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'My topic' });
       const state = await statePromise;
 
@@ -636,11 +664,11 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Add a topic first, then a point-of-order
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Low priority' });
       await statePromise;
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'point-of-order', topic: 'Urgent' });
       const state = await statePromise;
 
@@ -663,16 +691,16 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting — intro speaker is current, no current.topic yet
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
       // Add a topic-type entry and advance to it — this sets current.topic
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Real topic' });
       let state = await statePromise;
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
@@ -723,7 +751,7 @@ describe('Socket.IO integration', () => {
       const { client, meetingId, state } = await setupWithCurrentTopic();
 
       const speakerId = state.current.topic!.speakerId;
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meetingId);
       const ackPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
         client.emit('queue:add', { type: 'reply', topic: 'Fresh reply', currentTopicSpeakerId: speakerId }, resolve);
       });
@@ -743,7 +771,7 @@ describe('Socket.IO integration', () => {
 
       // No currentTopicSpeakerId; the asUsername path is a chair-driven
       // admin operation (e.g. Restore Queue) and skips the race guard.
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meetingId);
       client.emit('queue:add', { type: 'reply', topic: 'Restored reply', asUsername: 'someone' });
       const newState = await statePromise;
 
@@ -762,7 +790,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Their topic', asUsername: 'alice' });
       const state = await statePromise;
 
@@ -787,7 +815,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'knownuser' });
       const state = await statePromise;
 
@@ -803,7 +831,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Test', asUsername: 'unknownperson' });
       const state = await statePromise;
 
@@ -845,13 +873,13 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Add an entry
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Remove me' });
       const stateAfterAdd = await statePromise;
       const entryId = stateAfterAdd.queue.orderedIds[0];
 
       // Remove it
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:remove', { id: entryId });
       const state = await statePromise;
 
@@ -897,7 +925,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Move C to the beginning
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: c.id, afterId: null });
       const state = await statePromise;
 
@@ -913,7 +941,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Move topic before question — should change to question type
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: t.id, afterId: null });
       const state = await statePromise;
 
@@ -969,7 +997,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Moving own entry (A) after B (down) should succeed
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: a.id, afterId: b.id });
       const state = await statePromise;
       expect(state.queue.orderedIds[0]).toBe(b.id);
@@ -1007,7 +1035,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: c.id, afterId: a.id });
       const state = await statePromise;
 
@@ -1026,7 +1054,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: c.id, afterId: a.id });
       const state = await statePromise;
 
@@ -1046,7 +1074,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:reorder', { id: c.id, afterId: null });
       const state = await statePromise;
 
@@ -1141,7 +1169,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:edit', { id: entry.id, topic: 'New topic' });
       const state = await statePromise;
 
@@ -1207,7 +1235,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:edit', { id: entry.id, type: 'question' });
       const state = await statePromise;
 
@@ -1227,7 +1255,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:edit', { id: entry.id, topic: 'Chair edited' });
       const state = await statePromise;
 
@@ -1244,7 +1272,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
 
@@ -1260,7 +1288,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
 
@@ -1289,7 +1317,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       // Use the current speaker id as the precondition
       client.emit('queue:next', { currentSpeakerEntryId: meeting.current.speaker?.id ?? null }, () => {});
       const state = await statePromise;
@@ -1439,7 +1467,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:updateChairs', { usernames: ['testuser', 'newchair'] });
       const state = await statePromise;
 
@@ -1509,7 +1537,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:updateChairs', { usernames: ['testuser', 'knownuser'] });
       const state = await statePromise;
 
@@ -1536,7 +1564,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:updateChairs', { usernames: ['newchair'] });
       const state = await statePromise;
 
@@ -1560,7 +1588,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
       const state = await statePromise;
 
@@ -1584,7 +1612,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:updateChairs', { usernames: [] });
       const state = await statePromise;
 
@@ -1609,7 +1637,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:start', { options: samplePollOptions });
       const state = await statePromise;
 
@@ -1661,7 +1689,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:stop');
       const state = await statePromise;
 
@@ -1678,7 +1706,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:react', { optionId });
       const state = await statePromise;
 
@@ -1696,12 +1724,12 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Add
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:react', { optionId });
       await statePromise;
 
       // Toggle off
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:react', { optionId });
       const state = await statePromise;
 
@@ -1732,7 +1760,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state = await statePromise;
 
@@ -1752,12 +1780,12 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state1 = await statePromise;
 
       // Advance to second — use the currentAgendaItemId from the state we just received
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.current.agendaItemId ?? null }, () => {});
       const state2 = await statePromise;
 
@@ -1834,13 +1862,13 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting (advances to first item, so currentAgendaItemId changes)
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       await statePromise;
 
       // Try to advance again with null (the pre-start value) — should be rejected
       // because another advancement already happened
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       const state = await statePromise;
 
@@ -1857,7 +1885,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       const state1 = await statePromise;
 
@@ -1867,7 +1895,7 @@ describe('Socket.IO integration', () => {
 
       // Advance with the precondition from state1 — should succeed because
       // the current agenda item hasn't changed
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state1.current.agendaItemId ?? null }, () => {});
       const state2 = await statePromise;
 
@@ -1913,7 +1941,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting (advance to First).
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state1 = await statePromise;
       const firstId = state1.current.agendaItemId!;
@@ -1923,7 +1951,7 @@ describe('Socket.IO integration', () => {
       await new Promise((r) => setTimeout(r, 20));
 
       // Advance to Second — this completes First.
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId }, () => {});
       const state2 = await statePromise;
 
@@ -1949,7 +1977,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state1 = await statePromise;
       const firstId = state1.current.agendaItemId!;
@@ -1958,7 +1986,7 @@ describe('Socket.IO integration', () => {
       // Same reason as above — ensure a positive elapsed duration.
       await new Promise((r) => setTimeout(r, 20));
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId }, () => {});
       const state2 = await statePromise;
 
@@ -1990,13 +2018,13 @@ describe('Socket.IO integration', () => {
     await new Promise<void>((r) => client.on('connect', r));
 
     // Join meeting 1
-    let statePromise = waitForEvent<MeetingState>(client, 'state');
+    let statePromise = waitForChange(client, ctx.meetingManager, meeting1.id);
     client.emit('join', meeting1.id);
     let state = await statePromise;
     expect(state.id).toBe(meeting1.id);
 
     // Switch to meeting 2
-    statePromise = waitForEvent<MeetingState>(client, 'state');
+    statePromise = waitForChange(client, ctx.meetingManager, meeting2.id);
     client.emit('join', meeting2.id);
     state = await statePromise;
     expect(state.id).toBe(meeting2.id);
@@ -2012,7 +2040,7 @@ describe('Socket.IO integration', () => {
       ctx.meetingManager.addAgendaItem(meeting.id, 'First Item', [owner]);
 
       const client = await joinMeeting(meeting.id);
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
@@ -2031,12 +2059,12 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting (advance to first item)
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state = await statePromise;
 
       // Advance to second item
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
@@ -2059,16 +2087,16 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
       // Add a new topic to the queue and advance
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'My topic' });
       let state = await statePromise;
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
@@ -2089,18 +2117,18 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
       // Add a reply and advance to it. current.topic is undefined at this
       // point (the agenda intro doesn't count as a queued topic), so the
       // precondition is explicitly null.
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'reply', topic: 'My reply', currentTopicSpeakerId: null });
       let state = await statePromise;
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
@@ -2117,16 +2145,16 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
       // Add a point-of-order and advance to it
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'point-of-order', topic: 'POO' });
       let state = await statePromise;
 
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
@@ -2141,7 +2169,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start a poll
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:start', {
         options: [
           { emoji: '👍', label: 'Yes' },
@@ -2151,12 +2179,12 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       // React to an option
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:react', { optionId: state.poll!.options[0].id });
       await statePromise;
 
       // Stop the poll
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('poll:stop');
       await statePromise;
 
@@ -2177,17 +2205,17 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
       // Add entries to the queue
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Leftover topic' });
       const state = await statePromise;
 
       // Advance to next agenda item (leaving the queue non-empty)
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
@@ -2208,12 +2236,12 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       const state = await statePromise;
 
       // Advance to next item with empty queue
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
@@ -2232,7 +2260,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start meeting (no outgoing item yet — conclusion is ignored on this hop)
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit(
         'meeting:nextAgendaItem',
         { currentAgendaItemId: null, conclusion: 'ignored — nothing to conclude' },
@@ -2242,7 +2270,7 @@ describe('Socket.IO integration', () => {
 
       // Advance past First with a conclusion
       const firstId = state.current.agendaItemId!;
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId, conclusion: '  Decided X.  ' }, () => {});
       state = await statePromise;
 
@@ -2274,14 +2302,14 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
       let state = await statePromise;
 
       const firstId = state.current.agendaItemId!;
 
       // Advance past First with an empty conclusion (chair cleared the textarea).
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: firstId, conclusion: '   ' }, () => {});
       state = await statePromise;
 
@@ -2305,13 +2333,13 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Close the queue
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:setClosed', { closed: true });
       let state = await statePromise;
       expect(state.queue.closed).toBe(true);
 
       // Re-open the queue
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:setClosed', { closed: false });
       state = await statePromise;
       expect(state.queue.closed).toBe(false);
@@ -2357,7 +2385,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'point-of-order', topic: 'Point of order' });
       const state = await statePromise;
 
@@ -2392,7 +2420,7 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:add', { type: 'topic', topic: 'Chair entry' });
       const state = await statePromise;
 
@@ -2409,19 +2437,19 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       // Start the meeting (advances to first agenda item)
-      let statePromise = waitForEvent<MeetingState>(client, 'state');
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       let state = await statePromise;
       expect(state.queue.closed).toBe(false);
 
       // Close the queue
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:setClosed', { closed: true });
       state = await statePromise;
       expect(state.queue.closed).toBe(true);
 
       // Advance to next agenda item — should reopen queue
-      statePromise = waitForEvent<MeetingState>(client, 'state');
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
       state = await statePromise;
       expect(state.queue.closed).toBe(false);
@@ -2434,6 +2462,508 @@ describe('Socket.IO integration', () => {
       await joinMeeting(meeting.id);
       const state = ctx.meetingManager.get(meeting.id)!;
       expect(state.queue.closed).toBe(true);
+    });
+  });
+
+  // -- Gap detection and recovery ---------------------------------------
+  // The delta-broadcast path's correctness rests on two invariants:
+  //   1. Clients detect a missing delta (gap in the version sequence).
+  //   2. On detection, the resync codepath repairs the divergence so
+  //      the client converges to the server's state.
+  // The surrogate tests below force a drop on the wire and then make
+  // assertions about both halves.
+  describe('delta gap detection and resync', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    /**
+     * Attach a surrogate *before* the join handshake so the bootstrap
+     * `state` event fires the surrogate's listener (the regular
+     * `joinMeeting` consumes the state event itself, so listeners
+     * attached after the await never see the bootstrap).
+     */
+    async function joinWithSurrogate(meetingId: string) {
+      const socket = makeClient();
+      await new Promise<void>((r) => socket.on('connect', r));
+      const surrogate = createClientSurrogate(socket);
+      socket.emit('join', meetingId);
+      // Bootstrap `state` carries the meeting's current `operational.version`
+      // (which is `0` for a freshly-created meeting), so waiting for >= 0
+      // resolves on the first state event regardless of timing.
+      await surrogate.waitForVersion(0);
+      return { socket, surrogate };
+    }
+
+    it('detects a missing delta and recovers via state:resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
+
+      // First mutation lands normally — surrogate applies it.
+      driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+      await surrogate.waitForVersion(1);
+      expect(surrogate.state?.agenda).toHaveLength(1);
+
+      // Force the surrogate to silently drop the *next* delta.
+      surrogate.options.dropNext = true;
+      driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+      // Wait until the drop has been recorded (events.length grows even
+      // though no version is applied — the surrogate logs `[dropped]`).
+      await surrogate.waitForNextEvent();
+      expect(surrogate.lastSeenVersion).toBe(1); // didn't advance
+      expect(surrogate.state?.agenda).toHaveLength(1); // still stale
+
+      // A subsequent mutation triggers gap detection — version is now
+      // lastSeen+2, surrogate emits state:resync, server replies with
+      // a fresh state and the surrogate re-seeds.
+      driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+      // Convergence: the resync replays the full state with version 3.
+      await surrogate.waitForVersion(3);
+
+      expect(surrogate.resyncRequestCount).toBe(1);
+      expect(surrogate.state?.agenda.map((e) => 'name' in e && e.name)).toEqual(['First', 'Second', 'Third']);
+      // The state event from the resync should have arrived.
+      expect(surrogate.events.some((e) => e.event === 'state' && e.version === 3)).toBe(true);
+
+      surrogate.detach();
+      observer.disconnect();
+    });
+
+    it('server tracks state:resync requests in its socket counters', async () => {
+      const { resetSocketCounters, getSocketCounters } = await import('./socketCounters.js');
+      resetSocketCounters();
+
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
+
+      // Drop one and provoke a gap.
+      surrogate.options.dropNext = true;
+      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      await surrogate.waitForNextEvent();
+      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      await surrogate.waitForVersion(2);
+
+      expect(getSocketCounters().stateResyncs).toBeGreaterThanOrEqual(1);
+
+      surrogate.detach();
+      observer.disconnect();
+    });
+
+    it('resync converges even after multiple consecutive dropped deltas', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
+
+      // Drop the next two deltas in a row, then make a third mutation.
+      surrogate.options.dropNext = true;
+      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      await surrogate.waitForNextEvent();
+      surrogate.options.dropNext = true;
+      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      await surrogate.waitForNextEvent();
+      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+
+      // The third delta triggers gap detection (expected v2, got v3),
+      // and the resync replays the full state with version 3 — both
+      // missing items appear.
+      await surrogate.waitForVersion(3);
+      expect(surrogate.state?.agenda.map((e) => 'name' in e && e.name)).toEqual(['A', 'B', 'C']);
+
+      surrogate.detach();
+      observer.disconnect();
+    });
+
+    it('reconnect re-emits state and re-seeds the surrogate', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      // Apply a mutation before the observer joins, so the post-join
+      // state is non-trivially different from the initial empty meeting.
+      driver.emit('agenda:add', { name: 'Pre-join', presenterUsernames: ['testuser'] });
+      // Wait for the server-side mutation to land (emit is async).
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if ((ctx.meetingManager.get(meeting.id)?.agenda.length ?? 0) > 0) resolve();
+          else setTimeout(check, 10);
+        };
+        check();
+      });
+
+      const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
+      expect(surrogate.state?.agenda).toHaveLength(1);
+      const versionBeforeDisconnect = surrogate.lastSeenVersion ?? 0;
+
+      // Disconnect and apply more mutations while away.
+      observer.disconnect();
+      driver.emit('agenda:add', { name: 'During disconnect', presenterUsernames: ['testuser'] });
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if ((ctx.meetingManager.get(meeting.id)?.agenda.length ?? 0) === 2) resolve();
+          else setTimeout(check, 10);
+        };
+        check();
+      });
+
+      // Reconnect and re-join — the server emits a fresh state event,
+      // the surrogate re-seeds and now reflects the away-period mutation.
+      observer.connect();
+      await new Promise<void>((r) => observer.once('connect', r));
+      observer.emit('join', meeting.id);
+      await surrogate.waitForVersion(versionBeforeDisconnect + 1);
+      expect(surrogate.state?.agenda).toHaveLength(2);
+
+      surrogate.detach();
+      observer.disconnect();
+    });
+  });
+
+  // -- Reducer/server equivalence ---------------------------------------
+  // The strongest guarantee against silent client/server divergence is
+  // that after every server mutation, the surrogate's state — produced
+  // by applying the emitted delta through the real `applyDelta` from
+  // `@tcq/shared` — is byte-equal to the canonical state on the server.
+  // The test below sequences every supported mutation type through a
+  // single connected surrogate and asserts equivalence after each one;
+  // a reducer bug for any single delta type fails this test
+  // immediately and pinpoints which step diverged.
+  describe('reducer/server equivalence', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    /**
+     * Strip the one field that's intentionally divergent. The server's
+     * `emitDelta` clears `operational.lastAdvancementBy` after emitting
+     * each `speaker:advanced` / `agenda:advanced` (it's a one-shot
+     * attribution signal), but the client surrogate keeps it on local
+     * state until the next advance overwrites it. This is acceptable
+     * production behaviour — the client uses the field for transient
+     * cooldown UI — but it's not part of the equivalence we're
+     * asserting.
+     */
+    function normalise(state: import('@tcq/shared').MeetingState | null) {
+      if (!state) return state;
+      const { lastAdvancementBy: _ignored, ...operationalRest } = state.operational;
+      return { ...state, operational: operationalRest };
+    }
+
+    /**
+     * Each step of the sequence: emit a client-to-server action via the
+     * driver, wait for the surrogate to see the resulting delta, and
+     * assert byte-equivalence with the server's state.
+     */
+    async function runStep(
+      label: string,
+      driver: TypedClientSocket,
+      surrogate: ReturnType<typeof createClientSurrogate>,
+      meetingId: string,
+      emit: () => void,
+    ) {
+      const versionBefore = surrogate.lastSeenVersion ?? 0;
+      emit();
+      await surrogate.waitForVersion(versionBefore + 1);
+      const expected = normalise(ctx.meetingManager.get(meetingId)!);
+      const actual = normalise(surrogate.state);
+      // The label is included on the assertion message via the
+      // third argument so a failure points at the offending mutation
+      // (vitest's diff is preserved).
+      expect(actual, `divergence after step "${label}"`).toEqual(expected);
+    }
+
+    it('surrogate state matches server state byte-for-byte after every mutation type', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const observerSocket = makeClient();
+      await new Promise<void>((r) => observerSocket.on('connect', r));
+      const surrogate = createClientSurrogate(observerSocket);
+      observerSocket.emit('join', meeting.id);
+      await surrogate.waitForVersion(0);
+
+      // Capture ids as the test creates entries — needed for the
+      // edit/delete/reorder steps below.
+      const itemIds: string[] = [];
+      const sessionIds: string[] = [];
+      const queueIds: string[] = [];
+
+      // Set up an ack-collecting helper so adds can return us the new id.
+      // The server's responses are async, but the surrogate's
+      // waitForVersion is sufficient — we read the new id off the
+      // current state via `meetingManager.get` after each step.
+
+      // --- agenda:added (chair-only) ---
+      await runStep('agenda:added (item)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+      });
+      itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
+
+      // --- agenda:added (session header) ---
+      await runStep('agenda:added (session)', driver, surrogate, meeting.id, () => {
+        driver.emit('session:add', { name: 'Morning Session', capacity: 60 });
+      });
+      sessionIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
+
+      // --- agenda:added (item, used later for reorder/delete) ---
+      await runStep('agenda:added (item 2)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+      });
+      itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
+
+      // --- agenda:edited ---
+      await runStep('agenda:edited (item)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:edit', { id: itemIds[0], name: 'First (edited)' });
+      });
+
+      // --- agenda:edited (session) ---
+      await runStep('agenda:edited (session)', driver, surrogate, meeting.id, () => {
+        driver.emit('session:edit', { id: sessionIds[0], capacity: 90 });
+      });
+
+      // --- agenda:reordered ---
+      await runStep('agenda:reordered', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:reorder', { id: itemIds[1], afterId: null });
+      });
+
+      // --- agenda:deleted (session) ---
+      await runStep('agenda:deleted (session)', driver, surrogate, meeting.id, () => {
+        driver.emit('session:delete', { id: sessionIds[0] });
+      });
+
+      // --- chairs:updated (admin path is not exercised — non-admin
+      // chair must keep themselves; the test user is the chair). ---
+      await runStep('chairs:updated', driver, surrogate, meeting.id, () => {
+        driver.emit('meeting:updateChairs', { usernames: ['testuser', 'other'] });
+      });
+
+      // --- agenda:advanced (start the meeting → first item is current) ---
+      await runStep('agenda:advanced (start)', driver, surrogate, meeting.id, () => {
+        driver.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
+      });
+
+      // --- queue:added ---
+      await runStep('queue:added', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:add', { type: 'topic', topic: 'My topic' });
+      });
+      queueIds.push(ctx.meetingManager.get(meeting.id)!.queue.orderedIds.at(-1)!);
+
+      // --- queue:added (second, for reorder later) ---
+      await runStep('queue:added (2)', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:add', { type: 'topic', topic: 'Another topic' });
+      });
+      queueIds.push(ctx.meetingManager.get(meeting.id)!.queue.orderedIds.at(-1)!);
+
+      // --- queue:edited ---
+      await runStep('queue:edited', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:edit', { id: queueIds[0], topic: 'My topic (edited)' });
+      });
+
+      // --- queue:reordered ---
+      await runStep('queue:reordered', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:reorder', { id: queueIds[1], afterId: null });
+      });
+
+      // --- queue:closedChanged ---
+      await runStep('queue:closedChanged (close)', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:setClosed', { closed: true });
+      });
+      await runStep('queue:closedChanged (open)', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:setClosed', { closed: false });
+      });
+
+      // --- queue:removed ---
+      await runStep('queue:removed', driver, surrogate, meeting.id, () => {
+        driver.emit('queue:remove', { id: queueIds[0] });
+      });
+
+      // --- speaker:advanced (queue:next pops the head into current) ---
+      await runStep('speaker:advanced', driver, surrogate, meeting.id, () => {
+        const currentSpeakerEntryId = ctx.meetingManager.get(meeting.id)!.current.speaker?.id ?? null;
+        driver.emit('queue:next', { currentSpeakerEntryId }, () => {});
+      });
+
+      // --- poll:started ---
+      await runStep('poll:started', driver, surrogate, meeting.id, () => {
+        driver.emit('poll:start', {
+          options: [
+            { emoji: '👍', label: 'Yes' },
+            { emoji: '👎', label: 'No' },
+          ],
+          topic: 'Continue?',
+          multiSelect: true,
+        });
+      });
+
+      // --- poll:reacted ---
+      await runStep('poll:reacted', driver, surrogate, meeting.id, () => {
+        const optionId = ctx.meetingManager.get(meeting.id)!.poll!.options[0].id;
+        driver.emit('poll:react', { optionId });
+      });
+
+      // --- poll:stopped ---
+      await runStep('poll:stopped', driver, surrogate, meeting.id, () => {
+        driver.emit('poll:stop');
+      });
+
+      // --- agenda:advanced (advance past first → second item) ---
+      await runStep('agenda:advanced (advance)', driver, surrogate, meeting.id, () => {
+        const currentAgendaItemId = ctx.meetingManager.get(meeting.id)!.current.agendaItemId ?? null;
+        driver.emit('meeting:nextAgendaItem', { currentAgendaItemId }, () => {});
+      });
+
+      // --- agenda:deleted (item) ---
+      // Add a third item then delete it so we exercise the
+      // `currentCleared: false` branch (deleting a non-current item).
+      await runStep('agenda:added (item 3)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+      });
+      const thirdItemId = ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id;
+      await runStep('agenda:deleted (item)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:delete', { id: thirdItemId });
+      });
+
+      surrogate.detach();
+      observerSocket.disconnect();
+
+      // Final sanity: the version cursor advanced exactly once per
+      // mutation step. 23 mutations were emitted above; the bootstrap
+      // `state` doesn't bump the counter, so the surrogate ends at 23.
+      expect(surrogate.lastSeenVersion).toBe(23);
+    });
+  });
+
+  // -- Multi-client convergence ----------------------------------------
+  // The delta architecture's correctness depends on every connected
+  // socket receiving the same delta in the same order. A bug that
+  // emitted with `socket.emit` instead of `io.to(roomId).emit`, or one
+  // that dropped a delta for a specific socket, would let two clients
+  // diverge while neither's gap detection fires. The tests below
+  // connect multiple surrogate observers, drive mutations from one
+  // client, and assert every observer ends up byte-equal to the
+  // server's state and to each other.
+  describe('multi-client convergence', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    /**
+     * Same `joinWithSurrogate` shape as the gap-detection block, but
+     * inlined here to keep the two test suites independent.
+     */
+    async function joinWithSurrogate(meetingId: string) {
+      const socket = makeClient();
+      await new Promise<void>((r) => socket.on('connect', r));
+      const surrogate = createClientSurrogate(socket);
+      socket.emit('join', meetingId);
+      await surrogate.waitForVersion(0);
+      return { socket, surrogate };
+    }
+
+    /**
+     * Strip operational fields that legitimately diverge between
+     * server and clients: `lastAdvancementBy` is a one-shot signal
+     * cleared on the server after each advance, and
+     * `lastConnectionTime` / `maxConcurrent` are admin-dashboard
+     * bookkeeping the server updates on connect/disconnect without
+     * propagating via deltas.
+     */
+    function normalise(state: import('@tcq/shared').MeetingState | null | undefined) {
+      if (!state) return state;
+      const {
+        lastAdvancementBy: _ignored,
+        lastConnectionTime: _t,
+        maxConcurrent: _m,
+        ...operationalRest
+      } = state.operational;
+      return { ...state, operational: operationalRest };
+    }
+
+    it('three surrogates converge after a sequence of mutations', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+      const b = await joinWithSurrogate(meeting.id);
+      const c = await joinWithSurrogate(meeting.id);
+
+      // Drive a sequence of mutations of different types.
+      driver.emit('agenda:add', { name: 'Item 1', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Item 2', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: true });
+      driver.emit('queue:setClosed', { closed: false });
+
+      // Wait for every observer to have applied all four deltas.
+      await Promise.all([a.surrogate.waitForVersion(4), b.surrogate.waitForVersion(4), c.surrogate.waitForVersion(4)]);
+
+      const expected = normalise(ctx.meetingManager.get(meeting.id));
+      expect(normalise(a.surrogate.state)).toEqual(expected);
+      expect(normalise(b.surrogate.state)).toEqual(expected);
+      expect(normalise(c.surrogate.state)).toEqual(expected);
+
+      a.surrogate.detach();
+      b.surrogate.detach();
+      c.surrogate.detach();
+      a.socket.disconnect();
+      b.socket.disconnect();
+      c.socket.disconnect();
+    });
+
+    it('a delta dropped on one socket does not affect convergence on others', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+      const b = await joinWithSurrogate(meeting.id);
+
+      // Drop the next delta on `a` only — `b` should still apply it
+      // normally and never need a resync.
+      a.surrogate.options.dropNext = true;
+
+      driver.emit('agenda:add', { name: 'Skipped on a', presenterUsernames: ['testuser'] });
+      // `a` records the drop; `b` records the apply.
+      await Promise.all([a.surrogate.waitForNextEvent(), b.surrogate.waitForVersion(1)]);
+      expect(b.surrogate.state?.agenda).toHaveLength(1);
+      expect(a.surrogate.lastSeenVersion).toBe(0); // dropped, didn't advance
+
+      // Subsequent mutation: `a` detects a gap and resyncs; `b` applies
+      // the delta normally. Both end up at version 2 and equivalent.
+      driver.emit('agenda:add', { name: 'Triggers a resync', presenterUsernames: ['testuser'] });
+      await Promise.all([a.surrogate.waitForVersion(2), b.surrogate.waitForVersion(2)]);
+
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+      expect(b.surrogate.resyncRequestCount).toBe(0);
+
+      const expected = normalise(ctx.meetingManager.get(meeting.id));
+      expect(normalise(a.surrogate.state)).toEqual(expected);
+      expect(normalise(b.surrogate.state)).toEqual(expected);
+
+      a.surrogate.detach();
+      b.surrogate.detach();
+      a.socket.disconnect();
+      b.socket.disconnect();
+    });
+
+    it('surrogates that join late see post-mutation state via bootstrap', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+
+      // Apply some mutations before the late observer joins.
+      driver.emit('agenda:add', { name: 'Pre-join 1', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Pre-join 2', presenterUsernames: ['testuser'] });
+      // Wait for the second mutation to land on the server before the
+      // late observer joins, otherwise the bootstrap state would be
+      // empty and any incoming delta would arrive in-flight.
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if ((ctx.meetingManager.get(meeting.id)?.agenda.length ?? 0) >= 2) resolve();
+          else setTimeout(check, 10);
+        };
+        check();
+      });
+
+      const late = await joinWithSurrogate(meeting.id);
+      expect(late.surrogate.state?.agenda).toHaveLength(2);
+      expect(late.surrogate.lastSeenVersion).toBe(2);
+
+      // After joining, a further mutation arrives as a delta and applies
+      // on top of the bootstrapped state.
+      driver.emit('agenda:add', { name: 'Post-join', presenterUsernames: ['testuser'] });
+      await late.surrogate.waitForVersion(3);
+      expect(late.surrogate.state?.agenda).toHaveLength(3);
+
+      late.surrogate.detach();
+      late.socket.disconnect();
     });
   });
 });

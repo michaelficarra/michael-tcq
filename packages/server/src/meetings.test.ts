@@ -167,7 +167,7 @@ describe('MeetingManager', () => {
       agenda: [],
       queue: { entries: {}, orderedIds: [], closed: false },
       current: { topicSpeakers: [] },
-      operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0 },
+      operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0, version: 0 },
     });
 
     // Create a new manager and restore from the store

@@ -170,10 +170,21 @@ The server is the single source of truth. The flow for every state change is:
 1. Client emits an **action** via Socket.IO (e.g. `queue:add` with a payload).
 2. Server **validates** the action — the payload is parsed against a shared Zod schema (defined in `@tcq/shared`) for shape / trim / length / enum checks, then authority checks (is the user authenticated? are they in this meeting? do they have permission?) run in the handler.
 3. Server **mutates** its in-memory `MeetingState`.
-4. Server **broadcasts** the updated state (or a targeted delta) to all clients in the meeting room.
-5. Clients **apply** the broadcast to their local state via the reducer.
+4. Server emits a **typed delta event** (e.g. `queue:added` with `{ entry, position, version, users? }`) to every socket in the meeting room. Each delta carries a per-meeting monotonic `version` (mirrored on `OperationalState.version`) so clients can detect missed deltas.
+5. Clients **apply** the delta to their locally-cached state via the reducer.
 
-Clients do not perform optimistic updates — they wait for the server broadcast. At 50 users on a typical network, the round-trip latency is imperceptible, and this eliminates all conflict resolution complexity.
+Clients do not perform optimistic updates — they wait for the server delta. At 50 users on a typical network, the round-trip latency is imperceptible, and this eliminates all conflict resolution complexity.
+
+**Versioned deltas instead of full-state broadcasts.** Earlier the server re-broadcast the full `MeetingState` after every mutation. With ~50 users, ~40 agenda items, and multi-day meetings, that pattern dominated egress: each broadcast carried tens of kilobytes of state to every connected socket on every change. The current architecture instead emits one of 15 typed delta events per mutation (defined on `ServerToClientEvents` in `@tcq/shared`), each carrying only the changed fields. State broadcasts are reserved for the resync path:
+
+- **Initial join** — the server `socket.emit('state', meeting)` to the joining socket only.
+- **Automatic reconnect** — Socket.IO reconnects, the client re-joins, the same path emits `state`.
+- **Explicit `state:resync` request** — when a client detects a gap in delta versions, it emits `state:resync` and the server replies on the same socket with a fresh `state`.
+- **Bulk operations** — agenda import calls `emitFullState` once after adding many items, since a single resync is cheaper than dozens of `agenda:added` deltas.
+
+**Gap detection.** Each delta's `version` is exactly `lastSeenVersion + 1` in the happy case. The client tracks `lastSeenVersion` in `MeetingContextState` (seeded from `operational.version` in the bootstrap `state` payload, bumped by each applied delta). A delta whose version doesn't match the expected next value triggers a `state:resync` request and is dropped — the replayed `state` reseeds the cursor. Late or duplicate deltas (`version <= lastSeenVersion`) are dropped silently. This makes divergence self-healing: any path that drops a delta (transient disconnect mid-flight, reducer bug, etc.) is corrected on the next event.
+
+**User-record propagation.** Some deltas (e.g. `chairs:updated`, `agenda:added`, `queue:added`) carry an optional `users?: Record<UserKey, User>` slot with newly-introduced user records. The client merges these into `meeting.users` so badges render immediately without a separate fetch. Already-known users are simply overwritten with their (presumably identical) latest snapshot.
 
 **Alternatives considered:**
 
