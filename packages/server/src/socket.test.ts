@@ -407,6 +407,34 @@ describe('Socket.IO integration', () => {
       expect(state.users[first.presenterIds[1]].ghUsername).toBe('alice');
     });
 
+    it('enriches an unknown presenter via the mock-user seed in mock-auth mode', async () => {
+      // Adding a presenter who isn't already in the meeting and isn't
+      // the acting chair must go through the seed-aware mock helper, so
+      // a login matching a TC39 seed entry shows up with that member's
+      // real display name and company on the agenda item — not the bare
+      // login. (When the seed isn't yet enriched, the helper falls back
+      // to login-as-name with empty organisation; the test passes either
+      // way.)
+      const { DEV_USERS } = await import('@tcq/shared');
+      const enriched = DEV_USERS.find((u) => u.name !== u.login && (u.organisation ?? '') !== '');
+      const newPresenter = enriched ?? DEV_USERS[0];
+
+      const meeting = ctx.meetingManager.create([
+        { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' },
+      ]);
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('agenda:add', { name: 'Joint', presenterUsernames: ['testuser', newPresenter.login] });
+      const state = await statePromise;
+
+      const item = asItem(state.agenda[0]);
+      const presenterKey = item.presenterIds.find((id) => state.users[id].ghUsername === newPresenter.login)!;
+      expect(presenterKey).toBeDefined();
+      expect(state.users[presenterKey]?.name).toBe(enriched?.name ?? newPresenter.login);
+      expect(state.users[presenterKey]?.organisation).toBe(enriched?.organisation ?? '');
+    });
+
     it('rejects add from non-chair', async () => {
       // Create meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([
@@ -1570,6 +1598,33 @@ describe('Socket.IO integration', () => {
       const knownKey = state.chairIds.find((id) => state.users[id].ghUsername === 'knownuser')!;
       expect(state.users[knownKey]?.name).toBe('Known User');
       expect(state.users[knownKey]?.organisation).toBe('ACME');
+    });
+
+    it('enriches an unknown chair via the mock-user seed in mock-auth mode', async () => {
+      // Mock-mode chair-add must use the seed-aware helper so a login
+      // matching a TC39 seed entry shows up with that member's real
+      // display name and company in the chair badge — not the bare login.
+      // We use the first seed entry that has a non-fallback name and a
+      // non-empty organisation so the test exercises both fields. If
+      // the seed hasn't been enriched yet (refresh script run without a
+      // token), the assertion still passes because the helper falls
+      // back to login-as-name with empty organisation in that case.
+      const { DEV_USERS } = await import('@tcq/shared');
+      const enriched = DEV_USERS.find((u) => u.name !== u.login && (u.organisation ?? '') !== '');
+      const newChair = enriched ?? DEV_USERS[0];
+
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:updateChairs', { usernames: ['testuser', newChair.login] });
+      const state = await statePromise;
+
+      const newChairKey = state.chairIds.find((id) => state.users[id].ghUsername === newChair.login)!;
+      expect(newChairKey).toBeDefined();
+      expect(state.users[newChairKey]?.name).toBe(enriched?.name ?? newChair.login);
+      expect(state.users[newChairKey]?.organisation).toBe(enriched?.organisation ?? '');
     });
   });
 

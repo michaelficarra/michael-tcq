@@ -14,6 +14,25 @@ import { InMemoryStore } from './test/inMemoryStore.js';
  */
 const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '' };
 
+/**
+ * Mirror of the directory's match check (case-insensitive exact / prefix
+ * / substring / subsequence across login, name, organisation). Used by
+ * the autocomplete-route assertion so it doesn't have to know which
+ * specific match class fired.
+ */
+function scoresAgainstQuery(q: string, login: string, name: string, organisation: string): boolean {
+  const ql = q.toLowerCase();
+  const fields = [login.toLowerCase(), name.toLowerCase(), organisation.toLowerCase()];
+  for (const f of fields) {
+    if (f.length === 0) continue;
+    if (f === ql || f.startsWith(ql) || f.includes(ql)) return true;
+    let i = 0;
+    for (let j = 0; j < f.length && i < ql.length; j++) if (f[j] === ql[i]) i++;
+    if (i === ql.length) return true;
+  }
+  return false;
+}
+
 function createTestApp(meetingManager: MeetingManager, user: User = TEST_USER) {
   const app = express();
   app.use(express.json());
@@ -247,9 +266,10 @@ describe('Meeting REST routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(Array.isArray(body.users)).toBe(true);
-      // Each result must actually contain the query in login or name.
+      // Each result must score against the query in login, name, or
+      // organisation by exact / prefix / substring / subsequence.
       for (const u of body.users) {
-        expect(u.login.toLowerCase().includes('mike') || u.name.toLowerCase().includes('mike')).toBe(true);
+        expect(scoresAgainstQuery('mike', u.login, u.name, u.organisation ?? '')).toBe(true);
       }
     });
 

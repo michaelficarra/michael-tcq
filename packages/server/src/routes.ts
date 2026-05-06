@@ -6,6 +6,7 @@ import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { searchUsers, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
+import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser, toClientUser } from './session.js';
@@ -56,19 +57,11 @@ export function createMeetingRoutes(
     }
     const { username } = parsed.data;
 
-    // Create a new mock user with a deterministic ghid derived from
-    // the username, so the same username always gets the same identity.
-    let hash = 0;
-    for (const ch of username) {
-      hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
-    }
-
-    const user: User = {
-      ghid: Math.abs(hash),
-      ghUsername: username,
-      name: username,
-      organisation: '',
-    };
+    // Resolve via the mock-user helper so logins that match a TC39 seed
+    // entry pick up the real display name and company; everyone else
+    // falls back to login-as-name with no organisation. ghid stays
+    // deterministic per login across restarts.
+    const user = mockUserFromLogin(username);
 
     req.session.user = toSessionUser(user);
     delete req.session.mockLoggedOut;
@@ -138,13 +131,12 @@ export function createMeetingRoutes(
         }
         chairs.push(ghUser);
       } else {
-        // Without OAuth, create a placeholder (mock auth mode)
-        chairs.push({
-          ghid: 0,
-          ghUsername: username,
-          name: username,
-          organisation: '',
-        });
+        // Without OAuth, create a mock user via the seed-aware helper:
+        // logins that match a TC39 seed entry pick up the real display
+        // name and company, others fall back to login-as-name. The ghid
+        // is deterministic per login so the same chair maps to the same
+        // user across restarts and across meetings.
+        chairs.push(mockUserFromLogin(username));
       }
     }
 

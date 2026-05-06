@@ -36,6 +36,7 @@ import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
+import { mockUserFromLogin } from './mockUser.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
 import { recordStateResync } from './socketCounters.js';
@@ -59,20 +60,55 @@ function parsePayload<T>(
 }
 
 /**
- * Resolve a presenter username to a User. Prefers a user already known to
- * the meeting, then the session user itself (so their full profile wins
- * when they add themselves), otherwise a placeholder.
+ * Resolve a presenter username to a User, synchronously when possible.
+ * Source priority:
+ *   1. The full record already in `meeting.users` (real display name and
+ *      company picked up the first time the user was referenced).
+ *   2. The acting session user (so a chair adding themselves contributes
+ *      their full session profile).
+ *   3. The mock-user helper (`mockUserFromLogin`) in mock-auth mode —
+ *      picks up a real display name and company from the dev seed when
+ *      the login matches a TC39 member, otherwise login-as-name.
+ *
+ * Returns `null` if none of the sync paths apply, signalling to the
+ * caller that an OAuth-mode GitHub fetch is required to resolve this
+ * presenter — see `resolvePresentersFor` for the orchestration.
  */
-function resolvePresenter(meeting: MeetingState | undefined, sessionUser: User, username: string): User {
+function resolvePresenterSync(meeting: MeetingState | undefined, sessionUser: User, username: string): User | null {
   const key = asUserKey(username.toLowerCase());
-  return (
-    meeting?.users[key] ??
-    (userKey(sessionUser) === key ? sessionUser : undefined) ?? {
-      ghid: 0,
-      ghUsername: username,
-      name: username,
-      organisation: '',
-    }
+  const known = meeting?.users[key];
+  if (known) return known;
+  if (userKey(sessionUser) === key) return sessionUser;
+  if (!isOAuthConfigured()) return mockUserFromLogin(username);
+  return null;
+}
+
+/**
+ * Resolve a list of presenter usernames. Returns a `User[]` directly
+ * when every entry resolves synchronously, otherwise a Promise that
+ * fills in the holes with `fetchGitHubUser` lookups. The sync return
+ * matters: `await` on a real Promise yields a microtask, which can let
+ * a follow-up socket event overtake the in-flight handler — preserving
+ * the sync return path keeps the per-handler ordering that callers and
+ * tests rely on whenever no GitHub fetch is actually needed.
+ */
+function resolvePresentersFor(
+  meeting: MeetingState | undefined,
+  sessionUser: User,
+  usernames: string[],
+): User[] | Promise<User[]> {
+  const sync: (User | null)[] = usernames.map((u) => resolvePresenterSync(meeting, sessionUser, u));
+  if (sync.every((u): u is User => u !== null)) return sync;
+  return Promise.all(
+    usernames.map(async (username, i) => {
+      const cached = sync[i];
+      if (cached) return cached;
+      const ghUser = await fetchGitHubUser(username);
+      // Preserve the typed login as a placeholder when GitHub returns
+      // 404 (e.g. typo'd handle in OAuth mode) so the chair can spot
+      // the mistake on the agenda item.
+      return ghUser ?? { ghid: 0, ghUsername: username, name: username, organisation: '' };
+    }),
   );
 }
 
@@ -465,8 +501,10 @@ export function registerSocketHandlers(
           }
           chairs.push(ghUser);
         } else {
-          // Mock auth mode — create a placeholder
-          chairs.push({ ghid: 0, ghUsername: username, name: username, organisation: '' });
+          // Mock auth mode — resolve via the seed-aware helper so the
+          // chair badge picks up a real display name and company when
+          // the login matches a TC39 seed entry.
+          chairs.push(mockUserFromLogin(username));
         }
       }
 
@@ -495,7 +533,11 @@ export function registerSocketHandlers(
       const { name, presenterUsernames } = parsed;
 
       const meeting = meetingManager.get(joinedMeetingId);
-      const presenters = presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
+      const resolved = resolvePresentersFor(meeting, user, presenterUsernames);
+      // Sync-when-possible: the await is only paid when at least one
+      // presenter required an OAuth-mode GitHub fetch, preserving the
+      // synchronous handler ordering everywhere else.
+      const presenters = resolved instanceof Promise ? await resolved : resolved;
 
       // The schema already constrains duration to a positive integer; undefined = no estimate.
       const entry = meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.duration);
@@ -508,7 +550,7 @@ export function registerSocketHandlers(
 
     // --- agenda:edit ---
     // Chair edits an existing agenda item's name, presenters, or duration.
-    socket.on('agenda:edit', (payload) => {
+    socket.on('agenda:edit', async (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {
         socket.emit('error', 'Only chairs can edit agenda items');
@@ -524,7 +566,8 @@ export function registerSocketHandlers(
 
       if (parsed.presenterUsernames !== undefined) {
         const meeting = meetingManager.get(joinedMeetingId);
-        updates.presenters = parsed.presenterUsernames.map((username) => resolvePresenter(meeting, user, username));
+        const resolved = resolvePresentersFor(meeting, user, parsed.presenterUsernames);
+        updates.presenters = resolved instanceof Promise ? await resolved : resolved;
       }
 
       if (parsed.duration !== undefined) {

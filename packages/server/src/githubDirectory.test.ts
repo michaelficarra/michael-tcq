@@ -81,6 +81,26 @@ function graphqlMembersResponse(
 }
 
 /**
+ * Mirror of the directory's match check: returns true when `q` matches
+ * `login`, `name`, or `organisation` by exact / prefix / substring /
+ * subsequence (case-insensitive). Tests use this to assert "every result
+ * scores against the query" without coupling to specific match-class
+ * weights or to whether a particular hit was substring vs subsequence.
+ */
+function matchesQuery(q: string, login: string, name: string, organisation: string): boolean {
+  const ql = q.toLowerCase();
+  const fields = [login.toLowerCase(), name.toLowerCase(), organisation.toLowerCase()];
+  for (const f of fields) {
+    if (f.length === 0) continue;
+    if (f === ql || f.startsWith(ql) || f.includes(ql)) return true;
+    let i = 0;
+    for (let j = 0; j < f.length && i < ql.length; j++) if (f[j] === ql[i]) i++;
+    if (i === ql.length) return true;
+  }
+  return false;
+}
+
+/**
  * Inspect a GraphQL POST body and route based on the `org` variable so a
  * single fetch hook can answer multiple orgs in one test.
  */
@@ -483,12 +503,13 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'mike', undefined, 5);
 
       expect(fetchMock).not.toHaveBeenCalled();
-      // Anyone with "mike" in the login (e.g. michaelficarra) shows up. We
-      // don't pin the exact set because the seed regenerates from the live
-      // tc39 org — just assert each result actually contains the substring.
+      // Anyone whose login, name, or organisation matches "mike" by
+      // exact / prefix / substring / subsequence shows up. We don't pin
+      // the exact set because the seed regenerates from the live tc39
+      // org — just assert each result actually scores against the query.
       expect(results.length).toBeGreaterThan(0);
       for (const r of results) {
-        expect(r.login.toLowerCase().includes('mike') || r.name.toLowerCase().includes('mike')).toBe(true);
+        expect(matchesQuery('mike', r.login, r.name, r.organisation)).toBe(true);
       }
     });
   });
