@@ -1,46 +1,59 @@
-# Test Suites
+# Testing
 
-TCQ has **three** distinct test suites, each with a different runner, environment, and purpose. All three run as part of `npm run ci`. The `packages/shared` workspace has no suite of its own — its types and constants are exercised transitively through the server and client suites.
+TCQ runs three test suites under `npm run ci`. Each one sits at a different layer of the stack and catches a different class of bug. Choosing the right layer for a given test matters — the layers have different speed, different fidelity, and (importantly) different things they cannot reliably synthesise. A test written at the wrong layer either runs slower than it needs to, or never sees the bug it was meant to catch, or flakes for reasons unrelated to the application.
 
-| Suite                   | Runner                                 | File pattern                             |
-| ----------------------- | -------------------------------------- | ---------------------------------------- |
-| Server unit/integration | Vitest (Node)                          | `packages/server/src/*.test.ts`          |
-| Client component/unit   | Vitest (jsdom + React Testing Library) | `packages/client/src/**/*.test.{ts,tsx}` |
-| End-to-end browser      | Playwright                             | `e2e/*.spec.ts`                          |
+| Suite                   | Runner                                  | Location                                 |
+| ----------------------- | --------------------------------------- | ---------------------------------------- |
+| Server unit/integration | Vitest in Node                          | `packages/server/src/**/*.test.ts`       |
+| Client component/unit   | Vitest in jsdom + React Testing Library | `packages/client/src/**/*.test.{ts,tsx}` |
+| End-to-end browser      | Playwright (Chromium, Firefox, WebKit)  | `e2e/*.spec.ts`                          |
 
-For instructions on running, scoping, and debugging these suites, see [`CONTRIBUTING.md`](CONTRIBUTING.md). This document covers what each suite is for and why it exists.
+Running and debugging the suites is documented in [`CONTRIBUTING.md`](CONTRIBUTING.md). This document covers what belongs where and why.
 
-## Server unit/integration tests
+## Server unit/integration
 
-**How it works.** Vitest in a plain Node environment, configured at [`packages/server/vitest.config.ts`](../packages/server/vitest.config.ts). Each test imports server modules directly and exercises them in-process — there is no real HTTP server, no real Socket.IO transport, and no real filesystem-backed store. Two shared in-process fakes live in `packages/server/src/test/`:
+Tests in this suite import server modules directly. For tests that need wire coverage, the setup spins up a real `SocketIOServer` on a random port and connects a real `socket.io-client` — handler code runs end-to-end including framing and msgpack, but without an HTTP application or persistent storage (the data store is in-memory). This is the bulk of the test mass: socket handlers, the meeting model, parsers, logging middleware, error handling.
 
-- `inMemoryStore.ts` — an in-memory implementation of the data store, so anything that touches persistence runs without disk I/O.
-- `clientSurrogate.ts` — a Socket.IO client stand-in that lets socket handlers be driven without a real network round-trip.
+It is also where distributed-systems behaviour is tested. The in-process harness can drive faults nothing higher in the stack can synthesise reliably:
 
-**Why this suite earns its keep.** It is the fastest, most deterministic place to cover backend logic at the module boundary: auth, REST routes, Socket.IO handlers, the meeting model, the agenda/session-doc parsers, log/counter middleware, and error handling. The same coverage at the e2e layer would be orders of magnitude slower, and the client suite cannot see any of it.
+- A `clientSurrogate` mirrors the production hook's gap-detection and resync logic, with single-shot fault-injection hooks for dropping, delaying, reordering, or partitioning incoming deltas.
+- An `emitInParallel(...thunks)` helper fires N socket emits in the same microtask tick, so the actual JS event-loop interleaving determines server-side ordering rather than a sequenced "A then B" simulation.
 
-**Files.** Every server test lives directly in `packages/server/src/` and matches the glob `packages/server/src/*.test.ts`.
+Most files live directly in `packages/server/src/`, one per source file under test. Self-tests for the test helpers themselves (`clientSurrogate.test.ts`, `concurrency.test.ts`) live alongside their helpers under `packages/server/src/test/`.
 
-## Client component/unit tests
+## Client component/unit
 
-**How it works.** Vitest in a `jsdom` environment with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/), configured at [`packages/client/vitest.config.ts`](../packages/client/vitest.config.ts). Tests render React trees into a simulated DOM and assert on what the user would see and do. Setup and shared fixtures live in `packages/client/src/test/`:
+Tests in this suite render React trees in jsdom via React Testing Library. They cover components, hooks, contexts, formatting helpers, and keyboard-shortcut wiring — everything user-facing on the client side that isn't a page-level interaction.
 
-- `setup.ts` — wires up jsdom and `@testing-library/jest-dom` matchers.
-- `makeMeeting.ts` — fixture factory for `Meeting` objects.
-- `TestMeetingProvider.tsx` — wrapper that supplies `MeetingContext` to components under test.
+Two things are worth calling out because they aren't visible from the file layout:
 
-**Why this suite earns its keep.** It exercises components, hooks, contexts, and pure client utilities in isolation — no real browser, no real network, no real meeting state. That makes it the right place to lock down rendering logic, reducer/context behaviour, keyboard shortcut wiring, and formatting helpers, none of which the server suite can see and none of which would be cheap to cover only through Playwright.
+- **Component tests use `TestMeetingProvider`** rather than mounting a real socket. They render with a fixed `MeetingState` fixture and assert on what's drawn. That's the right shape for almost every UI test — components don't need a network to be tested.
+- **The production socket hook has its own tests.** `useSocketConnection.test.tsx` drives the hook against a small `mockSocket` (an EventEmitter-backed Socket.IO stand-in) so React-specific behaviour the surrogate cannot simulate is verified directly: synchronous cursor reseed in the same JS turn as the bootstrap `state` event, listener cleanup on unmount, `userGhid`-driven socket rebuild, window `offline`/`online` integration. The surrogate and the production hook are separate implementations of the same algorithm — bug-for-bug parity is not enforced anywhere except by these tests.
 
-**Files.** Client tests are spread across `src/`, `src/pages/`, `src/components/`, `src/contexts/`, `src/hooks/`, and `src/lib/`, and together match the glob `packages/client/src/**/*.test.{ts,tsx}`.
+## End-to-end browser
 
-## End-to-end browser tests
+Playwright spins up a fresh server (port 3001) and Vite client (port 5174) against a temporary data directory and drives Chromium, Firefox, and WebKit at the live URL. Each spec aligns with a claim from `PRD.md`; the project convention (see `CLAUDE.md`) is that any PRD-affecting change comes with an e2e spec.
 
-**How it works.** Playwright at the repo root, configured at [`playwright.config.ts`](../playwright.config.ts). The runner spins up a fresh server (port 3001) and Vite client (port 5174) backed by a temporary data directory, then drives **Chromium, Firefox, and WebKit** against `http://localhost:5174`. Shared page actions (creating a meeting, switching mock users, navigating tabs) live in [`e2e/helpers.ts`](../e2e/helpers.ts).
+This is the only suite that exercises real cross-client propagation. `multi-context.spec.ts` opens a second `BrowserContext` and verifies broadcast convergence (one context mutates, the other observes), the connection-count badge, mock-user identity propagation, and the disconnected indicator.
 
-**Why this suite earns its keep.** It is the only suite that exercises the full stack — real browser ↔ real Vite client ↔ real server ↔ real Socket.IO transport — so it is the only place that catches integration bugs spanning the client/server boundary, real-time socket flow, and cross-browser quirks. Each spec aligns with a claim in [`PRD.md`](PRD.md); the project convention (see [`CLAUDE.md`](../CLAUDE.md)) is that any change touching the PRD should come with an e2e spec.
+Two distributed scenarios are intentionally **not** tested here, and are documented inline in the spec:
 
-**Files.** Every Playwright spec lives directly in `e2e/` and matches the glob `e2e/*.spec.ts`. (`e2e/helpers.ts` is shared support code, not a spec, so the `.spec.ts` suffix excludes it.)
+- **Simultaneous-action races.** By the time the second context's click handler runs, the broadcast from the first click can already have arrived and updated its local state, so the second emit goes out with the new precondition rather than the stale one the test is trying to construct. The server's precondition guard is exercised directly in the server suite via `emitInParallel`, where both emits provably leave before either side can see the other.
+- **Offline-then-catch-up.** Playwright's `setOffline` doesn't reliably terminate existing WebSockets across all three browsers, so broadcasts can still leak through "while offline" and the assertion that the offline context misses them fails for reasons unrelated to the application. The reconnect-and-reseed codepath is exercised in the server suite.
 
-## A note on `packages/shared`
+E2E tests are slow (running across three browsers) and brittle by their nature. They are for what only the full stack can demonstrate, not for behaviour the lower layers already pin down.
 
-`packages/shared` defines no `*.test.*` files and has no `test` script in its `package.json`. Its types and constants are imported by both the server and the client, so anything that depends on them is exercised transitively whenever the other two suites run.
+## Where does a distributed-systems test belong?
+
+When something looks like a distributed concern — ordering, drops, delays, concurrency, reconnection — the answer is usually _not_ e2e. The suites split as follows:
+
+| Concern                                                                               | Layer       | Why                                                                                                                                            |
+| ------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-frame ordering — out-of-order, dropped, or delayed deltas; partitioned delivery   | Server unit | Only the in-process surrogate can synthesise individual wire frames precisely.                                                                 |
+| Concurrent client-to-server emits — race on `queue:next`, storm of `queue:add`        | Server unit | `emitInParallel` produces real interleaving; e2e clicks can't, because broadcast feedback within a single click handler invalidates the setup. |
+| The production hook's React behaviour — cursor sync, listener cleanup, socket rebuild | Client unit | jsdom + `mockSocket` lets you drive the hook directly; the surrogate is a separate implementation and doesn't simulate React.                  |
+| Real cross-context propagation through the full stack                                 | E2E         | Only the full stack can prove that what one browser does is observable in another.                                                             |
+
+---
+
+`packages/shared` has no test suite of its own. Its types and constants are exercised transitively whenever the server or client suites run.
