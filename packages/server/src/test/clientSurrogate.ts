@@ -6,17 +6,35 @@
  * detection. Tests assert against `surrogate.state` to verify the
  * client converges to the same `MeetingState` the server holds.
  *
- * Two test-specific knobs on top of the production behaviour:
+ * Fault-injection knobs on top of the production behaviour:
  *
- *   1. `dropNext` lets a test simulate a missed wire delta without
- *      actually severing the connection. Set it to a delta event name
+ *   1. `options.dropNext` — simulate a missed wire delta without
+ *      actually severing the connection. Set to a delta event name
  *      (or `true` to drop the very next delta of any kind); the
  *      surrogate silently ignores that one event and lets the next
  *      arrival trigger gap detection.
  *
- *   2. `events` records every event the surrogate has seen, so tests
+ *   2. `delayNext(event, ms)` — hold the next matching delta for `ms`
+ *      milliseconds before processing it. Models a delivery that
+ *      arrives late but eventually does arrive.
+ *
+ *   3. `reorderNext(count, permutation?)` — buffer the next `count`
+ *      deltas and process them in the given permutation (default:
+ *      reverse arrival order). Models out-of-order delivery without
+ *      rewriting what the server emitted.
+ *
+ *   4. `partition(durationMs)` — buffer ALL incoming deltas for
+ *      `durationMs`, then flush them in arrival order. Models a
+ *      logical partition shorter than the reconnection threshold.
+ *
+ *   5. `events` records every event the surrogate has seen, so tests
  *      can assert that — for example — a `state` event arrived after a
  *      forced drop (i.e. the resync codepath actually fired).
+ *
+ * The four fault hooks are mutually exclusive at any instant: a
+ * single-shot `dropNext` takes precedence, then `partition`, then
+ * `reorderNext`, then `delayNext`. Tests should arm at most one at a
+ * time.
  */
 
 import type { Socket as ClientSocket } from 'socket.io-client';
@@ -89,7 +107,7 @@ export interface ClientSurrogate {
    */
   readonly events: readonly { event: string; version: number | null }[];
 
-  /** Mutable fault-injection knobs. */
+  /** Mutable fault-injection knobs (single-shot drop only). */
   readonly options: SurrogateOptions;
 
   /**
@@ -105,9 +123,38 @@ export interface ClientSurrogate {
    */
   waitForVersion(version: number): Promise<void>;
 
+  /**
+   * Hold the next delta of `event` (or any delta, if `true`) for `ms`
+   * milliseconds before processing it. Single-shot: applies to exactly
+   * one delta and then clears.
+   */
+  delayNext(event: DeltaEventName | true, ms: number): void;
+
+  /**
+   * Buffer the next `count` deltas to arrive, then process them in the
+   * given `permutation` (an array of indices into the buffer). The
+   * default permutation reverses arrival order, so e.g.
+   * `reorderNext(3)` delivers the 3rd-then-2nd-then-1st arrival to the
+   * application logic.
+   */
+  reorderNext(count: number, permutation?: readonly number[]): void;
+
+  /**
+   * Stop processing any deltas for `durationMs` while leaving the
+   * underlying socket connected. After the duration elapses, all
+   * buffered deltas are flushed in arrival order.
+   */
+  partition(durationMs: number): void;
+
   /** Tear down the surrogate's listeners. Does not disconnect the socket. */
   detach(): void;
 }
+
+/** A delta envelope as it arrives off the wire. */
+type DeltaEnvelope = { version: number };
+
+/** A delta held in a fault-injection buffer. */
+type BufferedDelta = { eventType: DeltaEventName; delta: DeltaEnvelope };
 
 /**
  * Wrap a connected Socket.IO client with the version-tracking and
@@ -124,6 +171,23 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
   const events: { event: string; version: number | null }[] = [];
   const waiters: (() => void)[] = [];
   const versionWaiters: { version: number; resolve: () => void }[] = [];
+
+  // Fault-injection state. At most one of delayState / reorderState /
+  // partitionUntil should be set at a time; tests are expected to arm a
+  // single fault, drive deltas through it, and let it clear before
+  // arming another. Concurrent faults aren't supported and the priority
+  // order in `deliver()` is the documented behaviour if a test does it.
+  let delayState: { event: DeltaEventName | true; ms: number } | null = null;
+  let reorderState: {
+    remaining: number;
+    buffer: BufferedDelta[];
+    permutation: readonly number[] | null;
+  } | null = null;
+  let partitionUntil: number | null = null;
+  let partitionBuffer: BufferedDelta[] = [];
+  // Outstanding setTimeout handles, cleared on detach so tests don't
+  // leak timers past their lifetime.
+  const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
 
   function notifyWaiters() {
     while (waiters.length > 0) waiters.shift()!();
@@ -147,44 +211,90 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
   }
   socket.on('state', handleState);
 
+  /**
+   * The "real" per-delta logic — applied once a delta has cleared all
+   * fault-injection gates. Mirrors what `useSocketConnection` does on
+   * the real client.
+   */
+  function processDelta(eventType: DeltaEventName, delta: DeltaEnvelope) {
+    const lastSeen = lastSeenVersion;
+    if (lastSeen === null) return;
+    const expected = lastSeen + 1;
+    if (delta.version === expected) {
+      lastSeenVersion = delta.version;
+      if (state) {
+        state = applyDelta(state, { type: eventType, delta } as MeetingDeltaAction);
+      }
+      events.push({ event: eventType, version: delta.version });
+      notifyWaiters();
+      return;
+    }
+    if (delta.version > expected) {
+      resyncRequestCount += 1;
+      events.push({ event: `${eventType}[gap]`, version: delta.version });
+      socket.emit('state:resync');
+      notifyWaiters();
+      return;
+    }
+    // Late/duplicate deltas (delta.version <= lastSeen) are dropped
+    // silently, matching the real client; deliberately skipped from
+    // `events` to avoid noise.
+  }
+
+  /**
+   * Receive-side dispatcher. Decides whether the delta is dropped,
+   * buffered (partition / reorder), delayed, or processed immediately.
+   * Called from every delta listener.
+   */
+  function deliver(eventType: DeltaEventName, delta: DeltaEnvelope) {
+    // Forced drop — single-shot, takes precedence so existing tests
+    // using `options.dropNext` keep their semantics.
+    if (options.dropNext === eventType || options.dropNext === true) {
+      options.dropNext = null;
+      events.push({ event: `${eventType}[dropped]`, version: delta.version });
+      notifyWaiters();
+      return;
+    }
+    // Partition: buffer until release, regardless of other knobs.
+    if (partitionUntil !== null && Date.now() < partitionUntil) {
+      partitionBuffer.push({ eventType, delta });
+      return;
+    }
+    // Reorder: buffer until N collected, then deliver in permutation
+    // order via processDelta directly (don't re-enter `deliver` to
+    // avoid double-application of other faults).
+    if (reorderState !== null) {
+      reorderState.buffer.push({ eventType, delta });
+      reorderState.remaining -= 1;
+      if (reorderState.remaining === 0) {
+        const buf = reorderState.buffer;
+        // Default: deliver in reverse arrival order. Indices [n-1, ..., 0].
+        const perm = reorderState.permutation ?? buf.map((_, i) => buf.length - 1 - i);
+        reorderState = null;
+        for (const i of perm) processDelta(buf[i].eventType, buf[i].delta);
+      }
+      return;
+    }
+    // Delay: schedule processing for later.
+    if (delayState !== null && (delayState.event === eventType || delayState.event === true)) {
+      const ms = delayState.ms;
+      delayState = null;
+      const timer = setTimeout(() => {
+        pendingTimers.delete(timer);
+        processDelta(eventType, delta);
+      }, ms);
+      pendingTimers.add(timer);
+      return;
+    }
+    // No fault armed — process synchronously.
+    processDelta(eventType, delta);
+  }
+
   // --- delta listeners ---
-  type DeltaEnvelope = { version: number };
   type DeltaListener = (delta: DeltaEnvelope) => void;
   const deltaListeners: { event: DeltaEventName; listener: DeltaListener }[] = [];
   for (const eventType of DELTA_EVENT_TYPES) {
-    const listener: DeltaListener = (delta) => {
-      // Forced-drop path: simulate a missed wire delta.
-      if (options.dropNext === eventType || options.dropNext === true) {
-        options.dropNext = null;
-        // Still record it so tests can see the drop happened, but tag
-        // it specially so they can distinguish. Notify waiters so a
-        // pending `waitForNextEvent` resolves on the drop the same way
-        // it would on an applied delta.
-        events.push({ event: `${eventType}[dropped]`, version: delta.version });
-        notifyWaiters();
-        return;
-      }
-      const lastSeen = lastSeenVersion;
-      if (lastSeen === null) return;
-      const expected = lastSeen + 1;
-      if (delta.version === expected) {
-        lastSeenVersion = delta.version;
-        if (state) {
-          state = applyDelta(state, { type: eventType, delta } as MeetingDeltaAction);
-        }
-        events.push({ event: eventType, version: delta.version });
-        notifyWaiters();
-        return;
-      }
-      if (delta.version > expected) {
-        resyncRequestCount += 1;
-        events.push({ event: `${eventType}[gap]`, version: delta.version });
-        socket.emit('state:resync');
-        notifyWaiters();
-      }
-      // Late/duplicate deltas are dropped silently, matching the real
-      // client; deliberately skipped from `events` to avoid noise.
-    };
+    const listener: DeltaListener = (delta) => deliver(eventType, delta);
     socket.on(eventType, listener);
     deltaListeners.push({ event: eventType, listener });
   }
@@ -221,11 +331,49 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
         versionWaiters.push({ version, resolve });
       });
     },
+    delayNext(event, ms) {
+      delayState = { event, ms };
+    },
+    reorderNext(count, permutation) {
+      if (count < 1) throw new Error('reorderNext: count must be >= 1');
+      if (permutation !== undefined) {
+        if (permutation.length !== count) {
+          throw new Error('reorderNext: permutation length must equal count');
+        }
+        const seen = new Set(permutation);
+        if (seen.size !== count) {
+          throw new Error('reorderNext: permutation must contain each index exactly once');
+        }
+        for (const i of permutation) {
+          if (!Number.isInteger(i) || i < 0 || i >= count) {
+            throw new Error('reorderNext: permutation indices must be integers in [0, count)');
+          }
+        }
+      }
+      reorderState = { remaining: count, buffer: [], permutation: permutation ?? null };
+    },
+    partition(durationMs) {
+      if (durationMs < 0) throw new Error('partition: durationMs must be >= 0');
+      partitionUntil = Date.now() + durationMs;
+      const timer = setTimeout(() => {
+        pendingTimers.delete(timer);
+        partitionUntil = null;
+        const buf = partitionBuffer;
+        partitionBuffer = [];
+        // Flush in arrival order through the normal per-delta path.
+        // Faults armed during the partition are not re-evaluated for
+        // the buffered deltas — the partition consumes them.
+        for (const b of buf) processDelta(b.eventType, b.delta);
+      }, durationMs);
+      pendingTimers.add(timer);
+    },
     detach() {
       socket.off('state', handleState);
       for (const { event, listener } of deltaListeners) {
         socket.off(event, listener);
       }
+      for (const t of pendingTimers) clearTimeout(t);
+      pendingTimers.clear();
     },
   };
 }

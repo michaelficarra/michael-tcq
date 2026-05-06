@@ -5,7 +5,7 @@
  * so the default user is automatically logged in as "admin".
  */
 
-import { type Page, expect } from '@playwright/test';
+import { type Browser, type BrowserContext, type Page, expect } from '@playwright/test';
 
 /** Wait for the home page to be loaded and the user to be authenticated. */
 export async function waitForHomePage(page: Page) {
@@ -163,4 +163,42 @@ export async function addQueueEntry(
  */
 export function queueSection(page: Page, headingText: string) {
   return page.getByRole('region', { name: headingText });
+}
+
+/**
+ * Open a second browser context with its own cookies and storage,
+ * navigate it directly to an existing meeting, and (optionally)
+ * switch to a different mock user. Returns the new context and page
+ * so the caller can drive both sides of a multi-client interaction
+ * and clean up both contexts at the end of the test.
+ *
+ * The dev user-switcher requires landing on a page first, so when
+ * `asUser` is supplied we visit the home page, switch user, then
+ * navigate to the meeting.
+ */
+export async function openSecondContext(
+  browser: Browser,
+  meetingId: string,
+  options?: { asUser?: string },
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  if (options?.asUser !== undefined) {
+    await waitForHomePage(page);
+    await switchUser(page, options.asUser);
+  }
+  await page.goto(`/meeting/${encodeURIComponent(meetingId)}`);
+  return { context, page };
+}
+
+/**
+ * Take a context offline for `durationMs` and bring it back online.
+ * Models a transient client-side disconnection without destroying the
+ * page — Socket.IO will surface a disconnect event and (on return)
+ * reconnect.
+ */
+export async function offlineFor(context: BrowserContext, durationMs: number) {
+  await context.setOffline(true);
+  await new Promise((r) => setTimeout(r, durationMs));
+  await context.setOffline(false);
 }
