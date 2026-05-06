@@ -19,6 +19,7 @@ import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
 import { createClientSurrogate } from './test/clientSurrogate.js';
+import { emitInParallel } from './test/concurrency.js';
 
 // --- Helpers ---
 
@@ -2964,6 +2965,786 @@ describe('Socket.IO integration', () => {
 
       late.surrogate.detach();
       late.socket.disconnect();
+    });
+  });
+
+  // -- Out-of-order delivery -------------------------------------------
+  // Production sockets deliver in order, so the only way to reach the
+  // application layer with deltas in a non-version order is via a
+  // failure further down (a buggy proxy, a stalled connection, a
+  // socket.io transport quirk, a future `transport: ['polling']`
+  // fallback). The client's gap detector is the load-bearing defence:
+  // if any delta arrives out of sequence, it must trigger a resync
+  // and the surrogate must converge to the canonical server state.
+  //
+  // The tests below use the surrogate's `reorderNext` hook to
+  // synthesise out-of-order arrival, then assert convergence. The
+  // exact resync count is part of the assertion where it pins down a
+  // useful invariant (e.g. only the gapped deltas trigger resync).
+  describe('out-of-order delivery', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    /** Same join-with-surrogate shape as the convergence block above. */
+    async function joinWithSurrogate(meetingId: string) {
+      const socket = makeClient();
+      await new Promise<void>((r) => socket.on('connect', r));
+      const surrogate = createClientSurrogate(socket);
+      socket.emit('join', meetingId);
+      await surrogate.waitForVersion(0);
+      return { socket, surrogate };
+    }
+
+    /** Strip server-only operational fields, same as the convergence block. */
+    function normalise(state: import('@tcq/shared').MeetingState | null | undefined) {
+      if (!state) return state;
+      const {
+        lastAdvancementBy: _ignored,
+        lastConnectionTime: _t,
+        maxConcurrent: _m,
+        ...operationalRest
+      } = state.operational;
+      return { ...state, operational: operationalRest };
+    }
+
+    it('stale agenda:reorder applied after newer one — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Build up a 3-item agenda that the observer can apply normally.
+      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      await a.surrogate.waitForVersion(3);
+      const idB = ctx.meetingManager.get(meeting.id)!.agenda[1].id;
+      const idC = ctx.meetingManager.get(meeting.id)!.agenda[2].id;
+
+      // The next two reorders arrive on the wire in reverse, so the
+      // observer sees the newer reorder first (gap → resync) and then
+      // the older one as a duplicate that gets applied by version
+      // and immediately superseded when the resync state arrives.
+      a.surrogate.reorderNext(2);
+      driver.emit('agenda:reorder', { id: idB, afterId: null });
+      driver.emit('agenda:reorder', { id: idC, afterId: null });
+
+      await a.surrogate.waitForVersion(5);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      // Only the out-of-order delta triggered a gap; the in-order one
+      // matched its expected version and applied without resync.
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('stale queue:reorder applied after newer one — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Two queue entries, then two reorders.
+      driver.emit('queue:add', { type: 'topic', topic: 'first' });
+      driver.emit('queue:add', { type: 'topic', topic: 'second' });
+      await a.surrogate.waitForVersion(2);
+      const ids = ctx.meetingManager.get(meeting.id)!.queue.orderedIds;
+
+      a.surrogate.reorderNext(2);
+      driver.emit('queue:reorder', { id: ids[1], afterId: null });
+      driver.emit('queue:reorder', { id: ids[0], afterId: null });
+
+      await a.surrogate.waitForVersion(4);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('stale chairs:updated applied after newer one — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Two chair updates back-to-back, with the second strictly
+      // larger so the wrong order would visibly diverge state.
+      a.surrogate.reorderNext(2);
+      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second'] });
+      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second', 'third'] });
+
+      await a.surrogate.waitForVersion(2);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      expect(a.surrogate.state?.chairIds).toHaveLength(3);
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('queue:next arrives before its prerequisite queue:add — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // The advance references a speaker the surrogate hasn't seen
+      // added yet (in wire order). The gap detector is the only thing
+      // that can save state here — applying the advance before the add
+      // would mean operating on a queue entry the reducer doesn't know
+      // about.
+      a.surrogate.reorderNext(2);
+      driver.emit('queue:add', { type: 'topic', topic: 'topic to advance to' });
+      driver.emit('queue:next', { currentSpeakerEntryId: null }, () => {});
+
+      await a.surrogate.waitForVersion(2);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      expect(a.surrogate.state?.current.speaker).not.toBeNull();
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('after a reorder-induced resync, subsequent in-order deltas apply normally', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Step 1: induce a resync via reorder.
+      a.surrogate.reorderNext(2);
+      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      await a.surrogate.waitForVersion(2);
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      // Step 2: a follow-up delta should apply without another resync.
+      // This pins down that the resync codepath leaves the surrogate
+      // in a clean state — `lastSeenVersion` matches the server's, so
+      // the next delta lands on `expected` rather than producing yet
+      // another gap.
+      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      await a.surrogate.waitForVersion(3);
+      expect(a.surrogate.resyncRequestCount).toBe(1); // unchanged
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('reorder around a precondition-protected event — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Establish a queue entry first (in-order on the surrogate).
+      driver.emit('queue:add', { type: 'topic', topic: 'first' });
+      await a.surrogate.waitForVersion(1);
+
+      // Now reorder a queue:add with a queue:next that depends on the
+      // current speaker precondition. The advance arrives first on the
+      // wire, but the gap detector forces a resync so we never apply
+      // the advance against a stale queue.
+      a.surrogate.reorderNext(2);
+      driver.emit('queue:add', { type: 'topic', topic: 'second' });
+      driver.emit('queue:next', { currentSpeakerEntryId: null }, () => {});
+
+      await a.surrogate.waitForVersion(3);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      // Server should have advanced — the precondition matched at
+      // emit time on the driver side (current speaker was null).
+      expect(a.surrogate.state?.current.speaker).not.toBeNull();
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('three surrogates with divergent reorderings all converge to server state', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+      const b = await joinWithSurrogate(meeting.id);
+      const c = await joinWithSurrogate(meeting.id);
+
+      // Three different permutations of the next four deltas. Each
+      // surrogate's resync count varies (depending on how many gaps
+      // its permutation produces) but all must converge to the same
+      // final state. This is the strongest version of the convergence
+      // claim: order-independence under arbitrary wire-order
+      // scrambling.
+      a.surrogate.reorderNext(4); // default: full reverse
+      b.surrogate.reorderNext(4, [1, 3, 0, 2]);
+      c.surrogate.reorderNext(4, [0, 2, 1, 3]);
+
+      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: true });
+      driver.emit('queue:setClosed', { closed: false });
+
+      await Promise.all([a.surrogate.waitForVersion(4), b.surrogate.waitForVersion(4), c.surrogate.waitForVersion(4)]);
+
+      const expected = normalise(ctx.meetingManager.get(meeting.id));
+      expect(normalise(a.surrogate.state)).toEqual(expected);
+      expect(normalise(b.surrogate.state)).toEqual(expected);
+      expect(normalise(c.surrogate.state)).toEqual(expected);
+      // Each permutation produces at least one out-of-order arrival
+      // (the first delivered delta has version > expected), so each
+      // surrogate triggers at least one resync.
+      expect(a.surrogate.resyncRequestCount).toBeGreaterThanOrEqual(1);
+      expect(b.surrogate.resyncRequestCount).toBeGreaterThanOrEqual(1);
+      expect(c.surrogate.resyncRequestCount).toBeGreaterThanOrEqual(1);
+
+      a.surrogate.detach();
+      b.surrogate.detach();
+      c.surrogate.detach();
+      a.socket.disconnect();
+      b.socket.disconnect();
+      c.socket.disconnect();
+    });
+
+    it('mixed-type reorder (agenda:add and meeting:nextAgendaItem) — converges via resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      // Create an initial agenda item the meeting can advance into.
+      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
+
+      const a = await joinWithSurrogate(meeting.id);
+      // Surrogate joined after the first add — bootstrap seeds at v1.
+      // Reorder the next two deltas (a second add and an advance).
+      a.surrogate.reorderNext(2);
+      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
+
+      await a.surrogate.waitForVersion(3);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+      // Confirm the advance landed: agenda is no longer un-started.
+      expect(a.surrogate.state?.current.agendaItemId).not.toBeNull();
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+  });
+
+  // -- Delay / latency -------------------------------------------------
+  // Drops and significant delays look the same to the gap detector
+  // until enough time has passed: a delta that takes 5 s to arrive is
+  // indistinguishable from a delta that's gone for the first 4.999 s.
+  // The tests below distinguish the two by actually delivering the
+  // late delta and asserting how the surrogate handles it.
+  //
+  // Three scenarios that *can't* easily be tested through the live
+  // socket and are intentionally absent:
+  //
+  //   - **Bootstrap state arriving after deltas.** Socket.IO emits
+  //     `state` in response to `join` before any delta is broadcast
+  //     to the joining socket, so a real wire can't produce this
+  //     ordering without a custom transport.
+  //
+  //   - **Optimistic UI under delayed acks.** The client doesn't
+  //     paint optimistic state for queue:add or any other emit — the
+  //     UI waits for the broadcast — so there is no optimistic codepath
+  //     to delay-test.
+  //
+  //   - **Surrogate-driven reconnect on long partition.** The
+  //     surrogate's `partition` hook just buffers; it doesn't model a
+  //     resync threshold. The reconnect-and-rejoin codepath is
+  //     covered by the existing "reconnect re-emits state and re-seeds
+  //     the surrogate" test in the gap-detection block above.
+  describe('delay and partition', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    async function joinWithSurrogate(meetingId: string) {
+      const socket = makeClient();
+      await new Promise<void>((r) => socket.on('connect', r));
+      const surrogate = createClientSurrogate(socket);
+      socket.emit('join', meetingId);
+      await surrogate.waitForVersion(0);
+      return { socket, surrogate };
+    }
+
+    function normalise(state: import('@tcq/shared').MeetingState | null | undefined) {
+      if (!state) return state;
+      const {
+        lastAdvancementBy: _ignored,
+        lastConnectionTime: _t,
+        maxConcurrent: _m,
+        ...operationalRest
+      } = state.operational;
+      return { ...state, operational: operationalRest };
+    }
+
+    it('a single delayed delta eventually applies and produces no resync', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      a.surrogate.delayNext('agenda:added', 100);
+      driver.emit('agenda:add', { name: 'late but only one', presenterUsernames: ['testuser'] });
+
+      // Synchronously after the emit, the surrogate hasn't processed
+      // the broadcast yet — the delta is parked in the delay timer.
+      expect(a.surrogate.lastSeenVersion).toBe(0);
+
+      // Wait for the timer to fire and the delta to apply normally.
+      await a.surrogate.waitForVersion(1);
+      // No gap was ever seen — the in-order delta arrived late but
+      // alone, so there's nothing to resync from.
+      expect(a.surrogate.resyncRequestCount).toBe(0);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('a delayed delta followed by a fresh one triggers gap detection on the fresh one', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Hold the next agenda:added for long enough that the follow-up
+      // mutation arrives first and forces a resync.
+      a.surrogate.delayNext('agenda:added', 200);
+      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: true });
+
+      // The closed-changed delta is processed immediately and gaps
+      // (expected v1, got v2). Resync repairs the divergence.
+      await a.surrogate.waitForVersion(2);
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+      const stateAfterResync = a.surrogate.state;
+      expect(normalise(stateAfterResync)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+
+      // Wait long enough that the held delta's timer has definitely
+      // fired. The processDelta call on it should classify it as a
+      // late duplicate (delta.version <= lastSeenVersion) and silently
+      // drop it without disturbing state or counters.
+      await new Promise((r) => setTimeout(r, 250));
+      expect(a.surrogate.lastSeenVersion).toBe(2);
+      expect(a.surrogate.resyncRequestCount).toBe(1);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(stateAfterResync));
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('partition flushes a buffered burst in arrival order without resyncing', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Block delivery long enough to capture the whole burst, then
+      // drive five mutations of mixed types. Server processes them
+      // serially on the driver's socket, so they reach the observer
+      // in version order — the partition holds them while they pile
+      // up.
+      a.surrogate.partition(150);
+      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: true });
+      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: false });
+
+      // Mid-partition: buffer is filling but nothing has been processed.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(a.surrogate.lastSeenVersion).toBe(0);
+      expect(a.surrogate.resyncRequestCount).toBe(0);
+
+      // After the partition timer fires, the buffer is flushed in
+      // arrival order. Every delta hits processDelta with the
+      // expected version, so none triggers a gap.
+      await a.surrogate.waitForVersion(5);
+      expect(a.surrogate.resyncRequestCount).toBe(0);
+      expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+
+    it('a stale delayed delta arriving after a resync is discarded as a late duplicate', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      const a = await joinWithSurrogate(meeting.id);
+
+      // Hold v1 well past the point at which v2 arrives, gaps, and
+      // the resync state event lands. By the time the timer for v1
+      // fires, the surrogate's lastSeenVersion has already been
+      // bumped to >= 2 by the resync, so v1 must be treated as a
+      // late duplicate.
+      a.surrogate.delayNext('agenda:added', 200);
+      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('queue:setClosed', { closed: true });
+      await a.surrogate.waitForVersion(2);
+
+      const eventCountBeforeLate = a.surrogate.events.length;
+      const versionAfterResync = a.surrogate.lastSeenVersion;
+      const resyncCountAfterResync = a.surrogate.resyncRequestCount;
+
+      // Wait through the timer. processDelta runs on the held delta
+      // but takes the silent-drop branch — no events.push, no
+      // state:resync, no state mutation.
+      await new Promise((r) => setTimeout(r, 250));
+      expect(a.surrogate.events.length).toBe(eventCountBeforeLate);
+      expect(a.surrogate.lastSeenVersion).toBe(versionAfterResync);
+      expect(a.surrogate.resyncRequestCount).toBe(resyncCountAfterResync);
+
+      a.surrogate.detach();
+      a.socket.disconnect();
+    });
+  });
+
+  // -- Concurrent emits ------------------------------------------------
+  // The existing precondition-guard tests in this file simulate
+  // contention by sequencing operations server-side: chair A's mutation
+  // is invoked directly via the meeting manager, then chair B emits
+  // through a real socket carrying a now-stale precondition. That
+  // proves the guard's logical correctness, but the actual JS event
+  // loop interleaving — what the server sees when two emits arrive on
+  // separate sockets at the same instant — is never exercised. The
+  // tests below close that gap. Each one fires N emits on N sockets
+  // through `Promise.all`, so the server's I/O dispatch picks the
+  // ordering, and the precondition guards must hold under that real
+  // interleaving rather than a contrived sequence.
+  //
+  // What is *not* covered here:
+  //
+  //   - **3.7 (chairs:update vs advance).** This requires two
+  //     distinct authenticated identities on the same server; the
+  //     test scaffolding currently authenticates every socket as the
+  //     same `TEST_USER` via session middleware. Adding multi-user
+  //     auth is non-trivial (it would touch `createTestServer` and
+  //     the socket connection helper) and the resulting test would
+  //     duplicate per-event permission checks already covered
+  //     elsewhere. Left out deliberately.
+  describe('concurrent emits', () => {
+    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+
+    async function joinWithSurrogate(meetingId: string) {
+      const socket = makeClient();
+      await new Promise<void>((r) => socket.on('connect', r));
+      const surrogate = createClientSurrogate(socket);
+      socket.emit('join', meetingId);
+      await surrogate.waitForVersion(0);
+      return { socket, surrogate };
+    }
+
+    function normalise(state: import('@tcq/shared').MeetingState | null | undefined) {
+      if (!state) return state;
+      const {
+        lastAdvancementBy: _ignored,
+        lastConnectionTime: _t,
+        maxConcurrent: _m,
+        ...operationalRest
+      } = state.operational;
+      return { ...state, operational: operationalRest };
+    }
+
+    /** Convenience: emit with an ack and resolve with the response. */
+    function emitWithAck(
+      socket: TypedClientSocket,
+      event: 'queue:next',
+      payload: { currentSpeakerEntryId: string | null },
+    ) {
+      return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        socket.emit(event, payload, resolve);
+      });
+    }
+
+    /** Same shape for meeting:nextAgendaItem. */
+    function emitAdvanceAgenda(socket: TypedClientSocket, currentAgendaItemId: string | null) {
+      return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        socket.emit('meeting:nextAgendaItem', { currentAgendaItemId }, resolve);
+      });
+    }
+
+    it('two concurrent queue:next emits — exactly one wins via the precondition guard', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
+      ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
+
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+
+      // Both sockets see no current speaker, so both ack with the
+      // same precondition. The server's per-emit handler must
+      // serialise them: the first lands and updates state, the
+      // second sees a now-stale precondition and rejects.
+      const [r1, r2] = await emitInParallel(
+        () => emitWithAck(a, 'queue:next', { currentSpeakerEntryId: null }),
+        () => emitWithAck(b, 'queue:next', { currentSpeakerEntryId: null }),
+      );
+
+      const successes = [r1, r2].filter((r) => r.ok);
+      const failures = [r1, r2].filter((r) => !r.ok);
+      expect(successes).toHaveLength(1);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].error).toMatch(/already advanced/i);
+
+      // Speaker advanced exactly once: head of the queue is now
+      // current, queue still holds the other entry.
+      const after = ctx.meetingManager.get(meeting.id)!;
+      expect(after.current.speaker?.topic).toBe('First');
+      expect(after.queue.orderedIds).toHaveLength(1);
+    });
+
+    it('two concurrent meeting:nextAgendaItem emits — exactly one wins via the precondition guard', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'I1', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'I2', [owner]);
+
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+
+      const [r1, r2] = await emitInParallel(
+        () => emitAdvanceAgenda(a, null),
+        () => emitAdvanceAgenda(b, null),
+      );
+
+      const successes = [r1, r2].filter((r) => r.ok);
+      const failures = [r1, r2].filter((r) => !r.ok);
+      expect(successes).toHaveLength(1);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].error).toMatch(/already advanced|another chair/i);
+
+      const after = ctx.meetingManager.get(meeting.id)!;
+      expect(after.current.agendaItemId).toBe(after.agenda[0].id);
+    });
+
+    it('two concurrent agenda:reorder emits on different items — both succeed and observers converge', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'A', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'B', [owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'C', [owner]);
+
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+      const observer = await joinWithSurrogate(meeting.id);
+
+      const seed = ctx.meetingManager.get(meeting.id)!;
+      const idB = seed.agenda[1].id;
+      const idC = seed.agenda[2].id;
+
+      // Both reorders move different items. agenda:reorder has no
+      // ack and no version-style precondition, so both should land
+      // and the server's serialisation order determines the final
+      // arrangement. The strong assertion is convergence: an
+      // observer surrogate ends byte-equal to the canonical state.
+      a.emit('agenda:reorder', { id: idB, afterId: null });
+      b.emit('agenda:reorder', { id: idC, afterId: null });
+
+      await observer.surrogate.waitForVersion(2);
+      expect(normalise(observer.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
+
+      observer.surrogate.detach();
+      observer.socket.disconnect();
+    });
+
+    it('two concurrent queue:add emits — both entries land and observers converge', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+      const observer = await joinWithSurrogate(meeting.id);
+
+      // queue:add of `topic` type has no precondition; concurrent
+      // adds should not interfere with each other. This is the
+      // "false positive" half of the guard: a guard that rejected
+      // both would silently lose an entry.
+      a.emit('queue:add', { type: 'topic', topic: 'from a' });
+      b.emit('queue:add', { type: 'topic', topic: 'from b' });
+
+      await observer.surrogate.waitForVersion(2);
+      const final = ctx.meetingManager.get(meeting.id)!;
+      expect(final.queue.orderedIds).toHaveLength(2);
+      const topics = final.queue.orderedIds.map((id) => final.queue.entries[id].topic).sort();
+      expect(topics).toEqual(['from a', 'from b']);
+      expect(normalise(observer.surrogate.state)).toEqual(normalise(final));
+
+      observer.surrogate.detach();
+      observer.socket.disconnect();
+    });
+
+    /**
+     * Seed a meeting's queue via real emits (rather than the
+     * `meetingManager.*` helpers) so the user records on the meeting
+     * state include the same `isAdmin` field the session middleware
+     * adds. Mixing direct-manager seeds with emit-driven mutations
+     * leaves a divergence in `users[testuser]` that the convergence
+     * assertion would otherwise pick up.
+     */
+    async function seedQueue(driver: TypedClientSocket, meetingId: string, topics: string[]) {
+      for (const topic of topics) driver.emit('queue:add', { type: 'topic', topic });
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if ((ctx.meetingManager.get(meetingId)?.queue.orderedIds.length ?? 0) >= topics.length) resolve();
+          else setTimeout(check, 5);
+        };
+        check();
+      });
+    }
+
+    it('concurrent queue:add and queue:next — final state is internally consistent', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      // Seed via real emit so the user record on `meeting.users` matches
+      // what the session-driven mutations below will produce.
+      await seedQueue(driver, meeting.id, ['pre-existing']);
+
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+      const observer = await joinWithSurrogate(meeting.id);
+
+      // Whichever lands first determines the outcome:
+      //   - add then advance: queue has the new entry, speaker is
+      //     the pre-existing one.
+      //   - advance then add: speaker is the pre-existing one,
+      //     queue has the new entry.
+      // Either way: speaker is the pre-existing entry, queue holds
+      // exactly the new entry. Pin that down.
+      a.emit('queue:add', { type: 'topic', topic: 'added concurrently' });
+      const advanceAck = emitWithAck(b, 'queue:next', { currentSpeakerEntryId: null });
+
+      const ack = await advanceAck;
+      // The advance always succeeds — there's a queue entry to pop
+      // (either pre-existing alone, or with the new entry behind it).
+      expect(ack.ok).toBe(true);
+
+      // Bootstrap is at v1 (after the seed emit). Add and advance
+      // produce v2 and v3.
+      await observer.surrogate.waitForVersion(3);
+      const final = ctx.meetingManager.get(meeting.id)!;
+      expect(final.current.speaker?.topic).toBe('pre-existing');
+      expect(final.queue.orderedIds).toHaveLength(1);
+      expect(final.queue.entries[final.queue.orderedIds[0]].topic).toBe('added concurrently');
+      expect(normalise(observer.surrogate.state)).toEqual(normalise(final));
+
+      observer.surrogate.detach();
+      observer.socket.disconnect();
+    });
+
+    it('concurrent queue:next and queue:edit on a non-head entry — both succeed, no lost edit', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+      await seedQueue(driver, meeting.id, ['head', 'second']);
+      const seedQueueIds = ctx.meetingManager.get(meeting.id)!.queue.orderedIds;
+      const secondId = seedQueueIds[1];
+
+      const a = await joinMeeting(meeting.id);
+      const b = await joinMeeting(meeting.id);
+      const observer = await joinWithSurrogate(meeting.id);
+
+      // Advance pops the head; edit modifies the second entry's
+      // topic. The two operations target disjoint state so neither
+      // should clobber the other regardless of order.
+      const [advance] = await emitInParallel(
+        () => emitWithAck(a, 'queue:next', { currentSpeakerEntryId: null }),
+        () =>
+          new Promise<void>((resolve) => {
+            b.emit('queue:edit', { id: secondId, topic: 'second (edited)' });
+            // queue:edit has no ack; resolve once the server has had
+            // a chance to process it. Convergence on the observer
+            // pins down whether the edit actually landed.
+            setImmediate(resolve);
+          }),
+      );
+
+      expect(advance.ok).toBe(true);
+      // Bootstrap is at v2 (after two seed emits). Advance and edit
+      // produce v3 and v4.
+      await observer.surrogate.waitForVersion(4);
+      const final = ctx.meetingManager.get(meeting.id)!;
+      expect(final.current.speaker?.topic).toBe('head');
+      expect(final.queue.orderedIds).toEqual([secondId]);
+      expect(final.queue.entries[secondId].topic).toBe('second (edited)');
+      expect(normalise(observer.surrogate.state)).toEqual(normalise(final));
+
+      observer.surrogate.detach();
+      observer.socket.disconnect();
+    });
+
+    it('storm: ten concurrent queue:add emits — all land, version sequence is contiguous', async () => {
+      const meeting = ctx.meetingManager.create([owner]);
+      const observer = await joinWithSurrogate(meeting.id);
+
+      // Ten distinct sockets, each firing a queue:add at the same
+      // microtask tick. The server processes them serially but in
+      // arbitrary order. Final queue size must be exactly ten, and
+      // the observer's lastSeenVersion must be exactly ten — a
+      // dropped or merged delta would surface as a wrong count or
+      // a contiguity gap.
+      const sockets = await Promise.all(Array.from({ length: 10 }, () => joinMeeting(meeting.id)));
+      const thunks = sockets.map(
+        (s, i) => () =>
+          new Promise<void>((resolve) => {
+            s.emit('queue:add', { type: 'topic', topic: `entry ${i}` });
+            setImmediate(resolve);
+          }),
+      );
+      await emitInParallel(...thunks);
+
+      await observer.surrogate.waitForVersion(10);
+      const final = ctx.meetingManager.get(meeting.id)!;
+      expect(final.queue.orderedIds).toHaveLength(10);
+      expect(final.operational.version).toBe(10);
+      // Surrogate's events log every applied delta with its version;
+      // contiguity from v1..v10 means no broadcast was lost.
+      const appliedVersions = observer.surrogate.events.filter((e) => e.event === 'queue:added').map((e) => e.version);
+      expect(appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(normalise(observer.surrogate.state)).toEqual(normalise(final));
+
+      observer.surrogate.detach();
+      observer.socket.disconnect();
+    });
+  });
+
+  // -- Emit semantics: deliberate at-least-once -----------------------
+  // The protocol does NOT guarantee exactly-once delivery for
+  // client-to-server emits. There are no idempotency keys and no
+  // server-side request-ID dedup; each emit handler runs once per
+  // packet and creates whatever state it creates. For
+  // precondition-guarded events (queue:next, meeting:nextAgendaItem)
+  // and natural state-setters (queue:edit, queue:closedChanged,
+  // meeting:updateChairs) this is invisible — duplicate emits collapse
+  // via stale preconditions or overwrite-with-the-same-value. For
+  // *append* events like queue:add it isn't: two emits create two
+  // entries. The protection against accidental double-submits is
+  // client-side (forms close on submit, advance buttons debounce) —
+  // not a wire-level guarantee.
+  //
+  // The test below pins this design choice down. If a future change
+  // adds server-side dedup (idempotency keys, request IDs, content
+  // hashing), this test will fail and force a deliberate update —
+  // which is the point. It's a tripwire, not a behaviour we're
+  // celebrating.
+  describe('at-least-once emit semantics', () => {
+    it('two queue:add emits on the same socket create two distinct entries', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const driver = await joinMeeting(meeting.id);
+
+      // Same socket, same payload, fired back-to-back without any
+      // intervening await. Socket.IO processes them serially and the
+      // queue:add handler is invoked twice, each creating its own
+      // UUID-keyed entry.
+      driver.emit('queue:add', { type: 'topic', topic: 'duplicate' });
+      driver.emit('queue:add', { type: 'topic', topic: 'duplicate' });
+
+      // Wait until both have landed server-side. Polling here rather
+      // than relying on a surrogate keeps the test focused on the
+      // server's at-least-once semantics — what reaches the meeting
+      // state is the assertion that pins down the design.
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if ((ctx.meetingManager.get(meeting.id)?.queue.orderedIds.length ?? 0) >= 2) resolve();
+          else setTimeout(check, 5);
+        };
+        check();
+      });
+
+      const final = ctx.meetingManager.get(meeting.id)!;
+      // Both emits produced an entry — they are distinguishable only
+      // by their server-assigned UUIDs.
+      expect(final.queue.orderedIds).toHaveLength(2);
+      const topics = final.queue.orderedIds.map((id) => final.queue.entries[id].topic);
+      expect(topics).toEqual(['duplicate', 'duplicate']);
+      expect(final.queue.orderedIds[0]).not.toBe(final.queue.orderedIds[1]);
     });
   });
 });

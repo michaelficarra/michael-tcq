@@ -183,7 +183,12 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
     buffer: BufferedDelta[];
     permutation: readonly number[] | null;
   } | null = null;
-  let partitionUntil: number | null = null;
+  // Binary flag rather than a timestamp comparison so a delta arriving
+  // after `partitionUntil` but before the flush timer fires can't slip
+  // past while older buffered deltas are still waiting — that ordering
+  // would surface buffered deltas as late duplicates and silently drop
+  // them.
+  let partitioned = false;
   let partitionBuffer: BufferedDelta[] = [];
   // Outstanding setTimeout handles, cleared on detach so tests don't
   // leak timers past their lifetime.
@@ -256,7 +261,7 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
       return;
     }
     // Partition: buffer until release, regardless of other knobs.
-    if (partitionUntil !== null && Date.now() < partitionUntil) {
+    if (partitioned) {
       partitionBuffer.push({ eventType, delta });
       return;
     }
@@ -354,10 +359,10 @@ export function createClientSurrogate(socket: TypedClientSocket, options: Surrog
     },
     partition(durationMs) {
       if (durationMs < 0) throw new Error('partition: durationMs must be >= 0');
-      partitionUntil = Date.now() + durationMs;
+      partitioned = true;
       const timer = setTimeout(() => {
         pendingTimers.delete(timer);
-        partitionUntil = null;
+        partitioned = false;
         const buf = partitionBuffer;
         partitionBuffer = [];
         // Flush in arrival order through the normal per-delta path.
