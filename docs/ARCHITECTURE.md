@@ -158,6 +158,8 @@ Socket.IO is the right transport for TCQ because it directly maps to the applica
 - **Fallback transports** — Socket.IO falls back to long-polling if WebSocket connections are blocked by corporate proxies or firewalls, which is relevant for a standards committee tool where participants may be on restricted networks.
 - **Typed events** — Socket.IO supports TypeScript event type definitions on both client and server, using the shared types from `@tcq/shared`.
 
+**Per-message compression.** The Socket.IO server is configured with `perMessageDeflate: { threshold: 1024 }`. Socket.IO v4 disables WebSocket compression by default because most apps emit many small messages where DEFLATE adds CPU overhead without meaningful savings; TCQ is the opposite case — every state mutation broadcasts the full `MeetingState` (a repetitive JSON document with many shared keys), so compression typically halves on-the-wire size. The threshold skips compression for sub-1 KB messages (acks, small admin events) where it is not worth the work.
+
 ### Message Architecture
 
 The server is the single source of truth. The flow for every state change is:

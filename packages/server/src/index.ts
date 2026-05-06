@@ -50,6 +50,13 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpSe
           },
           credentials: true,
         },
+  // Enable WebSocket per-message deflate. Socket.IO v4 disables it by
+  // default (most apps send many small messages where compression is a
+  // net loss), but TCQ broadcasts a full MeetingState on every mutation,
+  // and that state is dominated by repetitive JSON (user keys, agenda
+  // entry shapes, log entries). The threshold skips compression for
+  // anything under 1 KB so acks and tiny events stay uncompressed.
+  perMessageDeflate: { threshold: 1024 },
 });
 
 const PORT = process.env.PORT ?? 3000;
