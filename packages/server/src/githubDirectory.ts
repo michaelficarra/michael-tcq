@@ -18,7 +18,7 @@
  *     autocomplete requests — a searcher can only see members of orgs
  *     they themselves are a public member of.
  *
- * The cache lives only in process memory. On Cloud Run cold starts each
+ * The cache lives only in process memory. On every container restart each
  * instance pays one refresh per active user; that's acceptable for
  * autocomplete and avoids the persistence and security weight of writing
  * cached membership to Firestore.
