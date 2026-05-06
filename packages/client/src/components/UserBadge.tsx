@@ -74,8 +74,21 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
         }}
       />
       <span>
-        {user.name}
-        {user.organisation && <span className="text-stone-400 dark:text-stone-500"> ({user.organisation})</span>}
+        {/* The display name carries the GitHub login as a title so a
+            hover surfaces the underlying username — useful when name and
+            login differ (e.g. "Alice Anderson" → @alice). */}
+        <span title={user.ghUsername}>{user.name}</span>
+        {user.organisation && (
+          // Organisation gets a fixed max-width and ellipsis so a long
+          // company string doesn't make the badge run off the row. The
+          // username and display name stay un-truncated — those are the
+          // identifying labels and need to be readable in full.
+          <span className="text-stone-400 dark:text-stone-500" title={user.organisation}>
+            {' ('}
+            <span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>
+            {')'}
+          </span>
+        )}
       </span>
     </span>
   );

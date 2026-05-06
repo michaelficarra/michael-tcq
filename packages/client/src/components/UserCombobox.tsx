@@ -523,7 +523,13 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
   const listElementRef = useRef<HTMLUListElement | null>(null);
   const measureRef = useRef<() => void>(() => {});
   const observerRef = useRef<ResizeObserver | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    minWidth: number;
+    maxWidth: number;
+    maxHeight: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     function measure() {
@@ -532,23 +538,35 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
-      // Width: at least MIN_WIDTH, at least the anchor's own width, and
-      // never wider than the viewport (minus margins).
-      const naturalWidth = Math.max(anchorRect.width, MIN_WIDTH);
-      const width = Math.min(naturalWidth, vw - 2 * VIEWPORT_MARGIN);
+      // The ul uses `width: max-content` so it sizes to its widest row
+      // automatically (display name + company + badge can run long when
+      // every field is populated). Clamp the natural size with a floor
+      // (anchor width / MIN_WIDTH) so the dropdown never looks narrower
+      // than the input it's attached to, and a ceiling (viewport minus
+      // edge margins) so it never overflows the screen.
+      const minWidth = Math.max(anchorRect.width, MIN_WIDTH);
+      const maxWidth = Math.max(MIN_WIDTH, vw - 2 * VIEWPORT_MARGIN);
 
-      // Horizontal: prefer left-aligned with the anchor; if that overflows
-      // the right edge, shift left so the right edge of the dropdown lands
-      // on `vw - VIEWPORT_MARGIN`. Then clamp `left >= VIEWPORT_MARGIN` so
-      // it never disappears off the left.
+      // For positioning, use the *rendered* width — the browser has
+      // already resolved `max-content` against the min/max bounds, so
+      // the bounding rect tells us the real width to clamp `left`
+      // against. Falls back to minWidth on the very first pass before
+      // the ul mounts; the ResizeObserver re-runs measure with the real
+      // width as soon as the ul attaches, correcting any initial
+      // estimate.
+      const renderedWidth = listElementRef.current?.getBoundingClientRect().width ?? minWidth;
+
+      // Horizontal: prefer left-aligned with the anchor; if the rendered
+      // dropdown would overflow the right edge, shift left so the right
+      // edge lands on `vw - VIEWPORT_MARGIN`. Then clamp `left >=
+      // VIEWPORT_MARGIN` so it never disappears off the left.
       let left = anchorRect.left;
-      if (left + width > vw - VIEWPORT_MARGIN) left = vw - VIEWPORT_MARGIN - width;
+      if (left + renderedWidth > vw - VIEWPORT_MARGIN) left = vw - VIEWPORT_MARGIN - renderedWidth;
       if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN;
 
-      // Vertical: measure the ul's actual height if it has rendered (the
-      // ResizeObserver below re-runs this once the ul mounts). Fall back to
-      // MAX_HEIGHT only on the very first pass before the ul exists; the
-      // observer corrects this in the next layout tick.
+      // Vertical: measure the ul's actual height if it has rendered.
+      // Fall back to MAX_HEIGHT only on the very first pass before the
+      // ul exists; the observer corrects this in the next layout tick.
       const measuredHeight = listElementRef.current?.getBoundingClientRect().height ?? MAX_HEIGHT;
       const desiredHeight = Math.min(measuredHeight, MAX_HEIGHT);
 
@@ -583,10 +601,17 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
       setPos((prev) => {
         // Avoid pointless state updates that would re-trigger the effect on
         // every scroll tick when nothing actually moved.
-        if (prev && prev.top === top && prev.left === left && prev.width === width && prev.maxHeight === maxHeight) {
+        if (
+          prev &&
+          prev.top === top &&
+          prev.left === left &&
+          prev.minWidth === minWidth &&
+          prev.maxWidth === maxWidth &&
+          prev.maxHeight === maxHeight
+        ) {
           return prev;
         }
-        return { top, left, width, maxHeight };
+        return { top, left, minWidth, maxWidth, maxHeight };
       });
     }
     measureRef.current = measure;
@@ -651,7 +676,15 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
         position: 'fixed',
         top: pos.top,
         left: pos.left,
-        width: pos.width,
+        // `max-content` lets the ul size itself to the widest row, with
+        // `min-width` keeping it at least as wide as the input it's
+        // attached to and `max-width` capping it at the viewport so it
+        // never overflows the screen. When even the natural width
+        // exceeds the cap, individual rows truncate via the per-span
+        // `truncate` class.
+        width: 'max-content',
+        minWidth: pos.minWidth,
+        maxWidth: pos.maxWidth,
         maxHeight: pos.maxHeight,
       }}
       className="z-[80] overflow-auto
@@ -692,12 +725,20 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
             style={{ width: 20, height: 20, minWidth: 20, minHeight: 20 }}
             className="rounded-full shrink-0"
           />
-          <span className="truncate">{user.login}</span>
+          <span>{user.login}</span>
           {user.name && user.name !== user.login && (
-            <span className="text-stone-500 dark:text-stone-400 truncate">{user.name}</span>
+            <span className="text-stone-500 dark:text-stone-400">{user.name}</span>
           )}
           {user.organisation && (
-            <span className="text-stone-400 dark:text-stone-500 truncate text-xs">({user.organisation})</span>
+            // Organisation gets a fixed max-width and ellipsis so a long
+            // company string doesn't blow out the dropdown's natural
+            // width. Login and display name stay un-truncated — they're
+            // the load-bearing identifiers for matching the right user.
+            // The parens stay outside the truncation so the closing `)`
+            // is always visible.
+            <span className="text-stone-400 dark:text-stone-500 text-xs" title={user.organisation}>
+              (<span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>)
+            </span>
           )}
           {user.badge && (
             <span

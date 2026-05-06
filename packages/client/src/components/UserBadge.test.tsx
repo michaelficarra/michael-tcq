@@ -25,13 +25,44 @@ describe('UserBadge', () => {
 
   it('renders the organisation in parentheses when present', () => {
     render(<UserBadge user={alice} />);
-    expect(screen.getByText('(ACME Corp)')).toBeInTheDocument();
+    // The organisation is rendered in its own truncatable span (so a long
+    // company name can ellipsis without affecting the username/display
+    // name) — the parens sit in adjacent text nodes around it. Assert
+    // each piece is present.
+    expect(screen.getByText('ACME Corp')).toBeInTheDocument();
+    // The full organisation is also surfaced via the title attribute so
+    // truncated values are recoverable on hover.
+    expect(screen.getByText('ACME Corp').closest('[title="ACME Corp"]')).not.toBeNull();
   });
 
   it('omits the organisation when empty', () => {
     render(<UserBadge user={bob} />);
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.queryByText(/\(/)).not.toBeInTheDocument();
+  });
+
+  it('shows the GitHub username as a tooltip on the display name', () => {
+    render(<UserBadge user={alice} />);
+    // The display name surfaces the underlying login on hover so it's
+    // recoverable when name and ghUsername diverge.
+    const nameSpan = screen.getByText('Alice');
+    expect(nameSpan).toHaveAttribute('title', 'alice');
+  });
+
+  it('applies a max-width and truncation to the organisation only (not the name)', () => {
+    render(<UserBadge user={alice} />);
+    const orgSpan = screen.getByText('ACME Corp');
+    // Max-width + truncate keep a long company string from blowing out
+    // the badge — the inline-block makes the max-width effective.
+    expect(orgSpan.className).toContain('max-w-');
+    expect(orgSpan.className).toContain('truncate');
+    expect(orgSpan.className).toContain('inline-block');
+
+    // The name span must NOT have these — usernames/display names are
+    // load-bearing identifiers and need to render in full.
+    const nameSpan = screen.getByText('Alice');
+    expect(nameSpan.className).not.toContain('truncate');
+    expect(nameSpan.className).not.toContain('max-w-');
   });
 
   it('renders a GitHub avatar image', () => {
