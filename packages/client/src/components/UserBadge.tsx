@@ -16,8 +16,10 @@ import type { User } from '@tcq/shared';
 /**
  * Data URI for a generic person silhouette fallback avatar.
  * Used when the GitHub avatar fails to load (e.g. nonexistent username).
+ * Exported so other components rendering avatars (e.g. the username
+ * combobox's chips) can degrade to the same placeholder.
  */
-const FALLBACK_AVATAR =
+export const FALLBACK_AVATAR =
   'data:image/svg+xml,' +
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +

@@ -380,6 +380,15 @@ export function registerSocketHandlers(
         meetingManager.markDirty(meetingId);
       }
 
+      // Also record the joining user in `meeting.users` so they surface in
+      // the username-autocomplete tier-1 candidates (people in the same
+      // meeting). Without this, a user who connects but never grabs the
+      // floor / is named on an agenda item / enters the queue would be
+      // invisible to tier 1 even though they're sitting in the room.
+      // `ensureUser` overwrites in place, so refreshing on every join also
+      // picks up display-name / company changes between sessions.
+      ensureUser(meeting, user);
+
       // Send the full current state to this socket only
       socket.emit('state', meeting);
     });

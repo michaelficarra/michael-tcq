@@ -104,18 +104,46 @@ The agenda is an ordered list of entries. Most entries are **agenda items**; int
 
 The Agenda tab displays the list of chairs inline next to the "Chairs" heading. Each chair is shown as a pill-shaped badge with their avatar and name. Chairs and admins can manage the list directly:
 
-- **Add** — a "+" icon to the right of the chair pills opens an inline username input. When OAuth is configured, new usernames are validated against the GitHub API.
+- **Add** — a "+" icon to the right of the chair pills opens an inline username input. The input shows an autocomplete dropdown of fuzzy matches as the user types (see "Username Autocomplete" below). When OAuth is configured, new usernames are validated against the GitHub API.
 - **Remove** — an "×" icon on each chair's pill removes them after a confirmation dialogue.
 
 For regular chairs: they cannot remove themselves from the list (no remove icon is shown on their own pill), and at least one chair must remain. Admins bypass both restrictions — they can remove any chair, including themselves, even if it leaves the chair list empty.
 
 ### Agenda Management (Chair Only)
 
-- **Add** — Create a new agenda item by specifying a name, presenters (one or more GitHub usernames, comma-separated), and an optional time estimate. Presenter usernames are not validated against GitHub — unknown names are recorded as placeholder users. Anywhere the app accepts a GitHub username as text input (presenters, the chair add input, etc., including each entry in a comma-separated list), a leading `@` and surrounding whitespace are accepted and stripped. The form fields are: Agenda Item Name (flexible width), Presenters (pre-populated with current user), and Estimate in minutes.
+- **Add** — Create a new agenda item by specifying a name, presenters (one or more GitHub usernames as a chip input — type a name and press Enter or comma to add it as a token; tokens can be removed individually, and each token shows the user's GitHub avatar alongside their login), and an optional time estimate. The presenters input shows an autocomplete dropdown of fuzzy matches as the user types (see "Username Autocomplete" below); selecting a suggestion adds it as a token, but typing a non-matching name and pressing Enter still adds it (so presenters without a GitHub account can be recorded). Presenter usernames are not validated against GitHub — unknown names are recorded as placeholder users. Anywhere the app accepts a GitHub username as text input (presenters, the chair add input, etc.), a leading `@` and surrounding whitespace are accepted and stripped on each commit. The form fields are: Agenda Item Name (flexible width), Presenters (starts empty — the chair adds presenters explicitly), and Estimate in minutes.
 - **Import** — When the agenda is empty, chairs can import an agenda from a TC39 agenda URL (a markdown document on the tc39/agendas GitHub repository). The server fetches the document, parses numbered list items and markdown tables to extract item names, presenters, and estimated durations (TC39 agendas still label this column "timebox"; the parser maps it to the `duration` field). A presenter column or parenthetical may list multiple comma-separated names, each becoming a distinct presenter. Markdown formatting in item names is preserved.
-- **Edit** — Inline edit of an existing agenda item's name, presenters, and estimate/duration.
+- **Edit** — Inline edit of an existing agenda item's name, presenters, and estimate/duration. The presenters field is the same chip combobox used by the New Agenda Item form, pre-populated with the item's existing presenter list (each as a chip that can be removed individually).
 - **Delete** — Remove an agenda item.
 - **Reorder** — Drag-and-drop to rearrange agenda items. The entire agenda item row is the drag target.
+
+### Username Autocomplete
+
+Every place the app accepts a GitHub username — the agenda form's presenters input, the inline agenda-item edit form, the chair-add input, and the dev user-switcher — is backed by a fuzzy-match autocomplete dropdown. The dropdown surfaces three deduped tiers in priority order:
+
+1. Users already known to the current meeting. This is anyone the meeting state has ever recorded a user record for, and once recorded a user is never removed. Specifically it covers:
+   - **Anyone who has connected to the meeting via a socket** (from the moment they join, even if they only sit and watch and never grab the floor or are referenced anywhere else).
+   - **Every chair ever set on the meeting** — current chairs and chairs who have since been removed.
+   - **Every presenter ever named on an agenda item** — current items, items whose presenter list has since been edited, and deleted items.
+   - **Every queue entrant ever** — current waiting speakers and speakers whose entries have already been popped or removed.
+2. Members of any GitHub organisation the searcher belongs to (including concealed members visible only to fellow org members). Org membership is discovered after login via the `read:org` OAuth scope.
+3. Global GitHub user-search results, fetched on the searcher's behalf using their OAuth token. Only consulted when tiers 1 and 2 produce fewer matches than the dropdown holds.
+
+Matching is case-insensitive and runs against each user's GitHub login, display name, and `company` field. Within each tier, prefix matches always rank above substring matches, which always rank above subsequence ("fuzzy") matches; within a single match class, login matches outweigh name matches, which outweigh company matches. Each suggestion row shows the avatar, login, optional display name, and optional company plus an "in meeting" / "org" tier badge.
+
+**Interaction.** The dropdown is a _suggestion_ layer, not a constraint:
+
+- Typing a name that matches no suggestion and pressing Enter (or comma, in the multi-select presenters chip input) still commits the typed text as a token — so presenters who don't have a GitHub account can still be recorded.
+- The dropdown stays hidden until the user has typed at least one character. Focusing an empty input (or one whose value is pre-filled, such as the dev user-switcher pre-populated with the current username) does not open the dropdown or fire any network request — the user must edit the input first.
+- Once results arrive, no entry is highlighted by default. Pressing Enter commits the typed text. Pressing ArrowDown moves focus into the dropdown and highlights the first entry; subsequent ArrowDown / ArrowUp move through the list, and Enter commits the highlighted suggestion. ArrowUp past the first entry releases focus back to "nothing highlighted" so a follow-up Enter commits the typed text again.
+- Suggestions are only committed on a primary-button click; right-click and middle-click pass through to default browser behaviour without selecting a user.
+- Queries are debounced — no fetch fires until ~250 ms of typing inactivity.
+- The highlighted suggestion uses the same orange palette as the current-agenda-item highlight on the Agenda tab, so the "selected" affordance is consistent across the app and reads correctly in both light and dark modes.
+- The dropdown is positioned to escape any clipping ancestor and stays inside the viewport. It prefers placement directly below the input, flips above when there's not enough room below, shifts horizontally to avoid overflowing the right edge, and caps its own height (with internal scrolling) when even the flipped placement won't fit.
+
+In the multi-select chip variant (agenda presenters), each committed token is rendered as a pill containing the user's GitHub avatar and login, with an inline button to remove it; pressing Backspace into an empty input removes the most recently added chip.
+
+In local development with mock auth, the dropdown is backed by a hardcoded seed list of TC39 public members (no network access), so the feature works offline.
 
 ### Markdown in Item Names and Queue Topics
 

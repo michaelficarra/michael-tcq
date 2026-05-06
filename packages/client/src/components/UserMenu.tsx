@@ -5,12 +5,12 @@
  * Used in both the NavBar (meeting page) and the HomePage header.
  */
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { normaliseGithubUsername } from '@tcq/shared';
 import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { UserBadge } from './UserBadge.js';
+import { UserCombobox } from './UserCombobox.js';
 
 export function UserMenu() {
   const { user, mockAuth, switchUser } = useAuth();
@@ -224,37 +224,21 @@ interface DevUserSwitcherProps {
  */
 function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const [username, setUsername] = useState('');
   const [switching, setSwitching] = useState(false);
 
-  // Callback ref: focus and select the input text on mount.
-  const inputRef = useCallback((node: HTMLInputElement | null) => {
-    if (node) {
-      node.focus();
-      node.select();
-    }
-  }, []);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = normaliseGithubUsername(username);
-    if (!trimmed || switching) return;
-
+  async function handleCommit(username: string) {
+    if (!username || switching) return;
     setSwitching(true);
-    await switchUser(trimmed);
+    await switchUser(username);
     setSwitching(false);
     setOpen(false);
-    setUsername('');
   }
 
   if (!open) {
     return (
       <span className="inline-flex items-center gap-3">
         <button
-          onClick={() => {
-            setUsername(user.ghUsername);
-            setOpen(true);
-          }}
+          onClick={() => setOpen(true)}
           className="self-stretch inline-flex items-center text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors cursor-pointer"
           title="Click to switch user (dev mode)"
         >
@@ -266,41 +250,27 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2">
-      <input
-        ref={inputRef}
-        type="text"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setOpen(false);
-            setUsername('');
-          }
-        }}
+    <span className="flex items-center gap-2">
+      <UserCombobox
+        mode="single"
+        autoFocus
+        disabled={switching}
+        initialValue={user.ghUsername}
         placeholder="username"
-        className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
-                   dark:bg-stone-700 dark:text-stone-100
-                   focus:outline-none focus:ring-1 focus:ring-teal-500"
+        ariaLabel="Switch to GitHub username"
+        onCommit={handleCommit}
+        onCancel={() => setOpen(false)}
+        inputClassName="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-32
+                        dark:bg-stone-700 dark:text-stone-100
+                        focus:outline-none focus:ring-1 focus:ring-teal-500"
       />
       <button
-        type="submit"
-        disabled={switching}
-        className="text-sm text-teal-600 dark:text-teal-400 enabled:hover:text-teal-800 dark:enabled:hover:text-teal-300 font-medium
-                   transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-      >
-        {switching ? '…' : 'Switch'}
-      </button>
-      <button
         type="button"
-        onClick={() => {
-          setOpen(false);
-          setUsername('');
-        }}
+        onClick={() => setOpen(false)}
         className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
       >
         Cancel
       </button>
-    </form>
+    </span>
   );
 }

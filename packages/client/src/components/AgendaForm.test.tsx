@@ -41,10 +41,13 @@ describe('AgendaForm', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
-  it('pre-fills the presenters field with the current user username', () => {
+  it('starts the presenters field empty', () => {
     renderForm();
-    const presentersInput = screen.getByLabelText('Presenters') as HTMLInputElement;
-    expect(presentersInput.value).toBe('alice');
+    // No chip should be pre-rendered, and the input itself is empty —
+    // the chair adds presenters explicitly so a self-presented item never
+    // happens by accident.
+    expect(screen.queryByText('alice')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Presenters')).toHaveValue('');
   });
 
   it('focuses the name input on mount', () => {
@@ -72,6 +75,11 @@ describe('AgendaForm', () => {
       target: { value: 'Test Item' },
     });
 
+    // The presenter list starts empty — add 'alice' explicitly.
+    const presentersInput = screen.getByLabelText('Presenters');
+    fireEvent.change(presentersInput, { target: { value: 'alice' } });
+    fireEvent.keyDown(presentersInput, { key: 'Enter' });
+
     // Fill in estimate
     fireEvent.change(screen.getByLabelText('Estimate'), {
       target: { value: '15' },
@@ -88,10 +96,10 @@ describe('AgendaForm', () => {
     expect(onSubmit).toHaveBeenCalled();
   });
 
-  // Users may type or paste presenter handles in GitHub-style `@name`
-  // form, including in comma-separated lists; the form strips a leading
-  // `@` and surrounding whitespace per entry before emitting.
-  it('strips a leading @ and surrounding whitespace from comma-separated presenters', () => {
+  // Users may type presenter handles in GitHub-style `@name` form; the
+  // chip combobox normalises a leading `@` and surrounding whitespace
+  // when each token is committed (Enter or comma).
+  it('strips a leading @ and surrounding whitespace from each entered presenter', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;
 
@@ -101,9 +109,11 @@ describe('AgendaForm', () => {
       target: { value: 'Item' },
     });
 
-    fireEvent.change(screen.getByLabelText('Presenters'), {
-      target: { value: ' @alice , @ bob, charlie ' },
-    });
+    const presentersInput = screen.getByLabelText('Presenters');
+    for (const raw of [' @alice ', ' @ bob', 'charlie']) {
+      fireEvent.change(presentersInput, { target: { value: raw } });
+      fireEvent.keyDown(presentersInput, { key: 'Enter' });
+    }
 
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
@@ -123,6 +133,10 @@ describe('AgendaForm', () => {
     fireEvent.change(screen.getByLabelText('Agenda Item Name'), {
       target: { value: 'No estimate' },
     });
+
+    const presentersInput = screen.getByLabelText('Presenters');
+    fireEvent.change(presentersInput, { target: { value: 'alice' } });
+    fireEvent.keyDown(presentersInput, { key: 'Enter' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 

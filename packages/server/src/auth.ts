@@ -17,6 +17,7 @@ import { Router } from 'express';
 import type { User } from '@tcq/shared';
 import { toSessionUser } from './session.js';
 import { warning, error as logError, serialiseError } from './logger.js';
+import { warmDirectoryForUser } from './githubDirectory.js';
 
 // OAuth configuration from environment variables
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
@@ -70,7 +71,10 @@ export function createAuthRoutes(): Router {
     const params = new URLSearchParams({
       client_id: GITHUB_CLIENT_ID,
       redirect_uri: GITHUB_CALLBACK_URL,
-      scope: 'read:user',
+      // `read:org` is required so we can read the user's org memberships
+      // (`/user/orgs`) and concealed org members (`/orgs/{org}/members`)
+      // for the username autocomplete directory.
+      scope: 'read:user read:org',
     });
 
     res.redirect(`https://github.com/login/oauth/authorize?${params}`);
@@ -136,7 +140,21 @@ export function createAuthRoutes(): Router {
         organisation: userData.company ?? '',
       };
 
-      req.session.user = toSessionUser(user);
+      const sessionUser = toSessionUser(user);
+      // Persist the OAuth bearer alongside the user so the server can call
+      // GitHub on the user's behalf later (autocomplete directory refresh,
+      // tier-3 user search). Held server-side only — `toClientUser` strips
+      // it before any response is shaped.
+      sessionUser.accessToken = accessToken;
+      req.session.user = sessionUser;
+
+      // Kick off a non-blocking refresh of the autocomplete directory for
+      // this user. We don't await it: the redirect should land immediately
+      // and the cache fills in the background. Errors (revoked token,
+      // network) are logged and dropped — the dropdown silently degrades.
+      warmDirectoryForUser(sessionUser).catch((err) => {
+        warning('directory_warm_failed', { error: serialiseError(err), ghUsername: sessionUser.ghUsername });
+      });
 
       // Redirect to the app's home page (the Vite dev server in development)
       const redirectTo = req.session.returnTo ?? '/';

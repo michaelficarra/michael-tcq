@@ -36,6 +36,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 - **Inline markdown** — agenda item names and queue entry topics support a limited subset of inline markdown: bold, italic, strikethrough, code, and links. Rendered in the UI wherever items are displayed.
 - **GitHub avatars** — user avatars are shown alongside names throughout the application.
+- **Username autocomplete** — every GitHub-username input (agenda presenters, chair list, dev user-switcher) shows a fuzzy-match dropdown that prioritises users already in the meeting, then members of the searcher's own GitHub organisations (including concealed members), then a fallback global GitHub user search using the searcher's OAuth credentials. Matches login, display name, and company; case-insensitive. Free-text fallback still works for presenters who don't have a GitHub account.
 
 ### General UX
 

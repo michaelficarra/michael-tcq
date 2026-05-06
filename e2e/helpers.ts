@@ -79,7 +79,9 @@ export async function goToHelpTab(page: Page) {
 
 /**
  * Add an agenda item (must be on the Agenda tab as a chair).
- * `presenters` accepts a single username or an array; joined with commas.
+ * `presenters` accepts a single username or an array; the chip combobox
+ * commits each entry on Enter. The presenter list starts empty, so the
+ * helper just types each requested entry.
  */
 export async function addAgendaItem(page: Page, name: string, presenters?: string | string[], estimate?: number) {
   // Open the form. Playwright's click auto-waits for the button to be actionable,
@@ -90,8 +92,12 @@ export async function addAgendaItem(page: Page, name: string, presenters?: strin
   // Fill in the form
   await page.getByLabel('Agenda Item Name').fill(name);
   if (presenters !== undefined) {
-    const value = Array.isArray(presenters) ? presenters.join(', ') : presenters;
-    await page.getByLabel('Presenters').fill(value);
+    const presentersList = Array.isArray(presenters) ? presenters : [presenters];
+    const presentersInput = page.getByLabel('Presenters');
+    for (const p of presentersList) {
+      await presentersInput.fill(p);
+      await presentersInput.press('Enter');
+    }
   }
   if (estimate !== undefined) {
     // `exact: true` avoids matching the display-side "Estimate: Xm" aria-label

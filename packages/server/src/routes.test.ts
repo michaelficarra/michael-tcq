@@ -233,4 +233,40 @@ describe('Meeting REST routes', () => {
       expect(body).toHaveLength(1);
     });
   });
+
+  describe('GET /api/users/autocomplete', () => {
+    // The route delegates to githubDirectory.searchUsers; these tests
+    // exercise the route plumbing (param parsing, meeting lookup, response
+    // shape) rather than the directory's tier logic, which is covered by
+    // githubDirectory.test.ts.
+
+    it('returns mock-auth seed-list matches when OAuth is not configured', async () => {
+      // No GITHUB_CLIENT_ID set in this test environment — the directory
+      // takes the seed-list branch and skips the network entirely.
+      const res = await fetch(`${baseUrl}/api/users/autocomplete?q=mike&limit=5`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.users)).toBe(true);
+      // Each result must actually contain the query in login or name.
+      for (const u of body.users) {
+        expect(u.login.toLowerCase().includes('mike') || u.name.toLowerCase().includes('mike')).toBe(true);
+      }
+    });
+
+    it('clamps limit to a sane window', async () => {
+      // limit=999 must not cause a >25-result response.
+      const res = await fetch(`${baseUrl}/api/users/autocomplete?q=&limit=999`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.users.length).toBeLessThanOrEqual(25);
+    });
+
+    it('still returns results when meetingId points to a missing meeting', async () => {
+      // The route should treat a bogus meetingId as "no meeting context"
+      // (tier 1 just becomes empty) rather than 404 — autocomplete is a
+      // read-only suggestion endpoint, not a meeting-scoped action.
+      const res = await fetch(`${baseUrl}/api/users/autocomplete?q=&meetingId=nope`);
+      expect(res.status).toBe(200);
+    });
+  });
 });

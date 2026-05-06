@@ -364,8 +364,9 @@ describe('AgendaPanel', () => {
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
-      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: 'newperson' } });
-      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+      const input = screen.getByLabelText(/new chair username/i);
+      fireEvent.change(input, { target: { value: 'newperson' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
 
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
         usernames: ['alice', 'newperson'],
@@ -380,8 +381,9 @@ describe('AgendaPanel', () => {
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
-      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: 'Alice' } });
-      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+      const input = screen.getByLabelText(/new chair username/i);
+      fireEvent.change(input, { target: { value: 'Alice' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
 
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
         usernames: ['alice'],
@@ -399,8 +401,9 @@ describe('AgendaPanel', () => {
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
-      fireEvent.change(screen.getByLabelText(/new chair username/i), { target: { value: ' @newperson ' } });
-      fireEvent.submit(screen.getByLabelText(/new chair username/i));
+      const input = screen.getByLabelText(/new chair username/i);
+      fireEvent.change(input, { target: { value: ' @newperson ' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
 
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
         usernames: ['alice', 'newperson'],
@@ -409,8 +412,8 @@ describe('AgendaPanel', () => {
   });
 
   describe('inline edit', () => {
-    // Edit the presenters of an existing item using comma-separated
-    // `@name` handles — each entry is normalised before emit.
+    // Edit the presenters of an existing item via the chip combobox: each
+    // typed-and-Enter'd handle is normalised before becoming a token.
     it('strips a leading @ and surrounding whitespace from edited presenters', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
@@ -425,10 +428,13 @@ describe('AgendaPanel', () => {
       // Open the inline edit form on the only item
       fireEvent.click(screen.getByRole('button', { name: /^edit topic$/i }));
 
+      // Drop the auto-prefilled 'alice' chip, then add three new ones.
+      fireEvent.click(screen.getByLabelText('Remove alice'));
       const presentersInput = screen.getByLabelText('Presenters');
-      fireEvent.change(presentersInput, {
-        target: { value: ' @alice , @ bob, charlie ' },
-      });
+      for (const raw of [' @alice ', ' @ bob', 'charlie']) {
+        fireEvent.change(presentersInput, { target: { value: raw } });
+        fireEvent.keyDown(presentersInput, { key: 'Enter' });
+      }
 
       fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 

@@ -97,3 +97,5 @@ export {
 } from './helpers.js';
 export { applyDelta } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
+export { DEV_USERS } from './devUsers.js';
+export type { DevUser } from './devUsers.js';

@@ -57,3 +57,9 @@ When something looks like a distributed concern — ordering, drops, delays, con
 ---
 
 `packages/shared` has no test suite of its own. Its types and constants are exercised transitively whenever the server or client suites run.
+
+## Notable test files
+
+- `packages/server/src/githubDirectory.test.ts` — tier ordering, ACL (only orgs the searcher belongs to surface), dedup (by ghid and login), tier-3 top-up against `/search/users`, case-insensitive matching against login/name/company, and 401 token-revocation handling. Uses `setFetchForTesting` to install a deterministic stand-in for the module's outbound `fetch` without touching globals.
+- `packages/client/src/components/UserCombobox.test.tsx` — the suggestion combobox: 250 ms debounce, free-text fallback (typing a name with no suggestion still commits on Enter), comma-as-commit in the chip variant, dedup against existing tokens, Backspace-to-remove.
+- `e2e/autocomplete.spec.ts` — Playwright spec exercising the agenda-form presenters dropdown end-to-end against the mock-auth seed list.

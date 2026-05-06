@@ -39,6 +39,7 @@ import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
+import { UserCombobox } from './UserCombobox.js';
 
 // Stable references so useSensor's internal useMemo doesn't invalidate every render.
 const POINTER_SENSOR_OPTIONS = {
@@ -362,7 +363,7 @@ function SortableAgendaItem({
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editPresenters, setEditPresenters] = useState('');
+  const [editPresenters, setEditPresenters] = useState<string[]>([]);
   const [editDuration, setEditDuration] = useState('');
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -378,7 +379,7 @@ function SortableAgendaItem({
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
     setEditName(item.name);
-    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.ghUsername ?? k).join(', '));
+    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.ghUsername ?? k));
     setEditDuration(item.duration != null && item.duration > 0 ? String(item.duration) : '');
     setEditing(true);
   }
@@ -387,10 +388,7 @@ function SortableAgendaItem({
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmedName = editName.trim();
-    const presenterUsernames = editPresenters
-      .split(',')
-      .map(normaliseGithubUsername)
-      .filter((s) => s.length > 0);
+    const presenterUsernames = editPresenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
     if (!trimmedName || presenterUsernames.length === 0) return;
 
     const durationMinutes = parseInt(editDuration, 10);
@@ -441,18 +439,16 @@ function SortableAgendaItem({
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
-          <input
-            type="text"
-            value={editPresenters}
-            onChange={(e) => setEditPresenters(e.target.value)}
-            required
-            aria-label="Presenters"
-            placeholder="alice, bob"
-            title="GitHub usernames, comma-separated"
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-40
-                       dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
-          />
+          <div className="min-w-[10rem] max-w-[24rem]">
+            <UserCombobox
+              mode="multi"
+              values={editPresenters}
+              onChange={setEditPresenters}
+              meetingId={meeting?.id}
+              ariaLabel="Presenters"
+              placeholder="username"
+            />
+          </div>
           <input
             type="number"
             value={editDuration}
@@ -733,7 +729,6 @@ function ChairsSection() {
   const socket = useSocket();
   const canEditChairs = isChair || isAdmin;
   const [adding, setAdding] = useState(false);
-  const [addValue, setAddValue] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
   if (!meeting) return null;
@@ -756,9 +751,8 @@ function ChairsSection() {
   }
 
   /** Add a new chair by username. */
-  function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    const username = normaliseGithubUsername(addValue);
+  function commitAdd(rawUsername: string) {
+    const username = normaliseGithubUsername(rawUsername);
     if (!username) return;
 
     const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.ghUsername ?? id);
@@ -766,7 +760,6 @@ function ChairsSection() {
       usernames.push(username);
     }
     socket?.emit('meeting:updateChairs', { usernames });
-    setAddValue('');
     setAdding(false);
   }
 
@@ -821,36 +814,27 @@ function ChairsSection() {
         )}
 
         {adding && (
-          <form onSubmit={handleAdd} className="inline-flex items-center gap-1">
-            <input
-              type="text"
-              value={addValue}
-              onChange={(e) => setAddValue(e.target.value)}
+          <span className="inline-flex items-center gap-1">
+            <UserCombobox
+              mode="single"
+              meetingId={meeting.id}
               autoFocus
-              required
               placeholder="username"
-              aria-label="New chair username"
-              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-28
-                         dark:bg-stone-700 dark:text-stone-100
-                         focus:outline-none focus:ring-1 focus:ring-teal-500"
+              ariaLabel="New chair username"
+              onCommit={commitAdd}
+              onCancel={() => setAdding(false)}
+              inputClassName="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-32
+                              dark:bg-stone-700 dark:text-stone-100
+                              focus:outline-none focus:ring-1 focus:ring-teal-500"
             />
             <button
-              type="submit"
-              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
-            >
-              Add
-            </button>
-            <button
               type="button"
-              onClick={() => {
-                setAdding(false);
-                setAddValue('');
-              }}
+              onClick={() => setAdding(false)}
               className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
             </button>
-          </form>
+          </span>
         )}
       </div>
 

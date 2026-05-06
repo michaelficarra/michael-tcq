@@ -235,6 +235,31 @@ describe('Socket.IO integration', () => {
     expect(state2.id).toBe(meeting.id);
   });
 
+  it('records the joining user in meeting.users even when they are not otherwise referenced', async () => {
+    // The meeting is created with a different chair (not TEST_USER), so
+    // the joining socket's user starts out absent from meeting.users.
+    // After the socket joins, the join handler must surface them in
+    // `users` so the username-autocomplete tier-1 (people in this
+    // meeting) includes passive observers.
+    const chairUser: User = { ghid: 999, ghUsername: 'chair', name: 'Chair', organisation: '' };
+    const meeting = ctx.meetingManager.create([chairUser]);
+    expect(Object.keys(meeting.users)).toEqual([asUserKey('chair')]);
+
+    const client = makeClient();
+    const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+    await new Promise<void>((r) => client.on('connect', r));
+    client.emit('join', meeting.id);
+    await statePromise;
+
+    const updated = ctx.meetingManager.get(meeting.id)!;
+    expect(updated.users[asUserKey('testuser')]).toMatchObject({
+      ghid: TEST_USER.ghid,
+      ghUsername: TEST_USER.ghUsername,
+      name: TEST_USER.name,
+      organisation: TEST_USER.organisation,
+    });
+  });
+
   it('does not receive state when joining a non-existent meeting', async () => {
     const client = makeClient();
 

@@ -5,9 +5,10 @@ import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema }
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
+import { searchUsers, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
 import { getActiveConnectionCount, emitFullState } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
-import { toSessionUser } from './session.js';
+import { toSessionUser, toClientUser } from './session.js';
 import { getRecentErrors, getErrorCount } from './errorBuffer.js';
 import { getHttpCounters } from './httpCounters.js';
 import { getSocketCounters } from './socketCounters.js';
@@ -35,7 +36,8 @@ export function createMeetingRoutes(
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    res.json({ ...user, mockAuth: !isOAuthConfigured() });
+    // toClientUser strips the OAuth access token (server-only) before serialising.
+    res.json({ ...toClientUser(user), mockAuth: !isOAuthConfigured() });
   });
 
   // --- Dev-only: switch the mock user ---
@@ -70,7 +72,35 @@ export function createMeetingRoutes(
 
     req.session.user = toSessionUser(user);
     delete req.session.mockLoggedOut;
-    res.json(req.session.user);
+    // Mock-auth users have no access token to leak, but route through
+    // toClientUser anyway for consistency with /api/me.
+    res.json(toClientUser(req.session.user));
+  });
+
+  // --- GitHub username autocomplete ---
+  // Used by every input that accepts a GitHub username. Returns up to
+  // `limit` users in three deduped tiers:
+  //   1. users in the same meeting as the searcher (when `meetingId` is given),
+  //   2. members of any organisation the searcher belongs to,
+  //   3. global GitHub user search via the searcher's OAuth token.
+  // See packages/server/src/githubDirectory.ts for the algorithm.
+  router.get('/users/autocomplete', async (req, res) => {
+    const user = req.session.user;
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const meetingIdRaw = typeof req.query.meetingId === 'string' ? req.query.meetingId : undefined;
+    const limitRaw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : NaN;
+    // Clamp to a sane window — protects the upstream GitHub call from a
+    // pathological per_page=10000 and the response from blowing up.
+    const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 25) : DEFAULT_AUTOCOMPLETE_LIMIT;
+
+    const meeting = meetingIdRaw ? meetingManager.get(meetingIdRaw) : undefined;
+    const users = await searchUsers(user, q, meeting, limit);
+    res.json({ users });
   });
 
   // Create a new meeting. The request body should contain a `chairs` array

@@ -26,13 +26,13 @@ describe('UserMenu (dev user-switcher)', () => {
   it('prefills the input with the current username when opened', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: /admin/i }));
-    expect(screen.getByRole('textbox')).toHaveValue('admin');
+    expect(screen.getByRole('combobox')).toHaveValue('admin');
   });
 
   it('selects the prefilled text so typing replaces it', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: /admin/i }));
-    const input = screen.getByRole('textbox') as HTMLInputElement;
+    const input = screen.getByRole('combobox') as HTMLInputElement;
     // The callback ref should have selected all text
     expect(input.selectionStart).toBe(0);
     expect(input.selectionEnd).toBe('admin'.length);
@@ -41,11 +41,11 @@ describe('UserMenu (dev user-switcher)', () => {
   it('pressing Escape closes the switcher', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: /admin/i }));
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
 
-    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
 
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /admin/i })).toBeInTheDocument();
   });
 });
