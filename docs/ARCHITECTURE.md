@@ -78,7 +78,7 @@ tcq/
 │           └── requireAuth.ts   # Auth middleware for API routes
 ├── scripts/
 │   ├── seed-meeting.mjs         # Populate a meeting with sample data
-│   └── deploy.sh                # Build, push, and deploy to Cloud Run
+│   └── deploy.sh                # Build, push, and deploy to a Compute Engine VM
 └── docs/                        # PRD, Architecture, Contributing, Deployment
 ```
 
@@ -157,7 +157,7 @@ Socket.IO is the right transport for TCQ because it directly maps to the applica
 
 - **Rooms** — Each meeting is a Socket.IO room. When a client joins a meeting, they join the room. When state changes, the server broadcasts to the room. This is a single line of code.
 - **Bidirectional communication** — Clients send actions (add to queue, reorder agenda) and the server sends state updates. Both directions use the same connection.
-- **Automatic reconnection** — If a participant's connection drops (laptop sleep, network hiccup, or Cloud Run's 60-minute request timeout), Socket.IO reconnects and the client re-syncs state. This is critical for a meeting tool and is what makes Cloud Run's WebSocket timeout a non-issue.
+- **Automatic reconnection** — If a participant's connection drops (laptop sleep, network hiccup, an upstream restart), Socket.IO reconnects and the client re-syncs state. This is critical for a meeting tool and survives upstream connection-drop conditions transparently.
 - **Fallback transports** — Socket.IO falls back to long-polling if WebSocket connections are blocked by corporate proxies or firewalls, which is relevant for a standards committee tool where participants may be on restricted networks.
 - **Typed events** — Socket.IO supports TypeScript event type definitions on both client and server, using the shared types from `@tcq/shared`.
 
@@ -237,7 +237,7 @@ When the last client disconnects from a meeting, a cleanup timer starts (e.g. 5 
 - **Pure in-memory (no persistence)** — Simpler, but all meeting state is lost on redeployment. For a meeting tool where a deploy during an active meeting would force everyone to start over, this is a poor experience.
 - **PostgreSQL** — Requires running a database server, which adds docker-compose complexity or a managed database dependency. Overkill for storing a handful of JSON documents.
 - **Redis** — Requires an external process. GCP Memorystore (managed Redis) does not have a free tier.
-- **SQLite** — Works well locally but Cloud Run's filesystem is ephemeral, so SQLite data would be lost on container replacement — defeating the purpose of persistence.
+- **SQLite** — Works well locally but the production runtime is a container whose filesystem is rebuilt on every deploy, so SQLite data would be lost on container replacement — defeating the purpose of persistence. (A persistent volume on the VM would solve that, but Firestore gives us the same persistence with less to manage.)
 - **GCP Cloud Storage** — Could store meeting state as JSON blobs. Simpler than Firestore but has higher latency for frequent small writes and no document-level operations. Firestore is a better fit for structured data that changes frequently.
 
 ### Application Settings: Runtime-Mutable Singleton
@@ -304,7 +304,7 @@ The session cookie is shared across tabs in the same browser, so the server-side
 
 ## Logging and Observability
 
-All logging goes through a small zero-dependency module (`packages/server/src/logger.ts`) that writes one JSON object per line to stdout. Cloud Run's log agent ingests stdout/stderr and treats entries with a recognised `severity` field as structured `LogEntry` records, so no additional log-forwarding infrastructure is required.
+All logging goes through a small zero-dependency module (`packages/server/src/logger.ts`) that writes one JSON object per line to stdout. On the Container-Optimized OS host, the built-in fluent-bit agent (activated by the `google-logging-enabled=true` instance metadata flag) ingests container stdout/stderr and treats entries with a recognised `severity` field as structured `LogEntry` records, so no additional log-forwarding infrastructure is required.
 
 Every entry carries `severity`, `message`, `time`, `service`, and — when `GIT_SHA` is set at deploy time — the deployment commit SHA. Callers add domain-specific fields alongside those defaults.
 
@@ -316,9 +316,9 @@ Every entry carries `severity`, `message`, `time`, `service`, and — when `GIT_
 
 **Periodic task log.** `MeetingManager` emits structured entries for its background work: `meetings_restored` at startup, `periodic_sync_completed` when the 30-second dirty-meeting sweep wrote at least one meeting, `expiry_sweep_completed` for the hourly 90-day cleanup, and a `NOTICE`-level `meeting_expired` per removed meeting. Failures in either sweep log at `ERROR` and the timer keeps running.
 
-**Process-level error handlers.** `uncaughtException` and `unhandledRejection` handlers log at `CRITICAL` and exit with code 1 so Cloud Run recycles the instance rather than letting the process continue in an undefined state. An Express error-handling middleware (`errorHandler.ts`) catches thrown errors from routes (including rejected async handlers in Express 5), logs the stack at `ERROR` alongside the `httpRequest` shape, and responds with a 500 JSON body.
+**Process-level error handlers.** `uncaughtException` and `unhandledRejection` handlers log at `CRITICAL` and exit with code 1 so the systemd-managed container restarts rather than letting the process continue in an undefined state. An Express error-handling middleware (`errorHandler.ts`) catches thrown errors from routes (including rejected async handlers in Express 5), logs the stack at `ERROR` alongside the `httpRequest` shape, and responds with a 500 JSON body.
 
-**In-memory error ring (`errorBuffer.ts`).** Every `ERROR` or `CRITICAL` log line is mirrored into a 50-entry FIFO ring kept in process memory, alongside a monotonic counter of total errors recorded since startup. The ring is exposed through `GET /api/admin/diagnostics` so the diagnostics panel on the home page's Admin tab can surface recent failures without requiring access to Cloud Logging. State is process-local — when Cloud Run cycles the instance the ring resets, which is acceptable because the canonical record of errors lives in Cloud Logging. The buffer is bounded so a flood of errors can't grow memory unbounded; older entries are evicted FIFO and the counter still increments so admins can see that errors are happening even if the entries themselves have rolled off.
+**In-memory error ring (`errorBuffer.ts`).** Every `ERROR` or `CRITICAL` log line is mirrored into a 50-entry FIFO ring kept in process memory, alongside a monotonic counter of total errors recorded since startup. The ring is exposed through `GET /api/admin/diagnostics` so the diagnostics panel on the home page's Admin tab can surface recent failures without requiring access to Cloud Logging. State is process-local — when systemd restarts the container the ring resets, which is acceptable because the canonical record of errors lives in Cloud Logging. The buffer is bounded so a flood of errors can't grow memory unbounded; older entries are evicted FIFO and the counter still increments so admins can see that errors are happening even if the entries themselves have rolled off.
 
 ## Meeting ID Generation
 
@@ -326,27 +326,38 @@ Meeting IDs are generated using the `human-id` library, which produces three low
 
 ## Deployment
 
-### Target: Google Cloud Run
+### Target: Google Compute Engine VM (Container-Optimized OS)
 
-Cloud Run is a container-based platform on GCP with an Always Free tier that includes 180,000 vCPU-seconds, 360,000 GiB-seconds, and 2 million requests per month (in eligible regions: us-central1, us-east1, us-west1). It supports WebSockets and scales to zero when idle, meaning no cost is incurred outside of active meetings.
+TCQ runs on a single `e2-micro` VM in Google Compute Engine, with [Container-Optimized OS (COS)](https://cloud.google.com/container-optimized-os/docs) as the host. `e2-micro` is in GCP's Always-Free tier (744 hours/month per region in `us-east1`, `us-central1`, or `us-west1`), which covers a single VM running 24/7. COS auto-updates the OS and Docker on a managed schedule, has no package manager surface area, and ships with the Cloud Logging integration enabled by default — closest thing GCP has to a maintenance-free Linux VM.
 
-Cloud Run treats WebSocket connections as long-running HTTP requests. While a connection is open, the container instance remains active and consumes CPU/memory quota. For TCQ's usage pattern — a handful of meetings per month, each lasting a few hours with ~50 participants — this fits comfortably within the free tier. A rough estimate: a 4-hour meeting consumes ~14,400 vCPU-seconds, well under the 180,000 monthly allowance.
+The runtime layout on the VM is two Docker containers managed by systemd:
 
-**WebSocket timeout:** Cloud Run enforces a maximum request timeout of 60 minutes (default 5 minutes, configurable). WebSocket connections are dropped when this timeout is reached. This is not a problem for TCQ because Socket.IO handles automatic reconnection transparently — when a connection is dropped at the timeout boundary, the client reconnects and the server re-sends the current meeting state. The timeout should be configured to the maximum 3,600 seconds to minimise unnecessary reconnections.
+- **`tcq.service`** — the application itself. The systemd unit pulls the latest image from Artifact Registry and runs the container with `--network=host`, `--env-file=/etc/tcq/env`, and `Restart=always` so a crash is recovered automatically.
+- **`caddy.service`** — [Caddy 2](https://caddyserver.com/) as a reverse proxy in front of TCQ. Caddy obtains a Let's Encrypt certificate for the configured domain on first start and renews it on its own. Same `Restart=always` policy. Listens on `:80` and `:443`; `:80` is used for HTTP-01 validation and to redirect everything to HTTPS.
 
-**Session affinity:** Cloud Run provides best-effort session affinity, which helps route reconnecting clients back to the same instance. Since TCQ is sized for a single instance, this is not a concern in practice.
+A static external IP is reserved for the VM so its address stays stable across stop/start cycles (DNS A record points at it). Firewall rules open only `tcp:80` and `tcp:443`; the application's port (`3000`) is bound to `127.0.0.1` inside the VM and never reachable externally.
 
-**Deployment:** `gcloud run deploy` from a Dockerfile, or via the Cloud Console. The container image can be built and stored in GCP's Artifact Registry (also has a free tier).
+**WebSocket handling:** Compute Engine doesn't impose a request-timeout cap (unlike Cloud Run's 60-minute limit). WebSockets stay open indefinitely until the network or one of the endpoints decides to drop them. Socket.IO's automatic reconnection still handles the cases where they do drop (network blips, laptop sleep) — the same way it would on any host.
+
+**Logging:** COS-managed VMs forward container stdout/stderr to Cloud Logging when the instance has `google-logging-enabled=true` set in metadata. The structured JSON `LogEntry` records the server already emits (via `packages/server/src/logger.ts`) show up as queryable Cloud Logging entries with no agent install. Same for Cloud Monitoring metrics via `google-monitoring-enabled=true`.
+
+**Deployment:** `scripts/deploy.sh` builds the Docker image locally, pushes it to Artifact Registry, copies a fresh env file to the VM via `gcloud compute scp`, and `ssh`'s in to pull the image and restart `tcq.service`. The VM is provisioned via cloud-init on first run, which writes both systemd units and the Caddyfile; subsequent deploys leave the VM's configuration alone and only update the running image and env.
+
+**Why this shape over Cloud Run:**
+
+Cloud Run was the original deployment target. It bills request-based vCPU-seconds, and a WebSocket counts as one long request — so the bill scales with `attendees × hours × 1 vCPU` regardless of CPU activity. For TCQ's 24-active-hour, 50–60-attendee meetings, two meetings/month consume the full 180,000 vCPU-seconds Always-Free budget. Compute Engine's `e2-micro` has fixed monthly free hours and no per-WebSocket-second billing, so meeting count is no longer a budget you watch — only RAM headroom on the single small VM.
 
 **Alternatives considered:**
 
-- **Fly.io** — Previously had a generous free tier, but removed free allowances for new users in 2024. New accounts now receive only a short trial. No longer a viable free-tier option.
-- **Railway** — Has a free tier with a limited monthly credit ($5 as of writing). Could work, but the credit can be consumed quickly by a long-running process and there is less headroom than Cloud Run's Always Free allowances.
-- **Render** — The free tier spins down instances after 15 minutes of inactivity, which destroys all in-memory meeting state. This is problematic for a meeting tool where there may be quiet periods during a long meeting. Render's paid tier would work but is not free.
+- **Cloud Run** — Hands-off serverless model and scales to zero, but per-WebSocket-second billing tightly couples per-meeting cost to vCPU. Two 24-hour meetings/month consume the entire vCPU free tier.
+- **Fly.io** — Hobby-tier credit covers an always-on small VM (~$3/month). Globally distributed and WebSocket-friendly. Smaller resources than e2-micro and less integrated with the existing Firestore/Artifact Registry setup.
+- **Oracle Cloud Free Tier** — 4 ARM Ampere cores + 24 GB RAM and 10 TB outbound, all always-free. Vastly more headroom than anything else, but requires running outside GCP (different account, different IAM model, less convenient Firestore access). Worth revisiting if TCQ ever outgrows e2-micro.
+- **Cloudflare Durable Objects with WebSocket Hibernation** — DOs can hibernate connections; billing pauses while no messages flow. Architecturally interesting fit for the bursty mutation pattern, but a non-trivial rewrite (different runtime, different state model). Not justified at this scale.
+- **Render free tier** — Spins down instances after 15 minutes of inactivity, with a ~30 second cold start. Bad UX for the first joiner of a meeting.
+- **Railway** — $5/month credit, then paid. Not a real free tier for a 24/7 service.
 - **Vercel** — Serverless functions with no persistent WebSocket support. Fundamentally the wrong deployment model for this application.
 - **Cloudflare Workers** — Durable Objects could theoretically model each meeting, but the programming model is very different from standard Node.js and would add significant complexity.
-- **GCP Compute Engine** — The Always Free tier includes one e2-micro instance, which would work as a traditional VM. However, it requires manual server administration (OS updates, process management, SSL termination) that Cloud Run handles automatically. More operational burden for no benefit at this scale.
-- **GCP App Engine** — The standard environment has a free tier with 28 instance-hours/day and supports WebSockets in the Node.js runtime. A viable alternative to Cloud Run, but Cloud Run is the more modern GCP product and offers more flexibility (any container, no vendor-specific configuration files).
+- **GCP App Engine** — The standard environment supports WebSockets in the Node.js runtime, but its programming model expects per-request cleanup that doesn't fit a long-lived in-memory `MeetingState` map.
 
 ### Deployment Configuration
 
@@ -372,14 +383,14 @@ GitHub OAuth is optional for local development — when `GITHUB_CLIENT_ID` is no
 
 **How local differs from production:**
 
-| Concern               | Local Development                                                                                         | Production (Cloud Run)                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Frontend**          | Vite dev server with HMR on a separate port; proxies API/WebSocket requests to the Express server         | Pre-built static files served directly by Express                          |
-| **Server**            | Runs via `tsx --watch` (or similar) for automatic restart on file changes                                 | Compiled JavaScript, run directly with `node`                              |
-| **Persistence**       | Meeting state and sessions written to JSON files on the local filesystem (the `file` persistence adapter) | Firestore (the `firestore` persistence adapter)                            |
-| **OAuth**             | A separate GitHub OAuth App configured with `http://localhost:<port>` as the callback URL                 | A GitHub OAuth App configured with the production URL                      |
-| **HTTPS**             | Not used; plain HTTP on localhost                                                                         | Terminated by Cloud Run's load balancer                                    |
-| **WebSocket timeout** | None; connections persist indefinitely                                                                    | Cloud Run enforces a 60-minute maximum; Socket.IO reconnects transparently |
+| Concern               | Local Development                                                                                         | Production (Compute Engine VM)                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Frontend**          | Vite dev server with HMR on a separate port; proxies API/WebSocket requests to the Express server         | Pre-built static files served directly by Express                             |
+| **Server**            | Runs via `tsx --watch` (or similar) for automatic restart on file changes                                 | Compiled JavaScript in a Docker container, managed by systemd                 |
+| **Persistence**       | Meeting state and sessions written to JSON files on the local filesystem (the `file` persistence adapter) | Firestore (the `firestore` persistence adapter)                               |
+| **OAuth**             | A separate GitHub OAuth App configured with `http://localhost:<port>` as the callback URL                 | A GitHub OAuth App configured with the production URL                         |
+| **HTTPS**             | Not used; plain HTTP on localhost                                                                         | Terminated by Caddy in front of TCQ; Let's Encrypt cert auto-renewed          |
+| **WebSocket timeout** | None; connections persist indefinitely                                                                    | None at the host; Socket.IO reconnects transparently if the network drops one |
 
 **Persistence adapter:** The persistence layer is behind a simple interface:
 

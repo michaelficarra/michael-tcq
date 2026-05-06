@@ -1,33 +1,59 @@
 #!/usr/bin/env bash
 #
-# Build, push, and deploy TCQ to Google Cloud Run.
+# Build, push, and deploy TCQ to a Compute Engine VM running
+# Container-Optimized OS (COS).
 #
-# On first run, or any time a required field is missing from .env.production,
-# the script walks the user through setup interactively:
+# Why this shape:
+#
+#   - **COS** is Google's container-optimised Linux distribution. It
+#     auto-updates the OS and the Docker runtime on a managed schedule,
+#     has no package manager surface area, and ships with the Cloud
+#     Logging integration enabled by default. Closest thing GCP has to
+#     a maintenance-free VM.
+#   - **Caddy** runs as a Docker container in front of TCQ and handles
+#     HTTPS automatically — Let's Encrypt issuance, renewal, and
+#     redirection from HTTP to HTTPS. Zero TLS config beyond the domain
+#     name.
+#   - **systemd** units (one per container) provide crash recovery via
+#     `Restart=always`. If TCQ panics, systemd starts it back up; if
+#     COS reboots for an OS update, both containers come back on boot.
+#   - **Cloud Logging** picks up container stdout/stderr via the
+#     `google-logging-enabled=true` instance metadata flag. No agent
+#     install needed; the structured JSON logs the server already emits
+#     show up as queryable LogEntry records the same way they did on
+#     Cloud Run.
+#
+# On first run, or any time a required field is missing from
+# .env.production, the script walks the user through setup interactively:
 #
 #   - installs gcloud (via Homebrew or the official tarball) if missing,
-#   - prompts for GCP project ID, region, admin usernames, etc.,
+#   - prompts for GCP project ID, region/zone, VM name, custom domain,
+#     admin usernames, etc.,
 #   - creates the project, links a billing account (chosen from a menu),
-#   - enables APIs, creates the Firestore database, service account, and
-#     Artifact Registry repo (all idempotent — safe to re-run),
+#   - enables APIs, creates the Firestore database, service account,
+#     Artifact Registry repo, static external IP, and firewall rules
+#     (all idempotent — safe to re-run),
 #   - generates SESSION_SECRET and writes .env.production,
-#   - builds and deploys,
-#   - prints a pre-filled GitHub OAuth App registration URL and, once the
-#     user pastes in the Client ID and Client Secret, redeploys with real
-#     GitHub auth enabled.
+#   - provisions the VM with cloud-init that installs both systemd
+#     units on first boot,
+#   - builds and pushes the Docker image, then SSHes in to pull it and
+#     restart the TCQ unit,
+#   - prints a pre-filled GitHub OAuth App registration URL and, once
+#     the user pastes in the Client ID and Client Secret, redeploys
+#     with real GitHub auth enabled.
 #
 # Re-runs with a fully populated .env.production skip every prompt and
-# behave as a straight build + push + deploy.
+# behave as a straight build + push + restart.
 #
 # Fields read from .env.production:
 #
 #   Required (prompted if missing):
-#     GCP_PROJECT_ID, GCP_REGION, GCP_SERVICE_ACCOUNT, CLOUD_RUN_SERVICE,
-#     SESSION_SECRET, STORE, ADMIN_USERNAMES
+#     GCP_PROJECT_ID, GCP_REGION, GCP_ZONE, GCP_SERVICE_ACCOUNT, VM_NAME,
+#     SESSION_SECRET, STORE, ADMIN_USERNAMES, CUSTOM_DOMAIN
 #
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
-#     GITHUB_CALLBACK_URL, CUSTOM_DOMAIN
+#     GITHUB_CALLBACK_URL
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -77,8 +103,6 @@ prompt_with_default() {
 }
 
 # Percent-encode a string for safe use in a URL query component.
-# Leaves RFC 3986 unreserved characters (A-Z a-z 0-9 - . _ ~) as-is; every
-# other byte is emitted as %HH.
 url_encode() {
   local s="$1" i c out=""
   for ((i = 0; i < ${#s}; i++)); do
@@ -115,7 +139,6 @@ load_env_file() {
 # Install / auth: gcloud
 # ---------------------------------------------------------------------------
 
-# Download and install the Google Cloud SDK tarball into $HOME.
 install_gcloud_tarball() {
   local os arch url dir archive
   os="$(uname -s)"
@@ -160,9 +183,6 @@ install_gcloud_tarball() {
   echo "for the PATH change to stick. This run will use $dir/bin directly."
 }
 
-# If Homebrew is available, install the cask and locate the bin directory.
-# Returns 0 on success, non-zero if brew isn't present or the bin can't be
-# located (caller should fall back to the tarball installer).
 install_gcloud_via_brew() {
   command -v brew >/dev/null 2>&1 || return 1
   echo "Installing Google Cloud SDK via Homebrew..."
@@ -185,12 +205,11 @@ ensure_gcloud() {
     return 0
   fi
   echo "gcloud (Google Cloud SDK) is not installed."
-  echo "It's required to provision GCP resources and deploy to Cloud Run."
+  echo "It's required to provision GCP resources and SSH to the VM."
   if ! confirm "Install gcloud now?" y; then
     echo "Install it manually and re-run: https://cloud.google.com/sdk/docs/install" >&2
     exit 1
   fi
-  # Prefer Homebrew on systems that have it; fall back to the official tarball.
   install_gcloud_via_brew || install_gcloud_tarball || exit 1
   if ! command -v gcloud >/dev/null 2>&1; then
     echo "gcloud was installed but isn't on PATH in this shell." >&2
@@ -217,9 +236,6 @@ ensure_clean_working_tree() {
   fi
 }
 
-# Fail fast if the user hasn't run `gcloud auth login`. We don't invoke
-# `gcloud auth login` from inside the script because it opens a browser
-# and handles poorly when the script itself is driving an interactive flow.
 ensure_auth() {
   ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
   if [ -z "$ACTIVE_ACCOUNT" ]; then
@@ -246,23 +262,31 @@ ensure_project_id() {
 
 ensure_region() {
   if [ -z "${GCP_REGION:-}" ]; then
-    # us-east1, us-central1, and us-west1 are free-tier-eligible for Firestore.
+    # us-east1, us-central1, and us-west1 are free-tier eligible for
+    # Firestore *and* Compute Engine's e2-micro Always-Free instance.
     GCP_REGION="$(prompt_with_default "GCP region" "us-central1")"
     upsert_env GCP_REGION "$GCP_REGION"
   fi
 }
 
-ensure_service_name() {
-  if [ -z "${CLOUD_RUN_SERVICE:-}" ]; then
-    CLOUD_RUN_SERVICE="$(prompt_with_default "Cloud Run service name" "tcq")"
-    upsert_env CLOUD_RUN_SERVICE "$CLOUD_RUN_SERVICE"
+ensure_zone() {
+  if [ -z "${GCP_ZONE:-}" ]; then
+    # Default to zone -a in the region; users can override if quota dictates.
+    GCP_ZONE="$(prompt_with_default "GCP zone" "${GCP_REGION}-a")"
+    upsert_env GCP_ZONE "$GCP_ZONE"
   fi
 }
 
-# SA email is derived — no prompt needed.
+ensure_vm_name() {
+  if [ -z "${VM_NAME:-}" ]; then
+    VM_NAME="$(prompt_with_default "VM name" "tcq")"
+    upsert_env VM_NAME "$VM_NAME"
+  fi
+}
+
 ensure_service_account_email() {
   if [ -z "${GCP_SERVICE_ACCOUNT:-}" ]; then
-    GCP_SERVICE_ACCOUNT="tcq-cloudrun@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+    GCP_SERVICE_ACCOUNT="tcq-vm@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
     upsert_env GCP_SERVICE_ACCOUNT "$GCP_SERVICE_ACCOUNT"
   fi
 }
@@ -281,14 +305,30 @@ ensure_store() {
   fi
 }
 
-# Admin usernames are optional server-side, but without any entry nobody gets
-# admin access — so prompt, but let the user skip with a blank answer.
 ensure_admin_usernames() {
   if [ -z "${ADMIN_USERNAMES:-}" ]; then
     read -r -p "GitHub usernames to grant admin access (comma-separated, blank to skip): " ADMIN_USERNAMES
     if [ -n "$ADMIN_USERNAMES" ]; then
       upsert_env ADMIN_USERNAMES "$ADMIN_USERNAMES"
     fi
+  fi
+}
+
+# Domain is required for Caddy to issue a Let's Encrypt cert. Without
+# one, the VM only serves plaintext HTTP, which browsers refuse to use
+# for cookie-bearing sessions. Refusing to proceed without a domain
+# avoids a half-deployed, broken-auth state.
+ensure_custom_domain() {
+  if [ -z "${CUSTOM_DOMAIN:-}" ]; then
+    echo ""
+    echo "Custom domain is required."
+    echo "Caddy uses it to obtain a Let's Encrypt TLS certificate; the"
+    echo "deploy can't complete without one. After this script provisions"
+    echo "the VM and prints its external IP, point an A record at that IP"
+    echo "and let DNS propagate before Caddy will be able to issue."
+    echo ""
+    CUSTOM_DOMAIN="$(prompt_with_default "Domain (e.g. tcq.example.org)")"
+    upsert_env CUSTOM_DOMAIN "$CUSTOM_DOMAIN"
   fi
 }
 
@@ -313,8 +353,9 @@ ensure_billing_linked() {
 
   echo ""
   echo "Project $GCP_PROJECT_ID is not linked to a billing account."
-  echo "Cloud Run and Artifact Registry require one, even though TCQ fits"
-  echo "comfortably inside the always-free tier."
+  echo "Compute Engine, Artifact Registry, and Firestore all require one,"
+  echo "even though TCQ on an e2-micro fits comfortably inside the"
+  echo "always-free tier (744 hours/month per region)."
   echo ""
 
   local accounts
@@ -351,7 +392,16 @@ ensure_billing_linked() {
 }
 
 ensure_apis() {
-  local needed=(firestore.googleapis.com run.googleapis.com artifactregistry.googleapis.com)
+  # `compute` for the VM, `firestore` for state, `artifactregistry` for the
+  # image, `logging` and `monitoring` for the COS-built-in agents to write
+  # logs and metrics to Cloud Logging / Monitoring without manual install.
+  local needed=(
+    compute.googleapis.com
+    firestore.googleapis.com
+    artifactregistry.googleapis.com
+    logging.googleapis.com
+    monitoring.googleapis.com
+  )
   local enabled
   enabled="$(gcloud services list --enabled --project="$GCP_PROJECT_ID" --format='value(config.name)' 2>/dev/null || true)"
   local to_enable=() api
@@ -389,11 +439,6 @@ ensure_firestore() {
 
 ensure_session_ttl_policy() {
   local db_id="${FIRESTORE_DATABASE_ID:-(default)}"
-  # Enable a Firestore TTL policy on the `expireAt` field of the `sessions`
-  # collection so expired session documents are pruned automatically. The
-  # custom parser in packages/server/src/sessionDocParser.ts populates this
-  # field with cookie expiry + 24h. Re-applying an already-enabled TTL is a
-  # no-op, so this is safe to re-run.
   echo "Ensuring Firestore TTL policy on sessions.expireAt..."
   gcloud firestore fields ttls update expireAt \
     --collection-group=sessions \
@@ -405,17 +450,31 @@ ensure_session_ttl_policy() {
 ensure_service_account() {
   if ! gcloud iam service-accounts describe "$GCP_SERVICE_ACCOUNT" \
          --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
-    echo "Creating service account tcq-cloudrun..."
-    gcloud iam service-accounts create tcq-cloudrun \
-      --display-name="TCQ Cloud Run" \
+    echo "Creating service account tcq-vm..."
+    gcloud iam service-accounts create tcq-vm \
+      --display-name="TCQ VM" \
       --project="$GCP_PROJECT_ID"
   fi
-  # Both bindings are idempotent — re-applying a present binding is a no-op.
-  gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
-    --member="serviceAccount:$GCP_SERVICE_ACCOUNT" \
-    --role="roles/datastore.user" \
-    --condition=None \
-    >/dev/null
+  # Roles the VM's service account needs:
+  #   - datastore.user            → Firestore reads/writes
+  #   - artifactregistry.reader   → docker pull from AR
+  #   - logging.logWriter         → COS forwarding container stdout to Cloud Logging
+  #   - monitoring.metricWriter   → COS forwarding metrics to Cloud Monitoring
+  # All idempotent — re-applying a present binding is a no-op.
+  local role
+  for role in \
+      roles/datastore.user \
+      roles/artifactregistry.reader \
+      roles/logging.logWriter \
+      roles/monitoring.metricWriter; do
+    gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+      --member="serviceAccount:$GCP_SERVICE_ACCOUNT" \
+      --role="$role" \
+      --condition=None \
+      >/dev/null
+  done
+  # The deploying user needs to be able to attach the service account
+  # to a VM (the 'iam.serviceAccountUser' role on the project).
   gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
     --member="user:$ACTIVE_ACCOUNT" \
     --role="roles/iam.serviceAccountUser" \
@@ -434,29 +493,218 @@ ensure_artifact_registry() {
       --location="$GCP_REGION" \
       --project="$GCP_PROJECT_ID"
   fi
-  # Registers a Docker credential helper for this registry host. Idempotent.
   gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet >/dev/null
+}
+
+# A static external IP keeps the VM's address stable across stops/starts —
+# important because the user's DNS A record points at it. The IP is free
+# while attached to a running VM.
+ensure_static_ip() {
+  STATIC_IP_NAME="${VM_NAME}-ip"
+  if ! gcloud compute addresses describe "$STATIC_IP_NAME" \
+         --region="$GCP_REGION" \
+         --project="$GCP_PROJECT_ID" \
+         >/dev/null 2>&1; then
+    echo "Reserving static external IP $STATIC_IP_NAME..."
+    gcloud compute addresses create "$STATIC_IP_NAME" \
+      --region="$GCP_REGION" \
+      --project="$GCP_PROJECT_ID" \
+      >/dev/null
+  fi
+  STATIC_IP="$(gcloud compute addresses describe "$STATIC_IP_NAME" \
+    --region="$GCP_REGION" \
+    --project="$GCP_PROJECT_ID" \
+    --format='value(address)')"
+}
+
+# Open 80 (Let's Encrypt HTTP-01 validation + redirect) and 443 (HTTPS)
+# only on VMs tagged `tcq-server`. The VM is created with that tag below.
+ensure_firewall_rules() {
+  local rule="tcq-allow-http-https"
+  if ! gcloud compute firewall-rules describe "$rule" \
+         --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
+    echo "Creating firewall rule $rule..."
+    gcloud compute firewall-rules create "$rule" \
+      --project="$GCP_PROJECT_ID" \
+      --direction=INGRESS \
+      --action=ALLOW \
+      --rules=tcp:80,tcp:443 \
+      --source-ranges=0.0.0.0/0 \
+      --target-tags=tcq-server \
+      >/dev/null
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Cloud-init: write the systemd units, Caddyfile, and env file on first boot
+# ---------------------------------------------------------------------------
+#
+# COS supports cloud-init's `write_files` and `runcmd` directives. The
+# generated user-data:
+#
+#   1. Writes /etc/systemd/system/tcq.service      — runs the TCQ container
+#   2. Writes /etc/systemd/system/caddy.service    — runs Caddy in front
+#   3. Writes /etc/caddy/Caddyfile                  — domain → 127.0.0.1:3000
+#   4. Writes /etc/tcq/env                          — server env vars
+#   5. Writes /etc/systemd/system/tcq-redeploy.service — receives `docker
+#      pull && systemctl restart tcq` from the deploy script via SSH
+#   6. Enables and starts both units on boot
+#
+# `Restart=always` on each service handles crash recovery; both units
+# come back automatically on COS auto-update reboots.
+generate_cloud_init() {
+  local image_url="$1"
+
+  cat <<EOF
+#cloud-config
+
+# COS forwards stdout/stderr from containers it manages to Cloud Logging
+# automatically when the instance has logging enabled in metadata, which
+# we set on \`gcloud compute instances create\` below. Both systemd units
+# below run their containers in the foreground (\`docker run --rm\`),
+# which is what triggers that capture path.
+
+write_files:
+- path: /etc/systemd/system/tcq.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=TCQ application container
+    Wants=gcr-online.target docker.socket network-online.target
+    After=gcr-online.target docker.socket network-online.target
+    StartLimitIntervalSec=0
+
+    [Service]
+    Environment=HOME=/var/lib/tcq
+    # Authenticate Docker to Artifact Registry on every start so a
+    # rotated host key or token doesn't wedge the container forever.
+    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries=${GCP_REGION}-docker.pkg.dev
+    ExecStartPre=-/usr/bin/docker stop tcq
+    ExecStartPre=-/usr/bin/docker rm tcq
+    ExecStart=/usr/bin/docker run --rm --name=tcq \\
+      --network=host \\
+      --env-file=/etc/tcq/env \\
+      ${image_url}
+    Restart=always
+    RestartSec=5
+    TimeoutStartSec=300
+
+    [Install]
+    WantedBy=multi-user.target
+
+- path: /etc/systemd/system/caddy.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Caddy reverse proxy with automatic HTTPS
+    Wants=gcr-online.target docker.socket network-online.target tcq.service
+    After=gcr-online.target docker.socket network-online.target tcq.service
+    StartLimitIntervalSec=0
+
+    [Service]
+    ExecStartPre=-/usr/bin/docker stop caddy
+    ExecStartPre=-/usr/bin/docker rm caddy
+    ExecStart=/usr/bin/docker run --rm --name=caddy \\
+      --network=host \\
+      -v /var/lib/caddy/data:/data \\
+      -v /var/lib/caddy/config:/config \\
+      -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \\
+      caddy:2-alpine
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+
+- path: /etc/caddy/Caddyfile
+  permissions: 0644
+  owner: root
+  content: |
+    # Caddy auto-issues and renews a Let's Encrypt cert for this name as
+    # long as DNS resolves to this VM and ports 80/443 are reachable.
+    ${CUSTOM_DOMAIN} {
+      reverse_proxy 127.0.0.1:3000
+    }
+
+- path: /etc/tcq/env
+  permissions: 0600
+  owner: root
+  content: |
+    NODE_ENV=production
+    PORT=3000
+    STORE=${STORE:-firestore}
+    SESSION_SECRET=${SESSION_SECRET}
+$([ -n "${FIRESTORE_DATABASE_ID:-}" ] && echo "    FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID}")
+$([ -n "${ADMIN_USERNAMES:-}" ] && echo "    ADMIN_USERNAMES=${ADMIN_USERNAMES}")
+$([ -n "${GITHUB_CLIENT_ID:-}" ] && echo "    GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}")
+$([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}")
+$([ -n "${GITHUB_CALLBACK_URL:-}" ] && echo "    GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}")
+
+runcmd:
+- mkdir -p /var/lib/tcq /var/lib/caddy/data /var/lib/caddy/config
+- systemctl daemon-reload
+- systemctl enable --now tcq.service
+- systemctl enable --now caddy.service
+EOF
+}
+
+# Provision the VM if it doesn't exist. e2-micro is the always-free tier
+# instance type (744 hours/month per region). Container-Optimized OS
+# (\`cos-stable\`) auto-updates the OS and Docker on a managed schedule.
+ensure_vm() {
+  if gcloud compute instances describe "$VM_NAME" \
+       --zone="$GCP_ZONE" \
+       --project="$GCP_PROJECT_ID" \
+       >/dev/null 2>&1; then
+    echo "VM $VM_NAME already exists in $GCP_ZONE — skipping provisioning."
+    return 0
+  fi
+
+  echo ""
+  echo "Provisioning VM $VM_NAME in $GCP_ZONE (this takes a minute or two)..."
+  local cloud_init_file
+  cloud_init_file="$(mktemp -t tcq-cloud-init.XXXXXX.yaml)"
+  generate_cloud_init "$IMAGE" > "$cloud_init_file"
+
+  # `cos-stable` is the auto-updating Container-Optimized OS image
+  # family. Setting `google-logging-enabled=true` and
+  # `google-monitoring-enabled=true` activates the COS-built-in
+  # forwarding of container stdout/stderr to Cloud Logging and metrics
+  # to Cloud Monitoring without an Ops Agent install.
+  gcloud compute instances create "$VM_NAME" \
+    --project="$GCP_PROJECT_ID" \
+    --zone="$GCP_ZONE" \
+    --machine-type=e2-micro \
+    --image-family=cos-stable \
+    --image-project=cos-cloud \
+    --boot-disk-size=30GB \
+    --boot-disk-type=pd-standard \
+    --service-account="$GCP_SERVICE_ACCOUNT" \
+    --scopes=cloud-platform \
+    --address="$STATIC_IP" \
+    --tags=tcq-server \
+    --metadata=google-logging-enabled=true,google-monitoring-enabled=true \
+    --metadata-from-file=user-data="$cloud_init_file" \
+    >/dev/null
+
+  rm -f "$cloud_init_file"
+
+  echo ""
+  echo "VM provisioned with external IP $STATIC_IP."
+  echo ""
+  echo "Before TLS will work, point an A record at this address:"
+  echo "  $CUSTOM_DOMAIN  →  $STATIC_IP"
+  echo ""
+  echo "Caddy retries Let's Encrypt issuance until DNS resolves, so the"
+  echo "VM can be created and DNS configured in either order; HTTPS will"
+  echo "start working once both are in place."
 }
 
 # ---------------------------------------------------------------------------
 # Build, push, deploy
 # ---------------------------------------------------------------------------
-
-compute_env_vars() {
-  # Record the commit we're shipping so the server can expose it at /api/version.
-  # ensure_clean_working_tree() already ran, so HEAD is what's actually in the image.
-  local git_sha
-  git_sha="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
-
-  ENV_VARS="STORE=${STORE:-firestore}"
-  ENV_VARS+=",SESSION_SECRET=${SESSION_SECRET}"
-  ENV_VARS+=",GIT_SHA=${git_sha}"
-  [ -n "${GITHUB_CLIENT_ID:-}" ]       && ENV_VARS+=",GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"
-  [ -n "${GITHUB_CLIENT_SECRET:-}" ]   && ENV_VARS+=",GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}"
-  [ -n "${GITHUB_CALLBACK_URL:-}" ]    && ENV_VARS+=",GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"
-  [ -n "${FIRESTORE_DATABASE_ID:-}" ]  && ENV_VARS+=",FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID}"
-  [ -n "${ADMIN_USERNAMES:-}" ]        && ENV_VARS+=",ADMIN_USERNAMES=${ADMIN_USERNAMES}"
-}
 
 build_and_push() {
   echo ""
@@ -467,35 +715,79 @@ build_and_push() {
   docker push "$IMAGE"
 }
 
-deploy_service() {
-  compute_env_vars
+# On first boot the VM's tcq.service hasn't yet pulled the latest image
+# (cloud-init wrote the systemd units but the image only just got pushed
+# from this machine). Pulling and restarting from here covers both the
+# first-deploy case and every subsequent redeploy.
+deploy_to_vm() {
   echo ""
-  echo "Deploying to Cloud Run..."
-  gcloud run deploy "$CLOUD_RUN_SERVICE" \
+  echo "Deploying to VM $VM_NAME..."
+
+  # The env file on the VM is only written by cloud-init at boot time,
+  # so subsequent env changes (a new SESSION_SECRET, OAuth credentials
+  # added later, etc.) need to be pushed along with the image. We
+  # re-render and copy the file every deploy.
+  local env_tmp
+  env_tmp="$(mktemp -t tcq-env.XXXXXX)"
+  cat > "$env_tmp" <<EOF
+NODE_ENV=production
+PORT=3000
+STORE=${STORE:-firestore}
+SESSION_SECRET=${SESSION_SECRET}
+GIT_SHA=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+EOF
+  [ -n "${FIRESTORE_DATABASE_ID:-}" ] && echo "FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID}" >> "$env_tmp"
+  [ -n "${ADMIN_USERNAMES:-}" ]       && echo "ADMIN_USERNAMES=${ADMIN_USERNAMES}"           >> "$env_tmp"
+  [ -n "${GITHUB_CLIENT_ID:-}" ]      && echo "GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${GITHUB_CLIENT_SECRET:-}" ]  && echo "GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${GITHUB_CALLBACK_URL:-}" ]   && echo "GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"   >> "$env_tmp"
+
+  # Wait briefly for SSH to come up on a fresh VM before the first
+  # `gcloud compute scp` — fresh COS instances take ~30 s to settle.
+  echo "Waiting for SSH to be reachable (up to 60s)..."
+  local i
+  for i in {1..12}; do
+    if gcloud compute ssh "$VM_NAME" \
+         --zone="$GCP_ZONE" \
+         --project="$GCP_PROJECT_ID" \
+         --command='true' >/dev/null 2>&1; then
+      break
+    fi
+    sleep 5
+  done
+
+  echo "Copying updated env to VM..."
+  gcloud compute scp "$env_tmp" "$VM_NAME:/tmp/tcq.env" \
+    --zone="$GCP_ZONE" \
     --project="$GCP_PROJECT_ID" \
-    --image="$IMAGE" \
-    --region="$GCP_REGION" \
-    --service-account="$GCP_SERVICE_ACCOUNT" \
-    --allow-unauthenticated \
-    --set-env-vars "$ENV_VARS" \
-    --timeout 3600 \
-    --session-affinity
+    >/dev/null
+  rm -f "$env_tmp"
+
+  echo "Pulling image and restarting tcq.service..."
+  # `sudo` is implicit on COS for the default ssh user (`google-sudoers`
+  # group). Move the env file into place, pull the new image, and
+  # restart — Caddy doesn't need restarting because the Caddyfile
+  # didn't change.
+  gcloud compute ssh "$VM_NAME" \
+    --zone="$GCP_ZONE" \
+    --project="$GCP_PROJECT_ID" \
+    --command="
+      set -e
+      sudo install -m 0600 /tmp/tcq.env /etc/tcq/env
+      rm -f /tmp/tcq.env
+      sudo docker-credential-gcr configure-docker --registries=${GCP_REGION}-docker.pkg.dev >/dev/null
+      sudo docker pull '$IMAGE'
+      sudo systemctl restart tcq.service
+    " >/dev/null
 }
 
 get_service_url() {
-  gcloud run services describe "$CLOUD_RUN_SERVICE" \
-    --project="$GCP_PROJECT_ID" \
-    --region="$GCP_REGION" \
-    --format='value(status.url)'
+  echo "https://${CUSTOM_DOMAIN}"
 }
 
 # ---------------------------------------------------------------------------
 # Post-deploy: prompt for GitHub OAuth App credentials if missing.
 # ---------------------------------------------------------------------------
-# Creating an OAuth App is the only remaining web-UI step — GitHub's API
-# doesn't expose OAuth App registration, and the `gh` CLI has no command
-# for it. We drive the user there with a pre-filled URL, collect the
-# credentials they paste back, write them to .env.production, and redeploy.
 
 ensure_github_oauth() {
   if [ -n "${GITHUB_CLIENT_ID:-}" ] && [ -n "${GITHUB_CLIENT_SECRET:-}" ]; then
@@ -503,18 +795,7 @@ ensure_github_oauth() {
   fi
 
   local url callback
-  # Prefer a custom domain when one is configured: the OAuth App should be
-  # registered against the URL users will actually visit, so that the
-  # Authorization callback URL stays valid after a domain switch.
-  if [ -n "${CUSTOM_DOMAIN:-}" ]; then
-    url="https://${CUSTOM_DOMAIN}"
-  else
-    url="$(get_service_url)"
-  fi
-  if [ -z "$url" ]; then
-    echo "Couldn't determine service URL; skipping OAuth setup." >&2
-    return 0
-  fi
+  url="https://${CUSTOM_DOMAIN}"
   callback="$url/auth/github/callback"
 
   echo ""
@@ -523,9 +804,6 @@ ensure_github_oauth() {
   echo "To enable real GitHub sign-in, register a new OAuth App. The link below"
   echo "pre-fills the form; just click Register application:"
   echo ""
-  # The key names contain [ and ], which are reserved in RFC 3986 and must
-  # be encoded; the URL values also get encoded so : and / in them are safe
-  # inside a query component.
   local enc_name enc_url enc_callback
   enc_name="$(url_encode TCQ)"
   enc_url="$(url_encode "$url")"
@@ -556,8 +834,8 @@ ensure_github_oauth() {
   upsert_env GITHUB_CALLBACK_URL "$GITHUB_CALLBACK_URL"
 
   echo ""
-  echo "Redeploying with GitHub OAuth enabled..."
-  deploy_service
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
 }
 
 # ---------------------------------------------------------------------------
@@ -569,7 +847,6 @@ main() {
   ensure_gcloud
   ensure_auth
 
-  # Seed an empty .env.production with a header the first time through.
   if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" <<'EOF'
 # TCQ production environment — written and maintained by scripts/deploy.sh.
@@ -579,18 +856,16 @@ EOF
 
   load_env_file
 
-  # Collect (or confirm) every required field, writing back to the env file
-  # as we go so partial progress survives Ctrl-C.
   ensure_project_id
   ensure_region
-  ensure_service_name
+  ensure_zone
+  ensure_vm_name
   ensure_service_account_email
   ensure_session_secret
   ensure_store
   ensure_admin_usernames
+  ensure_custom_domain
 
-  # Idempotent provisioning — each step checks whether the resource exists
-  # before creating it.
   ensure_project_exists
   ensure_billing_linked
   ensure_apis
@@ -598,12 +873,15 @@ EOF
   ensure_session_ttl_policy
   ensure_service_account
   ensure_artifact_registry
+  ensure_static_ip
+  ensure_firewall_rules
 
   REGISTRY="${GCP_REGION}-docker.pkg.dev"
-  IMAGE="${REGISTRY}/${GCP_PROJECT_ID}/tcq/${CLOUD_RUN_SERVICE}:latest"
+  IMAGE="${REGISTRY}/${GCP_PROJECT_ID}/tcq/${VM_NAME}:latest"
 
   build_and_push
-  deploy_service
+  ensure_vm
+  deploy_to_vm
 
   ensure_github_oauth
 
