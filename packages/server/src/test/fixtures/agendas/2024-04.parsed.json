@@ -1,0 +1,255 @@
+[
+  {
+    "name": "Opening, welcome and roll call",
+    "presenters": [
+      "Chair"
+    ],
+    "duration": null
+  },
+  {
+    "name": "Secretary's Report (15m, Samina Husain, [slides](tc39-2024-016.pdf))",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Project Editors’ Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Task Group Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
+    "presenters": [
+      "Chris de Almeida"
+    ],
+    "duration": 5
+  },
+  {
+    "name": "[Reality and spec differ on property key resolution timing for `o[p] = f()`](https://github.com/tc39/ecma262/issues/3295 ) ([PR](https://github.com/tc39/ecma262/pull/3307))",
+    "presenters": [
+      "Ross Kirsling"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "“array last” proposal [withdrawn](https://github.com/tc39/proposals/pull/511)",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 1
+  },
+  {
+    "name": "TC39 website - call for translators - [GH issue](https://github.com/tc39/tc39.github.io/issues/406)",
+    "presenters": [
+      "Chris de Almeida"
+    ],
+    "duration": 1
+  },
+  {
+    "name": "[Duplicate named capture groups](https://github.com/tc39/proposal-duplicate-named-capturing-groups) for stage 4 ([PR](https://github.com/tc39/ecma262/pull/2721), [tests](https://github.com/tc39/test262/pull/3625))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Set methods](https://github.com/tc39/proposal-set-methods) for stage 4 ([PR](https://github.com/tc39/ecma262/pull/3306), [tests](https://github.com/tc39/test262/pull/3966))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Temporal](https://github.com/tc39/proposal-temporal) normative bugfix ([PR](https://github.com/tc39/proposal-temporal/pull/2797), [slides](http://ptomato.name/talks/tc39-2024-04/))",
+    "presenters": [
+      "Philip Chimento"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Explicit Resource Management](https://github.com/tc39/proposal-explicit-resource-management) Normative Updates and Needs Consensus PRs ([slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpkI6V9_w6ykvsG1w?e=ehAC64), [PRs](https://github.com/tc39/proposal-explicit-resource-management/pulls?q=is%3Aopen+is%3Apr+label%3Aneeds-consensus))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[joint iteration](https://github.com/tc39/proposal-joint-iteration): confirm our stance on [#1](https://github.com/tc39/proposal-joint-iteration/issues/1#issuecomment-1981587641)",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[AsyncContext](https://github.com/tc39/proposal-async-context/) Stage 2 [updates](https://docs.google.com/presentation/d/1ok6fX9PN3XEv9ZwffrDzJX24uuiNrkGDZN-KgGwGkc0/edit?usp=sharing)",
+    "presenters": [
+      "Justin Ridgewell"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Promise.try](https://github.com/tc39/proposal-promise-try) for Stage 2.7",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[RegExp.escape](https://github.com/tc39/proposal-regex-escaping) for stage 2.7",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Deferred import evaluation](https://github.com/tc39/proposal-defer-import-eval/) for Stage 2.7 (without \"tree-shakeable\" exports) ([slides](https://docs.google.com/presentation/d/1oPEF8nA9Iq5cAqjN-FqMigNNfz6lWCUbNfIsEjRXf4Y/edit?usp=sharing))",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Treeshakeable/deferred re-exports](https://github.com/tc39/proposal-defer-import-eval/pull/30) status update ([slides](https://docs.google.com/presentation/d/1iM5cRgdRXLWLq_GxgRvzYmUTXEK6gzH_8QNgLKMmv7o/edit?usp=sharing))",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Make eval-introduced global vars redeclarable](https://github.com/tc39/proposal-redeclarable-global-eval-vars) for stage 2.7 ([slides](https://docs.google.com/presentation/d/1p--DB6SNlDv5XOn9g4bmwoymYQ93VWK_RDrCHLJJd60/edit?usp=sharing))",
+    "presenters": [
+      "Shu-yu Guo"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Iterator.range](https://github.com/tc39/proposal-iterator.range) for stage 2.7",
+    "presenters": [
+      "Jack Works"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Math.sumExact](https://github.com/tc39/proposal-math-sum) for stage 2.7 ([slides](https://docs.google.com/presentation/d/1QallvKcuIL2UHALEYnP4AdT8nX_iZ6QHDgpVISUXHMg/edit?usp=sharing))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "Discussing new directions for [R&T](https://github.com/tc39/proposal-record-tuple) ([slides](https://docs.google.com/presentation/d/1JfChmW8tQ2_mrFDynosNqa1tjJ2j-qX6WoKm8vc_tkY/), [related repo](https://github.com/acutmore/proposal-keyby))",
+    "presenters": [
+      "Ashley Claymore"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Array.isTemplateObject](https://github.com/tc39/proposal-array-is-template-object) next steps ([slides](https://docs.google.com/presentation/d/1LTlzpboYwKxRwigATcFYEh06CIbZvOvmFdPzkNn7vJI/edit#slide=id.g2cae2397581_0_66))",
+    "presenters": [
+      "Daniel Ehrenberg"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[`Atomics.microwait()`](https://github.com/syg/proposal-atomics-microwait) (without mini wait) for stage 2 ([slides](https://docs.google.com/presentation/d/1Sb4Qaa5F8ZM9X0kxv5e-Wh5CbT1ZoryeCtVShoVhu8Y/edit?usp=sharing))",
+    "presenters": [
+      "Shu-yu Guo"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "`eval`/`new Function` changes for Trusted Types as Normative PR or Stage 3 ([PR](https://github.com/tc39/ecma262/pull/3294), [slides](https://docs.google.com/presentation/d/14AjvbW2-aNvlirB-7pPhIAeM7oWKtjqONRcyp9ID7gg/edit?usp=sharing))",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[ESM Source Phase](https://github.com/tc39/proposal-esm-phase-imports) status update and [layering change](https://github.com/tc39/proposal-source-phase-imports/pull/62) ([slides](https://docs.google.com/presentation/d/1nbXtl77pc1YIau4O472wvAG1FCUnDwKkY-EX3mRnLsU/edit?usp=sharing)",
+    "presenters": [
+      "Guy Bedford"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Module sync assert](https://github.com/tc39/proposal-module-sync-assert) for stage 2",
+    "presenters": [
+      "Jack Works"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Intl.MessageFormat](https://github.com/tc39/proposal-intl-messageformat) status update, maybe for stage 0?",
+    "presenters": [
+      "Eemeli Aro"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Discard Bindings](https://github.com/tc39/proposal-discard-binding) for Stage 2 ([slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpoWw0poDW3dawBQg?e=O3UP1c), [spec](https://tc39.es/proposal-discard-binding/))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Extractors](https://github.com/tc39/proposal-extractors) for Stage 2 ([spec](https://tc39.es/proposal-extractors/), [slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpinLRBZZwud0rM9w?e=s7hKoI))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 45
+  },
+  {
+    "name": "[Decimal](https://github.com/tc39/proposal-decimal) for stage 2 ([slides](https://docs.google.com/presentation/d/1kXurIVl4kjzclwFgfzJqohtPyryeKI7Mn9C_w7aAYp8/))",
+    "presenters": [
+      "Jesse Alama"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Shared structs](https://github.com/tc39/proposal-structs) discussion ([slides](https://docs.google.com/presentation/d/1a53adMbL_Uqb1KxnY-r6Ie6n1PQXvNw3JgUOvRYFido/edit?usp=sharing))",
+    "presenters": [
+      "Shu-yu Guo"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "bringing back [Error.isError](https://github.com/ljharb/proposal-is-error), for stage 1 or 2 (or even 2.7)",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Strict Enforcement of 'using'](https://github.com/rbuckton/proposal-using-enforcement) for Stage 1 or 2 ([slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpmyWWWHf6TPYt2gg?e=fPIwaL&nav=eyJzSWQiOjI1NiwiY0lkIjoyMTg5ODA3Nzk5fQ), [spec](https://rbuckton.github.io/proposal-using-enforcement/))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Signals](https://github.com/proposal-signals/proposal-signals) for Stage 1 ([slides](https://docs.google.com/presentation/d/1MJqndTS5RmTEwTbtLTPsEloc-a_MWR8daQINgDim2RA/edit#slide=id.g1f570b058be_0_573))",
+    "presenters": [
+      "Daniel Ehrenberg and Jatin Ramanathan"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "Stop coercing things pt 4 ([slides](https://docs.google.com/presentation/d/1aumShXqYgQV38Bg_L3FfJvGKIupJVCxs_C-Iz3r_tRE/edit))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 45
+  },
+  {
+    "name": "Incubation call chartering",
+    "presenters": [
+      "15m on the last day"
+    ],
+    "duration": null
+  }
+]

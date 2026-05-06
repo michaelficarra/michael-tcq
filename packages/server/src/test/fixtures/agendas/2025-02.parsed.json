@@ -1,0 +1,205 @@
+[
+  {
+    "name": "Opening, welcome and roll call",
+    "presenters": [
+      "Chair"
+    ],
+    "duration": null
+  },
+  {
+    "name": "Secretary's Report (15m, Samina Husain) ([slides](./tc39-2025-005.pdf))",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Election of the 2025 [Chair Group](https://github.com/tc39/Reflector/issues/548), Editors, and Convenors (15m, Aki Rose Braun) ([slides]())",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Project Editors’ Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Task Group Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "[Don't call well-known Symbol methods for `RegExp` on primitive values](https://github.com/tc39/ecma262/pull/3009)",
+    "presenters": [
+      "Gus Caplan",
+      "Luca Casonato"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Float16Array](https://github.com/tc39/proposal-float16array) for stage 4 ([spec PR](https://github.com/tc39/ecma262/pull/3532))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 5
+  },
+  {
+    "name": "[Explicit Resource Management](https://github.com/tc39/proposal-explicit-resource-management) Needs Consensus PR ([PR](https://github.com/rbuckton/ecma262/pull/13))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Redeclarable global eval vars](https://github.com/tc39/proposal-redeclarable-global-eval-vars) for [stage 4](https://github.com/tc39/proposal-redeclarable-global-eval-vars/issues/3) ([spec PR](https://github.com/tc39/ecma262/pull/3226))",
+    "presenters": [
+      "Shu-yu Guo"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[RegExp Escaping](https://github.com/tc39/proposal-regex-escaping/issues/58) for stage 4 ([spec PR](https://github.com/tc39/ecma262/pull/3382))",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Temporal](https://github.com/tc39/proposal-temporal) normative [PR](https://github.com/tc39/proposal-temporal/pull/3054) and status update ([slides](http://ptomato.name/talks/tc39-2025-02/#8))",
+    "presenters": [
+      "Philip Chimento"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Intl Locale Info API](https://github.com/tc39/proposal-intl-locale-info) Update in Stage 3 ([PR](https://github.com/tc39/ecma402/pull/942), [slide](https://docs.google.com/presentation/d/14ColNEWDFlAnPGW6GSPSk6gbcdTmSy4pYuYXOwDlZX8))",
+    "presenters": [
+      "Frank Yung-Fong Tang"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Decorators](https://github.com/tc39/proposal-decorators) implementation updates ([slides](https://slides.com/pzuraq/decorators-for-stage-3-2022-03-977778))",
+    "presenters": [
+      "Kristen Hewell Garrett"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[ShadowRealm](https://github.com/tc39/proposal-shadowrealm) status update ([slides](http://ptomato.name/talks/tc39-2025-02/#1))",
+    "presenters": [
+      "Philip Chimento"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[import defer](https://github.com/tc39/proposal-defer-import-eval/) for Stage 3 (tests: all PRs linked to https://github.com/tc39/test262/issues/4215, [slides](https://docs.google.com/presentation/d/1LjsJhdTIP3wgo1odtVa-qbfyGU5M1W9YMm0AtKnJJKk/edit?usp=sharing))",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Immutable ArrayBuffer](https://github.com/tc39/proposal-immutable-arraybuffer) for stage 2.7 ([slides.key](https://github.com/tc39/proposal-immutable-arraybuffer/blob/main/immu-arraybuffer-talks/immu-arrayBuffers-stage2-7-as-presented.key), [slides.pdf](https://github.com/tc39/proposal-immutable-arraybuffer/blob/main/immu-arraybuffer-talks/immu-arrayBuffers-stage2-7-as-presented.pdf))",
+    "presenters": [
+      "Mark Miller"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Records & Tuples](https://github.com/tc39/proposal-record-tuple) future directions [slides](https://docs.google.com/presentation/d/1uONn7T91lfZDV4frCsxpwd1QB_pU3P7F6V2j9jEPnA8/)",
+    "presenters": [
+      "Ashley Claymore"
+    ],
+    "duration": 45
+  },
+  {
+    "name": "[Limited ArrayBuffer](https://github.com/tc39/proposal-limited-arraybuffer) update: stay on stage 1 or withdraw?, [slides](https://docs.google.com/presentation/d/1u6JsSeInvm6F4OrmCSLubtDvFVdjw1ESeE5-c_YflHE/)",
+    "presenters": [
+      "Jack Works"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Stabilize integrity traits](https://github.com/tc39/proposal-stabilize) status update ([slides.key](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.key), [slides.pdf](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.pdf), [video](https://www.youtube.com/watch?v=oMPeo4faynY&list=PLzDw4TTug5O3vIAd4IR1Gp5t_46co_dv9))",
+    "presenters": [
+      "Mark Miller"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "A unified vision for [measure](https://github.com/tc39/proposal-measure/) and [decimal](https://github.com/tc39/proposal-decimal/) ([slides](https://notes.igalia.com/p/tc39-2025-02-plenary-decimal-measure-unity)) ([continuation slides](https://docs.google.com/presentation/d/1050DHlNOzcN-8LqJQ_6z8j-LryXgEqOcLfcVzkhJyEk/edit#slide=id.p))",
+    "presenters": [
+      "Jesse Alama",
+      "Eemeli Aro",
+      "Shane F Carr"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Stable Formatting](https://github.com/tc39/proposal-stable-formatting) update ([PR](https://github.com/tc39/proposal-stable-formatting/pull/18), [slides](https://docs.google.com/presentation/d/14KQA1Gyy0reIyouHtzp5ofYRrcwRjkY6GajeknLWhg0/edit?usp=sharing))",
+    "presenters": [
+      "Eemeli Aro"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Error Stack Accessor](https://github.com/ljharb/proposal-error-stack-accessor) for stage 1 or 2",
+    "presenters": [
+      "Jordan Harband"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[`Math.clamp`](https://github.com/CanadaHonk/proposal-math-clamp) for Stage 1 or 2 ([slides](https://docs.google.com/presentation/d/14QGuyCHlsSr4ZSCkbFuaFZk8793EAMS1nAkdW_csLhA/edit))",
+    "presenters": [
+      "Oliver Medhurst"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[`Error.captureStackTrace`](https://github.com/mgaudet/proposal-error-capturestacktrace) [(slides)](https://docs.google.com/presentation/d/1SFdS9n5JR7Jqz29s7ApvkqDOqOfPW-IaBR2orK828As/edit?usp=sharing) for Stage 1",
+    "presenters": [
+      "Matthew Gaudet"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Curtailing the power of \"Thenables\"](https://github.com/mgaudet/proposal-thennable-curtailment) [(Slides)](https://docs.google.com/presentation/d/1Sny2xC5ZvZPuaDw3TwqOM4mj7W6NZmR-6AMdpskBE-M/edit#slide=id.p) for Stage 1",
+    "presenters": [
+      "Matthew Gaudet"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[`Number.isSafeNumeric`](https://github.com/Lxxyx/proposal-number-is-safe-numeric) [(slides)](https://docs.google.com/presentation/d/1Noxi5L0jnikYce1h7X67FnjMUbkBQAcMDNafkM7bF4A/edit?usp=sharing) for Stage 1",
+    "presenters": [
+      "ZiJian Liu"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Decision Making through Consensus - take 2](https://github.com/msaboff/tc39/blob/master/TC39%20Consensus%20take%202.pdf)",
+    "presenters": [
+      "Michael Saboff"
+    ],
+    "duration": 45
+  },
+  {
+    "name": "Language design goal for consensus: Things should layer ([slides](https://docs.google.com/presentation/d/1Nj6E1h0SeyDGI3e8BQlATQeX-l6x4Jx7uGAM8XimfIM/edit#slide=id.g329dc435965_0_344))",
+    "presenters": [
+      "Daniel Ehrenberg"
+    ],
+    "duration": null
+  },
+  {
+    "name": "Incubation call chartering",
+    "presenters": [
+      "15m on the last day"
+    ],
+    "duration": null
+  }
+]

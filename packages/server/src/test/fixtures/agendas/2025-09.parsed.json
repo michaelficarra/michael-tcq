@@ -1,0 +1,184 @@
+[
+  {
+    "name": "Opening, welcome and roll call",
+    "presenters": [
+      "Chair"
+    ],
+    "duration": null
+  },
+  {
+    "name": "Secretary's Report (15m, Samina Husain) ([slides](./tc39-2025-038.pdf))",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Project Editors’ Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Task Group Reports",
+    "presenters": [],
+    "duration": null
+  },
+  {
+    "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "[Normative: Add `[[CompactDisplay]]` slot to Intl.PluralRules](https://github.com/tc39/ecma402/pull/1019) ([slides](https://notes.igalia.com/p/tg1-normative-PR-1019-sept-2025.md#/))",
+    "presenters": [
+      "Ben Allen"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Normative: Make Intl.PluralRules ResolvePlural and associated AOs take Intl mathematical values rather than Numbers](https://github.com/tc39/ecma402/pull/1026) ([slides](https://notes.igalia.com/p/tg1-normative-PR-1026-sept-2025.md#/))",
+    "presenters": [
+      "Ben Allen"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Normative: change PromiseResolve species check](https://github.com/tc39/ecma262/pull/3689) ([slides](https://mhofman.github.io/proposal-native-promise-adoption/slides/2025-09-pr-3689/))",
+    "presenters": [
+      "Mathieu Hofman"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Convention: strings-as-enums are kebab-case](https://github.com/tc39/how-we-work/pull/165) ([PR](https://github.com/tc39/how-we-work/pull/165) to normative-conventions.md)",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Increase limits on Intl MV](https://github.com/tc39/ecma402/pull/1022) with discussion of how and when to set bounds in the spec ([slides](https://docs.google.com/presentation/d/1V1BC6PtJ7-q6zVvsgKt9dcaLmIeeLnE3s8DwP4KOl7Q/edit?slide=id.p#slide=id.p))",
+    "presenters": [
+      "Shane F Carr"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Temporal](https://github.com/tc39/proposal-temporal) update and normative change ([slides](https://ptomato.name/talks/tc39-2025-09/))",
+    "presenters": [
+      "Philip Chimento"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Non-extensible Applies to Private](https://github.com/tc39/proposal-nonextensible-applies-to-private) for stage 3 ([slides.key](https://github.com/tc39/proposal-nonextensible-applies-to-private/blob/main/no-stamping-talks/non-extensible-applies-to-private-for-s3.key), [slides.pdf](https://github.com/tc39/proposal-nonextensible-applies-to-private/blob/main/no-stamping-talks/non-extensible-applies-to-private-for-s3.pdf))",
+    "presenters": [
+      "Mark Miller"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Intl Era Month Code](https://github.com/tc39/proposal-intl-era-monthcode) Stage 2.7 Update ([slides](https://notes.igalia.com/p/2025-09-tc39-plenary-era-monthcode-update))",
+    "presenters": [
+      "Ben Allen"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Deferred re-exports](https://github.com/tc39/proposal-deferred-reexports) update ([slides](https://docs.google.com/presentation/d/1ok-qUnKrHK8ADWAHR071t5dglDkuKhXc0mPLCTS0meY))",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "AsyncContext `yield*` behavior ([draft commit](https://github.com/nicolo-ribaudo/proposal-async-context/commit/32856cb7ce1aaaa9f310f8f4b6532b93b459012f), [slides](https://docs.google.com/presentation/d/1g7Xgf9uAxv5gZYvms23m2_hP513IRYNktz0fDiE1NmA))",
+    "presenters": [
+      "Nicolò Ribaudo or Andreu Botella"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Iterator Chunking](https://github.com/tc39/proposal-iterator-chunking) for Stage 2.7 ([slides](https://docs.google.com/presentation/d/12QAd-b2rPY5OC82ZwPCcDfGgzSfeSwdbcEoctUqQGss))",
+    "presenters": [
+      "Michael Ficarra (or KG as backup)"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Import Bytes](https://github.com/tc39/proposal-import-bytes) for Stage 2.7 ([slides](https://slides-import-bytes-2025-09.vercel.app))",
+    "presenters": [
+      "Steven Salat"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "Update on [proposal-await-dictionary](https://github.com/tc39/proposal-await-dictionary) [[spec](https://tc39.es/proposal-await-dictionary/), [slides](https://docs.google.com/presentation/d/1TaLCZt2jJtrVY1PjFd49jlBW-vAVil4NYsOzAyYPP7Q/)]",
+    "presenters": [
+      "Ashley Claymore"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "Update on [proposal-module-global](https://github.com/endojs/proposal-module-global), ([slides](https://github.com/endojs/proposal-module-global/blob/main/slides/2025-09-stage1-update.pdf))",
+    "presenters": [
+      "ZB Tenerowicz and Kris Kowal"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Amount](https://github.com/tc39/proposal-amount) for Stage 2 ([slides](https://docs.google.com/presentation/d/1cDQBcMzSAht9jZiuaMKAEIDlPmlSmjeBJ-sw23AySWI/edit?slide=id.g37deebb6a10_2_54#slide=id.g37deebb6a10_2_54))",
+    "presenters": [
+      "Ben Allen"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Native Promise Predicate](https://github.com/mhofman/proposal-native-promise-predicate) for stage 1 or 2 [[spec](https://mhofman.github.io/proposal-native-promise-predicate/), [slides](https://mhofman.github.io/proposal-native-promise-predicate/slides/2025-09-stage-1/)]",
+    "presenters": [
+      "Mathieu Hofman"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[`Array.prototype.pushAll`](https://github.com/DanielRosenwasser/proposal-array-push-all/) for Stage 1 ([slides](https://danielrosenwasser.github.io/tc39-slides-2025-09-array-push-all))",
+    "presenters": [
+      "Daniel Rosenwasser"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Native Promise Adoption](https://github.com/mhofman/proposal-native-promise-adoption) for stage 1 [[spec](https://mhofman.github.io/proposal-native-promise-adoption/), [slides](https://mhofman.github.io/proposal-native-promise-adoption/slides/2025-09-stage-1/)]",
+    "presenters": [
+      "Mathieu Hofman"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "How Websites are Put Together ([WIP slides](https://docs.google.com/presentation/d/1vEYoTix5yHN3vc1cXZQCk87P8d_GqL0bYsOpoEcnjuo/edit?usp=sharing))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "Stage 2+ Proposal Review",
+    "presenters": [
+      "Peter Klecha"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "Amount continuation",
+    "presenters": [
+      "Shane Carr",
+      "Ben Allen (slides)"
+    ],
+    "duration": null
+  },
+  {
+    "name": "Incubation call chartering",
+    "presenters": [
+      "15m on the last day"
+    ],
+    "duration": null
+  }
+]

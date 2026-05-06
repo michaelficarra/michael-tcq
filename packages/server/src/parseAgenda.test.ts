@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { parseAgendaMarkdown, stripMarkdown } from './parseAgenda.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('stripMarkdown', () => {
   it('strips markdown links', () => {
@@ -278,5 +283,42 @@ Some constraints here.
     expect(names).not.toContain('Adoption of the agenda');
     expect(names).not.toContain('Other business');
     expect(names).not.toContain('Adjournment');
+  });
+});
+
+/**
+ * Fixture-based regression tests against real TC39 agendas verbatim from
+ * https://github.com/tc39/agendas. The parsed output is committed to a
+ * snapshot file alongside each fixture; any future parser change that
+ * shifts the output for a real-world agenda forces a deliberate snapshot
+ * update and a code-review look at the diff.
+ *
+ * Refresh the fixtures by re-running:
+ *   curl -fsSL https://raw.githubusercontent.com/tc39/agendas/refs/heads/main/<year>/<month>.md \
+ *     -o packages/server/src/test/fixtures/agendas/<year>-<month>.md
+ * and re-running these tests with `vitest -u` to update the snapshots.
+ */
+describe('parseAgendaMarkdown — TC39 fixture agendas', () => {
+  const FIXTURES_DIR = join(__dirname, 'test/fixtures/agendas');
+  const fixtures = ['2024-04', '2025-02', '2025-09', '2026-03'];
+
+  it.each(fixtures)('parses %s.md to a stable agenda', async (name) => {
+    const md = readFileSync(join(FIXTURES_DIR, `${name}.md`), 'utf8');
+    const items = parseAgendaMarkdown(md);
+
+    // Sanity floor: a real TC39 agenda always lists at least a handful of
+    // proposals. A drop below this floor signals the section header / table
+    // detection has regressed for the fixture's structure.
+    expect(items.length).toBeGreaterThan(5);
+
+    // Stable serialisation: 2-space JSON, sorted-stable field order via the
+    // explicit shape. Snapshot lives next to the fixture so reviewers see the
+    // markdown and parsed result side-by-side.
+    const serialised = JSON.stringify(
+      items.map((it) => ({ name: it.name, presenters: it.presenters, duration: it.duration ?? null })),
+      null,
+      2,
+    );
+    await expect(serialised).toMatchFileSnapshot(join(FIXTURES_DIR, `${name}.parsed.json`));
   });
 });

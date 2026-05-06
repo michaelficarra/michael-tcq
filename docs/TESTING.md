@@ -21,6 +21,8 @@ It is also where distributed-systems behaviour is tested. The in-process harness
 
 Most files live directly in `packages/server/src/`, one per source file under test. Self-tests for the test helpers themselves (`clientSurrogate.test.ts`, `concurrency.test.ts`) live alongside their helpers under `packages/server/src/test/`.
 
+Real-world TC39 agenda fixtures live verbatim under `packages/server/src/test/fixtures/agendas/<year>-<month>.md` (kept byte-identical to upstream via `.prettierignore`); their parser snapshots sit next to them as `<year>-<month>.parsed.json` and are produced by the fixture-based block in `parseAgenda.test.ts`. Update by re-running `curl ... -o ...` for the fixture and `vitest -u` for the snapshot.
+
 ## Client component/unit
 
 Tests in this suite render React trees in jsdom via React Testing Library. They cover components, hooks, contexts, formatting helpers, and keyboard-shortcut wiring — everything user-facing on the client side that isn't a page-level interaction.
