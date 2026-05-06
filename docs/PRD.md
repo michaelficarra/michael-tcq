@@ -33,8 +33,8 @@ The meeting creator is the initial chair. In addition to all participant capabil
 
 Admins are designated by GitHub username via server configuration. In addition to all participant capabilities, admins can:
 
-- View a list of all active meetings on the home page, showing each meeting's ID, creation time, distinct participant count, and last connection time. The creation and last-connection times render as relative durations (e.g. "3 hr ago") that update live, with the full ISO timestamp shown on hover. While at least one client is currently connected, the last-connection cell instead reads `now (N)`, where N is the current active-connection count (inclusive of every connected socket, admin or otherwise).
-- View a diagnostics panel on the home page (below the meetings list) summarising server health: wall-clock uptime, active CPU time (which lags uptime when the container is throttled or paused, e.g. on Cloud Run), Node version, deployed git SHA, memory usage, aggregate active meetings / participants / live connections, the total connected Socket.IO clients, cumulative HTTP traffic since process start (total responses, 4xx, 5xx, and overall error rate), persistence health (current dirty-meeting backlog plus the time of the last successful and last failed periodic sync, with the failure message when present), and the most recent ERROR or CRITICAL log entries (with a count of how many have been recorded since the server started). The panel refreshes every 10 seconds. All counters and recent-error history are process-local and reset on restart.
+- View a list of all active meetings on the home page, showing each meeting's ID (linked to that meeting), creation time, distinct participant count, and last connection time. The creation and last-connection times render as relative durations (e.g. "3 hr ago") that update live, with the full ISO timestamp shown on hover. While at least one client is currently connected, the last-connection cell instead reads `now (N)`, where N is the current active-connection count (inclusive of every connected socket, admin or otherwise).
+- View a diagnostics panel on the home page (below the meetings list) summarising server health: wall-clock uptime, active CPU time (which lags uptime when the container is throttled or paused, e.g. on Cloud Run), Node version, deployed git SHA, memory usage, aggregate active meetings / participants / live connections, the total connected Socket.IO clients, cumulative HTTP traffic since process start (total responses, 4xx, 5xx, and overall error rate), persistence health (current dirty-meeting backlog plus the timestamps of the last sync that actually wrote a meeting and of the last failed sync — idle sweeps that find nothing to write don't refresh the success timestamp — with the failure message when present), and the most recent ERROR or CRITICAL log entries (with a count of how many have been recorded since the server started). The panel refreshes every 10 seconds. All counters and recent-error history are process-local and reset on restart.
 - Delete any meeting (with a confirmation dialogue).
 - Edit the chair list for any meeting, even if they are not a chair themselves.
 - Remove themselves from the chair list, including when they are the last chair (allowing an empty chair list).
@@ -87,7 +87,7 @@ The meeting view has four tabs:
 - **Agenda** — displays the chairs list, the ordered list of agenda items with management controls for chairs, and the new agenda item form.
 - **Queue** — displays the current agenda item (with poll controls), current topic, current speaker (with Next Speaker button), speaker entry controls, and the speaker queue.
 - **Log** — displays a reverse-chronological timeline of meeting events (agenda changes, speaker topics, polls).
-- **Help** — explains how TCQ works for both chairs and participants, lists keyboard shortcuts.
+- **Help** — explains how to use TCQ, with separate participant and chair sections. The participant section covers joining a meeting, reading the agenda, the speaker queue and its entry types, polls, the meeting log and export, presentation mode, and keyboard shortcuts. The chair section adds: creating a meeting, managing chairs and agenda items (including agenda import and grouping items into sessions), running the meeting (Start Meeting, Next Speaker, Next Agenda Item), copying and restoring the queue, closing and reopening the queue, and running polls. The chair section is shown to chairs in a meeting and to everyone on the home page.
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown with Preferences and Log Out entries; clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
@@ -161,7 +161,7 @@ When a participant enters the queue, their entry is automatically inserted at th
 
 The queue can be open or closed. When the queue is closed, non-chair participants cannot add new New Topic, Reply, or Clarifying Question entries — those entry type buttons are disabled and a "The queue is closed. You can still raise a Point of Order." message is shown. Point of Order entries remain available to all participants even when the queue is closed, because they are procedural interruptions that must never be suppressed. Chairs can still add any entry type when the queue is closed (e.g. via Restore Queue or on behalf of others).
 
-The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries are also blocked for non-chairs when the queue is closed, with the exception of `p` (Point of Order), which remains active.
+The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened, even if a chair had manually closed it during the previous item. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries are also blocked for non-chairs when the queue is closed, with the exception of `p` (Point of Order), which remains active.
 
 ### Entering the Queue
 
@@ -186,8 +186,8 @@ The user's own queue entries are visually distinguished with a coloured left bor
 
 - **Next Speaker** (chair action) — the first person in the queue becomes the current speaker; their entry is removed from the queue.
 - If the queue is empty when advancement occurs, the current speaker is cleared.
-- If two users attempt to advance the speaker simultaneously, the second action is rejected to prevent conflicts.
-- The Next Speaker action is debounced to ignore rapid repeated activations. After a speaker change triggered by another user is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing accidental double-advancement.
+- If a chair's view of the current speaker or current agenda item is out of date when the **Next Speaker** or **Next Agenda Item** action reaches the server (for example, another chair has just advanced), the action is rejected to prevent conflicts.
+- Both the **Next Speaker** and **Next Agenda Item** actions are debounced to ignore rapid repeated activations. After a change triggered by another user is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing accidental double-advancement.
 
 ### Queue Reordering
 
@@ -407,4 +407,4 @@ A small connection status indicator is displayed in the bottom-right corner of t
 
 ## Persistence
 
-Meeting state is persisted and survives server restarts. Meetings are automatically deleted 90 days after their most recent client connection.
+Meeting state is persisted and survives server restarts. Meetings are automatically deleted 90 days after the last time any client was connected to them.
