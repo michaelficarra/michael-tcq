@@ -48,7 +48,10 @@ export async function fetchGitHubUser(username: string): Promise<User | null> {
   return {
     ghid: data.id,
     ghUsername: data.login,
-    name: data.name ?? data.login,
+    // `||` (not `??`) so an empty/whitespace `name` from GitHub also
+    // falls through to the login — UserBadge ultimately defends this
+    // too, but keep the shape clean here.
+    name: data.name?.trim() || data.login,
     organisation: data.company ?? '',
   };
 }
@@ -136,7 +139,9 @@ export function createAuthRoutes(): Router {
       const user: User = {
         ghid: userData.id,
         ghUsername: userData.login,
-        name: userData.name ?? userData.login,
+        // `||` (not `??`) so an empty/whitespace `name` also falls
+        // through to the login — same defensive shape as `fetchGitHubUser`.
+        name: userData.name?.trim() || userData.login,
         organisation: userData.company ?? '',
       };
 

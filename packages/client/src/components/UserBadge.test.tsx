@@ -41,6 +41,21 @@ describe('UserBadge', () => {
     expect(screen.queryByText(/\(/)).not.toBeInTheDocument();
   });
 
+  it('falls back to the GitHub username when the display name is empty', () => {
+    const noName: User = { ghid: 3, ghUsername: 'alice', name: '', organisation: '' };
+    render(<UserBadge user={noName} />);
+    // The visible badge text is the login when no display name is
+    // available — UserBadge never renders an empty label even if a
+    // construction site upstream produces a User with name=''.
+    expect(screen.getByText('alice')).toBeInTheDocument();
+  });
+
+  it('falls back to the GitHub username when the display name is whitespace-only', () => {
+    const blank: User = { ghid: 4, ghUsername: 'bob', name: '   ', organisation: '' };
+    render(<UserBadge user={blank} />);
+    expect(screen.getByText('bob')).toBeInTheDocument();
+  });
+
   it('shows the GitHub username as a tooltip on the display name', () => {
     render(<UserBadge user={alice} />);
     // The display name surfaces the underlying login on hover so it's

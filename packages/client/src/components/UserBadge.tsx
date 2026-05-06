@@ -76,8 +76,11 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
       <span>
         {/* The display name carries the GitHub login as a title so a
             hover surfaces the underlying username — useful when name and
-            login differ (e.g. "Alice Anderson" → @alice). */}
-        <span title={user.ghUsername}>{user.name}</span>
+            login differ (e.g. "Alice Anderson" → @alice). When the name
+            is empty or whitespace-only (e.g. a User constructed without
+            a real display name), fall back to the login as the visible
+            text so the badge never renders an empty label. */}
+        <span title={user.ghUsername}>{user.name?.trim() || user.ghUsername}</span>
         {user.organisation && (
           // Organisation gets a fixed max-width and ellipsis so a long
           // company string doesn't make the badge run off the row. The

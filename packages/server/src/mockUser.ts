@@ -55,7 +55,10 @@ export function mockUserFromLogin(login: string): User {
   return {
     ghid: deterministicGhid(login),
     ghUsername: login,
-    name: seed?.name ?? login,
+    // `||` (not `??`) so a seed entry whose `name` is empty/whitespace
+    // also falls through to the login — keeps the badge from rendering
+    // an empty label even if a refreshed seed ever produces one.
+    name: seed?.name?.trim() || login,
     organisation: seed?.organisation ?? '',
   };
 }
