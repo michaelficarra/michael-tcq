@@ -562,6 +562,50 @@ describe('githubDirectory', () => {
       expect(results.map((r) => r.login)).toContain('alice');
     });
 
+    it('excludes unresolved presenter placeholders (ghid 0) from results', async () => {
+      // Agenda import stores presenters whose names didn't bind to a real
+      // GitHub user as placeholder rows in meeting.users with ghid: 0.
+      // Those placeholders must not surface in autocomplete — they have
+      // no real identity to bind to.
+      const session = makeSession();
+      await seedCacheFor(session);
+
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.includes('/search/users')) return jsonResponse({ items: [] });
+        throw new Error(`unexpected: ${url}`);
+      });
+
+      // The meeting holds:
+      //   - bob: a normally-resolved meeting user (ghid > 0).
+      //   - 'alice anderson': an unresolved placeholder created by agenda
+      //     import. Same login (lowercased) as the real org-cached alice
+      //     (ghid 100); without the filter, login dedup in mergeTiered
+      //     would have the placeholder shadow the real user.
+      //   - 'unknown person': an unresolved placeholder with no real
+      //     counterpart in any tier — should simply not appear at all.
+      const meeting = makeMeeting({
+        bob: { ghid: 7, ghUsername: 'bob', name: 'Bob Smith' },
+        'alice anderson': { ghid: 0, ghUsername: 'alice anderson', name: 'alice anderson' },
+        'unknown person': { ghid: 0, ghUsername: 'unknown person', name: 'unknown person' },
+      });
+
+      // Query 'alice' — the placeholder must be filtered out so the real
+      // tier-2 alice (ghid 100, badge 'org') is what comes back.
+      const aliceResults = await searchUsers(session, 'alice', meeting, 5);
+      expect(aliceResults.map((r) => ({ login: r.login, ghid: r.ghid, badge: r.badge }))).toEqual([
+        { login: 'alice', ghid: 100, badge: 'org' },
+      ]);
+
+      // Query 'unknown' — the placeholder is the only thing that would
+      // match; with the filter, no result.
+      const unknownResults = await searchUsers(session, 'unknown', meeting, 5);
+      expect(unknownResults).toEqual([]);
+
+      // Resolved meeting users still come through normally.
+      const bobResults = await searchUsers(session, 'bob', meeting, 5);
+      expect(bobResults.map((r) => r.login)).toEqual(['bob']);
+    });
+
     it('skips the empty-query tier-3 call (GitHub rejects q=)', async () => {
       const session = makeSession();
       await seedCacheFor(session);

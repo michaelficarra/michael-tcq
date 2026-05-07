@@ -443,6 +443,14 @@ function meetingUserCandidates(meeting: MeetingState | undefined): DirectoryUser
   if (!meeting) return [];
   const out: DirectoryUser[] = [];
   for (const user of Object.values(meeting.users) as User[]) {
+    // Skip unresolved presenter placeholders. These are written into
+    // meeting.users by agenda import when a free-text presenter name
+    // doesn't bind to a real GitHub user (see resolvePresenterFromDirectory),
+    // and they exist solely so the agenda item can render the name. They
+    // have no real identity to autocomplete onto, and including them here
+    // would also let them shadow real tier-2 matches via the login dedup
+    // in mergeTiered when the agenda is re-imported.
+    if (user.ghid === 0) continue;
     out.push({
       ghid: user.ghid,
       login: user.ghUsername,
