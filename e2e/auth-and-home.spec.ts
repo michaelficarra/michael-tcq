@@ -82,6 +82,41 @@ test.describe('Home Page', () => {
     await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).not.toBeVisible();
   });
+
+  test('middle-clicking a tab opens that view in a new browser tab without changing the current one', async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    // WebKit headless under Playwright does not simulate the native
+    // middle-click → new-tab behaviour, so the synthesised event never
+    // produces a `page` event. The behaviour itself works in real Safari;
+    // we cover it on Chromium and Firefox.
+    test.skip(browserName === 'webkit', 'WebKit headless does not open a new tab on middle-click');
+
+    await waitForHomePage(page);
+    // Sanity-check the starting state: Join Meeting is the default tab.
+    await expect(page).toHaveURL(/#join$/);
+
+    // Middle-click is the browser-native "open in new tab" gesture. Tabs are
+    // rendered as <a href="#…"> so the click falls through to the browser
+    // (the React onClick handler only intercepts plain left-click). Listen
+    // for the new page on the context, then perform the middle-click.
+    const newPagePromise = context.waitForEvent('page');
+    await page.getByRole('tab', { name: 'Help' }).click({ button: 'middle' });
+    const newPage = await newPagePromise;
+    await newPage.waitForLoadState();
+
+    // The new tab lands on the Help view (via hash → tab init in HomePage).
+    await expect(newPage).toHaveURL(/#help$/);
+    await expect(newPage.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+
+    // The original tab is unaffected — still on Join Meeting.
+    await expect(page).toHaveURL(/#join$/);
+    await expect(page.getByRole('tab', { name: 'Join Meeting' })).toHaveAttribute('aria-selected', 'true');
+
+    await newPage.close();
+  });
 });
 
 test.describe('My Meetings panel', () => {

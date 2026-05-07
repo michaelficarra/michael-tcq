@@ -20,6 +20,54 @@ import { UserMenu } from '../components/UserMenu.js';
 type HomeTab = 'join' | 'admin' | 'help';
 const HOME_TABS: readonly HomeTab[] = ['join', 'admin', 'help'];
 
+/**
+ * One tab in the home-page nav. Anchor-based so middle-click and modifier-
+ * click hand off to the browser (open in new tab/window); plain left-click
+ * is intercepted to drive the SPA tab state.
+ */
+function HomeTabLink({
+  tab,
+  visibleTab,
+  setActiveTab,
+  label,
+}: {
+  tab: HomeTab;
+  visibleTab: HomeTab;
+  setActiveTab: (tab: HomeTab) => void;
+  label: string;
+}) {
+  const isActive = visibleTab === tab;
+  return (
+    <a
+      role="tab"
+      href={`#${tab}`}
+      aria-selected={isActive}
+      className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
+        isActive
+          ? 'text-stone-900 dark:text-stone-100'
+          : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
+      }`}
+      onClick={(e) => {
+        // Modifier-clicks fall through so the browser opens a new tab/window;
+        // middle-click fires `auxclick`, not `click`, and is handled natively.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        setActiveTab(tab);
+      }}
+    >
+      <span
+        className={`pb-1 border-b-2 transition-colors ${
+          isActive
+            ? 'border-teal-500'
+            : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
+        }`}
+      >
+        {label}
+      </span>
+    </a>
+  );
+}
+
 export function HomePage() {
   const { isAdmin } = useAuth();
   // Initialise from the URL fragment so /#admin or /#help link directly into
@@ -68,70 +116,12 @@ export function HomePage() {
           <Logo />
         </span>
 
-        {/* Tab toggles */}
+        {/* Tab toggles. Rendered as <a> so middle/modifier-click open in a new
+            tab; left-click is intercepted to drive the SPA tab state. */}
         <div className="flex items-stretch gap-4" role="tablist" aria-label="Home views">
-          <button
-            role="tab"
-            aria-selected={visibleTab === 'join'}
-            className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
-              visibleTab === 'join'
-                ? 'text-stone-900 dark:text-stone-100'
-                : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
-            }`}
-            onClick={() => setActiveTab('join')}
-          >
-            <span
-              className={`pb-1 border-b-2 transition-colors ${
-                visibleTab === 'join'
-                  ? 'border-teal-500'
-                  : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
-              }`}
-            >
-              Join Meeting
-            </span>
-          </button>
-          {isAdmin && (
-            <button
-              role="tab"
-              aria-selected={visibleTab === 'admin'}
-              className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
-                visibleTab === 'admin'
-                  ? 'text-stone-900 dark:text-stone-100'
-                  : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
-              }`}
-              onClick={() => setActiveTab('admin')}
-            >
-              <span
-                className={`pb-1 border-b-2 transition-colors ${
-                  visibleTab === 'admin'
-                    ? 'border-teal-500'
-                    : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
-                }`}
-              >
-                Admin
-              </span>
-            </button>
-          )}
-          <button
-            role="tab"
-            aria-selected={visibleTab === 'help'}
-            className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
-              visibleTab === 'help'
-                ? 'text-stone-900 dark:text-stone-100'
-                : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
-            }`}
-            onClick={() => setActiveTab('help')}
-          >
-            <span
-              className={`pb-1 border-b-2 transition-colors ${
-                visibleTab === 'help'
-                  ? 'border-teal-500'
-                  : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
-              }`}
-            >
-              Help
-            </span>
-          </button>
+          <HomeTabLink tab="join" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Join Meeting" />
+          {isAdmin && <HomeTabLink tab="admin" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Admin" />}
+          <HomeTabLink tab="help" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Help" />
         </div>
 
         {/* Spacer */}

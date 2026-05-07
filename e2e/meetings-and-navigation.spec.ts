@@ -213,4 +213,39 @@ test.describe('Navigation', () => {
     await helpTab.click();
     await expect(helpTab).toHaveAttribute('aria-selected', 'true');
   });
+
+  test('middle-clicking a meeting tab opens that view in a new browser tab without changing the current one', async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    // WebKit headless under Playwright does not simulate the native
+    // middle-click → new-tab behaviour, so the synthesised event never
+    // produces a `page` event. The behaviour itself works in real Safari;
+    // we cover it on Chromium and Firefox.
+    test.skip(browserName === 'webkit', 'WebKit headless does not open a new tab on middle-click');
+
+    const meetingId = await createMeeting(page);
+    // Meeting creation lands on the Agenda tab; verify before we exercise middle-click.
+    await expect(page).toHaveURL(/#agenda$/);
+
+    // Tabs render as <a href="#…">, so a real middle-click falls through to
+    // the browser and opens the destination in a new tab. Listen for the
+    // new context-level page event before performing the click.
+    const newPagePromise = context.waitForEvent('page');
+    await page.getByRole('tab', { name: 'Queue' }).click({ button: 'middle' });
+    const newPage = await newPagePromise;
+    await newPage.waitForLoadState();
+
+    // New tab loads the same meeting URL with the Queue hash — and the
+    // MeetingPage's hash → tab init lands on the Queue panel.
+    await expect(newPage).toHaveURL(new RegExp(`/meeting/${encodeURIComponent(meetingId)}#queue$`));
+    await expect(newPage.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+
+    // The original tab is unaffected — still on Agenda.
+    await expect(page).toHaveURL(/#agenda$/);
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+
+    await newPage.close();
+  });
 });
