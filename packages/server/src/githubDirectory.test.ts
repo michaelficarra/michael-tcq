@@ -427,6 +427,49 @@ describe('githubDirectory', () => {
       expect(collapsed.map((r) => r.login)).toEqual(['SaminaHusein']);
     });
 
+    it('matches across diacritics in either direction', async () => {
+      // Diacritic-insensitive matching: NFD-decompose and strip
+      // combining marks on both sides so "José" ↔ "Jose" and
+      // "Jurgen" ↔ "Jürgen" are equivalent. Covers the case where the
+      // typist can't easily produce the accent, *and* the case where
+      // the typed query has the accent but the stored field doesn't.
+      const session = makeSession();
+      restoreFetch = setFetchForTesting(async (url, init) => {
+        if (url === 'https://api.github.com/graphql') {
+          const org = await readGraphqlOrg(init);
+          if (org === 'tc39') {
+            return graphqlMembersResponse([
+              { databaseId: 1, login: 'joseperez', name: 'José Pérez', avatarUrl: 'j.png' },
+              { databaseId: 2, login: 'jurgenschmidt', name: 'Jurgen Schmidt', avatarUrl: 's.png' },
+            ]);
+          }
+          throw new Error(`unexpected: ${org}`);
+        }
+        if (url.endsWith('/user/orgs?per_page=100')) {
+          return jsonResponse([{ login: 'tc39' }]);
+        }
+        throw new Error(`unexpected: ${url}`);
+      });
+      await warmDirectoryForUser(session);
+
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.includes('/search/users')) return jsonResponse({ items: [] });
+        throw new Error(`unexpected: ${url}`);
+      });
+
+      // Stored name has accents; typed query has none.
+      const ascii = await searchUsers(session, 'Jose Perez', undefined, 5);
+      expect(ascii.map((r) => r.login)).toEqual(['joseperez']);
+
+      // Typed query has accent; stored name does not.
+      const accented = await searchUsers(session, 'Jürgen', undefined, 5);
+      expect(accented.map((r) => r.login)).toEqual(['jurgenschmidt']);
+
+      // Both sides accented (round-trip).
+      const both = await searchUsers(session, 'José', undefined, 5);
+      expect(both.map((r) => r.login)).toEqual(['joseperez']);
+    });
+
     it('ranks prefix matches above fuzzy (subsequence) matches within a tier', async () => {
       const session = makeSession();
       // Org cache contains:

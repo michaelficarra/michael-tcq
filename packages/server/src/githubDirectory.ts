@@ -349,14 +349,15 @@ export async function warmDirectoryForUser(session: SessionUser): Promise<void> 
  * `kallai`), even when the latter would otherwise have scored points
  * elsewhere.
  *
- * Comparisons are case-insensitive *and* whitespace-insensitive: both the
- * query and each field are lowercased and have all whitespace stripped
- * before scoring. This lets a typist enter a real-world display name like
- * "Samina Husein" and still match the camel-case login "SaminaHusein" —
- * stripping both sides also preserves the exact-match boost when the
- * query happens to mirror the stored name verbatim. Tuned for the
- * prefix-style typing pattern in autocomplete dropdowns rather than
- * full-text search.
+ * Comparisons are case-insensitive, whitespace-insensitive, *and*
+ * diacritic-insensitive: both the query and each field are lowercased,
+ * have all whitespace stripped, and have diacritics removed before
+ * scoring. This lets a typist enter a real-world display name like
+ * "Samina Husein" and match the camel-case login "SaminaHusein", or
+ * type "Jose" and match a stored name "José". Stripping both sides
+ * also preserves the exact-match boost when the query happens to
+ * mirror the stored name verbatim. Tuned for the prefix-style typing
+ * pattern in autocomplete dropdowns rather than full-text search.
  */
 const MATCH_CLASS_EXACT = 10000;
 const MATCH_CLASS_PREFIX = 1000;
@@ -388,11 +389,32 @@ function scoreMatch(query: string, login: string, name: string, organisation: st
   );
 }
 
-/** Lowercase and strip all whitespace so spaces in typed names don't
- * block matches against camel-case logins (e.g. "Samina Husein" vs
- * "SaminaHusein"). Applied to both sides of every comparison. */
+/**
+ * Normalise a string for fuzzy matching: NFD-decompose, strip
+ * diacritics, lowercase, then drop whitespace. Applied to both sides of
+ * every comparison so that "José Pérez", "Jose Perez", and "joseperez"
+ * all collapse to the same key.
+ *
+ * The diacritic step uses Unicode Normalization Form D (UAX #15) to
+ * split precomposed letters like "é" into "e" + combining acute, then
+ * strips characters with the Unicode `Diacritic` binary property
+ * (UAX #44). UTS #10 §11 ("Searching and Matching") describes the
+ * theoretically correct mechanism — primary-strength UCA comparison
+ * via `Intl.Collator({ sensitivity: 'base' })` — but ECMAScript
+ * exposes no UCA-aware substring search (no `usearch`), so it is
+ * unusable for our prefix/substring/subsequence pipeline. NFD plus
+ * `\p{Diacritic}` is the closest standards-grounded approximation that
+ * yields a plain string the existing matcher can run on directly.
+ *
+ * Known limits: doesn't apply locale-specific equivalences like ß↔ss,
+ * Æ↔AE, or Turkish ı↔i — those would need full collation tailoring.
+ */
 function normaliseForMatch(s: string): string {
-  return s.toLowerCase().replaceAll(/\s+/g, '');
+  return s
+    .normalize('NFD')
+    .replaceAll(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replaceAll(/\s+/g, '');
 }
 
 /** Return true iff every character of `q` appears in `s` in order. */
