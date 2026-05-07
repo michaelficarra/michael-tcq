@@ -384,6 +384,49 @@ describe('githubDirectory', () => {
       expect(lowerToMixed.map((r) => r.login)).toEqual(['AliceSmith']);
     });
 
+    it('matches a space-separated query against a camel-case login', async () => {
+      // Real-world case: a typist enters "Samina Husein" but the GitHub
+      // login is "SaminaHusein" (no space). The matcher must strip
+      // whitespace from both sides so the query still hits — otherwise
+      // the space character has no counterpart in the login and even
+      // subsequence matching fails.
+      const session = makeSession();
+      restoreFetch = setFetchForTesting(async (url, init) => {
+        if (url === 'https://api.github.com/graphql') {
+          const org = await readGraphqlOrg(init);
+          if (org === 'tc39') {
+            return graphqlMembersResponse([
+              { databaseId: 1, login: 'SaminaHusein', name: 'Samina Husein', avatarUrl: 's.png' },
+            ]);
+          }
+          throw new Error(`unexpected: ${org}`);
+        }
+        if (url.endsWith('/user/orgs?per_page=100')) {
+          return jsonResponse([{ login: 'tc39' }]);
+        }
+        throw new Error(`unexpected: ${url}`);
+      });
+      await warmDirectoryForUser(session);
+
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.includes('/search/users')) return jsonResponse({ items: [] });
+        throw new Error(`unexpected: ${url}`);
+      });
+
+      // Title-cased query with an internal space — the form a user is
+      // most likely to type when they know the display name.
+      const titled = await searchUsers(session, 'Samina Husein', undefined, 5);
+      expect(titled.map((r) => r.login)).toEqual(['SaminaHusein']);
+
+      // Lowercase + space — both axes of normalisation working together.
+      const lower = await searchUsers(session, 'samina husein', undefined, 5);
+      expect(lower.map((r) => r.login)).toEqual(['SaminaHusein']);
+
+      // Regression guard: the no-space form must keep working.
+      const collapsed = await searchUsers(session, 'saminahusein', undefined, 5);
+      expect(collapsed.map((r) => r.login)).toEqual(['SaminaHusein']);
+    });
+
     it('ranks prefix matches above fuzzy (subsequence) matches within a tier', async () => {
       const session = makeSession();
       // Org cache contains:

@@ -349,8 +349,14 @@ export async function warmDirectoryForUser(session: SessionUser): Promise<void> 
  * `kallai`), even when the latter would otherwise have scored points
  * elsewhere.
  *
- * All comparisons are case-insensitive. Tuned for the prefix-style
- * typing pattern in autocomplete dropdowns rather than full-text search.
+ * Comparisons are case-insensitive *and* whitespace-insensitive: both the
+ * query and each field are lowercased and have all whitespace stripped
+ * before scoring. This lets a typist enter a real-world display name like
+ * "Samina Husein" and still match the camel-case login "SaminaHusein" —
+ * stripping both sides also preserves the exact-match boost when the
+ * query happens to mirror the stored name verbatim. Tuned for the
+ * prefix-style typing pattern in autocomplete dropdowns rather than
+ * full-text search.
  */
 const MATCH_CLASS_EXACT = 10000;
 const MATCH_CLASS_PREFIX = 1000;
@@ -373,13 +379,20 @@ function scoreField(query: string, field: string, fieldWeight: number): number {
 }
 
 function scoreMatch(query: string, login: string, name: string, organisation: string): number {
-  const q = query.toLowerCase();
+  const q = normaliseForMatch(query);
   if (q.length === 0) return 1; // empty query → everyone matches equally
   return Math.max(
-    scoreField(q, login.toLowerCase(), FIELD_WEIGHT_LOGIN),
-    scoreField(q, name.toLowerCase(), FIELD_WEIGHT_NAME),
-    scoreField(q, organisation.toLowerCase(), FIELD_WEIGHT_ORG),
+    scoreField(q, normaliseForMatch(login), FIELD_WEIGHT_LOGIN),
+    scoreField(q, normaliseForMatch(name), FIELD_WEIGHT_NAME),
+    scoreField(q, normaliseForMatch(organisation), FIELD_WEIGHT_ORG),
   );
+}
+
+/** Lowercase and strip all whitespace so spaces in typed names don't
+ * block matches against camel-case logins (e.g. "Samina Husein" vs
+ * "SaminaHusein"). Applied to both sides of every comparison. */
+function normaliseForMatch(s: string): string {
+  return s.toLowerCase().replaceAll(/\s+/g, '');
 }
 
 /** Return true iff every character of `q` appears in `s` in order. */

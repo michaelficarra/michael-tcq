@@ -129,7 +129,7 @@ Every place the app accepts a GitHub username — the agenda form's presenters i
 2. Members of any GitHub organisation the searcher belongs to (including concealed members visible only to fellow org members). Org membership is discovered after login via the `read:org` OAuth scope.
 3. Global GitHub user-search results, fetched on the searcher's behalf using their OAuth token. Only consulted when tiers 1 and 2 produce fewer matches than the dropdown holds.
 
-Matching is case-insensitive and runs against each user's GitHub login, display name, and `company` field. Within each tier, prefix matches always rank above substring matches, which always rank above subsequence ("fuzzy") matches; within a single match class, login matches outweigh name matches, which outweigh company matches. Each suggestion row shows the avatar, login, optional display name, and optional company plus an "in meeting" / "org" tier badge.
+Matching is case-insensitive _and_ whitespace-insensitive, and runs against each user's GitHub login, display name, and `company` field. Whitespace is stripped from both the typed query and the candidate fields before comparison, so a typist can enter a real-world display name like "Samina Husein" and still match the camel-case login "SaminaHusein". Within each tier, prefix matches always rank above substring matches, which always rank above subsequence ("fuzzy") matches; within a single match class, login matches outweigh name matches, which outweigh company matches. Each suggestion row shows the avatar, login, optional display name, and optional company plus an "in meeting" / "org" tier badge.
 
 **Interaction.** The dropdown is a _suggestion_ layer, not a constraint:
 

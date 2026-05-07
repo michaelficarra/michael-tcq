@@ -373,6 +373,36 @@ describe('Meeting REST routes', () => {
       expect(presenter.name).toBe('Philip Chimento');
     });
 
+    it('resolves a spaced name to a camel-case meeting-user login', async () => {
+      // Whitespace-insensitive matching: the imported presenter text has
+      // the spaces of a real display name, but the GitHub login is
+      // camel-case with no separator. Both forms must collapse to the
+      // same key for the resolver to bind them.
+      const extra: User = {
+        ghid: 99,
+        ghUsername: 'SaminaHusein',
+        name: 'Samina Husein',
+        organisation: 'Apple',
+      };
+      const meetingId = createMeetingWith([extra]);
+      const md = [
+        '## Agenda Items',
+        '',
+        '| Topic | Presenter | Duration |',
+        '| ----- | --------- | -------- |',
+        '| Item | Samina Husein | 30 |',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md);
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.ghid).toBe(99);
+      expect(presenter.ghUsername).toBe('SaminaHusein');
+      expect(presenter.name).toBe('Samina Husein');
+    });
+
     it('falls back to a placeholder when no candidate matches', async () => {
       const meetingId = createMeetingWith();
       const md = [
