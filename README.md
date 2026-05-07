@@ -41,6 +41,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 ### General UX
 
 - **Memorable meeting IDs** — meetings use human-readable word-based IDs (e.g. `bright-pine-lake`) instead of opaque random strings.
+- **My Meetings panel** — the home page lists every meeting the current user is associated with (chair, presenter, queue speaker, or anyone who's joined) with a relative-formatted "Last Activity" column (e.g. "now", "5 min ago"), so a returning user can re-enter recent meetings without re-typing the ID and see at a glance which are in progress. Being added to the agenda by a chair is enough — the meeting shows up on the presenter's home page even before they've joined for the first time.
 - **Presentation mode** ([bterlson/tcq#22](https://github.com/bterlson/tcq/issues/22)) — press `f` to enter fullscreen with all controls hidden, ideal for projecting the queue during a meeting.
 - **Keyboard shortcuts** — press `?` to see the full list. Quick keys cover entering the queue (`n`, `r`, `c`, `p`), advancing the speaker (`s`), switching tabs (`1`–`4`), toggling presentation mode (`f`), and opening Preferences (`,`). Can be disabled in the Preferences modal for users who find the key bindings intrusive.
 - **In-app help page** — a Help tab explains how the tool works for both chairs and participants, with guidance on when to use each queue entry type.

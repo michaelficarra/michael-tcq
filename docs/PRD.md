@@ -57,6 +57,8 @@ The home page shows two cards side by side:
 - **Join Meeting** — a text input for the meeting ID and a "Join" button. Validates that the meeting exists before navigating to it.
 - **New Meeting** — a "Start a New Meeting" button that creates a meeting with the current user as the sole chair and redirects to it. Additional chairs can be added from the Agenda tab.
 
+Below the two cards, a **My Meetings** panel lists every meeting the current user is associated with — as a chair, an agenda-item presenter, a queue speaker, or anyone who has joined via socket. Each row shows the meeting ID (linked to that meeting) and the meeting's last activity: `now (N active)` (where N is the current count of connected sockets) while at least one client is connected, otherwise a relative duration since the last connection (e.g. "5 min ago"), or `never` for meetings nobody has ever joined. In-progress meetings are listed first, then idle meetings most-recently-active first. The panel is hidden for users with no associated meetings, and refreshes every 10 seconds while the home page is open.
+
 ## Meetings
 
 ### Creating a Meeting

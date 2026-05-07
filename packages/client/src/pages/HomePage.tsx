@@ -14,6 +14,7 @@ import { AdminPanel } from '../components/AdminPanel.js';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
+import { MyMeetingsPanel } from '../components/MyMeetingsPanel.js';
 import { UserMenu } from '../components/UserMenu.js';
 
 type HomeTab = 'join' | 'admin' | 'help';
@@ -160,6 +161,7 @@ function JoinTab() {
         <JoinMeetingCard />
         <NewMeetingCard />
       </div>
+      <MyMeetingsPanel />
     </div>
   );
 }

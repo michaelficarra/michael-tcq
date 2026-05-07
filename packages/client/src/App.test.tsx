@@ -6,11 +6,32 @@ import { PreferencesProvider } from './contexts/PreferencesContext.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { HomePage } from './pages/HomePage.js';
 
-// Mock fetch globally for these tests
-const mockFetch = vi.fn();
+// Mock fetch globally for these tests. URL-routed rather than FIFO so the
+// HomePage's background `<MyMeetingsPanel/>` fetch can't accidentally consume
+// a response queued for the user-driven action a test is about to drive.
+const mockResponses = new Map<string, unknown[]>();
+const mockFetch = vi.fn(async (url: string, _init?: unknown) => {
+  const queue = mockResponses.get(url);
+  if (queue && queue.length > 0) return queue.shift();
+  // Default: empty list for the home page's My Meetings panel so it stays
+  // hidden in tests that don't care; everything else explicitly opts in.
+  if (url === '/api/my-meetings') return { ok: true, json: () => Promise.resolve([]) };
+  return undefined;
+});
+
+function queueResponse(url: string, response: unknown) {
+  let queue = mockResponses.get(url);
+  if (!queue) {
+    queue = [];
+    mockResponses.set(url, queue);
+  }
+  queue.push(response);
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
-  mockFetch.mockReset();
+  mockFetch.mockClear();
+  mockResponses.clear();
 });
 
 // Mock useNavigate
@@ -24,8 +45,9 @@ vi.mock('react-router-dom', async () => {
 });
 
 function renderHomePage() {
-  // Simulate an authenticated user for HomePage tests
-  mockFetch.mockResolvedValueOnce({
+  // Simulate an authenticated user for HomePage tests. /api/my-meetings is
+  // covered by the URL-routed default ([]).
+  queueResponse('/api/me', {
     ok: true,
     json: () => Promise.resolve({ ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' }),
   });
@@ -82,7 +104,7 @@ describe('HomePage', () => {
     });
 
     // Mock the meeting lookup
-    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+    queueResponse('/api/meetings/bright-pine-lake', { ok: true, json: () => Promise.resolve({}) });
 
     fireEvent.change(screen.getByLabelText('Meeting ID'), {
       target: { value: 'bright-pine-lake' },
@@ -100,7 +122,7 @@ describe('HomePage', () => {
       expect(screen.getByLabelText('Meeting ID')).toBeInTheDocument();
     });
 
-    mockFetch.mockResolvedValueOnce({ ok: false });
+    queueResponse('/api/meetings/no-such-meeting', { ok: false });
 
     fireEvent.change(screen.getByLabelText('Meeting ID'), {
       target: { value: 'no-such-meeting' },
@@ -120,7 +142,7 @@ describe('HomePage', () => {
       expect(screen.getByRole('button', { name: 'Start a New Meeting' })).toBeInTheDocument();
     });
 
-    mockFetch.mockResolvedValueOnce({
+    queueResponse('/api/meetings', {
       ok: true,
       json: () => Promise.resolve({ id: 'calm-wave-fox' }),
     });
@@ -143,7 +165,7 @@ describe('HomePage', () => {
       expect(screen.getByRole('button', { name: 'Start a New Meeting' })).toBeInTheDocument();
     });
 
-    mockFetch.mockResolvedValueOnce({
+    queueResponse('/api/meetings', {
       ok: false,
       json: () => Promise.resolve({ error: 'Something went wrong' }),
     });

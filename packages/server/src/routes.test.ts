@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { User } from '@tcq/shared';
@@ -8,6 +8,7 @@ import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
+import * as socket from './socket.js';
 
 /**
  * Helper: make a request to the Express app without starting a real HTTP server.
@@ -160,6 +161,103 @@ describe('Meeting REST routes', () => {
     it('returns 404 for a non-existent meeting', async () => {
       const res = await fetch(`${baseUrl}/api/meetings/no-such-meeting`);
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/my-meetings', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns 401 when unauthenticated', async () => {
+      // Build a parallel app without the auto-login middleware so the
+      // session has no user attached.
+      const app = express();
+      app.use(express.json());
+      app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
+      app.use('/api', createMeetingRoutes(manager, { to: () => ({ emit: () => {} }) } as any));
+      const { baseUrl: noAuthUrl, close: noAuthClose } = await listen(app);
+      try {
+        const res = await fetch(`${noAuthUrl}/api/my-meetings`);
+        expect(res.status).toBe(401);
+      } finally {
+        noAuthClose();
+      }
+    });
+
+    it('returns meetings where the caller is a chair', async () => {
+      const meeting = manager.create([TEST_USER]);
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // No one has connected yet, so lastActivity is the empty-string sentinel
+      // (which the client renders as "never").
+      expect(body).toEqual([{ id: meeting.id, lastActivity: '', currentConnections: 0 }]);
+    });
+
+    it('returns meetings where the caller appears only in meeting.users (e.g. as a presenter)', async () => {
+      // A different user is the chair; the caller is added separately to
+      // `users` to model "named on an agenda item" without ever joining.
+      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const meeting = manager.create([other]);
+      meeting.users[asUserKey(TEST_USER.ghUsername)] = TEST_USER;
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body).toEqual([{ id: meeting.id, lastActivity: '', currentConnections: 0 }]);
+    });
+
+    it('returns meetings where the caller appears only in participantIds', async () => {
+      // Caller is not in `users` (so not a chair/presenter/queued user) but
+      // is recorded as having joined via socket. Guarantees the
+      // participantIds branch of the filter is exercised.
+      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const meeting = manager.create([other]);
+      meeting.participantIds.push(asUserKey(TEST_USER.ghUsername));
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body).toEqual([{ id: meeting.id, lastActivity: '', currentConnections: 0 }]);
+    });
+
+    it('excludes meetings where the caller is unrelated', async () => {
+      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      manager.create([other]);
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body).toEqual([]);
+    });
+
+    it('reports lastActivity as "now" with the live count when at least one socket is connected', async () => {
+      const meeting = manager.create([TEST_USER]);
+      vi.spyOn(socket, 'getActiveConnectionCount').mockImplementation((id) => (id === meeting.id ? 3 : 0));
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body).toEqual([{ id: meeting.id, lastActivity: 'now', currentConnections: 3 }]);
+    });
+
+    it('reports lastActivity as the persisted last-connection ISO timestamp when idle', async () => {
+      const meeting = manager.create([TEST_USER]);
+      meeting.operational.lastConnectionTime = '2026-01-02T03:04:05.000Z';
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body).toEqual([{ id: meeting.id, lastActivity: '2026-01-02T03:04:05.000Z', currentConnections: 0 }]);
+    });
+
+    it('sorts in-progress meetings ahead of idle ones, idle ones by recency', async () => {
+      const stale = manager.create([TEST_USER]);
+      stale.operational.lastConnectionTime = '2026-01-01T00:00:00.000Z';
+      const recent = manager.create([TEST_USER]);
+      recent.operational.lastConnectionTime = '2026-02-01T00:00:00.000Z';
+      const active = manager.create([TEST_USER]);
+      vi.spyOn(socket, 'getActiveConnectionCount').mockImplementation((id) => (id === active.id ? 2 : 0));
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body.map((m: { id: string }) => m.id)).toEqual([active.id, recent.id, stale.id]);
     });
   });
 

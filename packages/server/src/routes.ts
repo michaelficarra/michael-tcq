@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
 import type { User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
-import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema } from '@tcq/shared';
+import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema, userKey } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
@@ -163,6 +163,51 @@ export function createMeetingRoutes(
       return;
     }
     res.json(meeting);
+  });
+
+  // List the meetings the current user is associated with — surfaced on the
+  // home page so a returning user can see, and link straight back into,
+  // meetings they've previously taken part in. A meeting matches when the
+  // caller's UserKey appears either in `meeting.users` (chair, presenter, or
+  // anyone ever queued) or in `meeting.participantIds` (anyone who has joined
+  // via socket). The participantIds branch is a near-subset of the users
+  // branch in normal flows, but checking both is cheap and protects against
+  // any code path that adds a participant without populating the users map.
+  // `lastActivity` mirrors the shape used by the admin meetings list: the
+  // literal string `'now'` when at least one socket is currently connected
+  // to the meeting, otherwise the ISO timestamp recorded the last time a
+  // socket was open (empty string if no one has ever connected).
+  router.get('/my-meetings', (req, res) => {
+    const user = req.session.user;
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const key = userKey(user);
+    const matches: { id: string; lastActivity: string; currentConnections: number; sortTime: string }[] = [];
+    for (const meeting of meetingManager.listAll()) {
+      if (key in meeting.users || meeting.participantIds.includes(key)) {
+        const live = getActiveConnectionCount(meeting.id);
+        const lastConnectionTime = meeting.operational.lastConnectionTime ?? '';
+        matches.push({
+          id: meeting.id,
+          lastActivity: live > 0 ? 'now' : lastConnectionTime,
+          currentConnections: live,
+          sortTime: lastConnectionTime,
+        });
+      }
+    }
+
+    // In-progress meetings float to the top; among the rest, the most
+    // recently active meeting wins. A meeting that nobody has ever
+    // connected to (empty `sortTime`) sorts last.
+    matches.sort((a, b) => {
+      if (b.currentConnections !== a.currentConnections) return b.currentConnections - a.currentConnections;
+      return b.sortTime.localeCompare(a.sortTime);
+    });
+
+    res.json(matches.map(({ id, lastActivity, currentConnections }) => ({ id, lastActivity, currentConnections })));
   });
 
   // --- Get a meeting's log ---

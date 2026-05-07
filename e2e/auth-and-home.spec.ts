@@ -84,6 +84,32 @@ test.describe('Home Page', () => {
   });
 });
 
+test.describe('My Meetings panel', () => {
+  test('is hidden for a user with no associated meetings', async ({ page }) => {
+    await waitForHomePage(page);
+    // Switch to a fresh login that has never appeared in any meeting on this
+    // server, so the caller's UserKey is not in any `meeting.users` map and
+    // not in any `meeting.participantIds`. The panel renders nothing in
+    // that state.
+    await switchUser(page, 'mymeetings-fresh-noone');
+    await expect(page.getByRole('heading', { name: 'My Meetings' })).toHaveCount(0);
+  });
+
+  test('lists a meeting the user just created and links into it', async ({ page }) => {
+    // Default mock auth user ('admin') is the chair of the new meeting, so
+    // their UserKey lands in `meeting.users` and the panel surfaces it.
+    const id = await createMeeting(page);
+    await waitForHomePage(page);
+    const panel = page.getByRole('heading', { name: 'My Meetings' }).locator('..');
+    await expect(panel).toBeVisible();
+    const link = panel.getByRole('link', { name: id });
+    await expect(link).toBeVisible();
+    await link.click();
+    await page.waitForURL(`**/meeting/${encodeURIComponent(id)}`);
+    expect(page.url()).toContain(`/meeting/${encodeURIComponent(id)}`);
+  });
+});
+
 test.describe('Admin Tab', () => {
   // Default mock-auth user is "admin" and `.env.test` sets ADMIN_USERNAMES=admin,
   // so the test browser starts logged in as an admin. Switching to any other
