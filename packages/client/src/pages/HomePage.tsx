@@ -16,15 +16,45 @@ import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
 import { UserMenu } from '../components/UserMenu.js';
 
+type HomeTab = 'join' | 'admin' | 'help';
+const HOME_TABS: readonly HomeTab[] = ['join', 'admin', 'help'];
+
 export function HomePage() {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'join' | 'admin' | 'help'>('join');
+  // Initialise from the URL fragment so /#admin or /#help link directly into
+  // a tab. Falls through to 'join' for missing/invalid hashes.
+  const [activeTab, setActiveTab] = useState<HomeTab>(() => {
+    const hash = window.location.hash.slice(1);
+    return HOME_TABS.includes(hash as HomeTab) ? (hash as HomeTab) : 'join';
+  });
 
   // The Admin tab is admin-gated. Derive the displayed tab so that if the user
   // loses admin access while parked on Admin (e.g. via the dev user-switcher),
   // they fall back to Join without us needing a state-sync effect (which would
   // trip `react-hooks/set-state-in-effect`).
   const visibleTab = activeTab === 'admin' && !isAdmin ? 'join' : activeTab;
+
+  // Sync the *visible* tab to the URL fragment. Syncing visibleTab rather than
+  // activeTab means a non-admin who pastes /#admin self-corrects to /#join
+  // instead of leaving the URL claiming an Admin view they can't see.
+  // Depend on activeTab too so an in-session hashchange to #admin (which
+  // updates activeTab but leaves visibleTab='join' for a non-admin) still
+  // triggers the rewrite — otherwise the URL would stay at #admin.
+  useEffect(() => {
+    window.history.replaceState(null, '', `#${visibleTab}`);
+  }, [activeTab, visibleTab]);
+
+  // Listen for hashchange events so browser back/forward updates the tab.
+  useEffect(() => {
+    function handleHashChange() {
+      const hash = window.location.hash.slice(1);
+      if (HOME_TABS.includes(hash as HomeTab)) {
+        setActiveTab(hash as HomeTab);
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   return (
     <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">

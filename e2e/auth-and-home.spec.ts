@@ -70,7 +70,16 @@ test.describe('Home Page', () => {
     await page.getByRole('tab', { name: 'Help' }).click();
     // Help tab should now be selected and show help content
     await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+    // The URL fragment tracks the active tab so the view is bookmarkable.
+    await expect(page).toHaveURL(/#help$/);
     // The New Meeting card should still be visible but Join Meeting card content should be replaced
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).not.toBeVisible();
+  });
+
+  test('visiting /#help directly lands on the Help tab', async ({ page }) => {
+    // Note: don't use waitForHomePage here — it goto('/') and would clobber the hash.
+    await page.goto('/#help');
+    await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).not.toBeVisible();
   });
 });
@@ -116,6 +125,26 @@ test.describe('Admin Tab', () => {
     await switchUser(page, 'testuser');
     await expect(page.getByRole('tab', { name: 'Admin' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
+  });
+
+  test('visiting /#admin directly lands on the Admin tab for admin users', async ({ page }) => {
+    // Note: don't use waitForHomePage here — it goto('/') and would clobber the hash.
+    await page.goto('/#admin');
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: 'Active Meetings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Diagnostics' })).toBeVisible();
+  });
+
+  test('visiting /#admin as a non-admin self-corrects to /#join', async ({ page }) => {
+    // Switch to a non-admin user first, then try to deep-link to /#admin.
+    await waitForHomePage(page);
+    await switchUser(page, 'testuser');
+    await page.goto('/#admin');
+    // Admin button isn't rendered, the Join Meeting view is shown,
+    // and the URL has been rewritten so it doesn't claim an Admin view.
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
+    await expect(page).toHaveURL(/#join$/);
   });
 });
 
