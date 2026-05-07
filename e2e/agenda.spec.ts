@@ -106,7 +106,7 @@ test.describe('Agenda tab', () => {
   });
 
   test.describe('Agenda Management (Chair Only)', () => {
-    test('add form has fields for name, presenters (pre-populated), and estimate', async ({ page }) => {
+    test('add form has fields for name, presenters (starts empty), and estimate', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
@@ -117,8 +117,8 @@ test.describe('Agenda tab', () => {
       await expect(page.getByLabel('Agenda Item Name')).toBeVisible();
       const presentersInput = page.getByLabel('Presenters');
       await expect(presentersInput).toBeVisible();
-      // Presenters field should be pre-populated with the current user's username
-      await expect(presentersInput).toHaveValue('admin');
+      // Presenters field starts empty — the chair adds presenters explicitly.
+      await expect(presentersInput).toHaveValue('');
       await expect(page.getByLabel('Estimate')).toBeVisible();
 
       // Submit and cancel buttons

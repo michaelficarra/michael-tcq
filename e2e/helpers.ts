@@ -30,8 +30,9 @@ export async function createMeeting(page: Page): Promise<string> {
 /** Switch to a different mock user via the dev user-switcher. */
 export async function switchUser(page: Page, username: string) {
   const nav = page.getByRole('navigation');
-  // Click the username in the nav bar to open the switcher
-  const userMenu = nav.getByRole('textbox');
+  // The dev user-switcher input is now a `UserCombobox` (role=combobox)
+  // rather than a plain text input, so we locate it by combobox role.
+  const userMenu = nav.getByRole('combobox');
   // If the form isn't visible, click the user button to show it
   if (!(await userMenu.isVisible())) {
     await nav.getByRole('button').filter({ hasText: /\w/ }).last().click();
@@ -80,8 +81,10 @@ export async function goToHelpTab(page: Page) {
 /**
  * Add an agenda item (must be on the Agenda tab as a chair).
  * `presenters` accepts a single username or an array; the chip combobox
- * commits each entry on Enter. The presenter list starts empty, so the
- * helper just types each requested entry.
+ * commits each entry on Enter. When omitted, the helper adds the default
+ * mock-auth user ('admin') so the form passes its "≥1 presenter" check —
+ * the form no longer pre-populates the field, so a missing presenter
+ * would otherwise silently block submission.
  */
 export async function addAgendaItem(page: Page, name: string, presenters?: string | string[], estimate?: number) {
   // Open the form. Playwright's click auto-waits for the button to be actionable,
@@ -91,13 +94,11 @@ export async function addAgendaItem(page: Page, name: string, presenters?: strin
 
   // Fill in the form
   await page.getByLabel('Agenda Item Name').fill(name);
-  if (presenters !== undefined) {
-    const presentersList = Array.isArray(presenters) ? presenters : [presenters];
-    const presentersInput = page.getByLabel('Presenters');
-    for (const p of presentersList) {
-      await presentersInput.fill(p);
-      await presentersInput.press('Enter');
-    }
+  const presentersList = presenters === undefined ? ['admin'] : Array.isArray(presenters) ? presenters : [presenters];
+  const presentersInput = page.getByLabel('Presenters');
+  for (const p of presentersList) {
+    await presentersInput.fill(p);
+    await presentersInput.press('Enter');
   }
   if (estimate !== undefined) {
     // `exact: true` avoids matching the display-side "Estimate: Xm" aria-label

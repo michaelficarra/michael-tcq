@@ -94,13 +94,13 @@ test.describe('User Badge in Nav', () => {
 });
 
 test.describe('Mock Auth User Switcher', () => {
-  test('clicking username opens a text input for switching users', async ({ page }) => {
+  test('clicking username opens an input for switching users', async ({ page }) => {
     await waitForHomePage(page);
     const nav = page.getByRole('navigation');
     // Click the username button in the nav
     await nav.getByRole('button').filter({ hasText: 'admin' }).click();
-    // A text input should appear
-    await expect(nav.getByRole('textbox')).toBeVisible();
+    // The switcher input is now a UserCombobox (role=combobox).
+    await expect(nav.getByRole('combobox')).toBeVisible();
   });
 
   test('switching user changes the displayed identity', async ({ page }) => {
@@ -108,7 +108,7 @@ test.describe('Mock Auth User Switcher', () => {
     const nav = page.getByRole('navigation');
     // Open the user switcher
     await nav.getByRole('button').filter({ hasText: 'admin' }).click();
-    const input = nav.getByRole('textbox');
+    const input = nav.getByRole('combobox');
     await input.fill('testuser');
     await input.press('Enter');
     // Wait for the identity to update

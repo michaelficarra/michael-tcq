@@ -50,17 +50,19 @@ test.describe('Username autocomplete', () => {
 
     const firstOption = page.getByRole('listbox').getByRole('option').first();
     await expect(firstOption).toBeVisible();
-    const optionText = (await firstOption.textContent()) ?? '';
+    // The option lays out login / display name / org as separate inline
+    // elements with CSS gap — that gap doesn't show up in textContent, so
+    // splitting on whitespace just returns the whole concatenation. Read
+    // the login from its dedicated <span> instead, which is the first
+    // <span> child of the option (the avatar is an <img>).
+    const optionLogin = ((await firstOption.locator('span').first().textContent()) ?? '').trim();
     // Click the first suggestion via mousedown (the combobox commits on
     // mousedown so blur doesn't unmount it first).
     await firstOption.click();
 
     // The input clears, the suggestion appears as a chip in the row.
     await expect(presenters).toHaveValue('');
-    // The chip's login text is the first whitespace-trimmed token of the
-    // option's rendered text (login appears before the optional name).
-    const chipLogin = optionText.trim().split(/\s+/)[0];
-    await expect(page.getByText(chipLogin, { exact: true })).toBeVisible();
+    await expect(page.getByText(optionLogin, { exact: true })).toBeVisible();
   });
 
   test('free-text fallback: pressing Enter with no match still adds a token', async ({ page }) => {
