@@ -2,40 +2,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { parseAgendaMarkdown, stripMarkdown } from './parseAgenda.js';
+import { parseAgendaMarkdown } from './parseAgenda.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-describe('stripMarkdown', () => {
-  it('strips markdown links', () => {
-    expect(stripMarkdown('[text](https://example.com)')).toBe('text');
-  });
-
-  it('strips bold', () => {
-    expect(stripMarkdown('**bold text**')).toBe('bold text');
-  });
-
-  it('strips italic', () => {
-    expect(stripMarkdown('*italic text*')).toBe('italic text');
-  });
-
-  it('strips inline code', () => {
-    expect(stripMarkdown('`code`')).toBe('code');
-  });
-
-  it('strips HTML tags', () => {
-    expect(stripMarkdown('<sub>Note</sub>')).toBe('Note');
-  });
-
-  it('strips agenda key emoji', () => {
-    expect(stripMarkdown('❄️ Hard constraint item')).toBe('Hard constraint item');
-    expect(stripMarkdown('⌛️ Late addition')).toBe('Late addition');
-  });
-
-  it('handles combined formatting', () => {
-    expect(stripMarkdown('[**bold link**](url) and *italic*')).toBe('bold link and italic');
-  });
-});
+// Plain-text extraction (formerly the `stripMarkdown` regex helper) now
+// lives in `@tcq/shared` as `extractPlainText` and is covered by
+// `markdown.test.ts`. Agenda-key emoji prefix stripping is exercised
+// indirectly via the parser's end-to-end fixtures.
 
 describe('parseAgendaMarkdown', () => {
   it('returns empty array when no agenda section found', () => {

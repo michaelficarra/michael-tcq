@@ -147,7 +147,9 @@ In local development with mock auth, the dropdown is backed by a hardcoded seed 
 
 ### Markdown in Item Names and Queue Topics
 
-Agenda item names and queue entry topics support a limited subset of inline markdown: **bold**, _italic_, ~~strikethrough~~, `code`, and [links](). This formatting is preserved when importing agendas and rendered in the UI. Other markdown syntax is displayed as plain text.
+Agenda item names, queue entry topics, session names, agenda item conclusions, and poll topics support a limited subset of inline markdown: **bold**, _italic_, ~~strikethrough~~, `code`, [links](), bare-URL autolinks, and a small set of inline HTML tags (`<a>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<del>`, `<sub>`, `<sup>`, `<code>`). The canonical allowlist (and the URL scheme allowlist for links — `http:`, `https:`, `mailto:`) lives in `packages/shared/src/markdown.ts`.
+
+Validation is **strict at the write boundary** — submitting a heading, list, table, blockquote, image, code block, or any disallowed HTML tag/attribute is rejected with a specific error like _"Headings are not supported"_. Rendering is **lenient**: legacy stored content that pre-dates the validator is silently stripped to its supported subset rather than crashing the page. Agenda import is also lenient — disallowed nodes inside an imported item name are stripped, not cause to reject the import.
 
 ### Agenda Display
 

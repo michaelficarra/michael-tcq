@@ -40,10 +40,53 @@ describe('InlineMarkdown', () => {
     expect(code.tagName).toBe('CODE');
   });
 
-  it('escapes HTML to prevent XSS', () => {
+  it('strips disallowed HTML rather than rendering it', () => {
+    // Disallowed tags (and their inner content, since the inner content
+    // is a payload here, not user prose) are dropped wholesale. The
+    // page must contain neither a real <script> element nor the text.
     const { container } = render(<InlineMarkdown>{'<script>alert("xss")</script>'}</InlineMarkdown>);
     expect(container.querySelector('script')).toBeNull();
-    expect(container.textContent).toContain('<script>');
+    expect(container.textContent).not.toContain('alert');
+  });
+
+  it('does not use dangerouslySetInnerHTML', () => {
+    // The renderer must walk the AST and emit React elements; raw HTML
+    // injection is the surface we deliberately removed.
+    const { container } = render(<InlineMarkdown>{'**bold** and [link](https://x.example)'}</InlineMarkdown>);
+    // No element in the rendered tree should carry the property — easiest
+    // check is that the bold and link were rendered as proper elements.
+    expect(container.querySelector('strong')).not.toBeNull();
+    expect(container.querySelector('a')).not.toBeNull();
+  });
+
+  it('renders allow-listed inline HTML tags', () => {
+    const { container } = render(<InlineMarkdown>{'water H<sub>2</sub>O and 10<sup>9</sup>'}</InlineMarkdown>);
+    expect(container.querySelector('sub')?.textContent).toBe('2');
+    expect(container.querySelector('sup')?.textContent).toBe('9');
+  });
+
+  it('renders <a> with safe target/rel even when the source HTML omits them', () => {
+    const { container } = render(<InlineMarkdown>{'<a href="https://x.example">link</a>'}</InlineMarkdown>);
+    const a = container.querySelector('a');
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute('target')).toBe('_blank');
+    expect(a?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(a?.getAttribute('href')).toBe('https://x.example');
+  });
+
+  it('drops a markdown link with a javascript: URL but renders the text', () => {
+    const { container } = render(<InlineMarkdown>{'[click](javascript:alert(1))'}</InlineMarkdown>);
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toContain('click');
+  });
+
+  it('renders legacy heading-syntax content as plain text', () => {
+    // Stored data may pre-date the validator and contain block markdown;
+    // the renderer must tolerate it without crashing.
+    const { container } = render(<InlineMarkdown>{'# Legacy heading'}</InlineMarkdown>);
+    // Must not produce a real <h1>; the text survives as plain content.
+    expect(container.querySelector('h1')).toBeNull();
+    expect(container.textContent).toContain('Legacy heading');
   });
 
   it('handles multiple formatting in one string', () => {

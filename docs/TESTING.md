@@ -21,7 +21,9 @@ It is also where distributed-systems behaviour is tested. The in-process harness
 
 Most files live directly in `packages/server/src/`, one per source file under test. Self-tests for the test helpers themselves (`clientSurrogate.test.ts`, `concurrency.test.ts`) live alongside their helpers under `packages/server/src/test/`.
 
-Real-world TC39 agenda fixtures live verbatim under `packages/server/src/test/fixtures/agendas/<year>-<month>.md` (kept byte-identical to upstream via `.prettierignore`); their parser snapshots sit next to them as `<year>-<month>.parsed.json` and are produced by the fixture-based block in `parseAgenda.test.ts`. Update by re-running `curl ... -o ...` for the fixture and `vitest -u` for the snapshot.
+Real-world TC39 agenda fixtures live verbatim under `packages/server/src/test/fixtures/agendas/<year>-<month>.md` (kept byte-identical to upstream via `.prettierignore`); their parser snapshots sit next to them as `<year>-<month>.parsed.json` and are produced by the fixture-based block in `parseAgenda.test.ts`. Update by re-running `curl ... -o ...` for the fixture and `vitest -u` for the snapshot — review the diff manually before committing, since the parser's re-serialisation can produce CommonMark-canonical escape forms that look different but render identically.
+
+The shared markdown subsystem (validator, lenient stripper, plain-text extractor) is exercised by `packages/server/src/markdown.test.ts` — the shared package itself has no test runner, so its unit tests live in the server workspace where vitest is already configured.
 
 ## Client component/unit
 

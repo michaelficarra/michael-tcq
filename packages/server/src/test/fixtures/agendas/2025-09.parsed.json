@@ -113,7 +113,7 @@
     "duration": 30
   },
   {
-    "name": "Update on [proposal-await-dictionary](https://github.com/tc39/proposal-await-dictionary) [[spec](https://tc39.es/proposal-await-dictionary/), [slides](https://docs.google.com/presentation/d/1TaLCZt2jJtrVY1PjFd49jlBW-vAVil4NYsOzAyYPP7Q/)]",
+    "name": "Update on [proposal-await-dictionary](https://github.com/tc39/proposal-await-dictionary) \\[[spec](https://tc39.es/proposal-await-dictionary/), [slides](https://docs.google.com/presentation/d/1TaLCZt2jJtrVY1PjFd49jlBW-vAVil4NYsOzAyYPP7Q/)]",
     "presenters": [
       "Ashley Claymore"
     ],
@@ -135,7 +135,7 @@
     "duration": 30
   },
   {
-    "name": "[Native Promise Predicate](https://github.com/mhofman/proposal-native-promise-predicate) for stage 1 or 2 [[spec](https://mhofman.github.io/proposal-native-promise-predicate/), [slides](https://mhofman.github.io/proposal-native-promise-predicate/slides/2025-09-stage-1/)]",
+    "name": "[Native Promise Predicate](https://github.com/mhofman/proposal-native-promise-predicate) for stage 1 or 2 \\[[spec](https://mhofman.github.io/proposal-native-promise-predicate/), [slides](https://mhofman.github.io/proposal-native-promise-predicate/slides/2025-09-stage-1/)]",
     "presenters": [
       "Mathieu Hofman"
     ],
@@ -149,7 +149,7 @@
     "duration": 20
   },
   {
-    "name": "[Native Promise Adoption](https://github.com/mhofman/proposal-native-promise-adoption) for stage 1 [[spec](https://mhofman.github.io/proposal-native-promise-adoption/), [slides](https://mhofman.github.io/proposal-native-promise-adoption/slides/2025-09-stage-1/)]",
+    "name": "[Native Promise Adoption](https://github.com/mhofman/proposal-native-promise-adoption) for stage 1 \\[[spec](https://mhofman.github.io/proposal-native-promise-adoption/), [slides](https://mhofman.github.io/proposal-native-promise-adoption/slides/2025-09-stage-1/)]",
     "presenters": [
       "Mathieu Hofman"
     ],

@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import { normaliseGithubUsername } from './helpers.js';
+import { validateInlineMarkdown } from './markdown.js';
 import type {
   ActivePoll,
   AgendaEntry,
@@ -136,6 +137,57 @@ export type PollReactedDelta = DeltaEnvelope & { reactions: Reaction[] };
 const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is required`);
 
 /**
+ * Non-empty trimmed string that must also parse as inline markdown using
+ * only the supported subset (see `markdown.ts`). Used for fields whose
+ * value is rendered back through `InlineMarkdown` on the client.
+ *
+ * `superRefine` (rather than `refine`) is used so the validator's
+ * specific reason — e.g. *"Headings are not supported"* — surfaces in
+ * the form error rather than a generic message.
+ */
+const markdownString = (field: string, requiredMsg = `${field} is required`) =>
+  z
+    .string()
+    .trim()
+    .min(1, requiredMsg)
+    .superRefine((val, ctx) => {
+      const r = validateInlineMarkdown(val);
+      if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
+    });
+
+/**
+ * Optional markdown string used by edit-style payloads: when the field
+ * is provided it must be non-empty AND valid markdown; when omitted the
+ * existing value is left unchanged.
+ */
+const optionalMarkdownString = (field: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${field} cannot be empty`)
+    .superRefine((val, ctx) => {
+      const r = validateInlineMarkdown(val);
+      if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
+    })
+    .optional();
+
+/**
+ * Optional markdown string that also accepts the empty string as a way
+ * to clear the value (used for `conclusion` and the poll `topic`).
+ * Validation is skipped when empty/undefined.
+ */
+const clearableMarkdownString = (field: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .superRefine((val, ctx) => {
+      if (val === undefined || val.length === 0) return;
+      const r = validateInlineMarkdown(val);
+      if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
+    });
+
+/**
  * GitHub-username field: accepts an optional leading `@` and surrounding
  * whitespace, normalises to the bare username, then enforces non-empty.
  * The error `msg` surfaces in the UI when the field is empty after
@@ -148,7 +200,7 @@ const githubUsername = (msg = 'Username is required') =>
 
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
-  name: requiredTrimmed('Agenda item name'),
+  name: markdownString('Agenda item name'),
   presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required'),
   /** Estimated duration in minutes; omit or 0 for no estimate. */
   duration: z.number().int().positive().optional(),
@@ -179,7 +231,7 @@ export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
  */
 export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
-  name: z.string().trim().min(1, 'Agenda item name cannot be empty').optional(),
+  name: optionalMarkdownString('Agenda item name'),
   presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required').optional(),
   duration: z.number().int().nullable().optional(),
 });
@@ -191,7 +243,7 @@ export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
  * via `agenda:reorder` afterwards.
  */
 export const SessionAddPayloadSchema = z.object({
-  name: requiredTrimmed('Session name'),
+  name: markdownString('Session name'),
   /** Capacity in minutes — positive integer. */
   capacity: z.number().int().positive(),
 });
@@ -203,7 +255,7 @@ export type SessionAddPayload = z.infer<typeof SessionAddPayloadSchema>;
  */
 export const SessionEditPayloadSchema = z.object({
   id: z.string(),
-  name: z.string().trim().min(1, 'Session name cannot be empty').optional(),
+  name: optionalMarkdownString('Session name'),
   capacity: z.number().int().positive().optional(),
 });
 export type SessionEditPayload = z.infer<typeof SessionEditPayloadSchema>;
@@ -217,7 +269,7 @@ export type SessionDeletePayload = z.infer<typeof SessionDeletePayloadSchema>;
 /** Payload for editing an existing queue entry. */
 export const QueueEditPayloadSchema = z.object({
   id: z.string(),
-  topic: z.string().trim().min(1, 'Topic cannot be empty').optional(),
+  topic: optionalMarkdownString('Topic'),
   type: QueueEntryTypeSchema.optional(),
 });
 export type QueueEditPayload = z.infer<typeof QueueEditPayloadSchema>;
@@ -225,7 +277,7 @@ export type QueueEditPayload = z.infer<typeof QueueEditPayloadSchema>;
 /** Payload for adding a queue entry. */
 export const QueueAddPayloadSchema = z.object({
   type: QueueEntryTypeSchema,
-  topic: requiredTrimmed('Topic'),
+  topic: markdownString('Topic'),
   /**
    * Optional: GitHub username to add the entry as. Chair only. When omitted,
    * the entry is added as the current session user.
@@ -272,7 +324,7 @@ export type QueueReorderPayload = z.infer<typeof QueueReorderPayloadSchema>;
  * options are required.
  */
 export const PollStartPayloadSchema = z.object({
-  topic: z.string().trim().optional(),
+  topic: clearableMarkdownString('Poll topic'),
   multiSelect: z.boolean().optional(),
   options: z
     .array(
@@ -327,7 +379,7 @@ export const NextAgendaItemPayloadSchema = z.object({
    * conclusion. Omitted when the meeting is being started (no outgoing
    * item) — the server ignores it in that case.
    */
-  conclusion: z.string().optional(),
+  conclusion: clearableMarkdownString('Conclusion'),
 });
 export type NextAgendaItemPayload = z.infer<typeof NextAgendaItemPayloadSchema>;
 

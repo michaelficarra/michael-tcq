@@ -1,16 +1,30 @@
 /**
- * Renders a limited subset of inline markdown as HTML.
+ * Render the supported subset of inline markdown as React.
  *
- * Supported syntax:
- * - `[text](url)` — links (open in new tab)
- * - `**bold**` — bold
- * - `*italic*` — italic
- * - `~~strikethrough~~` — strikethrough
- * - `` `code` `` — inline code
+ * The supported subset and its allowlist live in
+ * `@tcq/shared/src/markdown.ts`. This component:
  *
- * All other content is rendered as plain text. HTML in the input is
- * escaped to prevent XSS.
+ *   1. Pre-passes the input through `stripUnsupportedMarkdown` so that
+ *      legacy stored content (predating the validator) renders without
+ *      throwing — anything outside the allowlist becomes plain text.
+ *   2. Parses the cleaned input into a hast tree (markdown → mdast →
+ *      hast, with raw inline HTML resolved into proper element nodes).
+ *   3. Walks the resulting tree and emits React elements directly —
+ *      no `dangerouslySetInnerHTML`.
+ *
+ * Rendering decisions (link colours, code-span chips) live here in
+ * Tailwind classes — only this component cares about the visual style.
  */
+
+import { Fragment, type ReactNode } from 'react';
+import {
+  parseInlineToHast,
+  stripUnsupportedMarkdown,
+  ALLOWED_HTML_TAGS,
+  ALLOWED_HTML_ATTRS_BY_TAG,
+  ALLOWED_URL_SCHEMES,
+} from '@tcq/shared';
+import type { Element, Root as HastRoot, RootContent as HastRootContent } from 'hast';
 
 interface InlineMarkdownProps {
   /** The markdown text to render. */
@@ -19,61 +33,80 @@ interface InlineMarkdownProps {
   className?: string;
 }
 
-/** Escape HTML special characters to prevent XSS. */
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const LINK_CLASS = 'text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 underline';
+const CODE_CLASS = 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]';
+
+// -- URL safety (mirrors the server-side validator) ---------------------
+
+function isAllowedUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return false;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return true;
+  try {
+    const u = new URL(trimmed);
+    return (ALLOWED_URL_SCHEMES as readonly string[]).includes(u.protocol);
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Convert a limited subset of inline markdown to HTML.
- * Processes in a specific order to handle nesting correctly.
- */
-function markdownToHtml(text: string): string {
-  // First, extract code spans to protect them from further processing.
-  // Replace each code span with a placeholder, process the rest, then restore.
-  const codeSpans: string[] = [];
-  let processed = text.replace(/`([^`]+)`/g, (_match, code: string) => {
-    const idx = codeSpans.length;
-    codeSpans.push(
-      `<code class="bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]">${escapeHtml(code)}</code>`,
-    );
-    return `\uE000CODE${idx}\uE000`;
-  });
+// -- hast → React -------------------------------------------------------
 
-  // Escape HTML in the remaining text
-  processed = escapeHtml(processed);
-
-  // Links: [text](url)
-  processed = processed.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 underline">$1</a>',
-  );
-
-  // Bold: **text**
-  processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-  // Strikethrough: ~~text~~
-  processed = processed.replace(/~~(.+?)~~/g, '<del>$1</del>');
-
-  // Italic: *text* (after bold to avoid conflicts)
-  processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // Restore code spans
-  processed = processed.replace(/\uE000CODE(\d+)\uE000/g, (_match, idx: string) => {
-    return codeSpans[parseInt(idx, 10)];
-  });
-
-  return processed;
+function renderChildren(children: ReadonlyArray<HastRootContent>): ReactNode[] {
+  return children.map((child, i) => <Fragment key={i}>{renderNode(child)}</Fragment>);
 }
 
-export function InlineMarkdown({ children, className }: InlineMarkdownProps) {
-  const html = markdownToHtml(children);
+function renderNode(node: HastRootContent): ReactNode {
+  if (node.type === 'text') return node.value;
+  if (node.type !== 'element') return null;
+  const el = node as Element;
+  const tag = el.tagName.toLowerCase();
 
-  // If the output is identical to escaped input (no markdown was applied),
-  // render as plain text to avoid unnecessary dangerouslySetInnerHTML.
-  if (html === escapeHtml(children)) {
-    return <span className={className}>{children}</span>;
+  // remark-rehype emits `<p>` wrappers around inline content. Flatten
+  // them so the rendered span doesn't contain a real <p> (which would
+  // break inline layout).
+  if (tag === 'p') return <>{renderChildren(el.children)}</>;
+
+  if (!(ALLOWED_HTML_TAGS as readonly string[]).includes(tag)) {
+    // Disallowed tag — render its inner text only. Stripping happened
+    // up the pipeline; this is a defensive fallback.
+    return <>{renderChildren(el.children)}</>;
   }
 
-  return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  // Filter properties to the allow-listed set, validating href on `<a>`.
+  const props: Record<string, string> = {};
+  const allowed = ALLOWED_HTML_ATTRS_BY_TAG[tag] ?? [];
+  for (const [attr, raw] of Object.entries(el.properties ?? {})) {
+    if (!(allowed as readonly string[]).includes(attr)) continue;
+    if (typeof raw !== 'string') continue;
+    if (tag === 'a' && attr === 'href' && !isAllowedUrl(raw)) continue;
+    props[attr] = raw;
+  }
+
+  if (tag === 'a') {
+    if (!props.href) return <>{renderChildren(el.children)}</>;
+    return (
+      <a href={props.href} title={props.title} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+        {renderChildren(el.children)}
+      </a>
+    );
+  }
+  if (tag === 'code') {
+    return <code className={CODE_CLASS}>{renderChildren(el.children)}</code>;
+  }
+  // Generic allow-listed inline tag — render with the literal tag name.
+  const Tag = tag as 'b' | 'strong' | 'i' | 'em' | 'u' | 's' | 'del' | 'sub' | 'sup';
+  return <Tag>{renderChildren(el.children)}</Tag>;
+}
+
+// -- Public component ---------------------------------------------------
+
+export function InlineMarkdown({ children, className }: InlineMarkdownProps) {
+  // Tolerant: legacy stored content might contain constructs the
+  // validator now rejects (e.g. headings, multi-paragraph). Strip them
+  // before parsing so the renderer always sees a clean inline tree.
+  const safe = stripUnsupportedMarkdown(children);
+  if (safe.length === 0) return <span className={className}></span>;
+  const tree: HastRoot = parseInlineToHast(safe);
+  return <span className={className}>{renderChildren(tree.children)}</span>;
 }

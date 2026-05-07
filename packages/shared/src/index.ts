@@ -99,3 +99,15 @@ export { applyDelta } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
 export { DEV_USERS } from './devUsers.js';
 export type { DevUser } from './devUsers.js';
+export {
+  ALLOWED_HTML_TAGS,
+  ALLOWED_HTML_ATTRS_BY_TAG,
+  ALLOWED_URL_SCHEMES,
+  INLINE_MDAST_TYPES,
+  validateInlineMarkdown,
+  stripUnsupportedMarkdown,
+  extractPlainText,
+  parseInlineMarkdown,
+  parseInlineToHast,
+} from './markdown.js';
+export type { ValidationResult } from './markdown.js';

@@ -100,7 +100,7 @@
     "duration": 10
   },
   {
-    "name": "[import defer](https://github.com/tc39/proposal-defer-import-eval/) for Stage 3 (tests: all PRs linked to https://github.com/tc39/test262/issues/4215, [slides](https://docs.google.com/presentation/d/1LjsJhdTIP3wgo1odtVa-qbfyGU5M1W9YMm0AtKnJJKk/edit?usp=sharing))",
+    "name": "[import defer](https://github.com/tc39/proposal-defer-import-eval/) for Stage 3 (tests: all PRs linked to <https://github.com/tc39/test262/issues/4215>, [slides](https://docs.google.com/presentation/d/1LjsJhdTIP3wgo1odtVa-qbfyGU5M1W9YMm0AtKnJJKk/edit?usp=sharing))",
     "presenters": [
       "Nicolò Ribaudo"
     ],
@@ -128,7 +128,7 @@
     "duration": 30
   },
   {
-    "name": "[Stabilize integrity traits](https://github.com/tc39/proposal-stabilize) status update ([slides.key](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.key), [slides.pdf](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.pdf), [video](https://www.youtube.com/watch?v=oMPeo4faynY&list=PLzDw4TTug5O3vIAd4IR1Gp5t_46co_dv9))",
+    "name": "[Stabilize integrity traits](https://github.com/tc39/proposal-stabilize) status update ([slides.key](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.key), [slides.pdf](https://github.com/tc39/proposal-stabilize/blob/main/stabilize-talks/stabilize-stage1-status-update.pdf), [video](https://www.youtube.com/watch?v=oMPeo4faynY\\&list=PLzDw4TTug5O3vIAd4IR1Gp5t_46co_dv9))",
     "presenters": [
       "Mark Miller"
     ],

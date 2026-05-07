@@ -31,7 +31,7 @@
     "duration": 5
   },
   {
-    "name": "[Reality and spec differ on property key resolution timing for `o[p] = f()`](https://github.com/tc39/ecma262/issues/3295 ) ([PR](https://github.com/tc39/ecma262/pull/3307))",
+    "name": "[Reality and spec differ on property key resolution timing for `o[p] = f()`](https://github.com/tc39/ecma262/issues/3295) ([PR](https://github.com/tc39/ecma262/pull/3307))",
     "presenters": [
       "Ross Kirsling"
     ],
@@ -143,7 +143,7 @@
     "duration": 30
   },
   {
-    "name": "Discussing new directions for [R&T](https://github.com/tc39/proposal-record-tuple) ([slides](https://docs.google.com/presentation/d/1JfChmW8tQ2_mrFDynosNqa1tjJ2j-qX6WoKm8vc_tkY/), [related repo](https://github.com/acutmore/proposal-keyby))",
+    "name": "Discussing new directions for [R\\&T](https://github.com/tc39/proposal-record-tuple) ([slides](https://docs.google.com/presentation/d/1JfChmW8tQ2_mrFDynosNqa1tjJ2j-qX6WoKm8vc_tkY/), [related repo](https://github.com/acutmore/proposal-keyby))",
     "presenters": [
       "Ashley Claymore"
     ],
@@ -227,7 +227,7 @@
     "duration": 30
   },
   {
-    "name": "[Strict Enforcement of 'using'](https://github.com/rbuckton/proposal-using-enforcement) for Stage 1 or 2 ([slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpmyWWWHf6TPYt2gg?e=fPIwaL&nav=eyJzSWQiOjI1NiwiY0lkIjoyMTg5ODA3Nzk5fQ), [spec](https://rbuckton.github.io/proposal-using-enforcement/))",
+    "name": "[Strict Enforcement of 'using'](https://github.com/rbuckton/proposal-using-enforcement) for Stage 1 or 2 ([slides](https://1drv.ms/p/s!AjgWTO11Fk-TkqpmyWWWHf6TPYt2gg?e=fPIwaL\\&nav=eyJzSWQiOjI1NiwiY0lkIjoyMTg5ODA3Nzk5fQ), [spec](https://rbuckton.github.io/proposal-using-enforcement/))",
     "presenters": [
       "Ron Buckton"
     ],

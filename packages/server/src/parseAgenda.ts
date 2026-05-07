@@ -1,10 +1,22 @@
 /**
  * Parse a TC39-style markdown agenda into structured agenda items.
  *
- * Handles both numbered list items (e.g. reports, opening) and markdown
- * tables (proposals, discussions). Strips markdown formatting (links,
- * bold, italic) to produce plain text names.
+ * Structural scanning is done over an mdast tree (`unified` +
+ * `remark-parse` + `remark-gfm`) — the parser handles tables, ordered
+ * lists, table-cell HTML, link URLs that contain `()`, etc., none of
+ * which a line-based regex pass could do reliably. Once each item's
+ * "name + parenthetical metadata" string is in hand, the existing
+ * text-level helpers (`extractPresenterMeta`, `parseParenthetical`,
+ * `PRESENTER_SEPARATOR`, ...) extract the presenter list and duration.
  */
+
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
+import remarkStringify from 'remark-stringify';
+import { toString as mdastToString } from 'mdast-util-to-string';
+import type { Root, RootContent, Table, List, PhrasingContent, Paragraph } from 'mdast';
+import { extractPlainText, stripUnsupportedMarkdown } from '@tcq/shared';
 
 export interface ParsedAgendaItem {
   name: string;
@@ -14,71 +26,58 @@ export interface ParsedAgendaItem {
   duration?: number;
 }
 
-/**
- * Strip markdown formatting from text, leaving only the readable content.
- *
- * - `[text](url)` → `text`
- * - `**bold**` / `__bold__` → `bold`
- * - `*italic*` / `_italic_` → `italic`
- * - HTML tags → removed
- * - Emoji shortcodes from the agenda key (❄️, 🔒, ⌛️, 🔁) → removed
- */
-export function stripMarkdown(text: string): string {
-  return (
-    text
-      // Remove markdown links: [text](url)
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      // Remove inline code
-      .replace(/`([^`]*)`/g, '$1')
-      // Remove bold: **text** or __text__
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/__(.+?)__/g, '$1')
-      // Remove italic: *text* or _text_ (but not mid-word underscores)
-      .replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')
-      .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
-      // Remove HTML tags
-      .replace(/<[^>]+>/g, '')
-      // Remove agenda key emoji prefixes
-      .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
-      // Collapse whitespace
-      .replace(/\s+/g, ' ')
-      .trim()
-  );
-}
+// -- Local parser / stringifier ------------------------------------------
+
+const documentParser = unified().use(remarkParse).use(remarkGfm);
+// GFM-on stringifier so `delete`/table/autolink nodes parsed out of the
+// source can be round-tripped back to markdown.
+const inlineStringifier = unified().use(remarkGfm).use(remarkStringify, {
+  bullet: '-',
+  emphasis: '*',
+  strong: '*',
+  fence: '`',
+  fences: true,
+});
 
 /**
- * Clean up text for use as an agenda item name. Preserves markdown
- * formatting (links, bold, italic, code, strikethrough) but removes
- * HTML tags and agenda key emoji prefixes.
+ * Re-serialise a phrasing-content array (e.g. a table cell's inline
+ * children) back to markdown source. Used as the input to the
+ * parenthetical extractor and to `stripUnsupportedMarkdown`.
  */
-export function cleanName(text: string): string {
-  return (
-    text
-      // Remove HTML tags
-      .replace(/<[^>]+>/g, '')
-      // Remove agenda key emoji prefixes
-      .replace(/(?:❄️|🔒|⌛️|🔁)\s*/gu, '')
-      // Collapse whitespace
-      .replace(/\s+/g, ' ')
-      .trim()
-  );
+function serializeInline(children: ReadonlyArray<PhrasingContent>): string {
+  if (children.length === 0) return '';
+  const fakeRoot: Root = { type: 'root', children: [{ type: 'paragraph', children: [...children] }] };
+  return inlineStringifier.stringify(fakeRoot).trim();
 }
+
+// -- TC39-specific item-name post-processing -----------------------------
+
+/**
+ * The agenda key emoji (❄️ hard constraint, 🔒 locked, ⌛️ late
+ * addition, 🔁 returning) prefix item names in TC39 agendas. They're
+ * presentational hints, not part of the topic, so we strip them before
+ * storing the name.
+ */
+const AGENDA_KEY_EMOJI = /(?:❄️|🔒|⌛️|🔁)\s*/gu;
+
+function cleanItemName(rawSource: string): string {
+  return stripUnsupportedMarkdown(rawSource).replace(AGENDA_KEY_EMOJI, '').replace(/\s+/g, ' ').trim();
+}
+
+// -- Parenthetical extraction (text-level, unchanged) --------------------
 
 /**
  * Parse a duration string into minutes. Accepts formats like:
- * "30m", "30", "90m", "1h", "1h30m"
+ * "30m", "30", "90m"
  */
 function parseDuration(text: string): number | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
-
-  // Match "Xm" or bare number
   const minuteMatch = trimmed.match(/^(\d+)\s*m?$/i);
   if (minuteMatch) {
     const val = parseInt(minuteMatch[1], 10);
     return val > 0 ? val : undefined;
   }
-
   return undefined;
 }
 
@@ -87,10 +86,6 @@ function parseDuration(text: string): number | undefined {
  * tracking paren depth so a parenthetical's content can itself contain
  * balanced `()` pairs — most often markdown link URLs like `[slides](./x.pdf)`
  * — without the boundary regex tripping on the inner `)`.
- *
- * Returns null when `text` doesn't end with `)` or no matching open paren
- * is found. The returned `name` keeps everything before the open paren
- * (trimmed); `paren` is the inner content, exclusive of the brackets.
  */
 function extractTrailingParen(text: string): { name: string; paren: string } | null {
   const trimmed = text.trimEnd();
@@ -115,13 +110,12 @@ function extractTrailingParen(text: string): { name: string; paren: string } | n
 /**
  * True iff the entire (trimmed) input is a single balanced markdown link
  * `[text](url)` with nothing else around it. Used to recognise trailing
- * `([slides](./x.pdf))` and slides/notes tokens as supplementary metadata
- * rather than presenter content.
+ * `([slides](./x.pdf))` and slides/notes tokens as supplementary
+ * metadata rather than presenter content.
  */
 function isPureMarkdownLink(s: string): boolean {
   const t = s.trim();
   if (!t.startsWith('[') || !t.endsWith(')')) return false;
-  // Find the matching closing `]` for the opening `[`, accounting for nesting.
   let bracketDepth = 0;
   let closeBracket = -1;
   for (let i = 0; i < t.length; i++) {
@@ -135,7 +129,6 @@ function isPureMarkdownLink(s: string): boolean {
     }
   }
   if (closeBracket === -1 || t[closeBracket + 1] !== '(') return false;
-  // Verify the `(...)` after the `]` covers the entire remainder of t.
   let parenDepth = 0;
   for (let i = closeBracket + 1; i < t.length; i++) {
     if (t[i] === '(') parenDepth++;
@@ -150,15 +143,10 @@ function isPureMarkdownLink(s: string): boolean {
 /**
  * Like `extractTrailingParen`, but peels off any number of trailing
  * pure-markdown-link parentheticals (slides / notes metadata) before
- * reporting the actual presenter parenthetical. TC39 agendas frequently
- * tack a `([slides](./x.pdf))` group onto the end of an item — sometimes
- * after a separate `(presenter, duration)` group — and we want the
- * presenter info, not the slides link.
+ * reporting the actual presenter parenthetical.
  */
 function extractPresenterMeta(text: string): { name: string; paren: string } | null {
   let cur = text.trimEnd();
-  // Bound the loop defensively; in practice TC39 items never nest more
-  // than two trailing parentheticals.
   for (let peel = 0; peel < 5; peel++) {
     const m = extractTrailingParen(cur);
     if (!m || m.name.length === 0) return null;
@@ -182,12 +170,7 @@ const PRESENTER_SEPARATOR = /\s+and\s+|[,&]/i;
 /**
  * Parse a parenthetical suffix like "(Chair, 10m)", "(15m, Alice & Bob)",
  * "(15m, Alice and Bob)", or "(15m, Samina Husain - [slides](./x.pdf))"
- * into a list of presenters and a duration. `,`, `&`, and whitespace-
- * bounded `and` are all accepted as separators (TC39 agendas use them
- * interchangeably, sometimes mixed). Each token has markdown stripped so
- * an inline `[Alice](url)` link doesn't leak into the stored name;
- * tokens that are *only* a markdown link are dropped (they're slides/
- * notes metadata, not presenters).
+ * into a list of presenters and a duration.
  */
 function parseParenthetical(paren: string): { presenters: string[]; duration?: number } {
   const parts = paren
@@ -199,7 +182,7 @@ function parseParenthetical(paren: string): { presenters: string[]; duration?: n
   let duration: number | undefined;
 
   for (const raw of parts) {
-    const cleaned = stripMarkdown(raw);
+    const cleaned = extractPlainText(raw);
     if (cleaned.length === 0) continue;
     const d = parseDuration(cleaned);
     if (d !== undefined) duration = d;
@@ -209,174 +192,176 @@ function parseParenthetical(paren: string): { presenters: string[]; duration?: n
   return { presenters, duration };
 }
 
-/** Detect table header columns by matching known names. */
-function parseTableHeader(headerRow: string): Map<string, number> {
-  const cells = headerRow.split('|').map((c) => c.trim().toLowerCase());
-  const columns = new Map<string, number>();
+// -- Table column header recognition ------------------------------------
 
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    if (cell === 'topic' || cell === 'proposal') columns.set('topic', i);
-    else if (cell === 'presenter' || cell === 'champion') columns.set('presenter', i);
+type ColumnKind = 'topic' | 'presenter' | 'duration' | 'stage';
+
+/**
+ * Map each header cell to a known column kind. Returns a column-index →
+ * kind map; missing kinds mean the column is absent or unrecognised.
+ */
+function classifyTableHeader(headerRow: {
+  children: ReadonlyArray<{ children: ReadonlyArray<PhrasingContent> }>;
+}): Map<number, ColumnKind> {
+  const out = new Map<number, ColumnKind>();
+  headerRow.children.forEach((cell, i) => {
+    const text = mdastToString(cell as never)
+      .trim()
+      .toLowerCase();
+    if (text === 'topic' || text === 'proposal') out.set(i, 'topic');
+    else if (text === 'presenter' || text === 'champion') out.set(i, 'presenter');
     // TC39 agendas label this column "timebox"; we store it under the
     // renamed internal key.
-    else if (cell === 'timebox') columns.set('duration', i);
-    else if (cell === 'stage') columns.set('stage', i);
+    else if (text === 'timebox') out.set(i, 'duration');
+    else if (text === 'stage') out.set(i, 'stage');
+  });
+  return out;
+}
+
+// -- mdast walk ---------------------------------------------------------
+
+/**
+ * Recognise list items whose only purpose is to introduce a nested
+ * table — the listItem's first paragraph is the table's section label,
+ * the actual rows live inside the listItem. The label is not an agenda
+ * item and must not be added to the output.
+ */
+function listItemContainsTable(item: { children: ReadonlyArray<RootContent> }): boolean {
+  return item.children.some((c) => c.type === 'table');
+}
+
+/** Skip purely structural items (adjournment, agenda adoption, etc.). */
+const STRUCTURAL_ITEM_RE =
+  /^(find volunteers|adoption of the agenda|approval of the minutes|next meeting|overflow from|other business|adjournment)/i;
+
+/**
+ * Process every `list` and `table` reachable from `nodes`, in source
+ * order, emitting one `ParsedAgendaItem` per qualifying row / list item
+ * to `out`. Doesn't recurse into unordered lists (those are sub-content,
+ * not agenda items) or non-list/table containers.
+ */
+function processNodes(nodes: ReadonlyArray<RootContent>, out: ParsedAgendaItem[]): void {
+  for (const node of nodes) {
+    if (node.type === 'list') {
+      processList(node, out);
+    } else if (node.type === 'table') {
+      processTable(node, out);
+    }
+    // Other top-level nodes (paragraphs, blockquotes, etc.) carry no
+    // agenda content — skip them.
   }
-
-  return columns;
 }
 
-/** Check if a line is a table separator row (e.g. |---|---|). */
-function isSeparatorRow(line: string): boolean {
-  return /^\|[\s:|-]+\|$/.test(line.trim());
+function processList(list: List, out: ParsedAgendaItem[]): void {
+  // Sub-content lives in unordered lists; skip them.
+  if (!list.ordered) return;
+  for (const item of list.children) {
+    if (listItemContainsTable(item)) {
+      // Section-label item — descend to process the nested table.
+      processNodes(item.children, out);
+      continue;
+    }
+    const firstPara = item.children.find((c): c is Paragraph => c.type === 'paragraph');
+    if (!firstPara) continue;
+    processListItem(firstPara, out);
+  }
 }
+
+function processListItem(para: Paragraph, out: ParsedAgendaItem[]): void {
+  const plain = extractPlainText(serializeInline(para.children));
+  if (STRUCTURAL_ITEM_RE.test(plain)) return;
+
+  // Re-serialise to markdown source so the parenthetical extractor (which
+  // is text-level) sees the same content shape it has been tested
+  // against — markdown links preserved, etc.
+  const source = serializeInline(para.children);
+  const cleanedSource = source.replace(AGENDA_KEY_EMOJI, '').trim();
+  if (cleanedSource.length === 0) return;
+
+  const presenterMeta = extractPresenterMeta(cleanedSource);
+  if (presenterMeta) {
+    const { presenters, duration } = parseParenthetical(presenterMeta.paren);
+    const name = cleanItemName(presenterMeta.name);
+    if (name.length > 0) out.push({ name, presenters, duration });
+  } else {
+    const name = cleanItemName(cleanedSource);
+    if (name.length > 0) out.push({ name, presenters: [], duration: undefined });
+  }
+}
+
+function processTable(table: Table, out: ParsedAgendaItem[]): void {
+  if (table.children.length < 2) return; // header only, no data rows
+  const [headerRow, ...dataRows] = table.children;
+  const columns = classifyTableHeader(headerRow);
+
+  // Inverse map: kind → cell-index. Multiple columns of the same kind
+  // shouldn't occur; if they do the last one wins.
+  const colIndex = new Map<ColumnKind, number>();
+  for (const [i, kind] of columns) colIndex.set(kind, i);
+
+  const topicCol = colIndex.get('topic');
+  if (topicCol === undefined) return; // no name column → nothing to import
+
+  for (const row of dataRows) {
+    const cells = row.children;
+
+    const topicSrc = serializeInline(cells[topicCol]?.children ?? []);
+    const name = cleanItemName(topicSrc);
+    if (!name) continue;
+
+    let presenters: string[] = [];
+    const presenterCol = colIndex.get('presenter');
+    if (presenterCol !== undefined) {
+      const presenterText = extractPlainText(serializeInline(cells[presenterCol]?.children ?? []));
+      presenters = presenterText
+        .split(PRESENTER_SEPARATOR)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    }
+
+    let duration: number | undefined;
+    const durationCol = colIndex.get('duration');
+    if (durationCol !== undefined) {
+      const durText = extractPlainText(serializeInline(cells[durationCol]?.children ?? []));
+      duration = parseDuration(durText);
+    }
+
+    out.push({ name, presenters, duration });
+  }
+}
+
+// -- Public entry point -------------------------------------------------
 
 /**
  * Parse a TC39-style markdown agenda document and return the extracted
- * agenda items. Looks for a "## Agenda" section, then parses both
- * numbered list items and markdown tables within it.
+ * agenda items. Looks for the `## Agenda items` heading, then walks the
+ * lists and tables in that section.
  */
 export function parseAgendaMarkdown(markdown: string): ParsedAgendaItem[] {
-  const lines = markdown.split('\n');
-  const items: ParsedAgendaItem[] = [];
+  const tree = documentParser.parse(markdown) as Root;
+  const out: ParsedAgendaItem[] = [];
 
-  // Find the start of the agenda items section
-  let agendaStart = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+agenda\s+items?\b/i.test(lines[i].trim())) {
-      agendaStart = i + 1;
+  // Find the heading that opens the agenda section.
+  let start = -1;
+  for (let i = 0; i < tree.children.length; i++) {
+    const node = tree.children[i];
+    if (node.type === 'heading' && node.depth === 2 && /^agenda items?$/i.test(mdastToString(node).trim())) {
+      start = i + 1;
+      break;
+    }
+  }
+  if (start === -1) return out;
+
+  // End at the next H2.
+  let end = tree.children.length;
+  for (let i = start; i < tree.children.length; i++) {
+    const node = tree.children[i];
+    if (node.type === 'heading' && node.depth === 2) {
+      end = i;
       break;
     }
   }
 
-  if (agendaStart === -1) return items;
-
-  // Find the end: next ## heading or end of file
-  let agendaEnd = lines.length;
-  for (let i = agendaStart; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i].trim()) && i > agendaStart) {
-      agendaEnd = i;
-      break;
-    }
-  }
-
-  const agendaLines = lines.slice(agendaStart, agendaEnd);
-
-  // Track current table header columns
-  let tableColumns: Map<string, number> | null = null;
-  let inTable = false;
-
-  /** Look ahead from index i to check if a table follows (after blank/indented lines). */
-  function hasTableAhead(from: number): boolean {
-    for (let j = from + 1; j < agendaLines.length; j++) {
-      const t = agendaLines[j].trim();
-      if (!t || t.startsWith('<!--')) continue;
-      // If next non-blank content is a table header or indented table, it's a section label
-      if (t.startsWith('|')) return true;
-      // If it's a new top-level list item, stop looking
-      if (/^\d+\.\s/.test(t) && !agendaLines[j].match(/^\s{2,}/)) return false;
-      // Indented sub-items — keep looking
-      if (agendaLines[j].match(/^\s{2,}/)) continue;
-      return false;
-    }
-    return false;
-  }
-
-  for (let i = 0; i < agendaLines.length; i++) {
-    const line = agendaLines[i];
-    const trimmed = line.trim();
-
-    // Skip empty lines, comments
-    if (!trimmed || trimmed.startsWith('<!--')) continue;
-
-    // Detect table header (may be indented)
-    if (trimmed.startsWith('|') && !isSeparatorRow(trimmed)) {
-      const nextLine = agendaLines[i + 1]?.trim() ?? '';
-      if (isSeparatorRow(nextLine)) {
-        // This is a header row
-        tableColumns = parseTableHeader(trimmed);
-        inTable = true;
-        i++; // skip the separator row
-        continue;
-      }
-    }
-
-    // Parse table data rows
-    if (inTable && trimmed.startsWith('|')) {
-      if (isSeparatorRow(trimmed)) continue;
-
-      const rawCells = trimmed.split('|');
-
-      if (tableColumns) {
-        const topicIdx = tableColumns.get('topic');
-        const presenterIdx = tableColumns.get('presenter');
-        const durationIdx = tableColumns.get('duration');
-
-        const name = topicIdx !== undefined ? cleanName(rawCells[topicIdx]) : '';
-        // Presenter cell may list multiple names separated by `,`, `&`,
-        // or a whitespace-bounded `and` (or a mix). stripMarkdown
-        // flattens link syntax first, so "[Alice](url), [Bob](url) &
-        // [Carol](url)" splits cleanly.
-        const presenters =
-          presenterIdx !== undefined
-            ? stripMarkdown(rawCells[presenterIdx])
-                .split(PRESENTER_SEPARATOR)
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0)
-            : [];
-        const rawDuration = durationIdx !== undefined ? stripMarkdown(rawCells[durationIdx]) : '';
-        const duration = parseDuration(rawDuration);
-
-        if (name) {
-          items.push({ name, presenters, duration });
-        }
-      }
-      continue;
-    }
-
-    // End of table
-    if (inTable && !trimmed.startsWith('|')) {
-      inTable = false;
-      tableColumns = null;
-    }
-
-    // Parse top-level numbered list items (1. Item text)
-    // Skip indented sub-items (they start with spaces/tabs before the number)
-    const listMatch = trimmed.match(/^\d+\.\s+(.+)$/);
-    if (listMatch && !line.match(/^\s{2,}/)) {
-      const plainText = stripMarkdown(listMatch[1]);
-
-      // Skip purely structural items
-      if (
-        /^(find volunteers|adoption of the agenda|approval of the minutes|next meeting|overflow from|other business|adjournment)/i.test(
-          plainText,
-        )
-      ) {
-        continue;
-      }
-
-      // Skip section headings that are followed by a table
-      if (hasTableAhead(i)) {
-        continue;
-      }
-
-      // Use cleaned (markdown-preserving) text for the name
-      const cleanedText = cleanName(listMatch[1]);
-
-      // Try to extract a trailing balanced "(...)" — works even when the
-      // parenthetical contains its own `()` pairs (markdown link URLs).
-      // Trailing slides/notes metadata parens are peeled off automatically.
-      const parenMatch = extractPresenterMeta(cleanedText);
-      if (parenMatch) {
-        const { presenters, duration } = parseParenthetical(parenMatch.paren);
-        items.push({ name: parenMatch.name, presenters, duration });
-      } else {
-        // No parenthetical — use the whole text as the name
-        items.push({ name: cleanedText, presenters: [], duration: undefined });
-      }
-    }
-  }
-
-  return items;
+  processNodes(tree.children.slice(start, end), out);
+  return out;
 }
