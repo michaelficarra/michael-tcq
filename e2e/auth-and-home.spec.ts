@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForHomePage, createMeeting } from './helpers.js';
+import { waitForHomePage, createMeeting, switchUser } from './helpers.js';
 
 test.describe('Authentication / Login', () => {
   test('mock auth auto-logs in as default user', async ({ page }) => {
@@ -72,6 +72,50 @@ test.describe('Home Page', () => {
     await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
     // The New Meeting card should still be visible but Join Meeting card content should be replaced
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).not.toBeVisible();
+  });
+});
+
+test.describe('Admin Tab', () => {
+  // Default mock-auth user is "admin" and `.env.test` sets ADMIN_USERNAMES=admin,
+  // so the test browser starts logged in as an admin. Switching to any other
+  // login (e.g. "testuser") gives us a non-admin to exercise the hidden case.
+
+  test('Admin tab is visible for admin users', async ({ page }) => {
+    await waitForHomePage(page);
+    await expect(page.getByRole('tab', { name: 'Admin' })).toBeVisible();
+  });
+
+  test('clicking Admin tab shows Active Meetings and Diagnostics panels', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveAttribute('aria-selected', 'true');
+    // The two panels (with their renamed headers — no "Admin —" prefix) replace the Join cards
+    await expect(page.getByRole('heading', { name: 'Active Meetings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Diagnostics' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).not.toBeVisible();
+  });
+
+  test('Admin tab is hidden for non-admin users', async ({ page }) => {
+    await waitForHomePage(page);
+    await switchUser(page, 'testuser');
+    // The Admin tab button is conditionally rendered, so it isn't in the DOM at all —
+    // toHaveCount(0) is more reliable than not.toBeVisible() for absent elements.
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveCount(0);
+    // The other two tabs are still present.
+    await expect(page.getByRole('tab', { name: 'Join Meeting' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Help' })).toBeVisible();
+  });
+
+  test('losing admin status while on Admin tab falls back to Join Meeting', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    await expect(page.getByRole('heading', { name: 'Active Meetings' })).toBeVisible();
+    // Switching user triggers a full page reload, so the new HomePage instance
+    // initialises with activeTab='join'. (If the fallback ever needs to handle
+    // an in-place admin downgrade, the useEffect in HomePage covers it too.)
+    await switchUser(page, 'testuser');
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
   });
 });
 

@@ -1,8 +1,9 @@
 /**
  * Home page — shown when the user is not in a meeting.
  *
- * Two tabs:
- * - "Join Meeting" — cards for joining or creating a meeting, plus admin panel.
+ * Tabs:
+ * - "Join Meeting" — cards for joining or creating a meeting.
+ * - "Admin" — active-meetings list and server diagnostics. Only rendered for admin users.
  * - "Help" — usage guide (shared HelpPanel component).
  */
 
@@ -16,7 +17,14 @@ import { Logo } from '../components/Logo.js';
 import { UserMenu } from '../components/UserMenu.js';
 
 export function HomePage() {
-  const [activeTab, setActiveTab] = useState<'join' | 'help'>('join');
+  const { isAdmin } = useAuth();
+  const [activeTab, setActiveTab] = useState<'join' | 'admin' | 'help'>('join');
+
+  // The Admin tab is admin-gated. Derive the displayed tab so that if the user
+  // loses admin access while parked on Admin (e.g. via the dev user-switcher),
+  // they fall back to Join without us needing a state-sync effect (which would
+  // trip `react-hooks/set-state-in-effect`).
+  const visibleTab = activeTab === 'admin' && !isAdmin ? 'join' : activeTab;
 
   return (
     <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
@@ -33,9 +41,9 @@ export function HomePage() {
         <div className="flex items-stretch gap-4" role="tablist" aria-label="Home views">
           <button
             role="tab"
-            aria-selected={activeTab === 'join'}
+            aria-selected={visibleTab === 'join'}
             className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
-              activeTab === 'join'
+              visibleTab === 'join'
                 ? 'text-stone-900 dark:text-stone-100'
                 : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
@@ -43,7 +51,7 @@ export function HomePage() {
           >
             <span
               className={`pb-1 border-b-2 transition-colors ${
-                activeTab === 'join'
+                visibleTab === 'join'
                   ? 'border-teal-500'
                   : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
               }`}
@@ -51,11 +59,33 @@ export function HomePage() {
               Join Meeting
             </span>
           </button>
+          {isAdmin && (
+            <button
+              role="tab"
+              aria-selected={visibleTab === 'admin'}
+              className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
+                visibleTab === 'admin'
+                  ? 'text-stone-900 dark:text-stone-100'
+                  : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
+              }`}
+              onClick={() => setActiveTab('admin')}
+            >
+              <span
+                className={`pb-1 border-b-2 transition-colors ${
+                  visibleTab === 'admin'
+                    ? 'border-teal-500'
+                    : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
+                }`}
+              >
+                Admin
+              </span>
+            </button>
+          )}
           <button
             role="tab"
-            aria-selected={activeTab === 'help'}
+            aria-selected={visibleTab === 'help'}
             className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
-              activeTab === 'help'
+              visibleTab === 'help'
                 ? 'text-stone-900 dark:text-stone-100'
                 : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
             }`}
@@ -63,7 +93,7 @@ export function HomePage() {
           >
             <span
               className={`pb-1 border-b-2 transition-colors ${
-                activeTab === 'help'
+                visibleTab === 'help'
                   ? 'border-teal-500'
                   : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
               }`}
@@ -83,27 +113,33 @@ export function HomePage() {
       </nav>
 
       <main className="flex-1 overflow-y-auto min-h-0">
-        {activeTab === 'join' && <JoinTab />}
-        {activeTab === 'help' && <HelpPanel showChairHelp={true} />}
+        {visibleTab === 'join' && <JoinTab />}
+        {visibleTab === 'admin' && <AdminTab />}
+        {visibleTab === 'help' && <HelpPanel showChairHelp={true} />}
       </main>
     </div>
   );
 }
 
-// -- Join tab (cards + admin panel) --
+// -- Join tab (cards) --
 
 function JoinTab() {
-  const { isAdmin } = useAuth();
-
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
         <JoinMeetingCard />
         <NewMeetingCard />
       </div>
+    </div>
+  );
+}
 
-      {/* Admin sections — only shown for admin users */}
-      {isAdmin && <AdminSection />}
+// -- Admin tab (active meetings + diagnostics) --
+
+function AdminTab() {
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <AdminSection />
     </div>
   );
 }

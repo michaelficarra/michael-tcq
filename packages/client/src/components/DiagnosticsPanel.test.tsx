@@ -47,7 +47,7 @@ describe('DiagnosticsPanel', () => {
     render(<DiagnosticsPanel refreshTick={0} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin — Diagnostics')).toBeInTheDocument();
+      expect(screen.getByText('Diagnostics')).toBeInTheDocument();
     });
 
     expect(screen.getByText('1d 1h 1m')).toBeInTheDocument();

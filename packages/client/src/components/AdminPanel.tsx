@@ -70,7 +70,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
   return (
     <div className="mt-8">
       <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">
-        Admin — Active Meetings
+        Active Meetings
       </h2>
 
       {meetings.length === 0 ? (

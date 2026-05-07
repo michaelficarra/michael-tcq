@@ -1,8 +1,8 @@
 /**
- * Diagnostics panel — shown on the home page below the active-meetings
- * admin panel for users with admin privileges. Surfaces operational
- * health (process, meetings, sockets, recent errors) so operators can
- * triage issues without shelling into Cloud Logging.
+ * Diagnostics panel — shown on the home page's Admin tab beside the
+ * active-meetings panel, for users with admin privileges. Surfaces
+ * operational health (process, meetings, sockets, recent errors) so
+ * operators can triage issues without shelling into Cloud Logging.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -78,7 +78,7 @@ export function DiagnosticsPanel({ refreshTick }: { refreshTick: number }) {
   return (
     <div className="mt-8">
       <h2 className="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">
-        Admin — Diagnostics
+        Diagnostics
       </h2>
 
       <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 overflow-hidden">
