@@ -8,6 +8,7 @@ import { isOAuthConfigured } from './mockAuth.js';
 import {
   searchUsers,
   resolvePresenterFromDirectory,
+  warmDirectoryForUser,
   DEFAULT_AUTOCOMPLETE_LIMIT,
   type DirectoryUser,
 } from './githubDirectory.js';
@@ -312,6 +313,18 @@ export function createMeetingRoutes(
       res.status(422).json({ error: 'No agenda items found in the document' });
       return;
     }
+
+    // Make sure the importer's org directory is in cache before resolving.
+    // `warmDirectoryForUser` is fire-and-forget at OAuth login, and the
+    // org-members cache is in-process only — so a restarted instance, a
+    // login from this morning paired with an import this afternoon (cache
+    // TTL elapsed), or simply an import seconds after first login can all
+    // leave tier 2 empty when resolution runs. Awaiting here guarantees
+    // tier 2 is populated and matches what the autocomplete dropdown would
+    // see for the same searcher. The helper coalesces concurrent refreshes
+    // and is a no-op in mock-auth mode (no access token), so this is cheap
+    // when the cache is already warm.
+    await warmDirectoryForUser(user);
 
     // Resolve unique presenter names against the local directory (tier 1
     // + tier 2 only — meeting users and the importer's org members). When

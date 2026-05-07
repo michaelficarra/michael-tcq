@@ -6,6 +6,7 @@ import { asUserKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
+import { setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
 
 /**
@@ -564,5 +565,157 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/users/autocomplete?q=&meetingId=nope`);
       expect(res.status).toBe(200);
     });
+  });
+});
+
+/**
+ * Import-agenda tests in OAuth mode (GITHUB_CLIENT_ID set). The directory
+ * resolver takes the real-mode branch — tier 2 = the searcher's GitHub
+ * org members — and `warmDirectoryForUser` populates that cache from the
+ * GraphQL API. The cache is in-process memory and gets wiped on instance
+ * restart, so the import endpoint awaits a warm before resolving so that
+ * a chair who just landed on a fresh instance still gets tier-2 hits.
+ */
+describe('Meeting REST routes — import in OAuth mode', () => {
+  const OAUTH_USER: User = {
+    ghid: 218840,
+    ghUsername: 'michaelficarra',
+    name: 'Michael Ficarra',
+    organisation: '@f5networks',
+  };
+
+  const fixtureUrl = 'https://test-fixture.invalid/oauth-agenda.md';
+  let manager: MeetingManager;
+  let baseUrl: string;
+  let close: () => void;
+  let restoreFetch: () => void = () => {};
+  let fixtureBody = '';
+  // Track GitHub-directory traffic so a test can assert the warm
+  // happened in the right order.
+  let directoryCalls: string[] = [];
+  const originalClientId = process.env.GITHUB_CLIENT_ID;
+  const realFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    resetDirectoryForTesting();
+    fixtureBody = '';
+    directoryCalls = [];
+
+    // Stub the directory module's fetch hook: respond to /user/orgs
+    // (REST) with one org, and to the GraphQL endpoint with one TC39
+    // member ("Daniel Ehrenberg" → littledan).
+    restoreFetch = setFetchForTesting(async (url, init) => {
+      directoryCalls.push(url);
+      if (url.endsWith('/user/orgs?per_page=100')) {
+        return new Response(JSON.stringify([{ login: 'tc39' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/graphql') {
+        const body = JSON.parse(init?.body as string) as { variables?: { org?: string } };
+        if (body.variables?.org === 'tc39') {
+          return new Response(
+            JSON.stringify({
+              data: {
+                organization: {
+                  membersWithRole: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        databaseId: 189835,
+                        login: 'littledan',
+                        name: 'Daniel Ehrenberg',
+                        company: 'Bloomberg',
+                        avatarUrl: 'https://avatars.githubusercontent.com/u/189835',
+                      },
+                    ],
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+      throw new Error(`unexpected directory fetch: ${url}`);
+    });
+
+    // Wrap the global `fetch` so the import route's outbound markdown
+    // fetch resolves to our fixture body without touching the network,
+    // while the inner test-server request keeps working.
+    globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as URL | Request).toString();
+      if (url === fixtureUrl) {
+        return Promise.resolve(
+          new Response(fixtureBody, { status: 200, headers: { 'Content-Type': 'text/markdown' } }),
+        );
+      }
+      return realFetch(input as never, init);
+    }) as typeof fetch;
+
+    manager = new MeetingManager(new InMemoryStore());
+    const app = express();
+    app.use(express.json());
+    app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
+    // OAuth-mode session middleware: stash a SessionUser with an access
+    // token so the route handler treats this user as authenticated via
+    // GitHub (not mock auth).
+    app.use((req, _res, next) => {
+      if (!req.session.user) {
+        const su = toSessionUser(OAUTH_USER);
+        su.accessToken = 'token-michaelficarra';
+        req.session.user = su;
+      }
+      next();
+    });
+    app.use('/api', createMeetingRoutes(manager, { to: () => ({ emit: () => {} }) } as never));
+    ({ baseUrl, close } = await listen(app));
+    return () => close();
+  });
+
+  afterEach(() => {
+    restoreFetch();
+    globalThis.fetch = realFetch;
+    if (originalClientId === undefined) delete process.env.GITHUB_CLIENT_ID;
+    else process.env.GITHUB_CLIENT_ID = originalClientId;
+  });
+
+  it('warms the org-members cache during import so tier-2 names resolve on a fresh instance', async () => {
+    // Simulate a freshly restarted instance: directory caches are empty
+    // (resetDirectoryForTesting() above), and the chair imports an
+    // agenda before any autocomplete call would have warmed the cache.
+    // Without the in-route warm, "Daniel Ehrenberg" can't match anyone
+    // (tier 1 has only the chair, tier 2 is empty) and ends up as a
+    // ghid-0 placeholder — the regression we're guarding against.
+    const meeting = manager.create([OAUTH_USER]);
+    fixtureBody = [
+      '## Agenda Items',
+      '',
+      '| Topic | Presenter | Duration |',
+      '| ----- | --------- | -------- |',
+      '| Temporal Update | Daniel Ehrenberg | 30 |',
+    ].join('\n');
+
+    const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/import-agenda`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: fixtureUrl }),
+    });
+    expect(res.status).toBe(200);
+
+    // The route must have called the GitHub directory APIs before
+    // resolving — otherwise tier 2 would be empty.
+    expect(directoryCalls.some((u) => u.includes('/user/orgs'))).toBe(true);
+    expect(directoryCalls.some((u) => u === 'https://api.github.com/graphql')).toBe(true);
+
+    const meetingRes = await fetch(`${baseUrl}/api/meetings/${meeting.id}`);
+    const updated = await meetingRes.json();
+    const presenterKey = updated.agenda[0].presenterIds[0];
+    const presenter = updated.users[presenterKey];
+    expect(presenter.ghid).toBe(189835);
+    expect(presenter.ghUsername).toBe('littledan');
+    expect(presenter.name).toBe('Daniel Ehrenberg');
   });
 });
