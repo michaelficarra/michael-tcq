@@ -58,6 +58,10 @@ When something looks like a distributed concern — ordering, drops, delays, con
 | The production hook's React behaviour — cursor sync, listener cleanup, socket rebuild | Client unit | jsdom + `mockSocket` lets you drive the hook directly; the surrogate is a separate implementation and doesn't simulate React.                  |
 | Real cross-context propagation through the full stack                                 | E2E         | Only the full stack can prove that what one browser does is observable in another.                                                             |
 
+## Load testing
+
+Out of the default `npm test` path: a Node-based load harness lives under `scripts/load-test/`. It spawns N virtual Socket.IO participants against a locally running dev server, ramps up in stages, and reports the per-stage breaking point (latency, RSS, persistence dirty backlog, client error rate). Realistic-plenary and adversarial-stress scenarios are both included. Run it before each plenary or after any change to the broadcast/persistence path. See `scripts/load-test/README.md` for the prerequisites (the server must be started with `ADMIN_USERNAMES=load-admin` so the harness can poll diagnostics) and the CLI flags.
+
 ---
 
 `packages/shared` has no test suite of its own. Its types and constants are exercised transitively whenever the server or client suites run.

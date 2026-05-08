@@ -9,3 +9,4 @@ dist/
 node_modules/
 service-account.json
 test-results/
+scripts/load-test/runs/
