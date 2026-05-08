@@ -245,6 +245,26 @@ async function start() {
   // Start periodic expiry sweep (removes meetings with no connections in 90 days)
   meetingManager.startExpirySweep();
 
+  // Surface EADDRINUSE with a banner before exiting — concurrently
+  // interleaves output from both workspaces during `npm run dev`, so the
+  // structured `critical` log line is easy to miss. Without this, the
+  // server dies silently while Vite keeps running and proxying /auth and
+  // /api requests to whatever other process is squatting on PORT.
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error('');
+      console.error('==================================================================');
+      console.error(`  Port ${PORT} is already in use.`);
+      console.error('  Another process (perhaps a previous `npm run dev`) is bound to');
+      console.error(`  this port. Stop it (e.g. \`lsof -ti:${PORT} | xargs kill\`) and try again.`);
+      console.error('==================================================================');
+      console.error('');
+      process.exit(1);
+    }
+    critical('server_error', { error: serialiseError(err) });
+    process.exit(1);
+  });
+
   httpServer.listen(PORT, () => {
     info('server_listening', { port: PORT });
   });

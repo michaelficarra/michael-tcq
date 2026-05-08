@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "predev": "npm run build",
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
+    "dev": "concurrently --kill-others-on-fail -n server,client -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
     "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
     "pretest": "npm run build -w @tcq/shared",
     "test": "npm run test -w packages/server -w packages/client",
