@@ -1,0 +1,212 @@
+[
+  {
+    "name": "Opening, welcome and roll call",
+    "presenters": [
+      "Chair"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "Opening, welcome and roll call: Overview of communication tools ([slides](https://docs.google.com/presentation/d/1s2BKv7oY6uAT_TUNy_OPmneaDBPzRy6cV_AfKuPefkM))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "Secretary's Report",
+    "presenters": [
+      "Samina Husain"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA262](https://github.com/tc39/ecma262) Status Updates ([slides](https://docs.google.com/presentation/d/1-ZA2HbVkY8XmpMiDromEhQOQlge-tXWVD6hIJWtDQwE))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA402](https://github.com/tc39/ecma402) Status Updates",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA404](https://www.ecma-international.org/publications/standards/Ecma-404.htm) Status Updates",
+    "presenters": [],
+    "duration": 1
+  },
+  {
+    "name": "Project Editors’ Reports: [Test262](https://github.com/tc39/test262) Status Updates",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG3: Security",
+    "presenters": [],
+    "duration": 1
+  },
+  {
+    "name": "Task Group Reports: TG4: Source Maps",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG5: Experiments in Programming Language Standardization",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
+    "presenters": [],
+    "duration": 1
+  },
+  {
+    "name": "Needs-consensus PR: use Numbers instead of reals as counters in Iterator builtins ([#3776](https://github.com/tc39/ecma262/pull/3776), [slides](https://docs.google.com/presentation/d/1WVjZyIAjTPl3TDV6X2cxNp1n-bzulIy_XWyKOsSq7i4))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "Tooling for navigating the ECMA-262 specification and reviewing API proposals",
+    "presenters": [
+      "Alberto Tontoni",
+      "Mikhail Barash"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "discussion/feedback around [Iterator-related proposal roadmap](https://gist.github.com/michaelficarra/34c47e1161b9ba2526ee197e1f5cb624)",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Joint Iteration](https://github.com/tc39/proposal-joint-iteration) for Stage 4 ([ecma262 PR](https://github.com/tc39/ecma262/pull/3802), [slides](https://docs.google.com/presentation/d/1KW2u1CeciwdoZjOnL5jb1pJxJUcgNjPeXsj5oVoaMxo))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "[Source Phase Imports](https://github.com/tc39/proposal-source-phase-imports) normative change to resolve ambiguous export spec bug <https://github.com/tc39/proposal-source-phase-imports/issues/75> in <https://github.com/tc39/proposal-source-phase-imports/pull/76> along with <https://github.com/tc39/ecma262/pull/3775>",
+    "presenters": [
+      "Guy Bedford"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "Allow CodeLike object evaluation ([ecma262 PR](https://github.com/tc39/ecma262/pull/3294), [proposal](https://github.com/tc39/proposal-dynamic-code-brand-checks)) for stage 4",
+    "presenters": [
+      "Nicolò Ribaudo"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[Decorators](https://github.com/tc39/proposal-decorators) for Stage 2.7 ([slides](https://docs.google.com/presentation/d/1AxKY6Rd3eimihoGJ30Bl-D7fodzqzXpFsH-ihcOTQP4))",
+    "presenters": [
+      "Daniel Minor"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Atomics.pause](https://github.com/tc39/proposal-atomics-microwait) for Stage 4 ([ecma262 PR](https://github.com/tc39/ecma262/pull/3847), Normative PRs: [Drop hint parameter](https://github.com/tc39/proposal-atomics-microwait/pull/17), [Make 0 hint special](https://github.com/tc39/proposal-atomics-microwait/pull/14))",
+    "presenters": [
+      "Keith Miller"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Iterator Includes](https://github.com/michaelficarra/proposal-iterator-includes) for Stage 3 ([tests](https://github.com/tc39/test262/pull/5031))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[ESM Phase Imports](https://github.com/tc39/proposal-esm-phase-imports) normative PRs (slides to follow, PRs [#58](https://github.com/tc39/proposal-esm-phase-imports/pull/58) & [#61](https://github.com/tc39/proposal-esm-phase-imports/pull/61))",
+    "presenters": [
+      "Guy Bedford"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[Iterator Chunking](https://github.com/tc39/proposal-iterator-chunking) for Stage 3 ([#30](https://github.com/tc39/proposal-iterator-chunking/pull/30), [tests](https://github.com/tc39/test262/pull/5011))",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[RegExp Buffer Boundaries](https://github.com/tc39/proposal-regexp-buffer-boundaries) for Stage 2.7 or 3 ([slides](https://1drv.ms/p/c/934f1675ed4c1638/IQBpJAD8CJutTpZ3x70Mr8C6AQ6Z26p2_nowaDED0_XQfRY?e=FLSMPe), [test262 PR](https://github.com/tc39/test262/pull/4975))",
+    "presenters": [
+      "Ron Buckton"
+    ],
+    "duration": 15
+  },
+  {
+    "name": "[AsyncContext](https://github.com/tc39/proposal-async-context/) (Stage 2) web integration status update",
+    "presenters": [
+      "Nicolò Ribaudo",
+      "Andreu Botella"
+    ],
+    "duration": 20
+  },
+  {
+    "name": "[`export defer`](https://github.com/tc39/proposal-deferred-reexports/) Stage 2 status update",
+    "presenters": [
+      "Nicolò Ribaudo",
+      "Caio Lima"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[isTemplateObject](https://github.com/tc39/proposal-array-is-template-object) status update and possible withdrawal",
+    "presenters": [
+      "Jordan Harband",
+      "Zbyszek Tenerowicz"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Amount](https://github.com/tc39/proposal-amount) for Stage 2 (slides TBD)",
+    "presenters": [
+      "Eemeli Aro",
+      "Jesse Alama"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "[Stable Formatting](https://github.com/tc39/proposal-stable-formatting) for Stage 2 (slides TBD)",
+    "presenters": [
+      "Eemeli Aro"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "[Comparisons](https://github.com/JakobJingleheimer/proposal-comparisons) for Stage 1 ([slides](https://docs.google.com/presentation/d/1unIAgQLLUdsWnTPh0KRMDnhr2n2s0jtVTV1NpRzWQj0/view))",
+    "presenters": [
+      "Jacob Smith"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "agreeing to consider impact of RegExp proposals to linear implementations",
+    "presenters": [
+      "Michael Ficarra",
+      "Aurèle Barrière",
+      "Clément Pit-Claudel"
+    ],
+    "duration": 60
+  },
+  {
+    "name": "An introduction to the EU CRA & how it matters to all of you (20 min) + Q\\&A (40 min)",
+    "presenters": [
+      "Aki Rose Braun"
+    ],
+    "duration": 60
+  }
+]

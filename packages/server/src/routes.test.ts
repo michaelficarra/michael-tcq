@@ -543,12 +543,12 @@ describe('Meeting REST routes', () => {
       expect(presenter.ghUsername).toBe('Daniel');
     });
 
-    it('imports an item with no presenters when none are parsed', async () => {
-      // Numbered-list item with no parenthetical → empty presenter list →
-      // route imports the item with no presenters (the chair can edit one
-      // in afterwards).
+    it('imports an item with no presenters when only a duration is parsed', async () => {
+      // Numbered-list item with a trailing time-only parenthetical → empty
+      // presenter list → route imports the item with no presenters (the
+      // chair can edit one in afterwards).
       const meetingId = createMeetingWith();
-      const md = ['## Agenda Items', '', '1. Standalone item with no presenter'].join('\n');
+      const md = ['## Agenda Items', '', '1. Standalone item with no presenter (15m)'].join('\n');
 
       const res = await importAgenda(meetingId, md);
       expect(res.status).toBe(200);
@@ -556,6 +556,7 @@ describe('Meeting REST routes', () => {
       const meeting = await getMeeting(meetingId);
       expect(meeting.agenda).toHaveLength(1);
       expect(meeting.agenda[0].presenterIds).toEqual([]);
+      expect(meeting.agenda[0].duration).toBe(15);
     });
 
     it('resolves comma-separated presenters per-name (mixed resolved + placeholder)', async () => {

@@ -1,12 +1,5 @@
 [
   {
-    "name": "Opening, welcome and roll call",
-    "presenters": [
-      "Chair"
-    ],
-    "duration": null
-  },
-  {
     "name": "Secretary's Report",
     "presenters": [
       "Samina Husain"
@@ -14,14 +7,39 @@
     "duration": 15
   },
   {
-    "name": "Project Editors’ Reports",
+    "name": "Project Editors’ Reports: [ECMA262](https://github.com/tc39/ecma262) Status Updates ([slides](https://docs.google.com/presentation/d/17dyg4ssXsYUtoEl4PkmeM5dDQ8v0rvV6sUV_BmXgXX4/edit?usp=sharing))",
     "presenters": [],
-    "duration": null
+    "duration": 15
   },
   {
-    "name": "Task Group Reports",
+    "name": "Project Editors’ Reports: [ECMA402](https://github.com/tc39/ecma402) Status Updates ([slides](https://notes.igalia.com/p/sept-tc39-tg1-editor-update#/))",
     "presenters": [],
-    "duration": null
+    "duration": 15
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA404](https://www.ecma-international.org/publications/standards/Ecma-404.htm) Status Updates",
+    "presenters": [],
+    "duration": 15
+  },
+  {
+    "name": "Project Editors’ Reports: [Test262](https://github.com/tc39/test262) Status Updates",
+    "presenters": [],
+    "duration": 15
+  },
+  {
+    "name": "Task Group Reports: TG3: Security",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG4: Source Maps",
+    "presenters": [],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG5: Experiments in Programming Language Standardization",
+    "presenters": [],
+    "duration": 5
   },
   {
     "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
@@ -174,13 +192,6 @@
     "presenters": [
       "Shane Carr",
       "Ben Allen (slides)"
-    ],
-    "duration": null
-  },
-  {
-    "name": "Incubation call chartering",
-    "presenters": [
-      "15m on the last day"
     ],
     "duration": null
   }

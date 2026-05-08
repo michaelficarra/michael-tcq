@@ -230,10 +230,6 @@ function listItemContainsTable(item: { children: ReadonlyArray<RootContent> }): 
   return item.children.some((c) => c.type === 'table');
 }
 
-/** Skip purely structural items (adjournment, agenda adoption, etc.). */
-const STRUCTURAL_ITEM_RE =
-  /^(find volunteers|adoption of the agenda|approval of the minutes|next meeting|overflow from|other business|adjournment)/i;
-
 /**
  * Process every `list` and `table` reachable from `nodes`, in source
  * order, emitting one `ParsedAgendaItem` per qualifying row / list item
@@ -243,7 +239,7 @@ const STRUCTURAL_ITEM_RE =
 function processNodes(nodes: ReadonlyArray<RootContent>, out: ParsedAgendaItem[]): void {
   for (const node of nodes) {
     if (node.type === 'list') {
-      processList(node, out);
+      processList(node, '', out);
     } else if (node.type === 'table') {
       processTable(node, out);
     }
@@ -252,40 +248,74 @@ function processNodes(nodes: ReadonlyArray<RootContent>, out: ParsedAgendaItem[]
   }
 }
 
-function processList(list: List, out: ParsedAgendaItem[]): void {
+/**
+ * Walk an ordered list, emitting any item whose trailing parenthetical
+ * conveys a time. `prefix` carries the chain of ancestor item names —
+ * e.g. for `1. Foo / 1. Bar (5m)` the emitted name is `Foo: Bar`.
+ */
+function processList(list: List, prefix: string, out: ParsedAgendaItem[]): void {
   // Sub-content lives in unordered lists; skip them.
   if (!list.ordered) return;
   for (const item of list.children) {
     if (listItemContainsTable(item)) {
-      // Section-label item — descend to process the nested table.
+      // Section-label item — descend to process the nested table. Tables
+      // are emitted verbatim (no prefix is threaded through) since the
+      // colon-prepending rule applies only to nested ordered lists.
       processNodes(item.children, out);
       continue;
     }
-    const firstPara = item.children.find((c): c is Paragraph => c.type === 'paragraph');
-    if (!firstPara) continue;
-    processListItem(firstPara, out);
+    processListItem(item, prefix, out);
   }
 }
 
-function processListItem(para: Paragraph, out: ParsedAgendaItem[]): void {
-  const plain = extractPlainText(serializeInline(para.children));
-  if (STRUCTURAL_ITEM_RE.test(plain)) return;
+function processListItem(
+  item: { children: ReadonlyArray<RootContent> },
+  prefix: string,
+  out: ParsedAgendaItem[],
+): void {
+  const firstPara = item.children.find((c): c is Paragraph => c.type === 'paragraph');
+  if (!firstPara) return;
 
   // Re-serialise to markdown source so the parenthetical extractor (which
   // is text-level) sees the same content shape it has been tested
   // against — markdown links preserved, etc.
-  const source = serializeInline(para.children);
+  const source = serializeInline(firstPara.children);
   const cleanedSource = source.replace(AGENDA_KEY_EMOJI, '').trim();
   if (cleanedSource.length === 0) return;
 
   const presenterMeta = extractPresenterMeta(cleanedSource);
-  if (presenterMeta) {
+  // The "core name" is the topic without any trailing parenthetical, used
+  // both for emission (qualified with the prefix) and as the prefix for
+  // any nested children.
+  const coreName = cleanItemName(presenterMeta ? presenterMeta.name : cleanedSource);
+
+  // Emit only when the trailing parenthetical conveys a time. Other
+  // parentheticals — bare presenters like "(Jordan Harband)" or
+  // decorative remarks like "(in insertion order)" — are treated as
+  // non-agenda metadata and the item is not added.
+  if (presenterMeta && coreName.length > 0) {
     const { presenters, duration } = parseParenthetical(presenterMeta.paren);
-    const name = cleanItemName(presenterMeta.name);
-    if (name.length > 0) out.push({ name, presenters, duration });
-  } else {
-    const name = cleanItemName(cleanedSource);
-    if (name.length > 0) out.push({ name, presenters: [], duration: undefined });
+    if (duration !== undefined) {
+      const fullName = prefix.length > 0 ? `${prefix}: ${coreName}` : coreName;
+      out.push({ name: fullName, presenters, duration });
+    }
+  }
+
+  // Always recurse into a nested ordered list — children may carry their
+  // own timed parentheticals (e.g. TC39 agendas' "Project Editors'
+  // Reports" → "ECMA262 Status Updates (10m)"). Children are surfaced as
+  // "Parent: Child", with deeper nesting accumulating "A: B: C".
+  const nestedList = item.children.find((c): c is List => c.type === 'list' && c.ordered === true);
+  if (nestedList) {
+    let nextPrefix: string;
+    if (coreName.length === 0) {
+      nextPrefix = prefix;
+    } else if (prefix.length > 0) {
+      nextPrefix = `${prefix}: ${coreName}`;
+    } else {
+      nextPrefix = coreName;
+    }
+    processList(nestedList, nextPrefix, out);
   }
 }
 

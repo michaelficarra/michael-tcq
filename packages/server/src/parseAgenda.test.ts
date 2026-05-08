@@ -148,14 +148,26 @@ describe('parseAgendaMarkdown', () => {
     expect(items[0]).toEqual({ name: "Secretary's Report", presenters: ['Samina Husain'], duration: 15 });
   });
 
-  it('parses numbered list items without parenthetical', () => {
+  it('skips a numbered list item with no trailing parenthetical', () => {
+    // A bare list item without timing metadata is treated as a section
+    // header, not an agenda item — the import pulls in items that have
+    // a trailing parenthetical with a time.
     const md = `## Agenda items
 
 1. Project Editors' Reports
 `;
-    const items = parseAgendaMarkdown(md);
-    expect(items).toHaveLength(1);
-    expect(items[0]).toEqual({ name: "Project Editors' Reports", presenters: [], duration: undefined });
+    expect(parseAgendaMarkdown(md)).toEqual([]);
+  });
+
+  it('skips a numbered list item whose trailing parenthetical has no time', () => {
+    // A trailing parenthetical without a duration ("(in insertion order)",
+    // "(Jordan Harband)") is decorative metadata, not a timebox — skip.
+    const md = `## Agenda items
+
+1. Reminder to review Github Delegate teams (Jordan Harband)
+1. Overflow from timeboxed agenda items (in insertion order)
+`;
+    expect(parseAgendaMarkdown(md)).toEqual([]);
   });
 
   it('skips structural items like adjournment', () => {
@@ -338,18 +350,81 @@ Some constraints here.
 
     expect(names).toContain('Opening, welcome and roll call');
     expect(names).toContain("Secretary's Report");
-    expect(names).toContain("Project Editors' Reports");
-    expect(names).toContain('Task Group Reports');
+    // The Reports section headers themselves are not agenda items — their
+    // nested items are imported as separate agenda items, prefixed with
+    // the section header.
+    expect(names).not.toContain("Project Editors' Reports");
+    expect(names).not.toContain('Task Group Reports');
+    expect(names).toContain("Project Editors' Reports: ECMA262 Status Updates");
+    expect(names).toContain("Project Editors' Reports: ECMA402 Status Updates");
+    expect(names).toContain('Task Group Reports: TG3: Security');
     expect(names).toContain('Updates from the CoC Committee');
     expect(names).toContain('[Temporal](https://github.com/tc39/proposal-temporal) for Stage 4');
     expect(names).toContain('[Iterator Includes](https://example.com) for Stage 1');
     expect(names).toContain('test262 coverage strategies');
 
-    // Should NOT include structural items
+    // Should NOT include structural items (no trailing parenthetical with
+    // a time, so they're not picked up at all).
     expect(names).not.toContain('Find volunteers for note taking');
     expect(names).not.toContain('Adoption of the agenda');
     expect(names).not.toContain('Other business');
     expect(names).not.toContain('Adjournment');
+  });
+
+  it('prepends the parent section name to a nested item with a colon separator', () => {
+    // TC39 "Project Editors' Reports" / "Task Group Reports" shape: the
+    // section header has no parenthetical, so it isn't itself an agenda
+    // item, but each nested entry inherits the section name as a prefix.
+    const md = `## Agenda items
+
+1. Project Editors' Reports
+    1. ECMA262 Status Updates (10m, Michael Ficarra)
+    1. ECMA402 Status Updates (5m)
+1. Task Group Reports
+    1. TG3: Security (1m)
+    1. TG4: Source Maps (5m)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toEqual([
+      { name: "Project Editors' Reports: ECMA262 Status Updates", presenters: ['Michael Ficarra'], duration: 10 },
+      { name: "Project Editors' Reports: ECMA402 Status Updates", presenters: [], duration: 5 },
+      { name: 'Task Group Reports: TG3: Security', presenters: [], duration: 1 },
+      { name: 'Task Group Reports: TG4: Source Maps', presenters: [], duration: 5 },
+    ]);
+  });
+
+  it('emits both the parent and any nested children that have their own time', () => {
+    // TC39 "Opening, welcome and roll call (Chair, 20m)" shape: the
+    // outer item has its own timebox so it stays, and children that
+    // also carry a time are emitted as prefixed sub-items. Children
+    // without a time are dropped.
+    const md = `## Agenda items
+
+1. Opening, welcome and roll call (Chair, 20m)
+    1. Opening of the meeting
+    1. Introduction of attendees
+    1. Overview of communication tools (Michael Ficarra, 10m)
+    1. Reminder to review Github Delegate teams (Jordan Harband)
+`;
+    const items = parseAgendaMarkdown(md);
+    expect(items).toEqual([
+      { name: 'Opening, welcome and roll call', presenters: ['Chair'], duration: 20 },
+      {
+        name: 'Opening, welcome and roll call: Overview of communication tools',
+        presenters: ['Michael Ficarra'],
+        duration: 10,
+      },
+    ]);
+  });
+
+  it('chains the prefix through multiple levels of nested ordered lists', () => {
+    const md = `## Agenda items
+
+1. Outer
+    1. Middle
+        1. Inner (5m)
+`;
+    expect(parseAgendaMarkdown(md)).toEqual([{ name: 'Outer: Middle: Inner', presenters: [], duration: 5 }]);
   });
 });
 
@@ -367,7 +442,7 @@ Some constraints here.
  */
 describe('parseAgendaMarkdown — TC39 fixture agendas', () => {
   const FIXTURES_DIR = join(__dirname, 'test/fixtures/agendas');
-  const fixtures = ['2024-04', '2025-02', '2025-09', '2026-03'];
+  const fixtures = ['2024-04', '2025-02', '2025-09', '2026-03', '2026-05'];
 
   it.each(fixtures)('parses %s.md to a stable agenda', async (name) => {
     const md = readFileSync(join(FIXTURES_DIR, `${name}.md`), 'utf8');

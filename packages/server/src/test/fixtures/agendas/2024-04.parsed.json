@@ -1,12 +1,5 @@
 [
   {
-    "name": "Opening, welcome and roll call",
-    "presenters": [
-      "Chair"
-    ],
-    "duration": null
-  },
-  {
     "name": "Secretary's Report",
     "presenters": [
       "Samina Husain"
@@ -14,14 +7,63 @@
     "duration": 15
   },
   {
-    "name": "Project Editors’ Reports",
-    "presenters": [],
-    "duration": null
+    "name": "Project Editors’ Reports: [ECMA262](https://github.com/tc39/ecma262) Status Updates ([slides](https://docs.google.com/presentation/d/1mXvZ-hgyjFca8BzqZ5jzFSa3AdCcr3rFkINaeZ857nA/edit))",
+    "presenters": [
+      "Kevin Gibbons"
+    ],
+    "duration": 5
   },
   {
-    "name": "Task Group Reports",
+    "name": "Project Editors’ Reports: [ECMA262](https://github.com/tc39/ecma262) Status Updates ([slides](https://docs.google.com/presentation/d/1mXvZ-hgyjFca8BzqZ5jzFSa3AdCcr3rFkINaeZ857nA/edit)): [update on automatically producing print-quality PDFs](https://docs.google.com/presentation/d/1kCDZewoWZtL26FnFSiK4tr6ZotGo7TR0_AZGlCwHiEQ/edit)",
+    "presenters": [
+      "Michael Ficarra"
+    ],
+    "duration": 30
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA402](https://github.com/tc39/ecma402) Status Updates",
     "presenters": [],
-    "duration": null
+    "duration": 15
+  },
+  {
+    "name": "Project Editors’ Reports: [ECMA404](https://www.ecma-international.org/publications/standards/Ecma-404.htm) Status Updates",
+    "presenters": [
+      "Chip Morningstar"
+    ],
+    "duration": 1
+  },
+  {
+    "name": "Project Editors’ Reports: [Test262](https://github.com/tc39/test262) Status Updates",
+    "presenters": [
+      "Philip Chimento"
+    ],
+    "duration": 10
+  },
+  {
+    "name": "Task Group Reports: TG3: Security",
+    "presenters": [
+      "Chris de Almeida"
+    ],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG3: Security: TG3 convenors appointment",
+    "presenters": [
+      "Ujjwal Sharma"
+    ],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG4: Source Maps",
+    "presenters": [
+      "Jon Kuperman"
+    ],
+    "duration": 5
+  },
+  {
+    "name": "Task Group Reports: TG5: Experiments in Programming Language Standardization",
+    "presenters": [],
+    "duration": 5
   },
   {
     "name": "Updates from the [CoC Committee](https://tc39.es/code-of-conduct/#code-of-conduct-committee)",
@@ -247,12 +289,5 @@
       "Kevin Gibbons"
     ],
     "duration": 45
-  },
-  {
-    "name": "Incubation call chartering",
-    "presenters": [
-      "15m on the last day"
-    ],
-    "duration": null
   }
 ]
