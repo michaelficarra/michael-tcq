@@ -8,7 +8,7 @@
  * and the queue list with drag-and-drop reordering for chairs.
  */
 
-import { lazy, Suspense, useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
+import { lazy, memo, Suspense, useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -81,7 +81,15 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   // Current speaker / topic are first-class structs on meeting.current
   const currentSpeaker = meeting?.current.speaker;
   const currentTopic = meeting?.current.topic;
-  const queuedSpeakers = meeting?.queue.orderedIds.map((id) => meeting.queue.entries[id]).filter(Boolean) ?? [];
+  // Memoised so that unrelated meeting-state changes (poll updates, current
+  // speaker advances, etc.) don't break referential equality on the array
+  // passed to memo'd SortableQueueEntry children. The reference only changes
+  // when the queue itself changes (entry add/remove/edit/reorder).
+  const queue = meeting?.queue;
+  const queuedSpeakers = useMemo(
+    () => (queue ? queue.orderedIds.map((id) => queue.entries[id]).filter(Boolean) : []),
+    [queue],
+  );
 
   // Derive start times for count-up timers
   const agendaItemStartTime = meeting?.current.agendaItemStartTime;
@@ -185,6 +193,17 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   const [showRestore, setShowRestore] = useState(false);
   const [restoreText, setRestoreText] = useState('');
 
+  /**
+   * Remove a queue entry (own entry, or any entry if chair). Stable across
+   * renders so memo'd SortableQueueEntry children don't invalidate.
+   */
+  const handleRemoveEntry = useCallback(
+    (entryId: string) => {
+      socket?.emit('queue:remove', { id: entryId });
+    },
+    [socket],
+  );
+
   // When hidden (not the active tab) or meeting state not yet loaded, render
   // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
   // mount/unmount race on tab switch; skipping the inner content avoids
@@ -192,11 +211,6 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   // on another tab.
   if (hidden || !meeting) {
     return <div id="panel-queue" role="tabpanel" aria-label="Queue" hidden={hidden} className="p-6 space-y-6" />;
-  }
-
-  /** Remove a queue entry (own entry, or any entry if chair). */
-  function handleRemoveEntry(entryId: string) {
-    socket?.emit('queue:remove', { id: entryId });
   }
 
   /**
@@ -709,7 +723,7 @@ interface SortableQueueEntryProps {
   onEditingStarted?: () => void;
 }
 
-function SortableQueueEntry({
+const SortableQueueEntry = memo(function SortableQueueEntry({
   entry,
   index,
   queue,
@@ -985,7 +999,7 @@ function SortableQueueEntry({
       )}
     </li>
   );
-}
+});
 
 /** Map a queue entry type to its display label. */
 function entryTypeLabel(type: string): string {

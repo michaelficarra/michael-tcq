@@ -11,7 +11,7 @@
  * highlight and past-item dimming.
  */
 
-import { useState, type FormEvent } from 'react';
+import { memo, useCallback, useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import {
   DndContext,
@@ -67,6 +67,21 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const sensors = useSensors(
     useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
     useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
+  );
+
+  // Stable across renders so memo'd SortableAgendaItem / SortableSession
+  // children skip re-renders when only their siblings change.
+  const handleDelete = useCallback(
+    (itemId: string) => {
+      socket?.emit('agenda:delete', { id: itemId });
+    },
+    [socket],
+  );
+  const handleDeleteSession = useCallback(
+    (sessionId: string) => {
+      socket?.emit('session:delete', { id: sessionId });
+    },
+    [socket],
   );
 
   // When hidden (not the active tab) or meeting state not yet loaded, render
@@ -134,16 +149,6 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
 
     dispatch({ type: 'optimisticAgendaReorder', oldIndex, newIndex });
     socket?.emit('agenda:reorder', { id: active.id as string, afterId });
-  }
-
-  /** Handle deleting an agenda item. */
-  function handleDelete(itemId: string) {
-    socket?.emit('agenda:delete', { id: itemId });
-  }
-
-  /** Handle deleting a session header. Contained items stay in the list. */
-  function handleDeleteSession(sessionId: string) {
-    socket?.emit('session:delete', { id: sessionId });
   }
 
   return (
@@ -348,7 +353,7 @@ interface SortableAgendaItemProps {
   onDelete: (id: string) => void;
 }
 
-function SortableAgendaItem({
+const SortableAgendaItem = memo(function SortableAgendaItem({
   item,
   index,
   displayNumber,
@@ -558,7 +563,7 @@ function SortableAgendaItem({
       )}
     </li>
   );
-}
+});
 
 // -- Sortable session header --
 
@@ -576,7 +581,13 @@ interface SortableSessionProps {
   onDelete: (id: string) => void;
 }
 
-function SortableSession({ session, isChair, used, runTotal, onDelete }: SortableSessionProps) {
+const SortableSession = memo(function SortableSession({
+  session,
+  isChair,
+  used,
+  runTotal,
+  onDelete,
+}: SortableSessionProps) {
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -718,7 +729,7 @@ function SortableSession({ session, isChair, used, runTotal, onDelete }: Sortabl
       )}
     </li>
   );
-}
+});
 
 // -- Chairs section with inline editing --
 

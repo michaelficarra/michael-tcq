@@ -108,6 +108,9 @@ function MeetingPageInner() {
   // --- Auto-edit state (shared between keyboard shortcuts and SpeakerControls) ---
 
   const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
+  // Stable across renders so QueuePanel and its memo'd SortableQueueEntry
+  // children don't invalidate every render.
+  const handleAutoEditConsumed = useCallback(() => setAutoEditEntryId(null), []);
 
   const isChair = useIsChair();
 
@@ -299,7 +302,7 @@ function MeetingPageInner() {
             hidden={activeTab !== 'queue'}
             autoEditEntryId={presentationMode ? null : autoEditEntryId}
             onAddEntry={addQueueEntry}
-            onAutoEditConsumed={() => setAutoEditEntryId(null)}
+            onAutoEditConsumed={handleAutoEditConsumed}
           />
           <LogPanel hidden={activeTab !== 'log'} />
           <HelpPanel hidden={activeTab !== 'help'} showChairHelp={isChair} />
