@@ -11,7 +11,7 @@
  * highlight and past-item dimming.
  */
 
-import { memo, useCallback, useState, type FormEvent } from 'react';
+import { memo, useCallback, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import {
   DndContext,
@@ -84,6 +84,31 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     [socket],
   );
 
+  // Containment derived from the current agenda order + durations. Sessions
+  // collect the contiguous run of items that follow them (stopping at the
+  // next session header); items whose cumulative durations stay within the
+  // session's capacity are rendered indented. Memoised on `meeting.agenda`
+  // so unrelated state changes (e.g. a poll reaction or speaker advance)
+  // don't trigger the linear walk.
+  const agenda = meeting?.agenda;
+  const containment = useMemo(() => computeContainment(agenda ?? []), [agenda]);
+
+  // 1-based display number per agenda item — counted across items only so
+  // that session interpolation doesn't create gaps in the numbering.
+  // Memoised for the same reason as `containment`.
+  const itemNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!agenda) return map;
+    let n = 0;
+    for (const entry of agenda) {
+      if (isAgendaItem(entry)) {
+        n += 1;
+        map.set(entry.id, n);
+      }
+    }
+    return map;
+  }, [agenda]);
+
   // When hidden (not the active tab) or meeting state not yet loaded, render
   // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
   // mount/unmount race on tab switch that caused Firefox CI flakes; skipping
@@ -100,25 +125,6 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const currentIndex = meeting.current.agendaItemId
     ? meeting.agenda.findIndex((e) => isAgendaItem(e) && e.id === meeting.current.agendaItemId)
     : -1;
-
-  // Containment derived from the current agenda order + durations. Sessions
-  // collect the contiguous run of items that follow them (stopping at the
-  // next session header); items whose cumulative durations stay within the
-  // session's capacity are rendered indented.
-  const containment = computeContainment(meeting.agenda);
-
-  // 1-based display number per agenda item — counted across items only so
-  // that session interpolation doesn't create gaps in the numbering.
-  const itemNumbers = new Map<string, number>();
-  {
-    let n = 0;
-    for (const entry of meeting.agenda) {
-      if (isAgendaItem(entry)) {
-        n += 1;
-        itemNumbers.set(entry.id, n);
-      }
-    }
-  }
 
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {

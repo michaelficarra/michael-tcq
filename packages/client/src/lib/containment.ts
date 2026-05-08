@@ -13,8 +13,8 @@
  * A run ends at the next session header or the end of the agenda.
  *
  * Pure display derivation: the server doesn't know about containment.
- * Recomputes from scratch each call; the agenda is small enough that
- * memoisation isn't worth the extra plumbing.
+ * Recomputes from scratch each call. AgendaPanel memoises the result on
+ * `meeting.agenda` so unrelated state changes don't trigger the walk.
  */
 
 import type { AgendaEntry } from '@tcq/shared';
