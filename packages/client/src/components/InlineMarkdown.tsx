@@ -16,7 +16,7 @@
  * Tailwind classes — only this component cares about the visual style.
  */
 
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import {
   parseInlineToHast,
   stripUnsupportedMarkdown,
@@ -137,11 +137,17 @@ function renderNode(node: HastRootContent): ReactNode {
 // -- Public component ---------------------------------------------------
 
 export function InlineMarkdown({ children, className }: InlineMarkdownProps) {
-  // Tolerant: legacy stored content might contain constructs the
-  // validator now rejects (e.g. headings, multi-paragraph). Strip them
-  // before parsing so the renderer always sees a clean inline tree.
-  const safe = stripUnsupportedMarkdown(children);
-  if (safe.length === 0) return <span className={className}></span>;
-  const tree: HastRoot = parseInlineToHast(safe);
+  // Tolerant: legacy stored content might contain constructs the validator
+  // now rejects (e.g. headings, multi-paragraph). Strip them before parsing
+  // so the renderer always sees a clean inline tree. Memoised by input
+  // string — the unified/remark/rehype pipeline is the dominant cost in
+  // this component, and InlineMarkdown is rendered once per agenda item,
+  // queue entry, and log entry, so unrelated state changes used to re-walk
+  // every visible markdown string on every commit.
+  const tree = useMemo<HastRoot | null>(() => {
+    const safe = stripUnsupportedMarkdown(children);
+    return safe.length === 0 ? null : parseInlineToHast(safe);
+  }, [children]);
+  if (!tree) return <span className={className}></span>;
   return <span className={className}>{renderChildren(tree.children)}</span>;
 }
