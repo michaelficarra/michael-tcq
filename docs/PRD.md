@@ -154,6 +154,8 @@ Agenda item names, queue entry topics, session names, agenda item conclusions, a
 
 Validation is **strict at the write boundary** — submitting a heading, list, table, blockquote, image, code block, or any disallowed HTML tag/attribute is rejected with a specific error like _"Headings are not supported"_. Rendering is **lenient**: legacy stored content that pre-dates the validator is silently stripped to its supported subset rather than crashing the page. Agenda import is also lenient — disallowed nodes inside an imported item name are stripped, not cause to reject the import.
 
+GitHub issue and PR links get a display-time prettification: when the source is a bare URL autolink or a `[url](url)`-style link with no custom text, a URL of the form `https://github.com/<org>/<repo>/(issues|pull)/<number>` renders as `org/repo#number` (e.g. `tc39/ecma262#3776`). Links with author-supplied text (e.g. `[the PR](url)`) are rendered as written. Sub-views such as `/files` or `/commits/...` are not shortened. The link target is unchanged — only the displayed text differs.
+
 ### Agenda Display
 
 The Agenda tab shows the list of meeting chairs at the top, followed by a numbered list of agenda items. Each item shows its name (with inline markdown rendered), a badge per presenter (each with GitHub avatar, display name, and organisation), and the duration if set — labelled as an "Estimate" for current and future items and as a "Duration" for past items (since the value has been overwritten with the actual elapsed time). Items where the current user is one of the presenters are visually distinguished with a coloured left border.

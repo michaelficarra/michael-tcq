@@ -50,6 +50,37 @@ function isAllowedUrl(url: string): boolean {
   }
 }
 
+// -- GitHub issue/PR shortlink display ---------------------------------
+
+/**
+ * Match a "naked" GitHub issue or PR URL — `https://github.com/<org>/
+ * <repo>/(issues|pull)/<number>` with an optional trailing `/`, query,
+ * or fragment. Deeper paths like `/files` or `/commits/...` are left
+ * alone, since they reference a sub-view of the issue/PR rather than
+ * the issue/PR itself.
+ */
+const GITHUB_ISSUE_PR_RE = /^https?:\/\/github\.com\/([^/?#]+)\/([^/?#]+)\/(?:issues|pull)\/(\d+)\/?(?:[?#]|$)/;
+
+function githubIssuePrShortlink(url: string): string | null {
+  const m = url.match(GITHUB_ISSUE_PR_RE);
+  if (!m) return null;
+  return `${m[1]}/${m[2]}#${m[3]}`;
+}
+
+/**
+ * If the link's only child is a text node whose value matches the href
+ * (i.e. the source was an autolink or `[url](url)`) and the URL is a
+ * GitHub issue/PR, return the canonical short form; otherwise null
+ * (the renderer falls back to the original children).
+ */
+function rawGithubShortlinkText(href: string, children: ReadonlyArray<HastRootContent>): string | null {
+  if (children.length !== 1) return null;
+  const child = children[0];
+  if (child.type !== 'text') return null;
+  if (child.value !== href) return null;
+  return githubIssuePrShortlink(href);
+}
+
 // -- hast → React -------------------------------------------------------
 
 function renderChildren(children: ReadonlyArray<HastRootContent>): ReactNode[] {
@@ -85,9 +116,13 @@ function renderNode(node: HastRootContent): ReactNode {
 
   if (tag === 'a') {
     if (!props.href) return <>{renderChildren(el.children)}</>;
+    // Raw GitHub issue / PR autolinks display as `org/repo#1234` rather
+    // than the verbose URL. Links whose author chose explicit text
+    // (`[some PR](url)`, `[#123](url)`) keep that text.
+    const shortlink = rawGithubShortlinkText(props.href, el.children);
     return (
       <a href={props.href} title={props.title} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-        {renderChildren(el.children)}
+        {shortlink ?? renderChildren(el.children)}
       </a>
     );
   }

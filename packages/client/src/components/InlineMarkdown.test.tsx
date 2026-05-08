@@ -107,4 +107,66 @@ describe('InlineMarkdown', () => {
     const { container } = render(<InlineMarkdown className="text-red-500">plain</InlineMarkdown>);
     expect(container.firstElementChild).toHaveClass('text-red-500');
   });
+
+  describe('GitHub issue/PR shortlinks', () => {
+    it('shortens an autolinked PR URL to org/repo#number', () => {
+      const { container } = render(
+        <InlineMarkdown>{'See <https://github.com/tc39/ecma262/pull/3776>'}</InlineMarkdown>,
+      );
+      const a = container.querySelector('a');
+      expect(a?.getAttribute('href')).toBe('https://github.com/tc39/ecma262/pull/3776');
+      expect(a?.textContent).toBe('tc39/ecma262#3776');
+    });
+
+    it('shortens an autolinked issue URL', () => {
+      const { container } = render(
+        <InlineMarkdown>{'See <https://github.com/tc39/proposal-source-phase-imports/issues/75>'}</InlineMarkdown>,
+      );
+      const a = container.querySelector('a');
+      expect(a?.textContent).toBe('tc39/proposal-source-phase-imports#75');
+    });
+
+    it('shortens [url](url) where the text equals the URL', () => {
+      const { container } = render(
+        <InlineMarkdown>
+          {'[https://github.com/owner/repo/pull/1](https://github.com/owner/repo/pull/1)'}
+        </InlineMarkdown>,
+      );
+      const a = container.querySelector('a');
+      expect(a?.textContent).toBe('owner/repo#1');
+    });
+
+    it('preserves author-chosen link text', () => {
+      const { container } = render(
+        <InlineMarkdown>{'[#3776](https://github.com/tc39/ecma262/pull/3776)'}</InlineMarkdown>,
+      );
+      const a = container.querySelector('a');
+      expect(a?.textContent).toBe('#3776');
+    });
+
+    it('does not shorten a URL pointing at a sub-view (e.g. /files)', () => {
+      const { container } = render(<InlineMarkdown>{'<https://github.com/owner/repo/pull/1/files>'}</InlineMarkdown>);
+      const a = container.querySelector('a');
+      expect(a?.textContent).toBe('https://github.com/owner/repo/pull/1/files');
+    });
+
+    it('shortens a URL with a trailing slash', () => {
+      const { container } = render(<InlineMarkdown>{'<https://github.com/owner/repo/issues/42/>'}</InlineMarkdown>);
+      expect(container.querySelector('a')?.textContent).toBe('owner/repo#42');
+    });
+
+    it('shortens a URL with a fragment (drops the fragment from the display)', () => {
+      const { container } = render(
+        <InlineMarkdown>{'<https://github.com/owner/repo/pull/9#issuecomment-123>'}</InlineMarkdown>,
+      );
+      const a = container.querySelector('a');
+      expect(a?.textContent).toBe('owner/repo#9');
+      expect(a?.getAttribute('href')).toBe('https://github.com/owner/repo/pull/9#issuecomment-123');
+    });
+
+    it('does not shorten a non-issue/PR GitHub URL', () => {
+      const { container } = render(<InlineMarkdown>{'<https://github.com/owner/repo>'}</InlineMarkdown>);
+      expect(container.querySelector('a')?.textContent).toBe('https://github.com/owner/repo');
+    });
+  });
 });
