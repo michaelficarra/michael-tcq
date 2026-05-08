@@ -91,6 +91,60 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
     [queue],
   );
 
+  // Per-entry drag/edit eligibility and the legal type-change set, computed
+  // once at the panel rather than per-entry. The original per-entry form
+  // walked the whole queue (O(N²) total) and forced `SortableQueueEntry` to
+  // take the queue array as a prop — which broke its `memo` on every queue
+  // mutation. Lifting these here lets each child receive only stable
+  // primitives and a memo-stable `legalTypes` array reference, so children
+  // skip re-renders when other state changes.
+  const ownerKey = user ? userKey(user) : null;
+  const derivationsByEntryId = useMemo(() => {
+    const map = new Map<string, QueueEntryDerivations>();
+    const n = queuedSpeakers.length;
+    if (n === 0) return map;
+
+    // Two cumulative passes so each entry's legal-type bounds are an O(1)
+    // lookup. `minPriorityAbove[i]` is the highest priority value seen at
+    // positions 0..i-1; `maxPriorityBelow[i]` is the lowest seen at i+1..n-1.
+    const minPriorityAbove = new Array<number>(n);
+    let cur = 0;
+    for (let i = 0; i < n; i++) {
+      minPriorityAbove[i] = cur;
+      const p = QUEUE_ENTRY_PRIORITY[queuedSpeakers[i].type];
+      if (p > cur) cur = p;
+    }
+    const maxPriorityBelow = new Array<number>(n);
+    cur = QUEUE_ENTRY_TYPES.length - 1;
+    for (let i = n - 1; i >= 0; i--) {
+      maxPriorityBelow[i] = cur;
+      const p = QUEUE_ENTRY_PRIORITY[queuedSpeakers[i].type];
+      if (p < cur) cur = p;
+    }
+
+    for (let i = 0; i < n; i++) {
+      const entry = queuedSpeakers[i];
+      const isOwnEntry = ownerKey !== null && entry.userId === ownerKey;
+      // Chairs may move any entry past anyone; non-chair owners may only
+      // move up across their own contiguous block above. Mirrors the
+      // server-side validator.
+      const canMoveUp = isChair ? i > 0 : isOwnEntry && i > 0 && queuedSpeakers[i - 1].userId === entry.userId;
+      const canMoveDown = (isChair || isOwnEntry) && i < n - 1;
+      const canDrag = (isChair || isOwnEntry) && (canMoveUp || canMoveDown);
+
+      const minP = minPriorityAbove[i];
+      const maxP = maxPriorityBelow[i];
+      // Built in low-to-high priority order (topic first) so clicking the
+      // type badge cycles toward higher priority naturally.
+      const legalTypes = QUEUE_ENTRY_TYPES.filter(
+        (t) => QUEUE_ENTRY_PRIORITY[t] >= minP && QUEUE_ENTRY_PRIORITY[t] <= maxP,
+      ).reverse();
+
+      map.set(entry.id, { isOwnEntry, canMoveUp, canMoveDown, canDrag, legalTypes });
+    }
+    return map;
+  }, [queuedSpeakers, isChair, ownerKey]);
+
   // Derive start times for count-up timers
   const agendaItemStartTime = meeting?.current.agendaItemStartTime;
   const topicSpeakers = meeting?.current.topicSpeakers;
@@ -578,19 +632,26 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           >
             <SortableContext items={meeting.queue.orderedIds} strategy={verticalListSortingStrategy}>
               <ol aria-label="Queued speakers">
-                {queuedSpeakers.map((entry, index) => (
-                  <SortableQueueEntry
-                    key={entry.id}
-                    entry={entry}
-                    index={index}
-                    queue={queuedSpeakers}
-                    isChair={isChair}
-                    isOwnEntry={!!user && entry.userId === userKey(user)}
-                    onDelete={handleRemoveEntry}
-                    initialEditing={autoEditEntryId === entry.id}
-                    onEditingStarted={onAutoEditConsumed}
-                  />
-                ))}
+                {queuedSpeakers.map((entry, index) => {
+                  const d = derivationsByEntryId.get(entry.id);
+                  if (!d) return null;
+                  return (
+                    <SortableQueueEntry
+                      key={entry.id}
+                      entry={entry}
+                      index={index}
+                      isChair={isChair}
+                      isOwnEntry={d.isOwnEntry}
+                      canMoveUp={d.canMoveUp}
+                      canMoveDown={d.canMoveDown}
+                      canDrag={d.canDrag}
+                      legalTypes={d.legalTypes}
+                      onDelete={handleRemoveEntry}
+                      initialEditing={autoEditEntryId === entry.id}
+                      onEditingStarted={onAutoEditConsumed}
+                    />
+                  );
+                })}
               </ol>
             </SortableContext>
           </DndContext>
@@ -709,13 +770,23 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
 
 // -- Sortable queue entry component --
 
-interface SortableQueueEntryProps {
+/**
+ * Per-entry state that depends on the entry's position within the queue
+ * (and on chair/ownership). Computed once at the panel level so children
+ * receive memo-stable references and don't re-walk the queue per render.
+ */
+interface QueueEntryDerivations {
+  isOwnEntry: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  canDrag: boolean;
+  legalTypes: QueueEntryType[];
+}
+
+interface SortableQueueEntryProps extends QueueEntryDerivations {
   entry: QueueEntry;
   index: number;
-  /** The full queue — needed to compute legal type changes. */
-  queue: QueueEntry[];
   isChair: boolean;
-  isOwnEntry: boolean;
   onDelete: (id: string) => void;
   /** When true, the entry renders in edit mode immediately. */
   initialEditing?: boolean;
@@ -726,9 +797,12 @@ interface SortableQueueEntryProps {
 const SortableQueueEntry = memo(function SortableQueueEntry({
   entry,
   index,
-  queue,
   isChair,
   isOwnEntry,
+  canMoveUp,
+  canMoveDown,
+  canDrag,
+  legalTypes,
   onDelete,
   initialEditing = false,
   onEditingStarted,
@@ -763,50 +837,12 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
     }
   }, []);
 
-  // Whether this entry has any legal upward / downward move from its
-  // current position. Chairs may move past anyone; non-chair owners may
-  // only move up across their own contiguous block above.
-  const canMoveUp = isChair ? index > 0 : isOwnEntry && index > 0 && queue[index - 1].userId === entry.userId;
-  const canMoveDown = (isChair || isOwnEntry) && index < queue.length - 1;
-  // Drag handle is only rendered when at least one direction is possible —
-  // this naturally hides it for non-owners and for the no-valid-moves case
-  // (e.g. a single-entry queue, or an own entry pinned at the bottom under
-  // a non-owner entry).
-  const canDrag = (isChair || isOwnEntry) && (canMoveUp || canMoveDown);
-
-  /**
-   * Compute which types this entry can legally be changed to without
-   * breaking the priority ordering of the queue. A type is legal if
-   * its priority is:
-   * - >= the highest priority (lowest number) of items above
-   * - <= the lowest priority (highest number) of items below
-   * The entry's own current type is always included.
-   */
-  const legalTypes: QueueEntryType[] = (() => {
-    // Priority bounds from neighbours
-    let minPriority = 0; // highest possible priority (point-of-order)
-    let maxPriority = QUEUE_ENTRY_TYPES.length - 1; // lowest possible priority (topic)
-
-    // Constrain by items above: type must be at least as low-priority
-    // as the lowest-priority item above
-    for (let i = 0; i < index; i++) {
-      const p = QUEUE_ENTRY_PRIORITY[queue[i].type];
-      if (p > minPriority) minPriority = p;
-    }
-
-    // Constrain by items below: type must be at least as high-priority
-    // as the highest-priority item below
-    for (let i = index + 1; i < queue.length; i++) {
-      const p = QUEUE_ENTRY_PRIORITY[queue[i].type];
-      if (p < maxPriority) maxPriority = p;
-    }
-
-    // Build the list in low-to-high priority order (topic first) so
-    // clicking cycles toward higher priority naturally.
-    return QUEUE_ENTRY_TYPES.filter(
-      (t) => QUEUE_ENTRY_PRIORITY[t] >= minPriority && QUEUE_ENTRY_PRIORITY[t] <= maxPriority,
-    ).reverse();
-  })();
+  // `canMoveUp`, `canMoveDown`, `canDrag`, and `legalTypes` are computed
+  // once at the panel level (see `derivationsByEntryId` in QueuePanel) and
+  // arrive here as stable props. The drag handle is only rendered when at
+  // least one direction is possible — this naturally hides it for
+  // non-owners and for the no-valid-moves case (e.g. a single-entry queue,
+  // or an own entry pinned at the bottom under a non-owner entry).
 
   /** Cycle to the next legal type when the type badge is clicked. */
   function handleCycleType() {
