@@ -148,14 +148,16 @@ describe('HomePage tab–hash sync', () => {
       expect(screen.getByRole('tab', { name: 'Help' })).toBeVisible();
     });
 
-    it('falls back to Join Meeting when a non-admin loads /#admin and rewrites the hash', () => {
+    it('falls back to Join Meeting when a non-admin loads /#admin', () => {
       mockAuthState.isAdmin = false;
       renderHomePage('#admin');
       // The Admin tab button isn't even in the DOM, and Join Meeting is selected.
       expect(screen.queryByRole('tab', { name: 'Admin' })).toBeNull();
       expect(screen.getByRole('tab', { name: 'Join Meeting' })).toHaveAttribute('aria-selected', 'true');
-      // The URL self-corrects to #join rather than lying about an Admin view.
-      expect(window.location.hash).toBe('#join');
+      // The hash is left as-is on initial mount — the visible view falls back
+      // to Join, but the URL is not rewritten until a tab change actually
+      // happens.
+      expect(window.location.hash).toBe('#admin');
     });
 
     it('rewrites the hash to #join when a non-admin triggers an in-session #admin hashchange', () => {
@@ -163,6 +165,8 @@ describe('HomePage tab–hash sync', () => {
       // visibleTab alone wouldn't re-run the sync effect — activeTab dep covers it.
       mockAuthState.isAdmin = false;
       renderHomePage('#join');
+      // Initial mount doesn't write the hash, but the inbound `#join` is
+      // already correct.
       expect(window.location.hash).toBe('#join');
 
       act(() => {
@@ -170,7 +174,9 @@ describe('HomePage tab–hash sync', () => {
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       });
 
-      // Still on Join (non-admin can't see Admin), and the URL is rewritten back.
+      // Still on Join (non-admin can't see Admin), and the URL is rewritten
+      // back — the in-session hashchange triggers a state update, which is
+      // not the first render and so the sync effect does run.
       expect(screen.getByRole('tab', { name: 'Join Meeting' })).toHaveAttribute('aria-selected', 'true');
       expect(window.location.hash).toBe('#join');
     });

@@ -226,8 +226,6 @@ test.describe('Navigation', () => {
     test.skip(browserName === 'webkit', 'WebKit headless does not open a new tab on middle-click');
 
     const meetingId = await createMeeting(page);
-    // Meeting creation lands on the Agenda tab; verify before we exercise middle-click.
-    await expect(page).toHaveURL(/#agenda$/);
 
     // Tabs render as <a href="#…">, so a real middle-click falls through to
     // the browser and opens the destination in a new tab. Listen for the
@@ -243,7 +241,6 @@ test.describe('Navigation', () => {
     await expect(newPage.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
 
     // The original tab is unaffected — still on Agenda.
-    await expect(page).toHaveURL(/#agenda$/);
     await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
 
     await newPage.close();

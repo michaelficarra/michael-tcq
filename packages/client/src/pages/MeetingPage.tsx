@@ -7,7 +7,7 @@
  * keyboard shortcuts for common actions.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
@@ -35,8 +35,16 @@ function MeetingPageInner() {
     return TABS.includes(hash as Tab) ? (hash as Tab) : 'queue';
   });
 
-  // Sync tab state → URL fragment
+  // Sync tab state → URL fragment, but only when activeTab actually changes,
+  // not on initial mount. Mounting at `/meeting/<id>` (no hash) should leave
+  // the URL alone — the hash only appears once the user actually clicks a
+  // different tab. The ref captures the last synced value, so StrictMode's
+  // double-invoke of effects in dev is a no-op (ref and current match on
+  // the second run).
+  const prevActiveTabRef = useRef<Tab>(activeTab);
   useEffect(() => {
+    if (prevActiveTabRef.current === activeTab) return;
+    prevActiveTabRef.current = activeTab;
     window.history.replaceState(null, '', `#${activeTab}`);
   }, [activeTab]);
 

@@ -7,7 +7,7 @@
  * - "Help" — usage guide (shared HelpPanel component).
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { AdminPanel } from '../components/AdminPanel.js';
@@ -83,13 +83,20 @@ export function HomePage() {
   // trip `react-hooks/set-state-in-effect`).
   const visibleTab = activeTab === 'admin' && !isAdmin ? 'join' : activeTab;
 
-  // Sync the *visible* tab to the URL fragment. Syncing visibleTab rather than
-  // activeTab means a non-admin who pastes /#admin self-corrects to /#join
-  // instead of leaving the URL claiming an Admin view they can't see.
-  // Depend on activeTab too so an in-session hashchange to #admin (which
-  // updates activeTab but leaves visibleTab='join' for a non-admin) still
-  // triggers the rewrite — otherwise the URL would stay at #admin.
+  // Sync the *visible* tab to the URL fragment, but only when activeTab
+  // actually changes — not on initial mount. Mounting at a hashless `/`
+  // should leave it as `/` (the visible default tab is still 'join');
+  // rewriting it on mount creates a brief `/` → `/#join` history flicker
+  // that races Playwright's `waitForURL('/')` in Firefox. We compare the
+  // current activeTab against a ref of the last value we synced from, so
+  // StrictMode's double-invoke of effects in dev is also a no-op (the ref
+  // and the current value match the second time round). An in-session
+  // hashchange to #admin by a non-admin still flips activeTab and trips
+  // the comparison, so the URL gets corrected back to #join.
+  const prevActiveTabRef = useRef<HomeTab>(activeTab);
   useEffect(() => {
+    if (prevActiveTabRef.current === activeTab) return;
+    prevActiveTabRef.current = activeTab;
     window.history.replaceState(null, '', `#${visibleTab}`);
   }, [activeTab, visibleTab]);
 
