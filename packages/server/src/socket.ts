@@ -1130,10 +1130,15 @@ export function registerSocketHandlers(
       const poll = meeting.poll;
       let pollLog: LogEntry | null = null;
       if (poll) {
-        // Count distinct voters
+        // Single pass over reactions: tally distinct voters and per-option
+        // counts together. The previous form filtered reactions once per
+        // option, which is O(reactions × options) — a one-pass aggregation
+        // is O(reactions + options) and behaves better as polls scale.
         const voterSet = new Set<string>();
+        const counts = new Map<string, number>();
         for (const r of poll.reactions) {
           voterSet.add(r.userId);
+          counts.set(r.optionId, (counts.get(r.optionId) ?? 0) + 1);
         }
 
         // Build results sorted by count descending
@@ -1141,7 +1146,7 @@ export function registerSocketHandlers(
           .map((opt) => ({
             emoji: opt.emoji,
             label: opt.label,
-            count: poll.reactions.filter((r) => r.optionId === opt.id).length,
+            count: counts.get(opt.id) ?? 0,
           }))
           .sort((a, b) => b.count - a.count);
 
