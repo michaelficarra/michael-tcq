@@ -15,7 +15,7 @@ function logProxyError(err: NodeJS.ErrnoException) {
   } else {
     hint = 'this may be transient; check that the server is running';
   }
-  console.log(`Proxy error: ${err.message || err} (${hint})`);
+  console.warn(`Proxy error: ${err.message || err} (${hint})`);
 }
 
 // Safety net: http-proxy's WebSocket tunnel can throw EPIPE/ECONNRESET on a

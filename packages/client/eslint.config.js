@@ -29,6 +29,10 @@ export default defineConfig([
           ignoreRestSiblings: true,
         },
       ],
+      // Prevent debug noise leaking to production. `warn` and `error` are
+      // allowed for diagnostics that should be visible to end-users in the
+      // browser console (e.g. socket-rejection warnings in useAdvanceAction).
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
 ]);
