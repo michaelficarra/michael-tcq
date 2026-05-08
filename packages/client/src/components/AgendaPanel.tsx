@@ -446,7 +446,7 @@ function SortableAgendaItem({
               onChange={setEditPresenters}
               meetingId={meeting?.id}
               ariaLabel="Presenters"
-              placeholder="username"
+              placeholder="presenters"
             />
           </div>
           <input
