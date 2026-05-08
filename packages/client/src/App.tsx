@@ -1,10 +1,25 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { PreferencesProvider } from './contexts/PreferencesContext.js';
 import { PreferencesModal } from './components/PreferencesModal.js';
 import { LoginPage } from './pages/LoginPage.js';
-import { HomePage } from './pages/HomePage.js';
-import { MeetingPage } from './pages/MeetingPage.js';
+
+// Route-level code splitting: HomePage and MeetingPage each pull in a
+// large slice of the dependency tree (MeetingPage in particular owns the
+// markdown stack and @dnd-kit), so loading them lazily keeps the initial
+// chunk well below Vite's 600 kB warning threshold and means home-page
+// visitors don't pay for meeting-page code.
+const HomePage = lazy(() => import('./pages/HomePage.js').then((m) => ({ default: m.HomePage })));
+const MeetingPage = lazy(() => import('./pages/MeetingPage.js').then((m) => ({ default: m.MeetingPage })));
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+      <p className="text-stone-400">Loading&hellip;</p>
+    </div>
+  );
+}
 
 /**
  * Root component. Wraps the app in AuthProvider so all routes can
@@ -32,11 +47,7 @@ function AppRoutes() {
 
   // Show nothing while checking auth status to avoid a flash of login page
   if (loading) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <p className="text-stone-400">Loading&hellip;</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // Not authenticated — show login page regardless of URL
@@ -44,12 +55,16 @@ function AppRoutes() {
     return <LoginPage />;
   }
 
-  // Authenticated — render normal app routes
+  // Authenticated — render normal app routes. Suspense covers the lazy-
+  // loaded route components above; LoadingScreen mirrors the auth-loading
+  // state so transitions look consistent.
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/meeting/:id" element={<MeetingPage />} />
-    </Routes>
+    <Suspense fallback={<LoadingScreen />}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/meeting/:id" element={<MeetingPage />} />
+      </Routes>
+    </Suspense>
   );
 }
 
