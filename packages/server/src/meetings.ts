@@ -310,17 +310,15 @@ export class MeetingManager {
   // -- Agenda mutations --
 
   /**
-   * Add a new agenda item to a meeting. `presenters` must be non-empty;
+   * Add a new agenda item to a meeting. `presenters` may be empty;
    * duplicate keys are de-duplicated preserving first-occurrence order.
-   * Returns the created item, or null if the meeting doesn't exist or
-   * `presenters` is empty.
+   * Returns the created item, or null if the meeting doesn't exist.
    */
   addAgendaItem(meetingId: string, name: string, presenters: User[], duration?: number): AgendaItem | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
     const presenterIds = dedupeKeys(presenters.map((p) => ensureUser(meeting, p)));
-    if (presenterIds.length === 0) return null;
 
     const item: AgendaItem = {
       kind: 'item',
@@ -338,8 +336,7 @@ export class MeetingManager {
   /**
    * Edit an existing agenda item. Only the provided fields are updated;
    * omitted fields are left unchanged. Pass `duration: null` to clear
-   * the duration. When `presenters` is provided it must be non-empty;
-   * an empty list is rejected (the call returns false without mutating).
+   * the duration. Pass `presenters: []` to clear the presenter list.
    * Returns true if the item was found and updated.
    */
   editAgendaItem(
@@ -356,9 +353,7 @@ export class MeetingManager {
     if (!item) return false;
 
     if (updates.presenters !== undefined) {
-      const presenterIds = dedupeKeys(updates.presenters.map((p) => ensureUser(meeting, p)));
-      if (presenterIds.length === 0) return false;
-      item.presenterIds = presenterIds;
+      item.presenterIds = dedupeKeys(updates.presenters.map((p) => ensureUser(meeting, p)));
     }
     if (updates.name !== undefined) item.name = updates.name;
     if (updates.duration === null) {
@@ -535,26 +530,36 @@ export class MeetingManager {
     const nextItem = meeting.agenda[nextIndex] as AgendaItem;
     const now = new Date().toISOString();
 
-    // The item's first presenter becomes the current speaker. No synthesised
+    // When the item has at least one presenter, the first presenter becomes
+    // the current speaker and seeds the topic-speakers list. No synthesised
     // queue entry: the CurrentSpeaker struct is the sole representation of
     // this turn. Any co-presenters are not auto-queued — they can self-add.
+    // When the item has no presenters, the floor is left open: speaker is
+    // undefined and topicSpeakers is empty until someone enters the queue.
     const firstPresenterId = nextItem.presenterIds[0];
-    const speaker: CurrentSpeaker = {
-      id: randomUUID(),
-      type: 'topic',
-      topic: `Introducing: ${nextItem.name}`,
-      userId: firstPresenterId,
-      source: 'agenda',
-      startTime: now,
-    };
+    const speaker: CurrentSpeaker | undefined =
+      firstPresenterId !== undefined
+        ? {
+            id: randomUUID(),
+            type: 'topic',
+            topic: `Introducing: ${nextItem.name}`,
+            userId: firstPresenterId,
+            source: 'agenda',
+            startTime: now,
+          }
+        : undefined;
 
-    // Topic group for this agenda item starts with the introduction.
-    const introSpeaker: TopicSpeaker = {
-      userId: firstPresenterId,
-      type: 'topic',
-      topic: `Introducing: ${nextItem.name}`,
-      startTime: now,
-    };
+    const topicSpeakers: TopicSpeaker[] =
+      firstPresenterId !== undefined
+        ? [
+            {
+              userId: firstPresenterId,
+              type: 'topic',
+              topic: `Introducing: ${nextItem.name}`,
+              startTime: now,
+            },
+          ]
+        : [];
 
     meeting.current = {
       agendaItemId: nextItem.id,
@@ -563,7 +568,7 @@ export class MeetingManager {
       // Topic is cleared on agenda advance — "reply" isn't available until
       // someone actually introduces a topic via the queue.
       topic: undefined,
-      topicSpeakers: [introSpeaker],
+      topicSpeakers,
     };
 
     // Queue is wiped (new agenda item) and re-opened.

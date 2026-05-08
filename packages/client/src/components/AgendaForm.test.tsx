@@ -146,4 +146,27 @@ describe('AgendaForm', () => {
       duration: undefined,
     });
   });
+
+  it('submits with no presenters', () => {
+    // Presenters are optional — a chair can create an agenda item without
+    // committing anyone to introduce it; the floor stays open on advance.
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const onSubmit = vi.fn();
+
+    renderForm(mockSocket, () => {}, onSubmit);
+
+    fireEvent.change(screen.getByLabelText('Agenda Item Name'), {
+      target: { value: 'Open floor' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(emit).toHaveBeenCalledWith('agenda:add', {
+      name: 'Open floor',
+      presenterUsernames: [],
+      duration: undefined,
+    });
+    expect(onSubmit).toHaveBeenCalled();
+  });
 });

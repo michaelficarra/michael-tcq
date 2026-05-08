@@ -2,7 +2,7 @@
  * Form for adding a new agenda item.
  *
  * Fields: name (required), presenter GitHub username(s) — chip input
- * backed by autocomplete, at least one — (required), estimated duration
+ * backed by autocomplete, zero or more (optional), estimated duration
  * in minutes (optional). Matches the layout from the original screenshots:
  * a horizontal row of labelled inputs with Create/Cancel buttons.
  */
@@ -37,7 +37,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
 
     const trimmedName = name.trim();
     const presenterUsernames = presenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
-    if (!trimmedName || presenterUsernames.length === 0) return;
+    if (!trimmedName) return;
 
     // Parse estimate: empty string or non-positive = no estimate
     const estimateMinutes = parseInt(estimate, 10);

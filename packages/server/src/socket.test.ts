@@ -435,6 +435,28 @@ describe('Socket.IO integration', () => {
       expect(state.users[presenterKey]?.organisation).toBe(enriched?.organisation ?? '');
     });
 
+    it('accepts an empty presenters list', async () => {
+      const meeting = ctx.meetingManager.create([
+        {
+          ghid: 1,
+          ghUsername: 'testuser',
+          name: 'Test User',
+          organisation: 'Test Org',
+        },
+      ]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('agenda:add', { name: 'No presenter', presenterUsernames: [] });
+      const state = await statePromise;
+
+      expect(state.agenda).toHaveLength(1);
+      const first = asItem(state.agenda[0]);
+      expect(first.name).toBe('No presenter');
+      expect(first.presenterIds).toEqual([]);
+    });
+
     it('rejects add from non-chair', async () => {
       // Create meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([

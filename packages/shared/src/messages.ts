@@ -201,7 +201,7 @@ const githubUsername = (msg = 'Username is required') =>
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
   name: markdownString('Agenda item name'),
-  presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required'),
+  presenterUsernames: z.array(githubUsername()),
   /** Estimated duration in minutes; omit or 0 for no estimate. */
   duration: z.number().int().positive().optional(),
 });
@@ -232,7 +232,8 @@ export type AgendaReorderPayload = z.infer<typeof AgendaReorderPayloadSchema>;
 export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: optionalMarkdownString('Agenda item name'),
-  presenterUsernames: z.array(githubUsername()).min(1, 'At least one presenter is required').optional(),
+  // Omitted = unchanged; an empty array explicitly clears the presenter list.
+  presenterUsernames: z.array(githubUsername()).optional(),
   duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;

@@ -390,26 +390,23 @@ export function createMeetingRoutes(
       }
     }
 
-    // Add each item to the meeting. If no presenters were parsed, fall
-    // back to the importing user so the item still has at least one
-    // presenter.
+    // Add each item to the meeting. Items with no parsed presenters are
+    // created with an empty presenter list; the chair can edit one in
+    // afterwards if desired.
     for (const item of items) {
-      const presenters: User[] =
-        item.presenters.length > 0
-          ? item.presenters.map((name) => {
-              const hit = resolved.get(name.trim().toLowerCase());
-              return hit
-                ? {
-                    ghid: hit.ghid,
-                    // Canonical login from the directory — `userKey` will
-                    // lowercase it when storing in `meeting.users`.
-                    ghUsername: hit.login,
-                    name: hit.name,
-                    organisation: hit.organisation,
-                  }
-                : { ghid: 0, ghUsername: name, name, organisation: '' };
-            })
-          : [user];
+      const presenters: User[] = item.presenters.map((name) => {
+        const hit = resolved.get(name.trim().toLowerCase());
+        return hit
+          ? {
+              ghid: hit.ghid,
+              // Canonical login from the directory — `userKey` will
+              // lowercase it when storing in `meeting.users`.
+              ghUsername: hit.login,
+              name: hit.name,
+              organisation: hit.organisation,
+            }
+          : { ghid: 0, ghUsername: name, name, organisation: '' };
+      });
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }
 

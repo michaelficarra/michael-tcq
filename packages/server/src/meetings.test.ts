@@ -232,11 +232,12 @@ describe('MeetingManager', () => {
       expect(item!.presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
     });
 
-    it('returns null when presenters is empty', () => {
+    it('creates an item with no presenters', () => {
       const meeting = manager.create([testUser]);
       const item = manager.addAgendaItem(meeting.id, 'No presenter', []);
-      expect(item).toBeNull();
-      expect(meeting.agenda).toHaveLength(0);
+      expect(item).not.toBeNull();
+      expect(item!.presenterIds).toEqual([]);
+      expect(meeting.agenda).toHaveLength(1);
     });
   });
 
@@ -266,13 +267,13 @@ describe('MeetingManager', () => {
       expect(asItem(meeting.agenda[0]).presenterIds).toEqual([userKey(testUser), userKey(otherUser)]);
     });
 
-    it('rejects an empty presenters list', () => {
+    it('clears the presenters when set to []', () => {
       const meeting = manager.create([testUser]);
       const item = manager.addAgendaItem(meeting.id, 'Item', [testUser])!;
 
       const result = manager.editAgendaItem(meeting.id, item.id, { presenters: [] });
-      expect(result).toBe(false);
-      expect(asItem(meeting.agenda[0]).presenterIds).toEqual([userKey(testUser)]);
+      expect(result).toBe(true);
+      expect(asItem(meeting.agenda[0]).presenterIds).toEqual([]);
     });
 
     it('updates the duration', () => {
@@ -474,6 +475,21 @@ describe('MeetingManager', () => {
       expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('Second');
       const speaker = meeting.current.speaker!;
       expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+    });
+
+    it('leaves the floor open when the item has no presenters', () => {
+      const meeting = manager.create([testUser]);
+      const item = manager.addAgendaItem(meeting.id, 'Open floor', [])!;
+
+      const result = manager.nextAgendaItem(meeting.id);
+      expect(result?.id).toBe(item.id);
+      expect(meeting.current.agendaItemId).toBe(item.id);
+      expect(meeting.current.agendaItemStartTime).toBeDefined();
+      expect(meeting.current.speaker).toBeUndefined();
+      expect(meeting.current.topicSpeakers).toEqual([]);
+      expect(meeting.current.topic).toBeUndefined();
+      expect(meeting.queue.orderedIds).toHaveLength(0);
+      expect(meeting.queue.closed).toBe(false);
     });
 
     it('returns null when advancing past the last item', () => {

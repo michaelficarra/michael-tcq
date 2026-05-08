@@ -389,7 +389,7 @@ function SortableAgendaItem({
     e.preventDefault();
     const trimmedName = editName.trim();
     const presenterUsernames = editPresenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
-    if (!trimmedName || presenterUsernames.length === 0) return;
+    if (!trimmedName) return;
 
     const durationMinutes = parseInt(editDuration, 10);
 

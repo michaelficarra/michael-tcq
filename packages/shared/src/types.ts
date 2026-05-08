@@ -20,7 +20,11 @@ export interface AgendaItem {
   kind: 'item';
   id: string;
   name: string;
-  /** Ordered, non-empty list of presenter user keys. First presenter becomes the initial speaker when the item is advanced to. */
+  /**
+   * Ordered list of presenter user keys; may be empty. When non-empty,
+   * the first presenter becomes the initial speaker on advancement;
+   * when empty, advancement leaves the floor open (no current speaker).
+   */
   presenterIds: UserKey[];
   /**
    * Duration in minutes. For current/future items this is the chair's

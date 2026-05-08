@@ -388,13 +388,19 @@ function serialiseLog(meeting: MeetingState, log: LogEntry[]): string {
         break;
 
       case 'agenda-item-started': {
-        const presenters = entry.itemPresenterIds.map((id) => userName(users, id)).join(', ');
-        const label = entry.itemPresenterIds.length === 1 ? 'Presenter' : 'Presenters';
         lines.push(`## ${entry.itemName}`);
         lines.push('');
-        lines.push(
-          `${label}: ${presenters} | Started: ${formatTimestamp(entry.timestamp)} | Chair: ${userName(users, entry.chairId)}`,
-        );
+        // Items can have no presenters; in that case omit the presenter
+        // segment entirely rather than emit an empty `Presenters: `.
+        const segments: string[] = [];
+        if (entry.itemPresenterIds.length > 0) {
+          const presenters = entry.itemPresenterIds.map((id) => userName(users, id)).join(', ');
+          const label = entry.itemPresenterIds.length === 1 ? 'Presenter' : 'Presenters';
+          segments.push(`${label}: ${presenters}`);
+        }
+        segments.push(`Started: ${formatTimestamp(entry.timestamp)}`);
+        segments.push(`Chair: ${userName(users, entry.chairId)}`);
+        lines.push(segments.join(' | '));
         lines.push('');
         break;
       }
