@@ -156,7 +156,11 @@ export class MeetingManager {
         topicSpeakers: [],
       },
       operational: {
-        lastConnectionTime: now,
+        // Empty-string sentinel means "no one has ever connected"; the
+        // `/api/my-meetings` handler renders this as "never" on the home
+        // page. The field gets stamped with a real ISO timestamp the first
+        // time a socket connects.
+        lastConnectionTime: '',
         maxConcurrent: 0,
         // Versioning starts at 0; the first state-mutation broadcast bumps
         // to 1 before emitting. Clients use this counter to detect missed
@@ -1026,7 +1030,10 @@ export class MeetingManager {
     for (const id of expiredIds) {
       const meeting = this.meetings.get(id)!;
       const lastConnectionTime = meeting.operational.lastConnectionTime;
-      const ageDays = Math.floor((now - new Date(lastConnectionTime).getTime()) / (24 * 60 * 60 * 1000));
+      // Fall back to createdAt for never-connected meetings so ageDays is
+      // meaningful (and not NaN) when expiry fires on a meeting nobody ever joined.
+      const reference = lastConnectionTime || meeting.createdAt;
+      const ageDays = Math.floor((now - new Date(reference).getTime()) / (24 * 60 * 60 * 1000));
       notice('meeting_expired', {
         meetingId: id,
         lastConnectionTime,
@@ -1040,10 +1047,11 @@ export class MeetingManager {
 
   /**
    * Check whether a meeting has expired. A meeting expires 90 days after
-   * its most recent connection.
+   * its most recent connection — or, for meetings nobody has ever connected
+   * to, 90 days after creation (so abandoned meetings don't sit forever).
    */
   private isExpired(meeting: MeetingState, now: number): boolean {
-    const lastConnection = new Date(meeting.operational.lastConnectionTime).getTime();
-    return now - lastConnection > MEETING_EXPIRY_MS;
+    const reference = meeting.operational.lastConnectionTime || meeting.createdAt;
+    return now - new Date(reference).getTime() > MEETING_EXPIRY_MS;
   }
 }
