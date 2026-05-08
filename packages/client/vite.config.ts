@@ -52,6 +52,41 @@ export default defineConfig({
   customLogger: filteredLogger,
   build: {
     chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Split heavy third-party deps into named vendor chunks so a code
+        // change to app code doesn't invalidate the cached vendor bundle on
+        // the next deploy. Matches against each module's resolved id so
+        // transitive deps (e.g. unified's submodules under node_modules)
+        // also land in the right chunk.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          // React + router: shared by every route, on the critical path.
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
+            return 'react';
+          }
+          // dnd-kit: only loaded with the meeting page.
+          if (/[\\/]node_modules[\\/]@dnd-kit[\\/]/.test(id)) return 'dnd';
+          // Socket.IO transport + msgpack parser: only loaded with the meeting page.
+          if (
+            /[\\/]node_modules[\\/](socket\.io-client|socket\.io-msgpack-parser|engine\.io-client|@msgpack)[\\/]/.test(
+              id,
+            )
+          ) {
+            return 'socket';
+          }
+          // Markdown stack (unified/remark/rehype + their many micromark/mdast/hast helpers).
+          if (
+            /[\\/]node_modules[\\/](unified|remark-.*|rehype-.*|mdast-.*|hast-.*|micromark.*|character-entities.*|decode-named-character-reference|trim-lines|space-separated-tokens|comma-separated-tokens|property-information|html-void-elements|web-namespaces|zwitch|trough|bail|is-plain-obj|vfile.*|unist-.*|ccount|escape-string-regexp|longest-streak|markdown-table|stringify-entities|devlop)[\\/]/.test(
+              id,
+            )
+          ) {
+            return 'markdown';
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     proxy: {
