@@ -1,7 +1,7 @@
 // Load environment-specific .env file from the project root before anything else.
 // When run via `npm run dev -w packages/server`, cwd is packages/server,
 // so we resolve relative to this file's location (src/) → up to project root.
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import dotenv from 'dotenv';
 const projectRoot = join(import.meta.dirname, '../../..');
 const envSuffix =
@@ -169,7 +169,21 @@ app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io));
 // In production, the Express server serves the Vite-built client assets.
 // In development, the Vite dev server handles this via proxy.
 const CLIENT_DIST = join(import.meta.dirname, '../../client/dist');
-app.use(express.static(CLIENT_DIST));
+app.use(
+  express.static(CLIENT_DIST, {
+    setHeaders(res, filePath) {
+      // Vite emits content-hashed filenames under /assets, so they're
+      // safely immutable for a year. Anything else (favicon, robots, the
+      // index.html that occasionally comes through here) must revalidate
+      // each load so a deploy isn't pinned behind a stale cache entry.
+      if (filePath.includes(`${sep}assets${sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith(`${sep}index.html`)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }),
+);
 
 // Catch-all: serve index.html for client-side routing (e.g. /meeting/:id).
 // This must come after all API and auth routes. Uses a middleware
@@ -185,6 +199,10 @@ app.use((_req, res, next) => {
     next();
     return;
   }
+  // The catch-all serves index.html for client-side routes; the same
+  // revalidate-each-load policy as above applies, since this response is
+  // what bootstraps every fresh tab and must pick up new chunk hashes.
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(join(CLIENT_DIST, 'index.html'), (err) => {
     // If the file doesn't exist (dev mode), just skip
     if (err) next();
