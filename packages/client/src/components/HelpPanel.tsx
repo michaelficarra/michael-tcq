@@ -218,10 +218,12 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
               automatically orders entries by priority.
             </li>
             <li>
-              When discussion on an item is complete, click <strong>Next Agenda Item</strong> to move on. If the queue
-              is non-empty you'll be asked to confirm. The queue is cleared and the next item's first presenter, if any,
-              becomes the speaker. Any remaining queue entries are recorded in the meeting log, so you can restore them
-              later if the agenda item is revisited.
+              When discussion on an item is complete, click <strong>Next Agenda Item</strong> to move on. A confirmation
+              dialog opens with a focused textarea for recording a free-form conclusion for the outgoing item
+              (Ctrl/Cmd+Enter submits without leaving the keyboard). If the queue is non-empty, the dialog also warns
+              that those entries will be cleared. On confirming, the next item's first presenter, if any, becomes the
+              speaker. Any remaining queue entries are recorded in the meeting log, so you can restore them later if the
+              agenda item is revisited.
             </li>
           </ol>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">

@@ -171,6 +171,17 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
   const { fire: handleNextAgendaItem } = useAdvanceAction('meeting:nextAgendaItem');
   const { fire: handleNextSpeaker, disabled: nextSpeakerDisabled } = useAdvanceAction('queue:next');
 
+  // Commit the conclusion-dialog draft and advance to the next agenda item.
+  // Shared between the Advance button and the Ctrl/Cmd+Enter shortcut in
+  // the textarea so both paths emit identically.
+  const confirmAdvance = useCallback(() => {
+    // Capture the draft before resetting state. The server trims and
+    // treats blank as "clear conclusion".
+    const conclusion = conclusionDraft;
+    setShowAdvanceConfirm(false);
+    handleNextAgendaItem({ conclusion });
+  }, [conclusionDraft, handleNextAgendaItem]);
+
   // Drag-and-drop sensors with keyboard support for accessibility.
   // Options are hoisted to module scope so useSensor's internal useMemo
   // sees stable references and doesn't recreate descriptors every render.
@@ -689,8 +700,20 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
             </label>
             <textarea
               id="agenda-conclusion"
+              // Focus on open so the chair can start typing immediately
+              // without having to click into the field.
+              autoFocus
               value={conclusionDraft}
               onChange={(e) => setConclusionDraft(e.target.value)}
+              onKeyDown={(e) => {
+                // Ctrl/Cmd+Enter submits the dialog — the chair can advance
+                // without leaving the keyboard. A bare Enter keeps inserting
+                // newlines so multi-line conclusions still work.
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  confirmAdvance();
+                }
+              }}
               placeholder="What was decided or concluded for this item?"
               rows={4}
               className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-3
@@ -712,14 +735,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                 Cancel
               </button>
               <button
-                autoFocus
-                onClick={() => {
-                  // Capture the draft before resetting state. The server
-                  // trims and treats blank as "clear conclusion".
-                  const conclusion = conclusionDraft;
-                  setShowAdvanceConfirm(false);
-                  handleNextAgendaItem({ conclusion });
-                }}
+                onClick={confirmAdvance}
                 className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-600 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"

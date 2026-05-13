@@ -269,6 +269,22 @@ describe('QueuePanel', () => {
     expect(screen.getByText(/clear the speaker queue/i)).toBeInTheDocument();
   });
 
+  it('auto-focuses the conclusion textarea when the dialog opens', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    expect(screen.getByLabelText(/conclusion/i)).toHaveFocus();
+  });
+
   it('seeds the conclusion textarea from the current item’s saved conclusion (revisit case)', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
@@ -310,6 +326,79 @@ describe('QueuePanel', () => {
       { currentAgendaItemId: '1', conclusion: 'agreed to revisit next week' },
       expect.any(Function),
     );
+  });
+
+  it('advances on Ctrl+Enter in the conclusion textarea', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    const textarea = screen.getByLabelText(/conclusion/i);
+    fireEvent.change(textarea, { target: { value: 'decided via keyboard' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+
+    expect(emit).toHaveBeenCalledWith(
+      'meeting:nextAgendaItem',
+      { currentAgendaItemId: '1', conclusion: 'decided via keyboard' },
+      expect.any(Function),
+    );
+  });
+
+  it('advances on Cmd+Enter in the conclusion textarea', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    const textarea = screen.getByLabelText(/conclusion/i);
+    fireEvent.change(textarea, { target: { value: 'decided via meta key' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true });
+
+    expect(emit).toHaveBeenCalledWith(
+      'meeting:nextAgendaItem',
+      { currentAgendaItemId: '1', conclusion: 'decided via meta key' },
+      expect.any(Function),
+    );
+  });
+
+  it('does not advance on bare Enter in the conclusion textarea', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
+        { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+      ],
+      current: currentOf({ agendaItemId: '1' }),
+    });
+    renderQueue(meeting, chairUser, mockSocket);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Agenda Item' }));
+    const textarea = screen.getByLabelText(/conclusion/i);
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(emit).not.toHaveBeenCalled();
   });
 
   it('does not emit when Cancel is clicked', () => {
