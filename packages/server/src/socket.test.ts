@@ -3351,6 +3351,51 @@ describe('Socket.IO integration', () => {
   //     resync threshold. The reconnect-and-rejoin codepath is
   //     covered by the existing "reconnect re-emits state and re-seeds
   //     the surrogate" test in the gap-detection block above.
+  describe('premium-tier stamping on broadcast', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('marks premium users with isPremium:true and omits the field for non-premium users', async () => {
+      // The connecting user (TEST_USER, ghUsername=testuser) is premium; the
+      // second chair is not. The emitted state should carry isPremium:true
+      // on the premium user and have no isPremium key at all on the other,
+      // so absence stays the bandwidth-saving default.
+      vi.stubEnv('PREMIUM_USERNAMES', 'testuser');
+      const otherChair: User = { ghid: 2, ghUsername: 'plainuser', name: 'Plain User', organisation: '' };
+      const meeting = ctx.meetingManager.create([TEST_USER, otherChair]);
+
+      const client = makeClient();
+      const statePromise = waitForEvent<MeetingState>(client, 'state');
+      await new Promise<void>((r) => client.on('connect', r));
+      client.emit('join', meeting.id);
+      const state = await statePromise;
+
+      expect(state.users[asUserKey('testuser')].isPremium).toBe(true);
+      expect('isPremium' in state.users[asUserKey('plainuser')]).toBe(false);
+    });
+
+    it('stamps isPremium on delta-piggybacked user records too', async () => {
+      // Make the joining client premium; when they add a queue entry, the
+      // resulting queue:added delta piggybacks their User record — which
+      // should also carry the isPremium flag.
+      vi.stubEnv('PREMIUM_USERNAMES', 'testuser');
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      // Advance to an agenda item so the queue is open for entries.
+      const item: AgendaItem = { kind: 'item', id: 'a1', name: 'Item 1', presenterIds: [] };
+      const mgr = ctx.meetingManager.get(meeting.id)!;
+      mgr.agenda.push(item);
+      mgr.current.agendaItemId = item.id;
+
+      const client = await joinMeeting(meeting.id);
+      const deltaPromise = waitForEvent<{ users?: Record<string, User> }>(client, 'queue:added');
+      client.emit('queue:add', { type: 'topic', topic: 'Hello' });
+      const delta = await deltaPromise;
+      const piggybacked = delta.users?.[asUserKey('testuser')];
+      expect(piggybacked?.isPremium).toBe(true);
+    });
+  });
+
   describe('delay and partition', () => {
     const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
 

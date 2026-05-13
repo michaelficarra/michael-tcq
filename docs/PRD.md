@@ -42,6 +42,15 @@ Admins are designated by GitHub username via server configuration. In addition t
 
 The distinct participant count reflects how many unique users have joined the meeting via a socket connection — it is incremented on first join and is not affected by reconnections, additional tabs, or being added to an agenda item without connecting. Admins who join a meeting also count as participants.
 
+### Premium-tier users
+
+Premium-tier users are designated by GitHub username via server configuration (a separate list from the admins list). The tier is a user-visible status that may gate additional features over time. Two initial visual treatments mark a premium user:
+
+- A verification-style badge is shown after the user's display name **everywhere their name appears** (queue entries, agenda chairs and presenters, current speaker, current topic, meeting log, user menu, etc.). The badge gently pulses in a heartbeat rhythm (disabled when the viewer prefers reduced motion) and surfaces a `TCQ Premium™ user` tooltip on hover.
+- Queue entries belonging to a premium user have a soft animated colour glow behind the row.
+
+Both treatments are visible to every participant in the meeting, not only to the premium user themselves. Premium-tier users have no additional permissions or capabilities beyond a regular participant. Premium status is independent of the admin role: a user can be either, both, or neither.
+
 ## Authentication
 
 Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application. Unauthenticated users see a login page with a "Log in with GitHub" button.

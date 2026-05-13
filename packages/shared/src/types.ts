@@ -5,6 +5,16 @@ export interface User {
   ghUsername: string;
   name: string;
   organisation: string;
+  /**
+   * Whether this user belongs to the premium tier — server-stamped at
+   * broadcast time from the `PREMIUM_USERNAMES` env var, never persisted
+   * on stored meeting state. Omitted entirely (rather than set to `false`)
+   * for non-premium users to keep state and delta payloads small; clients
+   * MUST treat absence as `false`. Gates premium-tier features generally,
+   * not just the animated queue-entry border that was the first such
+   * feature.
+   */
+  isPremium?: boolean;
 }
 
 /**

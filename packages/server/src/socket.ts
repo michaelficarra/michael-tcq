@@ -37,6 +37,7 @@ import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { mockUserFromLogin } from './mockUser.js';
+import { isPremium } from './premium.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
 import { recordStateResync } from './socketCounters.js';
@@ -241,7 +242,7 @@ export function emitFullState(
 ): void {
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
-    io.to(meetingId).emit('state', meeting);
+    io.to(meetingId).emit('state', decorateMeetingForClient(meeting));
     // Clear after broadcasting so it only applies to the broadcast that
     // immediately follows the handler that set it. Without this, a stale
     // value could be misattributed if a future code path changes the
@@ -295,16 +296,45 @@ function emitDelta<E extends DeltaEventName>(
 }
 
 /**
+ * Stamp `isPremium: true` on a User if and only if they belong to the
+ * premium tier. Non-premium users pass through by reference unchanged — we
+ * never write `isPremium: false`, since absence is the default and keeps
+ * state/delta payloads small (client treats absent as false).
+ */
+function stampPremium(u: User): User {
+  return isPremium(u) ? { ...u, isPremium: true } : u;
+}
+
+/**
+ * Produce a wire-shaped copy of the meeting state for broadcast: same
+ * structure, but each User in `users` is decorated via `stampPremium` so
+ * premium-tier membership is visible to every connected client. The
+ * source meeting is never mutated — important because it's the live
+ * in-memory record. Non-premium users are reused by reference, so this
+ * is cheap when no premium participants are present.
+ */
+function decorateMeetingForClient(meeting: MeetingState): MeetingState {
+  const decoratedUsers: Record<UserKey, User> = {};
+  for (const [k, u] of Object.entries(meeting.users)) {
+    decoratedUsers[k as UserKey] = stampPremium(u);
+  }
+  return { ...meeting, users: decoratedUsers };
+}
+
+/**
  * Build a small `users` map containing just the User records relevant to
  * a delta — used to piggy-back newly-introduced user records onto the
  * delta that first referenced them. The client merges these into its
  * locally-cached `users` so it can render badges immediately without an
  * extra fetch. Idempotent; passing already-known users is harmless.
+ *
+ * Each User is run through `stampPremium` so deltas carry the premium
+ * flag on the same broadcast boundary as full-state emits.
  */
 function usersRecordFor(users: User[]): Record<UserKey, User> {
   const out: Record<UserKey, User> = {};
   for (const u of users) {
-    out[userKey(u)] = u;
+    out[userKey(u)] = stampPremium(u);
   }
   return out;
 }
@@ -426,7 +456,7 @@ export function registerSocketHandlers(
       ensureUser(meeting, user);
 
       // Send the full current state to this socket only
-      socket.emit('state', meeting);
+      socket.emit('state', decorateMeetingForClient(meeting));
     });
 
     // --- state:resync ---
@@ -441,7 +471,7 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
       recordStateResync();
-      socket.emit('state', meeting);
+      socket.emit('state', decorateMeetingForClient(meeting));
     });
 
     // --- meeting:updateChairs ---
@@ -767,7 +797,7 @@ export function registerSocketHandlers(
         const claimedSpeakerId = parsed.currentTopicSpeakerId ?? null;
         if (parsed.currentTopicSpeakerId === undefined || currentSpeakerId !== claimedSpeakerId) {
           // Re-broadcast state to the stale client so it reconciles.
-          if (addMeeting) socket.emit('state', addMeeting);
+          if (addMeeting) socket.emit('state', decorateMeetingForClient(addMeeting));
           const message = 'Topic has changed — your reply was not added';
           socket.emit('error', message);
           respond({ ok: false, error: message });
@@ -1019,7 +1049,7 @@ export function registerSocketHandlers(
       // the server's current speaker, the view is stale.
       if (parsed.currentSpeakerEntryId !== (meeting.current.speaker?.id ?? null)) {
         // Client's view is stale — send current state so it can update
-        socket.emit('state', meeting);
+        socket.emit('state', decorateMeetingForClient(meeting));
         respond({ ok: false, error: 'Speaker already advanced' });
         return;
       }
@@ -1217,7 +1247,7 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
       if (parsed.currentAgendaItemId !== (meeting.current.agendaItemId ?? null)) {
-        socket.emit('state', meeting);
+        socket.emit('state', decorateMeetingForClient(meeting));
         respond({ ok: false, error: 'Another chair already advanced the agenda' });
         return;
       }

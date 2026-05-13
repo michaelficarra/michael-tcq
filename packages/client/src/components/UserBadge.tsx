@@ -81,6 +81,21 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
             a real display name), fall back to the login as the visible
             text so the badge never renders an empty label. */}
         <span title={user.ghUsername}>{user.name?.trim() || user.ghUsername}</span>
+        {user.isPremium && (
+          // Premium-tier verification mark, shown immediately after the
+          // display name (verified-account convention). Sized to match
+          // the avatar so it carries visual weight in dense lists (queue
+          // entries) as well as roomier headers (current speaker).
+          <img
+            src="/premium.svg"
+            alt="Premium"
+            title="TCQ Premium™"
+            width={size}
+            height={size}
+            style={{ width: size, height: size }}
+            className="premium-badge inline-block align-text-bottom ml-1 shrink-0"
+          />
+        )}
         {user.organisation && (
           // Organisation gets a fixed max-width and ellipsis so a long
           // company string doesn't make the badge run off the row. The

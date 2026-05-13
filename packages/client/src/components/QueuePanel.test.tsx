@@ -865,4 +865,36 @@ describe('QueuePanel', () => {
     renderQueue(makeMeeting({ queue: queueOf({}, [], true), chairIds: ['alice'] }), chairUser);
     expect(screen.queryByText(/queue is closed/i)).not.toBeInTheDocument();
   });
+
+  // -- Premium-tier border --
+
+  it('applies the premium-border class to the outer <li> when the entry owner is premium', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: { ...otherUser, isPremium: true } },
+      chairIds: ['alice'],
+      agenda: [{ kind: 'item', id: 'item-1', name: 'Item 1', presenterIds: ['alice'] }],
+      current: currentOf({ agendaItemId: 'item-1' }),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Premium pitch', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    const li = screen.getByText('Premium pitch').closest('li');
+    expect(li).not.toBeNull();
+    expect(li!.className).toMatch(/\bpremium-border\b/);
+  });
+
+  it('does not apply the premium-border class when the entry owner is not premium', () => {
+    const meeting = makeMeeting({
+      users: { alice: chairUser, bob: otherUser },
+      chairIds: ['alice'],
+      agenda: [{ kind: 'item', id: 'item-1', name: 'Item 1', presenterIds: ['alice'] }],
+      current: currentOf({ agendaItemId: 'item-1' }),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'Plain pitch', userId: 'bob' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    const li = screen.getByText('Plain pitch').closest('li');
+    expect(li).not.toBeNull();
+    expect(li!.className).not.toMatch(/premium-border/);
+  });
 });

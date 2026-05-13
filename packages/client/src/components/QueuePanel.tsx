@@ -865,6 +865,20 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
   const canEdit = isOwnEntry || isChair;
   const canDelete = isOwnEntry || isChair;
 
+  // Premium-tier owners get an animated gradient/glow border around their
+  // entry. The flag is server-stamped on the user record at broadcast time
+  // (omitted when false), so absence means a regular user.
+  const isPremiumEntry = !!meeting?.users[entry.userId]?.isPremium;
+  // The premium border lives on the outer <li>; the existing visual classes
+  // (background, borders, padding) all move to an inner <div> so the
+  // gradient on the <li>'s pseudo-elements peeks out through the 4px
+  // padding instead of being masked by the entry's own background. For
+  // this to work the inner background must be fully opaque — the
+  // point-of-order tint is therefore solid in dark mode for premium
+  // entries (zebra striping is opaque unconditionally; see below).
+  const outerClass = isPremiumEntry ? 'premium-border my-1' : '';
+  const pointOfOrderBg = isPremiumEntry ? 'bg-red-50 dark:bg-red-900' : 'bg-red-50 dark:bg-red-900/30';
+
   /** Open the inline edit form, pre-populated with current topic. */
   function startEditing() {
     setEditTopic(entry.topic);
@@ -895,144 +909,144 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
   // --- Editing mode: inline form ---
   if (editing) {
     return (
-      <li
-        ref={setNodeRef}
-        style={style}
-        className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-          entry.type === 'point-of-order'
-            ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
-            : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
-      >
-        {/* Placeholder for drag handle column */}
-        {canDrag && <span className="w-4" />}
+      <li ref={setNodeRef} style={style} className={outerClass}>
+        <div
+          className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
+            entry.type === 'point-of-order'
+              ? `${pointOfOrderBg} border border-red-300 dark:border-red-700 my-2`
+              : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100 dark:bg-stone-800'}`
+          } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        >
+          {/* Placeholder for drag handle column */}
+          {canDrag && <span className="w-4" />}
 
-        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
-          {index + 1}
-        </span>
-
-        <form onSubmit={handleEditSubmit} className="flex-1 flex items-center gap-2">
-          {/* Show the type badge (not editable inline) */}
-          <span className={`text-sm font-semibold shrink-0 ${entryTypeColor(entry.type)}`}>
-            {entryTypeLabel(entry.type)}:
+          <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
+            {index + 1}
           </span>
-          <input
-            type="text"
-            value={editTopic}
-            onChange={(e) => setEditTopic(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEditCancel();
-            }}
-            required
-            aria-label="Topic description"
-            // Focus and select all text on mount so the user can
-            // immediately start typing to replace the placeholder.
-            // Uses a stable ref via useCallback to run only once.
-            ref={editInputRef}
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
-                       dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
-          />
-          <button
-            type="submit"
-            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={handleEditCancel}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
-          >
-            Cancel
-          </button>
-        </form>
+
+          <form onSubmit={handleEditSubmit} className="flex-1 flex items-center gap-2">
+            {/* Show the type badge (not editable inline) */}
+            <span className={`text-sm font-semibold shrink-0 ${entryTypeColor(entry.type)}`}>
+              {entryTypeLabel(entry.type)}:
+            </span>
+            <input
+              type="text"
+              value={editTopic}
+              onChange={(e) => setEditTopic(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') handleEditCancel();
+              }}
+              required
+              aria-label="Topic description"
+              // Focus and select all text on mount so the user can
+              // immediately start typing to replace the placeholder.
+              // Uses a stable ref via useCallback to run only once.
+              ref={editInputRef}
+              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
+                         dark:bg-stone-700 dark:text-stone-100
+                         focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+            <button
+              type="submit"
+              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={handleEditCancel}
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
       </li>
     );
   }
 
   // --- Display mode ---
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
-        isDragging
-          ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
-          : entry.type === 'point-of-order'
-            ? 'bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 my-2'
-            : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100/50 dark:bg-stone-800/50'}`
-      } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
-    >
-      {/* Drag handle — rendered only when the entry has at least one legal
-          move from its current position. The cursor advertises which
-          directions are legal: ns-resize for both, n-resize for up only,
-          s-resize for down only. */}
-      {canDrag && (
-        <span
-          className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
-            canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
-          } select-none text-sm leading-none presentation-hidden`}
-          aria-label={`Drag to reorder: ${entry.topic}`}
-          {...attributes}
-          {...listeners}
-        >
-          ⠿
-        </span>
-      )}
-
-      {/* Position number */}
-      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
-        {index + 1}
-      </span>
-
-      <div className="flex-1 min-w-0">
-        {/* Type badge and topic — chairs can click to cycle through legal types */}
-        {isChair && legalTypes.length > 1 ? (
-          <button
-            onClick={handleCycleType}
-            className={`text-sm font-semibold cursor-pointer hover:underline ${entryTypeColor(entry.type)}`}
-            title={`Click to change type (${legalTypes.map(entryTypeLabel).join(' → ')})`}
-            aria-label={`Change type from ${entryTypeLabel(entry.type)}`}
+    <li ref={setNodeRef} style={style} className={outerClass}>
+      <div
+        className={`flex items-center gap-2 pb-2 pt-1 px-2 rounded ${
+          isDragging
+            ? 'opacity-50 bg-stone-200 dark:bg-stone-700'
+            : entry.type === 'point-of-order'
+              ? `${pointOfOrderBg} border border-red-300 dark:border-red-700 my-2`
+              : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100 dark:bg-stone-800'}`
+        } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      >
+        {/* Drag handle — rendered only when the entry has at least one legal
+            move from its current position. The cursor advertises which
+            directions are legal: ns-resize for both, n-resize for up only,
+            s-resize for down only. */}
+        {canDrag && (
+          <span
+            className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
+              canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
+            } select-none text-sm leading-none presentation-hidden`}
+            aria-label={`Drag to reorder: ${entry.topic}`}
+            {...attributes}
+            {...listeners}
           >
-            {entryTypeLabel(entry.type)}:
-          </button>
-        ) : (
-          <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>{entryTypeLabel(entry.type)}:</span>
+            ⠿
+          </span>
         )}
-        <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
 
-        {/* Speaker info */}
-        <div className="text-sm text-stone-500 dark:text-stone-400">
-          <UserBadge user={meeting?.users[entry.userId]} size={16} />
+        {/* Position number */}
+        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
+          {index + 1}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          {/* Type badge and topic — chairs can click to cycle through legal types */}
+          {isChair && legalTypes.length > 1 ? (
+            <button
+              onClick={handleCycleType}
+              className={`text-sm font-semibold cursor-pointer hover:underline ${entryTypeColor(entry.type)}`}
+              title={`Click to change type (${legalTypes.map(entryTypeLabel).join(' → ')})`}
+              aria-label={`Change type from ${entryTypeLabel(entry.type)}`}
+            >
+              {entryTypeLabel(entry.type)}:
+            </button>
+          ) : (
+            <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>{entryTypeLabel(entry.type)}:</span>
+          )}
+          <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
+
+          {/* Speaker info */}
+          <div className="text-sm text-stone-500 dark:text-stone-400">
+            <UserBadge user={meeting?.users[entry.userId]} size={16} />
+          </div>
         </div>
+
+        {/* Edit and delete buttons — right-aligned */}
+        {(canEdit || canDelete) && (
+          <div className="flex gap-3 shrink-0 presentation-hidden">
+            {canEdit && (
+              <button
+                onClick={startEditing}
+                className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
+                           transition-colors cursor-pointer"
+                aria-label={`Edit entry: ${entry.topic}`}
+              >
+                Edit
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => onDelete(entry.id)}
+                className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
+                           transition-colors cursor-pointer"
+                aria-label={`Delete entry: ${entry.topic}`}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Edit and delete buttons — right-aligned */}
-      {(canEdit || canDelete) && (
-        <div className="flex gap-3 shrink-0 presentation-hidden">
-          {canEdit && (
-            <button
-              onClick={startEditing}
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
-                         transition-colors cursor-pointer"
-              aria-label={`Edit entry: ${entry.topic}`}
-            >
-              Edit
-            </button>
-          )}
-          {canDelete && (
-            <button
-              onClick={() => onDelete(entry.id)}
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
-                         transition-colors cursor-pointer"
-              aria-label={`Delete entry: ${entry.topic}`}
-            >
-              Delete
-            </button>
-          )}
-        </div>
-      )}
     </li>
   );
 });

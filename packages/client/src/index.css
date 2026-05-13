@@ -36,3 +36,102 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/*
+ * Premium-tier queue-entry visual — a soft, animated, full-row colour
+ * glow behind the topic content. Applied to the outer <li> of a queue
+ * entry whose owner is in the PREMIUM_USERNAMES env var; the inner
+ * content <div> sits on top with its own opaque background, while a
+ * blurred copy of an animated gradient at low opacity tints the entire
+ * row from behind.
+ *
+ * `isolation: isolate` (on both the outer <li> and the inner <div>) is
+ * required because the queue entry's <li> already receives a CSS
+ * `transform` from dnd-kit's useSortable, which creates a stacking
+ * context that would otherwise trap z-index: -1 beneath the page
+ * background instead of beneath the content.
+ *
+ * Originally adapted from Example 3 of
+ * https://www.letsbuildui.dev/articles/how-to-animate-borders-in-css/
+ * — the outward halo and gradient border frame have since been replaced
+ * with a uniform inner glow.
+ */
+.premium-border {
+  position: relative;
+  border-radius: 0.375rem;
+  isolation: isolate;
+}
+
+/* Inner content: positioning + clipping parent for the row-wide glow.
+   The pseudo sits between the inner div's background colour and its
+   children (z-index -1 with isolation), so the topic text stays on top
+   and readable. */
+.premium-border > div {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.premium-border > div::after {
+  content: '';
+  position: absolute;
+  /* Cover the full inner row; the blurred gradient becomes a uniform
+     soft tint behind the content rather than a bottom-anchored bloom. */
+  inset: 0;
+  background: linear-gradient(45deg, #ff595e, #ffca3a, #8ac926, #1982c4, #6a4c93, #ff6700);
+  background-size: 400%;
+  filter: blur(12px);
+  /* Single dial for glow intensity — low opacity keeps the colour
+     subtle so the topic text stays readable on top. */
+  opacity: 0.18;
+  z-index: -1;
+  animation: tcq-premium-glow 20s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes tcq-premium-glow {
+  0% {
+    background-position: 0 0;
+  }
+  50% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+/*
+ * Premium-tier user badge — the verification mark rendered after a
+ * premium user's display name in <UserBadge>. The image pulses subtly
+ * in a lub-dub heartbeat rhythm: two quick beats followed by a longer
+ * rest. transform-origin keeps the scale centred so the badge doesn't
+ * drift sideways as it pulses. Disabled for users who prefer reduced
+ * motion — the badge still appears, just static.
+ */
+.premium-badge {
+  transform-origin: center;
+  animation: tcq-premium-heartbeat 1.6s ease-in-out infinite;
+}
+
+@keyframes tcq-premium-heartbeat {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.1);
+  }
+  30% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-badge {
+    animation: none;
+  }
+}
