@@ -25,6 +25,10 @@ COPY packages/shared/ packages/shared/
 COPY packages/server/ packages/server/
 COPY packages/client/ packages/client/
 
+# Copy root-level config files referenced by the build. `svgo.config.mjs` is
+# loaded by the inline SVGO Vite plugin in `packages/client/vite.config.ts`.
+COPY svgo.config.mjs ./
+
 # Build all packages in dependency order:
 # 1. shared (types and constants used by both server and client)
 # 2. client (Vite production build → packages/client/dist/)
