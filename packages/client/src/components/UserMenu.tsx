@@ -55,8 +55,9 @@ function HamburgerMenu() {
   const iconRef = useRef<HTMLSpanElement | null>(null);
   // Menu item refs — since the dropdown is portaled to <body>, natural tab
   // order skips past it. We route Tab from the button through the items
-  // manually so Preferences → Log Out → button forms a cycle.
+  // manually so Preferences → Report an issue → Log Out → button forms a cycle.
   const prefsItemRef = useRef<HTMLButtonElement | null>(null);
+  const reportItemRef = useRef<HTMLAnchorElement | null>(null);
   const logoutItemRef = useRef<HTMLAnchorElement | null>(null);
   // Dropdown container ref for outside-click detection.
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -175,11 +176,11 @@ function HamburgerMenu() {
                 openPreferences();
               }}
               onKeyDown={(e) => {
-                // Tab → Log Out (next item); Shift+Tab → trigger button.
+                // Tab → Report an issue (next item); Shift+Tab → trigger button.
                 if (e.key === 'Tab') {
                   e.preventDefault();
                   if (e.shiftKey) buttonRef.current?.focus();
-                  else logoutItemRef.current?.focus();
+                  else reportItemRef.current?.focus();
                 }
               }}
               className="block w-full text-left px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
@@ -188,14 +189,33 @@ function HamburgerMenu() {
               Preferences
             </button>
             <a
+              ref={reportItemRef}
+              href="https://github.com/michaelficarra/michael-tcq"
+              target="_blank"
+              rel="noopener noreferrer"
+              role="menuitem"
+              onKeyDown={(e) => {
+                // Tab → Log Out; Shift+Tab → Preferences.
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  if (e.shiftKey) prefsItemRef.current?.focus();
+                  else logoutItemRef.current?.focus();
+                }
+              }}
+              className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+            >
+              Report an issue
+            </a>
+            <a
               ref={logoutItemRef}
               href="/auth/logout"
               role="menuitem"
               onKeyDown={(e) => {
-                // Tab → cycle back to trigger button; Shift+Tab → Preferences.
+                // Tab → cycle back to trigger button; Shift+Tab → Report an issue.
                 if (e.key === 'Tab') {
                   e.preventDefault();
-                  if (e.shiftKey) prefsItemRef.current?.focus();
+                  if (e.shiftKey) reportItemRef.current?.focus();
                   else buttonRef.current?.focus();
                 }
               }}

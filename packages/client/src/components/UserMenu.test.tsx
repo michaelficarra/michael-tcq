@@ -110,11 +110,22 @@ describe('UserMenu (logout hamburger dropdown)', () => {
     expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
   });
 
-  it('shows a Preferences entry above Log Out when the hamburger is opened', () => {
+  it('shows Preferences, Report an issue, and Log Out in order when the hamburger is opened', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const items = screen.getAllByRole('menuitem');
-    expect(items.map((el) => el.textContent?.trim())).toEqual(['Preferences', 'Log Out']);
+    expect(items.map((el) => el.textContent?.trim())).toEqual(['Preferences', 'Report an issue', 'Log Out']);
+  });
+
+  it('Report an issue links to the GitHub repo and opens in a new tab', () => {
+    renderWithPrefs(<UserMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const reportLink = screen.getByRole('menuitem', { name: 'Report an issue' });
+    expect(reportLink).toHaveAttribute('href', 'https://github.com/michaelficarra/michael-tcq');
+    expect(reportLink).toHaveAttribute('target', '_blank');
+    // rel must include noopener to prevent the opened tab from controlling
+    // window.opener on this page.
+    expect(reportLink.getAttribute('rel')).toMatch(/noopener/);
   });
 
   it('clicking Preferences opens the Preferences modal and closes the dropdown', () => {
