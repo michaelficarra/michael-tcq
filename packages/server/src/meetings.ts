@@ -60,6 +60,12 @@ const MEETING_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type LogEntryInput = DistributiveOmit<LogEntry, 'id'>;
 
+/**
+ * Outcome of `MeetingManager.nextAgendaItem`. See the method's doc for
+ * the meaning of each variant.
+ */
+export type NextAgendaItemResult = { kind: 'advanced'; item: AgendaItem } | { kind: 'concluded' } | { kind: 'none' };
+
 export class MeetingManager {
   /** The canonical in-memory state for all active meetings. */
   private meetings = new Map<string, MeetingState>();
@@ -117,8 +123,19 @@ export class MeetingManager {
         if (typeof meeting.operational.version !== 'number') {
           meeting.operational.version = 0;
         }
+        const meetingLogs = allLogs.get(meeting.id) ?? [];
+        // Backfill `current.startedAt` for meetings persisted before
+        // the field existed. The `meeting-started` log entry's timestamp
+        // is the authoritative record of when the meeting first
+        // advanced, so we use it when present. Meetings that never
+        // started keep `startedAt` undefined — which correctly leaves
+        // them in pre-start UI on next load.
+        if (meeting.current.startedAt === undefined) {
+          const started = meetingLogs.find((entry) => entry.type === 'meeting-started');
+          if (started) meeting.current.startedAt = started.timestamp;
+        }
         this.meetings.set(meeting.id, meeting);
-        this.logs.set(meeting.id, allLogs.get(meeting.id) ?? []);
+        this.logs.set(meeting.id, meetingLogs);
       }
     }
 
@@ -318,6 +335,15 @@ export class MeetingManager {
    * duplicate keys are de-duplicated preserving first-occurrence order.
    * Returns the created item, or null if the meeting doesn't exist.
    */
+  /**
+   * Add a new agenda item. Auto-activates it (sets it as the current
+   * agenda item, mirroring `nextAgendaItem`'s `advanced` branch) when
+   * the meeting is in the past-final state — i.e. the chair has
+   * advanced past the last item (`current.startedAt` is set,
+   * `current.agendaItemId` is undefined). Callers can detect
+   * auto-activation by comparing `meeting.current.agendaItemId` against
+   * the returned item id.
+   */
   addAgendaItem(meetingId: string, name: string, presenters: User[], duration?: number): AgendaItem | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
@@ -333,6 +359,16 @@ export class MeetingManager {
     };
 
     meeting.agenda.push(item);
+
+    // Past-final auto-activation: if the meeting has been started
+    // (`startedAt` set) but no item is current, adding an agenda item
+    // immediately makes it the current item so the chair doesn't have
+    // to click an advance button afterwards.
+    if (meeting.current.startedAt !== undefined && meeting.current.agendaItemId === undefined) {
+      const now = new Date().toISOString();
+      this.activateAgendaItem(meeting, item, now);
+    }
+
     this.markDirty(meetingId);
     return item;
   }
@@ -496,57 +532,29 @@ export class MeetingManager {
   // -- Meeting flow mutations --
 
   /**
-   * Advance to the next agenda item. If no current agenda item is set,
-   * this starts the meeting by setting the first item. Otherwise it
-   * advances to the next item in the list.
+   * Mutate `meeting.current` and `meeting.queue` to make `item` the new
+   * current agenda item. Shared between manual advancement
+   * (`nextAgendaItem`) and the past-final auto-activation path in
+   * `addAgendaItem` so both produce identical state transitions.
    *
-   * When advancing, the agenda item's first presenter becomes the current
-   * speaker with a topic of "Introducing: <item name>". The current topic and
-   * queue are cleared since we're starting a new agenda item.
-   *
-   * Returns the new current agenda item, or null if there's nothing to
-   * advance to (e.g. we're past the last item, or agenda is empty).
+   * Preserves `meeting.current.startedAt` if already set; stamps it
+   * with `now` otherwise (i.e. the very first advance starts the
+   * meeting clock).
    */
-  nextAgendaItem(meetingId: string): AgendaItem | null {
-    const meeting = this.meetings.get(meetingId);
-    if (!meeting) return null;
-
-    if (meeting.agenda.length === 0) return null;
-
-    // Starting position for the search — one past the current item, or
-    // the start of the agenda if no item is current yet.
-    let searchFrom: number;
-    if (!meeting.current.agendaItemId) {
-      searchFrom = 0;
-    } else {
-      const currentIndex = meeting.agenda.findIndex(
-        (entry) => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
-      );
-      searchFrom = currentIndex + 1;
-    }
-
-    // Skip any interleaved session headers — advancement only lands on
-    // actual agenda items. If the remainder is all sessions (or empty),
-    // there's nothing to advance to.
-    const nextIndex = meeting.agenda.findIndex((entry, idx) => idx >= searchFrom && isAgendaItem(entry));
-    if (nextIndex === -1) return null;
-
-    const nextItem = meeting.agenda[nextIndex] as AgendaItem;
-    const now = new Date().toISOString();
-
+  private activateAgendaItem(meeting: MeetingState, item: AgendaItem, now: string): void {
     // When the item has at least one presenter, the first presenter becomes
     // the current speaker and seeds the topic-speakers list. No synthesised
     // queue entry: the CurrentSpeaker struct is the sole representation of
     // this turn. Any co-presenters are not auto-queued — they can self-add.
     // When the item has no presenters, the floor is left open: speaker is
     // undefined and topicSpeakers is empty until someone enters the queue.
-    const firstPresenterId = nextItem.presenterIds[0];
+    const firstPresenterId = item.presenterIds[0];
     const speaker: CurrentSpeaker | undefined =
       firstPresenterId !== undefined
         ? {
             id: randomUUID(),
             type: 'topic',
-            topic: `Introducing: ${nextItem.name}`,
+            topic: `Introducing: ${item.name}`,
             userId: firstPresenterId,
             source: 'agenda',
             startTime: now,
@@ -559,15 +567,18 @@ export class MeetingManager {
             {
               userId: firstPresenterId,
               type: 'topic',
-              topic: `Introducing: ${nextItem.name}`,
+              topic: `Introducing: ${item.name}`,
               startTime: now,
             },
           ]
         : [];
 
     meeting.current = {
-      agendaItemId: nextItem.id,
+      agendaItemId: item.id,
       agendaItemStartTime: now,
+      // First-ever advance stamps the meeting start. Idempotent on
+      // subsequent advances so it survives the past-final transition.
+      startedAt: meeting.current.startedAt ?? now,
       speaker,
       // Topic is cleared on agenda advance — "reply" isn't available until
       // someone actually introduces a topic via the queue.
@@ -581,9 +592,70 @@ export class MeetingManager {
       orderedIds: [],
       closed: false,
     };
+  }
+
+  /**
+   * Advance the agenda. Three possible outcomes:
+   * - `advanced`: stepped forward (including starting the meeting on
+   *   the first item). `meeting.current` is mutated to point at the
+   *   new item; `startedAt` is stamped on first advance.
+   * - `concluded`: was on the last item and there is no further item;
+   *   transitions the meeting into the past-final state by clearing
+   *   `current.agendaItemId`/`agendaItemStartTime`/`speaker`/`topic`
+   *   while preserving `startedAt`. Queue is reset. The chair can now
+   *   add a new agenda item (which auto-activates via `addAgendaItem`).
+   * - `none`: nothing to advance to (empty agenda, or agenda is all
+   *   session headers, or meeting already past-final with no items).
+   */
+  nextAgendaItem(meetingId: string): NextAgendaItemResult {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return { kind: 'none' };
+
+    if (meeting.agenda.length === 0) return { kind: 'none' };
+
+    // Starting position for the search — one past the current item, or
+    // the start of the agenda if no item is current yet.
+    const hasCurrentItem = meeting.current.agendaItemId !== undefined;
+    let searchFrom: number;
+    if (!hasCurrentItem) {
+      searchFrom = 0;
+    } else {
+      const currentIndex = meeting.agenda.findIndex(
+        (entry) => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
+      );
+      searchFrom = currentIndex + 1;
+    }
+
+    // Skip any interleaved session headers — advancement only lands on
+    // actual agenda items. If the remainder is all sessions (or empty),
+    // there's nothing to advance to.
+    const nextIndex = meeting.agenda.findIndex((entry, idx) => idx >= searchFrom && isAgendaItem(entry));
+    if (nextIndex === -1) {
+      // A current item with no successor → transition to past-final so
+      // the chair can record a conclusion for the final item. Without a
+      // current item we're either pre-start (nothing started) or already
+      // past-final (no items to advance into) — both are `none`.
+      if (!hasCurrentItem) return { kind: 'none' };
+
+      meeting.current = {
+        topicSpeakers: [],
+        startedAt: meeting.current.startedAt,
+      };
+      meeting.queue = {
+        entries: {},
+        orderedIds: [],
+        closed: false,
+      };
+      this.markDirty(meetingId);
+      return { kind: 'concluded' };
+    }
+
+    const now = new Date().toISOString();
+    const nextItem = meeting.agenda[nextIndex] as AgendaItem;
+    this.activateAgendaItem(meeting, nextItem, now);
 
     this.markDirty(meetingId);
-    return nextItem;
+    return { kind: 'advanced', item: nextItem };
   }
 
   // -- Queue mutations --

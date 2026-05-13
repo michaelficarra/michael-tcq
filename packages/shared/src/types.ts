@@ -282,6 +282,14 @@ export interface CurrentContext {
   agendaItemId?: string;
   /** ISO timestamp when the current agenda item started. */
   agendaItemStartTime?: string;
+  /**
+   * ISO timestamp of when the meeting first advanced past "not started".
+   * Stamped on the first successful advance and never cleared, so it
+   * persists across the past-final transition (when the chair advances
+   * past the last item and `agendaItemId` becomes undefined again).
+   * Absent only when the meeting has never been started.
+   */
+  startedAt?: string;
   /** Who is currently holding the floor, if anyone. */
   speaker?: CurrentSpeaker;
   /** What topic is being discussed, if any. */

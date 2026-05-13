@@ -223,7 +223,11 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
               (Ctrl/Cmd+Enter submits without leaving the keyboard). If the queue is non-empty, the dialog also warns
               that those entries will be cleared. On confirming, the next item's first presenter, if any, becomes the
               speaker. Any remaining queue entries are recorded in the meeting log, so you can restore them later if the
-              agenda item is revisited.
+              agenda item is revisited. On the final agenda item the same button is labelled{' '}
+              <strong>Conclude meeting</strong>— clicking it opens the same dialog so a conclusion can still be recorded
+              for the last item; after confirming, the queue tab shows "Meeting concluded". Adding a new agenda item
+              from the Agenda tab while concluded auto-activates it, so you can reopen the meeting without clicking
+              Start Meeting again.
             </li>
           </ol>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">

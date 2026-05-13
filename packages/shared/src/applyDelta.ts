@@ -87,12 +87,24 @@ function applyDeltaInner(meeting: MeetingState, action: MeetingDeltaAction): Mee
         chairIds: action.delta.chairIds,
         users: mergeUsers(meeting.users, action.delta.users),
       };
-    case 'agenda:added':
+    case 'agenda:added': {
+      // The server auto-activates a newly-added agenda item when the
+      // meeting is in the past-final state. In that case the delta also
+      // carries fresh `current`/`queue` snapshots, which we apply
+      // atomically so the client never observes a torn state where the
+      // new item exists but isn't yet current.
+      const hasAutoActivation = action.delta.current !== undefined;
       return {
         ...meeting,
         agenda: [...meeting.agenda, action.delta.entry],
+        current: hasAutoActivation ? action.delta.current! : meeting.current,
+        queue: hasAutoActivation && action.delta.queue ? action.delta.queue : meeting.queue,
+        operational: hasAutoActivation
+          ? { ...meeting.operational, lastAdvancementBy: action.delta.lastAdvancementBy }
+          : meeting.operational,
         users: mergeUsers(meeting.users, action.delta.users),
       };
+    }
     case 'agenda:edited':
       return {
         ...meeting,

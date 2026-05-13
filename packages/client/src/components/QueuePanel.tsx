@@ -406,23 +406,25 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
           {/* Chair controls next to the heading */}
           {isChair && currentAgendaItem && (
             <>
-              {hasMoreAgendaItems && (
-                <button
-                  onClick={() => {
-                    // Always show the dialog so the chair can record (or
-                    // edit) a conclusion for the outgoing item, regardless
-                    // of whether the queue has entries that need clearing.
-                    // Seed the draft from the outgoing item's saved
-                    // conclusion so revisits show what was last entered.
-                    setConclusionDraft(currentAgendaItem?.conclusion ?? '');
-                    setShowAdvanceConfirm(true);
-                  }}
-                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
-                >
-                  Next Agenda Item
-                </button>
-              )}
+              {/* On the last item the same dialog is reused to record the
+                  final item's conclusion — the button label switches to
+                  "Conclude meeting" so it's clear the action ends the
+                  meeting rather than stepping to a next item. */}
+              <button
+                onClick={() => {
+                  // Always show the dialog so the chair can record (or
+                  // edit) a conclusion for the outgoing item, regardless
+                  // of whether the queue has entries that need clearing.
+                  // Seed the draft from the outgoing item's saved
+                  // conclusion so revisits show what was last entered.
+                  setConclusionDraft(currentAgendaItem?.conclusion ?? '');
+                  setShowAdvanceConfirm(true);
+                }}
+                className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                           text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+              >
+                {hasMoreAgendaItems ? 'Next Agenda Item' : 'Conclude meeting'}
+              </button>
               {!meeting.poll && (
                 <button
                   onClick={() => setShowPollSetup(true)}
@@ -462,6 +464,17 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
                 />
               )}
             </div>
+          </div>
+        ) : meeting.current.startedAt ? (
+          // Past-final: the chair advanced past the last item. No
+          // current item, but `startedAt` distinguishes this from
+          // pre-start so we show a "concluded" hint instead of "waiting
+          // to start". Adding a new agenda item from the Agenda tab
+          // auto-activates it (server-side) and the meeting resumes.
+          <div className="pl-3">
+            <p className="text-stone-500 dark:text-stone-400">
+              Meeting concluded &mdash; add a new agenda item to continue.
+            </p>
           </div>
         ) : (
           <div className="pl-3">

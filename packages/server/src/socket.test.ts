@@ -479,6 +479,70 @@ describe('Socket.IO integration', () => {
       // Agenda should still be empty
       expect(ctx.meetingManager.get(meeting.id)!.agenda).toHaveLength(0);
     });
+
+    it('auto-activates the new item when the meeting is in the past-final state', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Original', [owner]);
+      // Start, then advance past the last item — meeting is now past-final.
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+      expect(ctx.meetingManager.get(meeting.id)!.current.agendaItemId).toBeUndefined();
+      expect(ctx.meetingManager.get(meeting.id)!.current.startedAt).toBeDefined();
+
+      const client = await joinMeeting(meeting.id);
+
+      // The agenda:added delta should bundle the fresh `current` and
+      // `queue` snapshots so clients atomically transition out of
+      // past-final.
+      const deltaPromise = waitForEvent<{
+        version: number;
+        entry: { id: string; name: string };
+        current?: { agendaItemId?: string };
+        queue?: { closed: boolean };
+        lastAdvancementBy?: string;
+      }>(client, 'agenda:added');
+      client.emit('agenda:add', { name: 'Follow-up', presenterUsernames: ['testuser'] });
+      const delta = await deltaPromise;
+
+      expect(delta.entry.name).toBe('Follow-up');
+      expect(delta.current).toBeDefined();
+      expect(delta.current!.agendaItemId).toBe(delta.entry.id);
+      expect(delta.queue).toBeDefined();
+      expect(delta.queue!.closed).toBe(false);
+      expect(delta.lastAdvancementBy).toBeDefined();
+
+      // Server state confirms the auto-activation.
+      const post = ctx.meetingManager.get(meeting.id)!;
+      expect(post.current.agendaItemId).toBe(delta.entry.id);
+
+      // A new agenda-item-started log entry is appended for the
+      // auto-activated item. No meeting-started — the manager
+      // method we used to drive the past-final transition doesn't
+      // emit log entries (that's the socket handler's job), so the
+      // log only contains the entry the auto-activation just added.
+      const log = ctx.meetingManager.getLog(meeting.id);
+      const lastStarted = log.filter((e) => e.type === 'agenda-item-started').at(-1) as
+        | Extract<(typeof log)[number], { type: 'agenda-item-started' }>
+        | undefined;
+      expect(lastStarted?.itemName).toBe('Follow-up');
+    });
+
+    it('does not auto-activate when adding a session header', async () => {
+      // Session adds go through a separate handler — covered for
+      // completeness: even in past-final, a session should not become
+      // the "current" item (sessions are never current).
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+
+      ctx.meetingManager.addSession(meeting.id, 'Session', 30);
+      const post = ctx.meetingManager.get(meeting.id)!;
+      expect(post.current.agendaItemId).toBeUndefined();
+      expect(post.current.startedAt).toBeDefined();
+    });
   });
 
   describe('agenda:delete', () => {
@@ -1924,7 +1988,7 @@ describe('Socket.IO integration', () => {
       expect(response.error).toMatch(/only chairs/i);
     });
 
-    it('returns error via ack when no more agenda items', async () => {
+    it('concludes the meeting when advancing past the final item (records conclusion, clears current)', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Only item', [owner]);
@@ -1941,14 +2005,43 @@ describe('Socket.IO integration', () => {
       // Wait for the state broadcast so we have the new agenda item
       await new Promise((r) => setTimeout(r, 50));
       const currentMeeting = ctx.meetingManager.get(meeting.id)!;
+      const currentItemId = currentMeeting.current.agendaItemId;
 
-      // Try to advance past end
+      // Advance past the end with a conclusion — should succeed and
+      // transition the meeting into the past-final state.
       ackPromise = new Promise<any>((resolve) => {
         client.emit(
           'meeting:nextAgendaItem',
-          { currentAgendaItemId: currentMeeting.current.agendaItemId ?? null },
+          { currentAgendaItemId: currentMeeting.current.agendaItemId ?? null, conclusion: 'wrapped up the discussion' },
           resolve,
         );
+      });
+      const response = await ackPromise;
+
+      expect(response.ok).toBe(true);
+      // Server state: past-final.
+      const finalMeeting = ctx.meetingManager.get(meeting.id)!;
+      expect(finalMeeting.current.agendaItemId).toBeUndefined();
+      expect(finalMeeting.current.startedAt).toBeDefined();
+      // Outgoing item received its conclusion and a realised duration.
+      const outgoing = finalMeeting.agenda.find((e) => e.id === currentItemId);
+      expect(outgoing && 'conclusion' in outgoing && outgoing.conclusion).toBe('wrapped up the discussion');
+      // The agenda-item-finished log entry carries the conclusion.
+      const log = ctx.meetingManager.getLog(meeting.id);
+      const finishedEntry = log.find((entry) => entry.type === 'agenda-item-finished');
+      expect(finishedEntry && 'conclusion' in finishedEntry && finishedEntry.conclusion).toBe(
+        'wrapped up the discussion',
+      );
+    });
+
+    it('returns error via ack when no items have ever been added (none branch)', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const ackPromise = new Promise<any>((resolve) => {
+        client.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, resolve);
       });
       const response = await ackPromise;
 

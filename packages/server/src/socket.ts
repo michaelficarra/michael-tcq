@@ -572,10 +572,59 @@ export function registerSocketHandlers(
       // The schema already constrains duration to a positive integer; undefined = no estimate.
       const entry = meetingManager.addAgendaItem(joinedMeetingId, name, presenters, parsed.duration);
       if (!entry) return;
+
+      // Past-final auto-activation: the manager mutates `current`/`queue`
+      // atomically with the add when the meeting was past-final. Detect
+      // it by checking whether the new item is now the current one —
+      // then mirror the advance handler's side-effects (log
+      // `agenda-item-started`, stamp `lastAdvancementBy`, bundle the
+      // fresh state into the delta so clients apply it atomically).
+      const meetingAfter = meetingManager.get(joinedMeetingId);
+      const autoActivated = meetingAfter !== undefined && meetingAfter.current.agendaItemId === entry.id;
+
+      let logIdToEmit: string | null = null;
+      let chairId: UserKey | undefined;
+      if (autoActivated) {
+        chairId = ensureUser(meetingAfter, user);
+        const startedEntry = await meetingManager.appendLog(joinedMeetingId, {
+          type: 'agenda-item-started',
+          timestamp: meetingAfter.current.agendaItemStartTime ?? new Date().toISOString(),
+          chairId,
+          itemName: entry.name,
+          itemPresenterIds: entry.presenterIds,
+        });
+        if (startedEntry) logIdToEmit = startedEntry.id;
+        meetingAfter.operational.lastAdvancementBy = chairId;
+      }
+
+      // The chair's User record always rides along on auto-activation so
+      // any field upgrades (e.g. acquiring `isAdmin` on first connect)
+      // propagate to client caches. Plain presenter records cover the
+      // standard "added an item with new presenters" case.
+      const usersForDelta: Record<UserKey, User> = usersRecordFor(presenters);
+      if (autoActivated && chairId) usersForDelta[chairId] = meetingAfter.users[chairId];
+
       emitDelta(io, meetingManager, joinedMeetingId, 'agenda:added', {
         entry,
-        users: usersRecordFor(presenters),
+        current: autoActivated ? meetingAfter.current : undefined,
+        queue: autoActivated ? meetingAfter.queue : undefined,
+        lastAdvancementBy: autoActivated ? chairId : undefined,
+        users: usersForDelta,
       });
+      if (autoActivated) {
+        delete meetingAfter.operational.lastAdvancementBy;
+        emitLogDirty(io, joinedMeetingId, logIdToEmit);
+        // Auto-activation is a high-value event (it transitions the
+        // meeting from past-final back into in-progress) — persist
+        // immediately like the advance handler.
+        meetingManager.syncOne(joinedMeetingId).catch((err) => {
+          logError('meeting_sync_failed', {
+            meetingId: joinedMeetingId,
+            trigger: 'agenda_added_auto_activated',
+            error: serialiseError(err),
+          });
+        });
+      }
     });
 
     // --- agenda:edit ---
@@ -1333,8 +1382,8 @@ export function registerSocketHandlers(
       // first presenter introducing), and resets the queue. Its internal
       // timestamp may be a few ms off from `now` captured above — acceptable
       // for display / duration purposes.
-      const nextItem = meetingManager.nextAgendaItem(joinedMeetingId);
-      if (!nextItem) {
+      const advanceResult = meetingManager.nextAgendaItem(joinedMeetingId);
+      if (advanceResult.kind === 'none') {
         respond({ ok: false, error: 'No more agenda items' });
         // Even if we can't advance, prior appendLog calls (topic group
         // finalisation, agenda-item-finished) may have produced log
@@ -1343,24 +1392,31 @@ export function registerSocketHandlers(
         return;
       }
 
-      // Append meeting-started or agenda-item-started
-      if (isFirstItem) {
-        const startedEntry = await meetingManager.appendLog(joinedMeetingId, {
-          type: 'meeting-started',
+      // Past-final transition: the chair advanced past the last item to
+      // record its conclusion. No new agenda-item-started log (no item
+      // to introduce) — the outgoing item's conclusion is the only
+      // signal. The cleared `current` rides on the same delta as the
+      // outgoing item's agendaUpdates.
+      if (advanceResult.kind === 'advanced') {
+        // Append meeting-started or agenda-item-started
+        if (isFirstItem) {
+          const startedEntry = await meetingManager.appendLog(joinedMeetingId, {
+            type: 'meeting-started',
+            timestamp: now,
+            chairId,
+          });
+          if (startedEntry) latestLogId = startedEntry.id;
+        }
+
+        const itemStartedEntry = await meetingManager.appendLog(joinedMeetingId, {
+          type: 'agenda-item-started',
           timestamp: now,
           chairId,
+          itemName: advanceResult.item.name,
+          itemPresenterIds: advanceResult.item.presenterIds,
         });
-        if (startedEntry) latestLogId = startedEntry.id;
+        if (itemStartedEntry) latestLogId = itemStartedEntry.id;
       }
-
-      const itemStartedEntry = await meetingManager.appendLog(joinedMeetingId, {
-        type: 'agenda-item-started',
-        timestamp: now,
-        chairId,
-        itemName: nextItem.name,
-        itemPresenterIds: nextItem.presenterIds,
-      });
-      if (itemStartedEntry) latestLogId = itemStartedEntry.id;
 
       meeting.operational.lastAdvancementBy = chairId;
       meetingManager.markDirty(joinedMeetingId);

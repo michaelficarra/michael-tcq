@@ -75,9 +75,28 @@ function renderQueue(meeting: MeetingState, user: User | null = null, socket: Ty
 describe('QueuePanel', () => {
   // -- Agenda item section --
 
-  it('shows "Waiting for the meeting to start" when no current agenda item', () => {
+  it('shows "Waiting for the meeting to start" when no current agenda item and the meeting has never been started', () => {
     renderQueue(makeMeeting());
     expect(screen.getByText(/waiting for the meeting to start/i)).toBeInTheDocument();
+  });
+
+  it('shows "Meeting concluded" in the past-final state (no current item, but startedAt is set)', () => {
+    // `startedAt` distinguishes past-final from pre-start so the UI
+    // doesn't fall back to the "Waiting…" copy when the chair has
+    // already advanced past the final item.
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [{ kind: 'item', id: '1', name: 'Done', presenterIds: ['alice'], conclusion: 'wrap-up' }],
+      current: currentOf({ startedAt: '2026-04-01T10:00:00.000Z' }),
+    });
+    renderQueue(meeting, chairUser);
+
+    expect(screen.getByText(/meeting concluded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for the meeting to start/i)).not.toBeInTheDocument();
+    // The Start Meeting button is a pre-start affordance and must not
+    // be available once the meeting has already happened.
+    expect(screen.queryByRole('button', { name: 'Start Meeting' })).not.toBeInTheDocument();
   });
 
   it('shows the current agenda item when set', () => {
@@ -185,7 +204,7 @@ describe('QueuePanel', () => {
     expect(screen.getByRole('button', { name: 'Next Agenda Item' })).toBeInTheDocument();
   });
 
-  it('hides "Next Agenda Item" button on the last agenda item', () => {
+  it('shows "Conclude meeting" button on the last agenda item', () => {
     const meeting = makeMeeting({
       users: { alice: chairUser },
       chairIds: ['alice'],
@@ -194,7 +213,11 @@ describe('QueuePanel', () => {
     });
     renderQueue(meeting, chairUser);
 
+    // The button is still present (chairs can advance past the final
+    // item to record its conclusion) but labelled "Conclude meeting"
+    // since there is no next item to step to.
     expect(screen.queryByRole('button', { name: 'Next Agenda Item' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Conclude meeting' })).toBeInTheDocument();
   });
 
   it('hides "Next Agenda Item" button for non-chairs', () => {

@@ -43,8 +43,26 @@ interface DeltaEnvelope {
 /** Payload for `chairs:updated` — chair list replaced wholesale. */
 export type ChairsUpdatedDelta = DeltaEnvelope & { chairIds: UserKey[] };
 
-/** Payload for `agenda:added` — new agenda item or session header. */
-export type AgendaAddedDelta = DeltaEnvelope & { entry: AgendaEntry };
+/**
+ * Payload for `agenda:added` — new agenda item or session header.
+ *
+ * When the meeting is in the past-final state (the chair has advanced
+ * past the last item, so `current.agendaItemId` is undefined while
+ * `current.startedAt` is set), adding an agenda item auto-activates
+ * it. In that case the server bundles the fresh `current` and reset
+ * `queue` into this same delta — clients apply them atomically so they
+ * never observe a torn state where the new item exists but isn't yet
+ * current. `lastAdvancementBy` mirrors the same field on
+ * `agenda:advanced` so the cooldown heuristic kicks in identically.
+ * All three fields are absent for the normal "added but not activated"
+ * case (which includes session headers, which never auto-activate).
+ */
+export type AgendaAddedDelta = DeltaEnvelope & {
+  entry: AgendaEntry;
+  current?: CurrentContext;
+  queue?: MeetingQueueState;
+  lastAdvancementBy?: UserKey;
+};
 
 /**
  * Payload for `agenda:edited` — replacement entry for an existing

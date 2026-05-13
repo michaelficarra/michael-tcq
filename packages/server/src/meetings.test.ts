@@ -178,6 +178,61 @@ describe('MeetingManager', () => {
     expect(mgr.get('test-meeting')?.chairIds).toEqual([testUserKey]);
   });
 
+  it('restore backfills current.startedAt from the meeting-started log entry', async () => {
+    const store = new InMemoryStore();
+    const testUserKey = userKey(testUser);
+    const startedAt = '2026-04-01T10:00:00.000Z';
+
+    // Persist a meeting that pre-dates the `startedAt` field (so it
+    // is missing on `current`) but that has a meeting-started log
+    // entry from when it was first advanced.
+    await store.save({
+      id: 'legacy-meeting',
+      createdAt: '2026-04-01T09:00:00.000Z',
+      participantIds: [],
+      users: { [testUserKey]: testUser },
+      chairIds: [testUserKey],
+      agenda: [],
+      queue: { entries: {}, orderedIds: [], closed: false },
+      current: { topicSpeakers: [] }, // no startedAt
+      operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0, version: 1 },
+    });
+    await store.appendLog('legacy-meeting', {
+      id: 'log-1',
+      type: 'meeting-started',
+      timestamp: startedAt,
+      chairId: testUserKey,
+    });
+
+    const mgr = new MeetingManager(store);
+    await mgr.restore();
+
+    expect(mgr.get('legacy-meeting')?.current.startedAt).toBe(startedAt);
+  });
+
+  it('restore leaves startedAt undefined for meetings that never started', async () => {
+    const store = new InMemoryStore();
+    const testUserKey = userKey(testUser);
+
+    // No log entries — the meeting was never advanced.
+    await store.save({
+      id: 'never-started',
+      createdAt: new Date().toISOString(),
+      participantIds: [],
+      users: { [testUserKey]: testUser },
+      chairIds: [testUserKey],
+      agenda: [],
+      queue: { entries: {}, orderedIds: [], closed: false },
+      current: { topicSpeakers: [] },
+      operational: { lastConnectionTime: new Date().toISOString(), maxConcurrent: 0, version: 0 },
+    });
+
+    const mgr = new MeetingManager(store);
+    await mgr.restore();
+
+    expect(mgr.get('never-started')?.current.startedAt).toBeUndefined();
+  });
+
   // -- Agenda mutations --
 
   describe('addAgendaItem', () => {
@@ -238,6 +293,56 @@ describe('MeetingManager', () => {
       expect(item).not.toBeNull();
       expect(item!.presenterIds).toEqual([]);
       expect(meeting.agenda).toHaveLength(1);
+    });
+
+    it('auto-activates a new item when the meeting is in the past-final state', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Original', [testUser]);
+      manager.nextAgendaItem(meeting.id); // start
+      const startedAt = meeting.current.startedAt;
+      manager.nextAgendaItem(meeting.id); // conclude — enters past-final
+
+      // Sanity: in past-final.
+      expect(meeting.current.agendaItemId).toBeUndefined();
+      expect(meeting.current.startedAt).toBe(startedAt);
+
+      // Adding an item now should make it the current item without
+      // requiring a separate Start Meeting / advance call.
+      const item = manager.addAgendaItem(meeting.id, 'Follow-up', [testUser])!;
+      expect(meeting.current.agendaItemId).toBe(item.id);
+      expect(meeting.current.agendaItemStartTime).toBeDefined();
+      expect(meeting.current.speaker?.topic).toBe('Introducing: Follow-up');
+      // startedAt is preserved across the past-final → in-progress transition.
+      expect(meeting.current.startedAt).toBe(startedAt);
+      // Queue is reset (closed: false).
+      expect(meeting.queue.closed).toBe(false);
+      expect(meeting.queue.orderedIds).toHaveLength(0);
+    });
+
+    it('does not auto-activate when the meeting has never been started', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+
+      // No advance has happened — startedAt is undefined, so the
+      // chair must explicitly Start Meeting before any item becomes
+      // current.
+      expect(meeting.current.startedAt).toBeUndefined();
+      expect(meeting.current.agendaItemId).toBeUndefined();
+    });
+
+    it('does not auto-activate session headers (only agenda items)', () => {
+      // Reach the past-final state.
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Item', [testUser]);
+      manager.nextAgendaItem(meeting.id);
+      manager.nextAgendaItem(meeting.id); // concluded
+
+      // Adding a session header doesn't take the meeting out of
+      // past-final — sessions are never `current` and can't seed a
+      // speaker.
+      manager.addSession(meeting.id, 'Session header', 30);
+      expect(meeting.current.agendaItemId).toBeUndefined();
+      expect(meeting.current.startedAt).toBeDefined();
     });
   });
 
@@ -431,8 +536,8 @@ describe('MeetingManager', () => {
       manager.addAgendaItem(meeting.id, 'Second', [testUser]);
 
       const result = manager.nextAgendaItem(meeting.id);
-      expect(result).not.toBeNull();
-      expect(result!.name).toBe('First');
+      expect(result.kind).toBe('advanced');
+      expect(result.kind === 'advanced' && result.item.name).toBe('First');
       expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('First');
     });
 
@@ -471,7 +576,7 @@ describe('MeetingManager', () => {
 
       // Advance to second item
       const result = manager.nextAgendaItem(meeting.id);
-      expect(result?.name).toBe('Second');
+      expect(result.kind === 'advanced' && result.item.name).toBe('Second');
       expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('Second');
       const speaker = meeting.current.speaker!;
       expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
@@ -482,7 +587,7 @@ describe('MeetingManager', () => {
       const item = manager.addAgendaItem(meeting.id, 'Open floor', [])!;
 
       const result = manager.nextAgendaItem(meeting.id);
-      expect(result?.id).toBe(item.id);
+      expect(result.kind === 'advanced' && result.item.id).toBe(item.id);
       expect(meeting.current.agendaItemId).toBe(item.id);
       expect(meeting.current.agendaItemStartTime).toBeDefined();
       expect(meeting.current.speaker).toBeUndefined();
@@ -492,22 +597,58 @@ describe('MeetingManager', () => {
       expect(meeting.queue.closed).toBe(false);
     });
 
-    it('returns null when advancing past the last item', () => {
+    it('transitions to past-final when advancing past the last item', () => {
       const meeting = manager.create([testUser]);
       manager.addAgendaItem(meeting.id, 'Only item', [testUser]);
 
       manager.nextAgendaItem(meeting.id); // first
       const result = manager.nextAgendaItem(meeting.id); // past the end
-      expect(result).toBeNull();
+      expect(result).toEqual({ kind: 'concluded' });
+      // Past-final shape: no current item, but startedAt persists so
+      // the UI can distinguish concluded from pre-start. Queue is
+      // wiped and reopened.
+      expect(meeting.current.agendaItemId).toBeUndefined();
+      expect(meeting.current.agendaItemStartTime).toBeUndefined();
+      expect(meeting.current.speaker).toBeUndefined();
+      expect(meeting.current.topic).toBeUndefined();
+      expect(meeting.current.topicSpeakers).toEqual([]);
+      expect(meeting.current.startedAt).toBeDefined();
+      expect(meeting.queue.orderedIds).toHaveLength(0);
+      expect(meeting.queue.closed).toBe(false);
     });
 
-    it('returns null for an empty agenda', () => {
+    it('returns none for an empty agenda', () => {
       const meeting = manager.create([testUser]);
-      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+      expect(manager.nextAgendaItem(meeting.id)).toEqual({ kind: 'none' });
     });
 
-    it('returns null for non-existent meeting', () => {
-      expect(manager.nextAgendaItem('no-such-meeting')).toBeNull();
+    it('returns none for non-existent meeting', () => {
+      expect(manager.nextAgendaItem('no-such-meeting')).toEqual({ kind: 'none' });
+    });
+
+    it('stamps startedAt on the first advance and leaves it untouched on later advances', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', [testUser]);
+      manager.addAgendaItem(meeting.id, 'Second', [testUser]);
+
+      expect(meeting.current.startedAt).toBeUndefined();
+      manager.nextAgendaItem(meeting.id);
+      const firstStartedAt = meeting.current.startedAt;
+      expect(firstStartedAt).toBeDefined();
+
+      manager.nextAgendaItem(meeting.id);
+      // Same timestamp — `startedAt` is set once and never overwritten.
+      expect(meeting.current.startedAt).toBe(firstStartedAt);
+    });
+
+    it('preserves startedAt across the past-final transition', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'Only', [testUser]);
+
+      manager.nextAgendaItem(meeting.id);
+      const startedAt = meeting.current.startedAt;
+      manager.nextAgendaItem(meeting.id); // concludes
+      expect(meeting.current.startedAt).toBe(startedAt);
     });
 
     it('clears the queue and current topic when advancing', () => {
@@ -1210,23 +1351,25 @@ describe('MeetingManager', () => {
       manager.addSession(meeting.id, 'Block', 30);
       const third = manager.addAgendaItem(meeting.id, 'Third', [testUser])!;
 
-      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(first.id);
-      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(third.id);
+      const r1 = manager.nextAgendaItem(meeting.id);
+      expect(r1.kind === 'advanced' && r1.item.id).toBe(first.id);
+      const r2 = manager.nextAgendaItem(meeting.id);
+      expect(r2.kind === 'advanced' && r2.item.id).toBe(third.id);
     });
 
-    it('returns null when only sessions remain after the current item', () => {
+    it('transitions to past-final when only sessions remain after the current item', () => {
       const meeting = manager.create([testUser]);
       manager.addAgendaItem(meeting.id, 'Only', [testUser]);
       manager.addSession(meeting.id, 'Tail', 30);
 
       manager.nextAgendaItem(meeting.id); // advance to "Only"
-      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+      expect(manager.nextAgendaItem(meeting.id)).toEqual({ kind: 'concluded' });
     });
 
-    it('returns null when the agenda contains only sessions', () => {
+    it('returns none when the agenda contains only sessions', () => {
       const meeting = manager.create([testUser]);
       manager.addSession(meeting.id, 'Empty block', 30);
-      expect(manager.nextAgendaItem(meeting.id)).toBeNull();
+      expect(manager.nextAgendaItem(meeting.id)).toEqual({ kind: 'none' });
     });
 
     it('starts from the first agenda item even when preceded by sessions', () => {
@@ -1234,7 +1377,8 @@ describe('MeetingManager', () => {
       manager.addSession(meeting.id, 'Intro', 10);
       const first = manager.addAgendaItem(meeting.id, 'First', [testUser])!;
 
-      expect(manager.nextAgendaItem(meeting.id)?.id).toBe(first.id);
+      const result = manager.nextAgendaItem(meeting.id);
+      expect(result.kind === 'advanced' && result.item.id).toBe(first.id);
     });
   });
 });

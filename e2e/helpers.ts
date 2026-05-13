@@ -135,7 +135,9 @@ export async function startMeeting(page: Page) {
  * then clicks Advance. Caller must already be on the Queue tab.
  */
 export async function advanceAgenda(page: Page, conclusion?: string) {
-  await page.getByRole('button', { name: 'Next Agenda Item' }).click();
+  // On the last item the button is relabelled "Conclude meeting"; either
+  // form opens the same confirmation dialog.
+  await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
   const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
   await expect(dialog).toBeVisible();
   if (conclusion !== undefined) {

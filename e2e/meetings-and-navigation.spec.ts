@@ -125,14 +125,43 @@ test.describe('Meeting Flow', () => {
     await expect(agendaPanel.getByText('1h39m', { exact: true })).not.toBeVisible();
   });
 
-  test('"Next Agenda Item" button is hidden on the last agenda item', async ({ page }) => {
+  test('"Next Agenda Item" button becomes "Conclude meeting" on the last item', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Only Item', 'admin');
     await startMeeting(page);
 
-    // Only one agenda item, so "Next Agenda Item" should not be visible
+    // On the last item the button is relabelled — same dialog flow,
+    // just clearer copy for ending the meeting.
     await expect(page.getByRole('button', { name: 'Next Agenda Item' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Conclude meeting' })).toBeVisible();
+  });
+
+  test('chair can advance past the final item to record a conclusion; adding a new item auto-activates it', async ({
+    page,
+  }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Final Item', 'admin');
+    await startMeeting(page);
+
+    // Conclude the final item with a conclusion via the same dialog.
+    await advanceAgenda(page, 'agreed to revisit next quarter');
+
+    // Past-final UI on the queue tab.
+    await goToQueueTab(page);
+    await expect(page.getByText(/Meeting concluded/i)).toBeVisible();
+
+    // Add a new agenda item — server auto-activates it as the current
+    // item, so the past-final hint goes away and the new item is shown.
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Follow-up', 'admin');
+    await goToQueueTab(page);
+    await expect(page.getByText(/Meeting concluded/i)).not.toBeVisible();
+    // `exact: true` so this matches the agenda item name and not the
+    // "Introducing: Follow-up" topic introduction the speaker section
+    // renders for the auto-activated item's first presenter.
+    await expect(page.getByText('Follow-up', { exact: true })).toBeVisible();
   });
 });
 
