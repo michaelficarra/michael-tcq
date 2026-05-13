@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Open box: top edge partial, then left, bottom, right edge partial -->
+  <path d="M5 4 H1 V11 H8 V7" />
+  <!-- Diagonal arrow shaft, exiting through the box's open corner -->
+  <path d="M5 7 L11 1" />
+  <!-- L-shaped arrowhead at the NE corner -->
+  <path d="M7 1 H11 V5" />
+</svg>

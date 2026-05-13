@@ -202,7 +202,8 @@ function HamburgerMenu() {
                   else logoutItemRef.current?.focus();
                 }
               }}
-              className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+              // `external-link` appends the NE arrow indicator — see index.css.
+              className="external-link block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
                          hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
             >
               Report an issue

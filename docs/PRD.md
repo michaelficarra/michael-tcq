@@ -103,6 +103,8 @@ The meeting view has four tabs:
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown with Preferences, Report an issue, and Log Out entries; the Report an issue entry opens the project's GitHub repository in a new tab. Clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
+Any link that points to a destination outside the application — whether it appears in a user-generated markdown field (agenda item names, queue topics, conclusions, session names, poll topics) or in the application chrome itself (e.g. the hamburger menu's Report an issue entry) — opens in a new tab/window and displays a small northeast-facing arrow indicator next to the link text so users can tell, before clicking, that the link leaves TCQ.
+
 ## Agenda
 
 The agenda is an ordered list of entries. Most entries are **agenda items**; interleaved among them chairs may also add **session headers** that group a contiguous run of items by capacity (see "Sessions" below). Each agenda item has:

@@ -139,3 +139,28 @@ abbr {
     animation: none;
   }
 }
+
+/*
+ * External-link indicator — appends a tiny northeast-facing arrow to any
+ * <a> tagged with `.external-link` (currently: user-generated markdown
+ * links rendered by <InlineMarkdown>, and the "Report an issue" entry in
+ * the hamburger menu).
+ *
+ * Implemented with `mask-image` so the arrow tints to the link's text
+ * colour automatically — important because the link colour differs
+ * between light and dark themes, and the arrow needs to follow.
+ */
+.external-link::after {
+  content: '';
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  margin-left: 0.15em;
+  /* Centre the arrow on the text's mid-line. Default baseline alignment
+     puts the icon's bottom on the baseline, which makes a tall icon look
+     top-aligned next to lowercase text. */
+  vertical-align: middle;
+  background-color: currentColor;
+  -webkit-mask: url('/external-link.svg') no-repeat center / contain;
+  mask: url('/external-link.svg') no-repeat center / contain;
+}
