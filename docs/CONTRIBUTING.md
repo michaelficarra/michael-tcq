@@ -170,6 +170,10 @@ npm run test:e2e -- --headed
 npm run test:e2e -- --debug
 ```
 
+## SVG Assets
+
+SVG assets live under `packages/client/public/`. An inline Vite plugin in `packages/client/vite.config.ts` runs SVGO over every SVG in the build output at `closeBundle`, so committed source SVGs can stay in whatever form your editor produces — the build pipeline ships the optimised version. Configuration lives in `svgo.config.mjs` at the repo root (`preset-default`, multipass; `viewBox` is preserved by SVGO 4's defaults).
+
 ## Validating Changes
 
 Run all CI checks locally before pushing:

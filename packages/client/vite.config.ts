@@ -1,6 +1,72 @@
-import { createLogger, defineConfig } from 'vite';
+import { createLogger, defineConfig, type Plugin, type ResolvedConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { loadConfig, optimize } from 'svgo';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { extname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Recursively yield every `.svg` file under `dir`. Used by the build-time
+// SVG optimiser plugin below; tolerates a missing directory because the
+// plugin runs unconditionally and the output dir may not contain SVGs.
+async function* walkSvgs(dir: string): AsyncGenerator<string> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkSvgs(full);
+    } else if (extname(entry.name).toLowerCase() === '.svg') {
+      yield full;
+    }
+  }
+}
+
+// Build-time SVG optimiser. Walks the output directory after Vite has
+// finished writing everything (including `public/` copies, which happen in
+// the internal `vite:copy-public` plugin's `writeBundle` hook) and rewrites
+// each SVG with the SVGO-optimised version. The same `svgo.config.mjs` at
+// the repo root drives both this plugin and the `optimize:svg` script, so
+// build output stays optimised even when a contributor lands a new SVG
+// without first running the manual script.
+function svgoBuildPlugin(): Plugin {
+  let resolved: ResolvedConfig;
+  const configPath = resolve(fileURLToPath(import.meta.url), '../../../svgo.config.mjs');
+  return {
+    name: 'tcq:svgo-optimize',
+    apply: 'build',
+    enforce: 'post',
+    configResolved(config) {
+      resolved = config;
+    },
+    async closeBundle() {
+      const svgoConfig = await loadConfig(configPath);
+      const outDir = resolve(resolved.root, resolved.build.outDir);
+      let count = 0;
+      let saved = 0;
+      for await (const file of walkSvgs(outDir)) {
+        const original = await readFile(file, 'utf8');
+        const result = optimize(original, { ...svgoConfig, path: file });
+        if (!('data' in result)) continue;
+        if (result.data !== original) {
+          await writeFile(file, result.data);
+        }
+        count += 1;
+        saved += Buffer.byteLength(original) - Buffer.byteLength(result.data);
+      }
+      if (count > 0) {
+        resolved.logger.info(
+          `[svgo] optimised ${count} SVG file(s) in ${relative(resolved.root, outDir)} (-${saved} bytes)`,
+        );
+      }
+    },
+  };
+}
 
 /**
  * Log proxy errors with context explaining why they're expected.
@@ -48,7 +114,7 @@ const serverPort = process.env.PORT ?? '3000';
 const serverTarget = `http://localhost:${serverPort}`;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), svgoBuildPlugin()],
   customLogger: filteredLogger,
   build: {
     chunkSizeWarningLimit: 600,
