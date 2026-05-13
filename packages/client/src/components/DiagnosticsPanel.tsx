@@ -114,7 +114,20 @@ function ProcessSection({ info }: { info: ProcessInfo }) {
       <Row label="CPU time" value={formatUptime(Math.floor(info.cpuSeconds))} />
       {/* Memory last. */}
       <Row label={<abbr title="Resident Set Size">RSS</abbr>} value={formatBytes(info.memory.rss)} />
-      <Row label="Heap" value={`${formatBytes(info.memory.heapUsed)} / ${formatBytes(info.memory.heapTotal)}`} />
+      <Row
+        label="Heap"
+        value={
+          <>
+            <span title="used" className="cursor-help">
+              {formatBytes(info.memory.heapUsed)}
+            </span>
+            {' / '}
+            <span title="allocated" className="cursor-help">
+              {formatBytes(info.memory.heapTotal)}
+            </span>
+          </>
+        }
+      />
     </Section>
   );
 }
@@ -134,15 +147,35 @@ function MeetingsSection({
 }) {
   return (
     <Section title="Meetings & sockets">
-      <Row label="Active meetings" value={totalActive} />
-      <Row label="Total participants" value={totalParticipants} />
-      <Row label="Live meeting connections" value={totalConnections} />
-      <Row label="Total Socket.IO clients" value={totalClients} />
+      <Row
+        label="Active meetings"
+        value={totalActive}
+        title="Meetings currently held in memory on this server instance, regardless of whether anyone is currently connected."
+      />
+      <Row
+        label="Total participants"
+        value={totalParticipants}
+        title="Number of users who have joined a meeting at least once (a user in two meetings counts twice)."
+      />
+      <Row
+        label="Live meeting connections"
+        value={totalConnections}
+        title="Sum across all meetings of currently-open socket connections. A single user with multiple tabs counts once per tab."
+      />
+      <Row
+        label="Total Socket.IO clients"
+        value={totalClients}
+        title="All connected Socket.IO clients on this server. Always ≥ live meeting connections."
+      />
       {/* Cumulative since process start. Should stay near zero — a
           rising count means clients are detecting gaps in the delta-
           version sequence and self-healing via full-state replays.
           Visible here as the canary for delta-broadcast bugs. */}
-      <Row label="State resyncs" value={stateResyncs.toLocaleString()} />
+      <Row
+        label="State resyncs"
+        value={stateResyncs.toLocaleString()}
+        title="Cumulative count since process start of clients that detected a gap in the meeting delta stream and requested a full state refresh. Should stay near zero; a rising count is the canary for delta stream broadcast bugs."
+      />
     </Section>
   );
 }
@@ -266,9 +299,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
+function Row({ label, value, title }: { label: React.ReactNode; value: React.ReactNode; title?: string }) {
   return (
-    <div className="flex justify-between gap-4 px-2 py-0.5 even:bg-stone-100 dark:even:bg-stone-800/50">
+    <div
+      title={title}
+      className={`flex justify-between gap-4 px-2 py-0.5 even:bg-stone-100 dark:even:bg-stone-800/50${
+        title ? ' cursor-help' : ''
+      }`}
+    >
       <dt className="text-stone-500 dark:text-stone-400">{label}</dt>
       <dd className="text-stone-700 dark:text-stone-300 text-right">{value}</dd>
     </div>

@@ -11,6 +11,10 @@ body {
   margin: 0;
 }
 
+abbr {
+  cursor: help;
+}
+
 #root {
   height: 100dvh;
   background-color: var(--color-white);
