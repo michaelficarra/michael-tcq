@@ -2,7 +2,7 @@
  * Top navigation bar shown on the meeting page.
  *
  * Layout: "TCQ" branding on the left, Agenda/Queue/Help tab toggles,
- * and the user menu (Log Out or dev user-switcher) on the right.
+ * and the user menu (Log out or dev user-switcher) on the right.
  */
 
 import { Link } from 'react-router-dom';
@@ -88,7 +88,7 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* User menu: Log Out in real OAuth, user-switcher in dev mode */}
+      {/* User menu: Log out in real OAuth, user-switcher in dev mode */}
       <div className="shrink-0 flex items-stretch">
         <UserMenu />
       </div>

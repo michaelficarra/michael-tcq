@@ -51,15 +51,15 @@ describe('UserMenu (dev user-switcher)', () => {
 });
 
 describe('UserMenu (logout hamburger dropdown)', () => {
-  it('does not show the Log Out link until the hamburger is clicked', () => {
+  it('does not show the Log out link until the hamburger is clicked', () => {
     renderWithPrefs(<UserMenu />);
-    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
   });
 
-  it('clicking the hamburger reveals the Log Out link with the correct href', () => {
+  it('clicking the hamburger reveals the Log out link with the correct href', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const logOut = screen.getByRole('menuitem', { name: 'Log Out' });
+    const logOut = screen.getByRole('menuitem', { name: 'Log out' });
     expect(logOut).toHaveAttribute('href', '/auth/logout');
   });
 
@@ -75,22 +75,22 @@ describe('UserMenu (logout hamburger dropdown)', () => {
     renderWithPrefs(<UserMenu />);
     const button = screen.getByRole('button', { name: 'Open menu' });
     fireEvent.click(button);
-    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
 
     fireEvent.click(button);
 
-    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
     expect(button).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('pressing Escape dismisses the dropdown', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
   });
 
   it('pointerdown outside the dropdown dismisses it', () => {
@@ -101,20 +101,20 @@ describe('UserMenu (logout hamburger dropdown)', () => {
       </div>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
 
     // Simulate a pointerdown on another element in the document. The menu
     // should dismiss without blocking the underlying target.
     fireEvent.pointerDown(screen.getByRole('button', { name: 'other' }));
 
-    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
   });
 
-  it('shows Preferences, Report an issue, and Log Out in order when the hamburger is opened', () => {
+  it('shows Preferences, Report an issue, and Log out in order when the hamburger is opened', () => {
     renderWithPrefs(<UserMenu />);
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const items = screen.getAllByRole('menuitem');
-    expect(items.map((el) => el.textContent?.trim())).toEqual(['Preferences', 'Report an issue', 'Log Out']);
+    expect(items.map((el) => el.textContent?.trim())).toEqual(['Preferences', 'Report an issue', 'Log out']);
   });
 
   it('Report an issue links to the GitHub repo and opens in a new tab', () => {
@@ -136,7 +136,7 @@ describe('UserMenu (logout hamburger dropdown)', () => {
 
     // The dropdown closes (both menuitems gone)...
     expect(screen.queryByRole('menuitem', { name: 'Preferences' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Log Out' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
     // ...and the preferences modal is not rendered by UserMenu itself — it's
     // mounted at App level. We only assert the dropdown closed here; the
     // modal's own tests cover its open behaviour.

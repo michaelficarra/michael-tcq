@@ -21,7 +21,7 @@ function renderNav(ui: ReactElement) {
 }
 
 beforeEach(() => {
-  // Default: real OAuth mode (shows Log Out link)
+  // Default: real OAuth mode (shows Log out link)
   mockUseAuth.mockReturnValue({
     user: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' },
     mockAuth: false,
@@ -57,11 +57,11 @@ describe('NavBar', () => {
     expect(onTabChange).toHaveBeenCalledWith('agenda');
   });
 
-  it('exposes a Log Out link via the hamburger menu in OAuth mode', () => {
+  it('exposes a Log out link via the hamburger menu in OAuth mode', () => {
     renderNav(<NavBar activeTab="queue" onTabChange={() => {}} />);
-    // The Log Out link lives behind a hamburger dropdown; open it first.
+    // The Log out link lives behind a hamburger dropdown; open it first.
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const logOut = screen.getByRole('menuitem', { name: 'Log Out' });
+    const logOut = screen.getByRole('menuitem', { name: 'Log out' });
     expect(logOut).toHaveAttribute('href', '/auth/logout');
   });
 
@@ -75,9 +75,9 @@ describe('NavBar', () => {
     renderNav(<NavBar activeTab="queue" onTabChange={() => {}} />);
     // UserBadge displays user.name, not ghUsername
     expect(screen.getByText('Test User')).toBeInTheDocument();
-    // The hamburger is rendered alongside the user-switcher button; Log Out appears once it's clicked.
+    // The hamburger is rendered alongside the user-switcher button; Log out appears once it's clicked.
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toHaveAttribute('href', '/auth/logout');
+    expect(screen.getByRole('menuitem', { name: 'Log out' })).toHaveAttribute('href', '/auth/logout');
   });
 
   it('has an accessible navigation landmark', () => {

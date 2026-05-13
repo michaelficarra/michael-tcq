@@ -55,7 +55,7 @@ function HamburgerMenu() {
   const iconRef = useRef<HTMLSpanElement | null>(null);
   // Menu item refs — since the dropdown is portaled to <body>, natural tab
   // order skips past it. We route Tab from the button through the items
-  // manually so Preferences → Report an issue → Log Out → button forms a cycle.
+  // manually so Preferences → Report an issue → Log out → button forms a cycle.
   const prefsItemRef = useRef<HTMLButtonElement | null>(null);
   const reportItemRef = useRef<HTMLAnchorElement | null>(null);
   const logoutItemRef = useRef<HTMLAnchorElement | null>(null);
@@ -223,7 +223,7 @@ function HamburgerMenu() {
               className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
                          hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
             >
-              Log Out
+              Log out
             </a>
           </div>,
           document.body,
