@@ -303,6 +303,15 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
               Click <strong>Stop Poll</strong> when done. The results will be recorded in the meeting log.
             </li>
           </ol>
+
+          <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Meeting Retention</h4>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+            Meetings are automatically deleted 90 days after the last time any client was connected to them — every
+            connection resets the clock, so a meeting that's still in active use will not be removed. For meetings that
+            nobody has ever connected to, the 90&#8239;days run from when the meeting was created, so abandoned meetings
+            don't sit around forever. If you need a permanent record of a meeting, export the transcript from the{' '}
+            <strong>Log</strong> tab before the retention window elapses.
+          </p>
         </section>
       )}
     </div>
