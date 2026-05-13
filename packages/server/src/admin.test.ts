@@ -279,11 +279,14 @@ describe('Admin endpoints', () => {
       expect(body.isAdmin).toBe(true);
     });
 
-    it('includes isAdmin: false for non-admin users', async () => {
+    it('omits isAdmin entirely for non-admin users', async () => {
+      // Mirrors the isPremium pattern: the field is only present when
+      // true, never explicitly `false`, so the common case carries no
+      // overhead on the wire. Client treats absence as falsy.
       vi.stubEnv('ADMIN_USERNAMES', 'someone-else');
       const res = await fetch(`${baseUrl}/api/me`);
       const body = await res.json();
-      expect(body.isAdmin).toBe(false);
+      expect('isAdmin' in body).toBe(false);
     });
   });
 });
