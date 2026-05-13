@@ -8,6 +8,7 @@
 
 import type { User } from '@tcq/shared';
 import { isAdmin } from './admin.js';
+import { isPremium } from './premium.js';
 
 /**
  * The authenticated user as stored on the session. `User` plus a cached
@@ -33,16 +34,26 @@ export function toSessionUser(user: User): SessionUser {
  * the current user, so a credential never leaks even if another endpoint
  * grows a careless `res.json(req.session.user)`.
  *
- * Admin status uses the same omit-when-false strategy as `isPremium`:
- * the field is only present (`isAdmin: true`) for admin users, omitted
- * entirely for everyone else. Saves the `"isAdmin":false` overhead on
- * every /api/me response for the common non-admin case; the client
+ * Both `isAdmin` and `isPremium` use the omit-when-false strategy: each
+ * field is only present (`: true`) when the user qualifies and is omitted
+ * entirely otherwise. Saves the `"isAdmin":false` / `"isPremium":false`
+ * overhead on every /api/me response for the common case; the client
  * already treats absence as falsy.
+ *
+ * `isPremium` is re-evaluated per response (not cached on the session)
+ * to match the Socket.IO broadcast path's `stampPremium`, so changes to
+ * `PREMIUM_USERNAMES` propagate without forcing a re-login.
  */
-export function toClientUser(user: SessionUser): User & { isAdmin?: true } {
-  const { accessToken: _accessToken, isAdmin, ...rest } = user;
+export function toClientUser(user: SessionUser): User & { isAdmin?: true; isPremium?: true } {
+  // Strip `isPremium` from the input as well — this function is the
+  // authority on the wire-side flag, recomputed from the env var below.
+  const { accessToken: _accessToken, isAdmin, isPremium: _isPremium, ...rest } = user;
   void _accessToken;
-  return isAdmin ? { ...rest, isAdmin: true } : rest;
+  void _isPremium;
+  const result: User & { isAdmin?: true; isPremium?: true } = { ...rest };
+  if (isAdmin) result.isAdmin = true;
+  if (isPremium(rest)) result.isPremium = true;
+  return result;
 }
 
 declare module 'express-session' {

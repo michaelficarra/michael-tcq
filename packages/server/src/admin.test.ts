@@ -289,4 +289,25 @@ describe('Admin endpoints', () => {
       expect('isAdmin' in body).toBe(false);
     });
   });
+
+  describe('GET /api/me (premium flag)', () => {
+    it('includes isPremium: true when the user is in PREMIUM_USERNAMES', async () => {
+      // The user menu (UserBadge) renders the premium mark only when
+      // /api/me reports isPremium:true on the authed user, so this is
+      // the wire-level invariant that lets the badge appear next to the
+      // logged-in user's own name.
+      vi.stubEnv('PREMIUM_USERNAMES', 'testadmin');
+      const res = await fetch(`${baseUrl}/api/me`);
+      const body = await res.json();
+      expect(body.isPremium).toBe(true);
+    });
+
+    it('omits isPremium entirely for non-premium users', async () => {
+      // Same omit-when-false convention as isAdmin.
+      vi.stubEnv('PREMIUM_USERNAMES', 'someone-else');
+      const res = await fetch(`${baseUrl}/api/me`);
+      const body = await res.json();
+      expect('isPremium' in body).toBe(false);
+    });
+  });
 });
