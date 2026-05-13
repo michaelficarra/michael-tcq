@@ -125,6 +125,12 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const currentIndex = meeting.current.agendaItemId
     ? meeting.agenda.findIndex((e) => isAgendaItem(e) && e.id === meeting.current.agendaItemId)
     : -1;
+  // Past-final state: the chair advanced past the last item, so the
+  // meeting is concluded and every existing item is "past". `isPast`
+  // is what gates conclusion rendering and the dim styling, so without
+  // this branch the conclusion the chair just recorded for the final
+  // item would not show anywhere on the agenda.
+  const isPastFinal = meeting.current.agendaItemId === undefined && meeting.current.startedAt !== undefined;
 
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {
@@ -285,7 +291,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                     displayNumber={itemNumbers.get(entry.id) ?? 0}
                     isChair={isChair}
                     isOwnItem={!!user && entry.presenterIds.includes(userKey(user))}
-                    isPast={index < currentIndex}
+                    isPast={isPastFinal || index < currentIndex}
                     isCurrent={index === currentIndex}
                     isContained={containment.containedBy.has(entry.id)}
                     onDelete={handleDelete}

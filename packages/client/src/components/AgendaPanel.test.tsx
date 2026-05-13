@@ -249,6 +249,26 @@ describe('AgendaPanel', () => {
       expect(screen.getByText('agreed unanimously')).toBeInTheDocument();
     });
 
+    it('shows conclusions on every item in the past-final state (no current item, but meeting has started)', () => {
+      // Once the chair advances past the final item, `agendaItemId` is
+      // undefined but `startedAt` is set — every item is now in the past
+      // and any saved conclusions (including the one just recorded for
+      // the final item via the Conclude meeting dialog) must surface on
+      // the agenda.
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'First', presenterIds: ['a'], conclusion: 'first conclusion' },
+          { kind: 'item', id: '2', name: 'Final', presenterIds: ['a'], conclusion: 'final conclusion' },
+        ],
+        current: { topicSpeakers: [], startedAt: '2026-04-01T10:00:00.000Z' },
+      });
+      renderAgenda(meeting);
+
+      expect(screen.getByText('first conclusion')).toBeInTheDocument();
+      expect(screen.getByText('final conclusion')).toBeInTheDocument();
+    });
+
     it('does not show a conclusion on the current or upcoming items even if one is set', () => {
       // Setting `conclusion` on a current/future item should never happen in
       // practice (the dialog only writes on advance), but if it did the UI
