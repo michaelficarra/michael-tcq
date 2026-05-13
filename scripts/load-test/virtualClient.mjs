@@ -20,6 +20,8 @@ export const DELTA_EVENTS = [
   'agenda:edited',
   'agenda:deleted',
   'agenda:reordered',
+  'agenda:prologueSet',
+  'agenda:epilogueSet',
   'queue:added',
   'queue:edited',
   'queue:removed',

@@ -133,9 +133,14 @@ function renderNode(node: HastRootContent): ReactNode {
   if (tag === 'code') {
     return <code className={CODE_CLASS}>{renderChildren(el.children)}</code>;
   }
+  // `<br>` is a void element — render it without children and without
+  // touching `props` (we don't allow any attributes on it anyway).
+  if (tag === 'br') return <br />;
   // Generic allow-listed inline tag — render with the literal tag name.
-  const Tag = tag as 'b' | 'strong' | 'i' | 'em' | 'u' | 's' | 'del' | 'sub' | 'sup';
-  return <Tag>{renderChildren(el.children)}</Tag>;
+  // Pass `props` through so `<abbr title="…">` keeps its expansion;
+  // disallowed attrs were already filtered out above.
+  const Tag = tag as 'b' | 'strong' | 'i' | 'em' | 'u' | 's' | 'del' | 'ins' | 'sub' | 'sup' | 'dfn' | 'abbr';
+  return <Tag {...props}>{renderChildren(el.children)}</Tag>;
 }
 
 // -- Public component ---------------------------------------------------

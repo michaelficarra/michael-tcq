@@ -25,6 +25,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Sessions** — chairs can interleave named session headers (with a capacity in minutes) among agenda items. Each session visually groups the contiguous run of items that follow it and shows used / remaining capacity, flipping to an "overflow" indicator when the run exceeds its budget.
 - **Editable chair list** — chairs can edit the list of chairs from the Agenda tab during a meeting, adding or removing others (but not themselves).
 - **Agenda item conclusions** — when advancing past an agenda item, chairs are prompted to record a free-form conclusion describing what was decided. Conclusions are saved on the item, snapshotted into the meeting log, and shown under past items in the agenda list. Revisiting a previously-concluded item pre-populates the dialogue with the saved conclusion so it can be edited or replaced.
+- **Agenda prologue and epilogue** — chairs can attach free-form, sanitised-markdown sections above and below the agenda list for welcome notes, links, action items, or post-meeting reminders.
 
 ### Polls and meeting log
 

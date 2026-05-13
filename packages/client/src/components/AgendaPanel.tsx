@@ -11,7 +11,17 @@
  * highlight and past-item dimming.
  */
 
-import { memo, useCallback, useMemo, useState, type FormEvent } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import {
   DndContext,
@@ -37,6 +47,7 @@ import { useSocket } from '../contexts/SocketContext.js';
 import { computeContainment } from '../lib/containment.js';
 import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
+import { BlockMarkdown } from './BlockMarkdown.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
 import { UserCombobox } from './UserCombobox.js';
@@ -167,6 +178,18 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
       {/* Chairs list with inline edit for chairs */}
       <ChairsSection />
+
+      {/* Optional chair-authored prologue rendered above the agenda list.
+          Non-chairs see nothing when unset; chairs see a dashed
+          "add a prologue" placeholder. */}
+      <EditableMarkdownSection
+        kind="prologue"
+        value={meeting.prologue}
+        isChair={isChair}
+        placeholder="Add an agenda prologue"
+        ariaLabel="Agenda prologue"
+        onSave={(v) => socket?.emit('agenda:setPrologue', { prologue: v })}
+      />
 
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm && !showSessionForm ? (
@@ -310,7 +333,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
         <SessionForm onCancel={() => setShowSessionForm(false)} onSubmit={() => setShowSessionForm(false)} />
       )}
       {isChair && !showForm && !showSessionForm && (
-        <div className="flex flex-wrap gap-2 presentation-hidden">
+        <div className="flex flex-wrap gap-2 mb-4 presentation-hidden">
           <button
             onClick={() => setShowForm(true)}
             className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
@@ -329,6 +352,18 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
           </button>
         </div>
       )}
+
+      {/* Optional chair-authored epilogue rendered below the new-item /
+          new-session buttons so the agenda-management controls stay
+          visually adjacent to the agenda list above them. */}
+      <EditableMarkdownSection
+        kind="epilogue"
+        value={meeting.epilogue}
+        isChair={isChair}
+        placeholder="Add an agenda epilogue"
+        ariaLabel="Agenda epilogue"
+        onSave={(v) => socket?.emit('agenda:setEpilogue', { epilogue: v })}
+      />
     </div>
   );
 }
@@ -899,5 +934,330 @@ function ChairsSection() {
         </div>
       )}
     </section>
+  );
+}
+
+// -- Editable markdown section (prologue / epilogue) --
+
+interface EditableMarkdownSectionProps {
+  /** Distinguishes prologue from epilogue for aria-labels and section ids. */
+  kind: 'prologue' | 'epilogue';
+  /** Current value from `meeting.prologue` / `meeting.epilogue`. */
+  value: string | undefined;
+  isChair: boolean;
+  /** Placeholder text rendered inside the dashed-border "add" button. */
+  placeholder: string;
+  /** Accessible label for the section and its textarea. */
+  ariaLabel: string;
+  /**
+   * Called with the trimmed editor contents on save. Empty string means
+   * the user emptied the textarea and saved — the server treats that as
+   * a clear (same as the delete button).
+   */
+  onSave: (value: string) => void;
+}
+
+/**
+ * Chair-editable, sanitised-block-markdown section. Three resting
+ * states:
+ *
+ *   - **empty + non-chair**: renders nothing.
+ *   - **empty + chair**: dashed-border placeholder button.
+ *   - **populated**: rendered `<BlockMarkdown>` with chair-only edit /
+ *     delete controls in the top-right.
+ *
+ * The fourth state, **editing**, is chairs-only and replaces the section
+ * with a textarea + Save/Cancel. Ctrl/Cmd+Enter saves. Saving with an
+ * empty textarea is equivalent to clicking delete.
+ *
+ * Two confirmation dialogues guard destructive / overwriting actions:
+ *
+ *   - **Delete**: clicking the chair-only delete control opens a
+ *     "Delete prologue?" dialogue; the delete only fires after
+ *     confirmation.
+ *   - **Overwrite**: if another chair changed the section while the
+ *     editor was open (signalled by the conflict banner), pressing Save
+ *     opens an "Overwrite their changes?" dialogue. Without the
+ *     conflict banner, Save submits directly.
+ *
+ * Concurrent edits surface a sticky conflict banner: if the value
+ * arriving via socket changes while the editor is open, we show a
+ * warning above the textarea that does NOT auto-dismiss — chairs can
+ * finish their thought, read the warning, and then decide to
+ * Save/Cancel/dismiss.
+ */
+function EditableMarkdownSection({
+  kind,
+  value,
+  isChair,
+  placeholder,
+  ariaLabel,
+  onSave,
+}: EditableMarkdownSectionProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [conflict, setConflict] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [overwriteConfirm, setOverwriteConfirm] = useState(false);
+  // Snapshot of the value at the moment editing started. A change in
+  // the incoming `value` prop while the editor is open means another
+  // chair just modified the same section.
+  const baselineRef = useRef<string | undefined>(undefined);
+
+  // Detect concurrent edits while the textarea is open. The banner is
+  // sticky: once shown, it stays until the user dismisses, cancels, or
+  // saves — but we update the baseline so a *further* remote change
+  // doesn't re-flash the banner (its presence already conveys the
+  // condition).
+  useEffect(() => {
+    if (!editing) return;
+    if (value !== baselineRef.current) {
+      setConflict(true);
+      baselineRef.current = value;
+    }
+  }, [editing, value]);
+
+  function startEditing() {
+    setDraft(value ?? '');
+    baselineRef.current = value;
+    setConflict(false);
+    setOverwriteConfirm(false);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
+    setDraft('');
+    setConflict(false);
+    setOverwriteConfirm(false);
+    baselineRef.current = undefined;
+  }
+
+  /** Actually commit the current draft and exit edit mode. */
+  function commitDraft() {
+    onSave(draft.trim());
+    setEditing(false);
+    setDraft('');
+    setConflict(false);
+    setOverwriteConfirm(false);
+    baselineRef.current = undefined;
+  }
+
+  function handleSaveClick(e?: FormEvent) {
+    e?.preventDefault();
+    // If the conflict banner is showing, the chair is about to
+    // knowingly overwrite another chair's changes — confirm first.
+    // Without a conflict signal, Save commits directly.
+    if (conflict) {
+      setOverwriteConfirm(true);
+      return;
+    }
+    commitDraft();
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSaveClick();
+    }
+  }
+
+  /** Title-cased section name used in dialogue copy ("Prologue" / "Epilogue"). */
+  const kindTitle = kind === 'prologue' ? 'Prologue' : 'Epilogue';
+
+  // --- Editing mode (chairs only) ---
+  if (editing) {
+    // Defensive: if chair status was lost while the editor was open,
+    // hide it (the user can no longer save anyway — server would reject).
+    if (!isChair) return null;
+    return (
+      <section aria-label={ariaLabel} className="mb-4 presentation-hidden">
+        {conflict && (
+          <div
+            role="alert"
+            className="mb-2 flex items-start gap-2 rounded border border-amber-400 dark:border-amber-500/60 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
+          >
+            <span className="flex-1">
+              Another chair has updated the {kind} while you were editing. Saving will overwrite their changes.
+            </span>
+            <button
+              type="button"
+              onClick={() => setConflict(false)}
+              aria-label="Dismiss conflict warning"
+              className="shrink-0 text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer leading-none"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <form onSubmit={handleSaveClick} className="flex flex-col gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            aria-label={ariaLabel}
+            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm w-full min-h-[6rem]
+                       dark:bg-stone-700 dark:text-stone-100 font-mono
+                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={cancelEditing}
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <span className="text-xs text-stone-400 dark:text-stone-500">
+              {/* Hint mirrors the queue-edit shortcut for muscle-memory consistency. */}
+              Ctrl/Cmd+Enter to save
+            </span>
+          </div>
+        </form>
+
+        {overwriteConfirm && (
+          <ConfirmDialogue
+            title={`Overwrite ${kindTitle}`}
+            body={
+              <>
+                Another chair has updated the {kind} while you were editing. Saving will overwrite their changes with
+                yours.
+              </>
+            }
+            confirmLabel="Save anyway"
+            confirmVariant="amber"
+            onCancel={() => setOverwriteConfirm(false)}
+            onConfirm={commitDraft}
+          />
+        )}
+      </section>
+    );
+  }
+
+  // --- Empty / placeholder ---
+  if (value === undefined || value.length === 0) {
+    if (!isChair) return null;
+    return (
+      <button
+        type="button"
+        onClick={startEditing}
+        aria-label={placeholder}
+        className="mb-4 w-full border-2 border-dashed border-stone-300 dark:border-stone-600 rounded p-4 text-center
+                   text-sm text-stone-500 dark:text-stone-400
+                   hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+      >
+        {placeholder}
+      </button>
+    );
+  }
+
+  // --- Populated display ---
+  return (
+    <section aria-label={ariaLabel} className="mb-4 relative">
+      <BlockMarkdown className="text-sm text-stone-700 dark:text-stone-300">{value}</BlockMarkdown>
+      {isChair && (
+        <div className="absolute top-1 right-1 flex gap-3 shrink-0 presentation-hidden">
+          <button
+            type="button"
+            onClick={startEditing}
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            aria-label={`Edit ${kind}`}
+          >
+            edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirm(true)}
+            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+            aria-label={`Delete ${kind}`}
+          >
+            delete
+          </button>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <ConfirmDialogue
+          title={`Delete ${kindTitle}`}
+          body={
+            <>
+              Delete the {kind}? This clears it for everyone. You can re-add it later, but the current content will be
+              lost.
+            </>
+          }
+          confirmLabel="Delete"
+          confirmVariant="red"
+          onCancel={() => setDeleteConfirm(false)}
+          onConfirm={() => {
+            setDeleteConfirm(false);
+            onSave('');
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+interface ConfirmDialogueProps {
+  title: string;
+  body: ReactNode;
+  confirmLabel: string;
+  /** Background colour for the confirm button — red for destructive, amber for overwrite. */
+  confirmVariant: 'red' | 'amber';
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+/**
+ * Modal confirmation dialogue shared by the delete and overwrite flows
+ * on the agenda prologue/epilogue. Layout and click-out-to-cancel
+ * behaviour mirror the "Remove chair" modal in `ChairsSection`.
+ */
+function ConfirmDialogue({ title, body, confirmLabel, confirmVariant, onCancel, onConfirm }: ConfirmDialogueProps) {
+  const confirmClasses =
+    confirmVariant === 'red'
+      ? 'bg-red-500 hover:bg-red-600 focus:ring-red-500'
+      : 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500';
+  return (
+    <div
+      className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
+      onClick={onCancel}
+      role="dialog"
+      aria-label={title}
+    >
+      <div
+        className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 p-6 max-w-sm mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">{title}</h3>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">{body}</p>
+        <div className="flex gap-3 justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
+                       transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            autoFocus
+            className={`${confirmClasses} text-white px-4 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer
+                       focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-stone-900`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

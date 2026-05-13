@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 import { normaliseGithubUsername } from './helpers.js';
-import { validateInlineMarkdown } from './markdown.js';
+import { validateBlockMarkdown, validateInlineMarkdown } from './markdown.js';
 import type {
   ActivePoll,
   AgendaEntry,
@@ -84,6 +84,16 @@ export type AgendaDeletedDelta = DeltaEnvelope & { id: string; currentCleared: b
 
 /** Payload for `agenda:reordered` — full new ordering of agenda entry ids. */
 export type AgendaReorderedDelta = DeltaEnvelope & { orderedIds: string[] };
+
+/**
+ * Payload for `agenda:prologueSet` — full replacement of the agenda's
+ * prologue markdown. `value` is the new string, or `undefined` when the
+ * chair cleared the section. Mirrors `agenda:epilogueSet`.
+ */
+export type AgendaPrologueSetDelta = DeltaEnvelope & { value: string | undefined };
+
+/** Payload for `agenda:epilogueSet` — same shape as `agenda:prologueSet`. */
+export type AgendaEpilogueSetDelta = DeltaEnvelope & { value: string | undefined };
 
 /**
  * Payload for `queue:added`. `position` is the index into
@@ -206,6 +216,24 @@ const clearableMarkdownString = (field: string) =>
     });
 
 /**
+ * Optional *block* markdown string that also accepts the empty string
+ * as a way to clear the value. Used for the agenda prologue/epilogue,
+ * which support multi-paragraph + lists + headings + the rest of the
+ * block allowlist (see `markdown.ts`). Validation is skipped when
+ * empty/undefined.
+ */
+const clearableBlockMarkdownString = (field: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .superRefine((val, ctx) => {
+      if (val === undefined || val.length === 0) return;
+      const r = validateBlockMarkdown(val);
+      if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
+    });
+
+/**
  * GitHub-username field: accepts an optional leading `@` and surrounding
  * whitespace, normalises to the bare username, then enforces non-empty.
  * The error `msg` surfaces in the UI when the field is empty after
@@ -255,6 +283,22 @@ export const AgendaEditPayloadSchema = z.object({
   duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
+
+/**
+ * Payload for setting (or clearing) the agenda prologue (chair only).
+ * Empty string clears the section — server normalises empty/whitespace
+ * to "no prologue" and broadcasts the cleared state to all clients.
+ */
+export const AgendaSetProloguePayloadSchema = z.object({
+  prologue: clearableBlockMarkdownString('Prologue'),
+});
+export type AgendaSetProloguePayload = z.infer<typeof AgendaSetProloguePayloadSchema>;
+
+/** Payload for setting (or clearing) the agenda epilogue (chair only). */
+export const AgendaSetEpiloguePayloadSchema = z.object({
+  epilogue: clearableBlockMarkdownString('Epilogue'),
+});
+export type AgendaSetEpiloguePayload = z.infer<typeof AgendaSetEpiloguePayloadSchema>;
 
 /**
  * Payload for adding a new session header (chair only). Sessions are
@@ -479,6 +523,8 @@ export interface ServerToClientEvents {
   'agenda:edited': (delta: AgendaEditedDelta) => void;
   'agenda:deleted': (delta: AgendaDeletedDelta) => void;
   'agenda:reordered': (delta: AgendaReorderedDelta) => void;
+  'agenda:prologueSet': (delta: AgendaPrologueSetDelta) => void;
+  'agenda:epilogueSet': (delta: AgendaEpilogueSetDelta) => void;
   'queue:added': (delta: QueueAddedDelta) => void;
   'queue:edited': (delta: QueueEditedDelta) => void;
   'queue:removed': (delta: QueueRemovedDelta) => void;
@@ -526,6 +572,17 @@ export interface ClientToServerEvents {
    * reorder protocol.
    */
   'agenda:reorder': (payload: AgendaReorderPayload) => void;
+
+  /**
+   * Set (or clear, by sending an empty string) the agenda prologue —
+   * free-form chair-authored markdown displayed above the agenda. Chair
+   * only. The server normalises empty/whitespace-only input to "cleared"
+   * and broadcasts an `agenda:prologueSet` delta with `value: undefined`.
+   */
+  'agenda:setPrologue': (payload: AgendaSetProloguePayload) => void;
+
+  /** Set (or clear) the agenda epilogue. Same shape as `agenda:setPrologue`. */
+  'agenda:setEpilogue': (payload: AgendaSetEpiloguePayload) => void;
 
   /** Add a new session header (chair only). Appended to the end of the agenda. */
   'session:add': (payload: SessionAddPayload) => void;

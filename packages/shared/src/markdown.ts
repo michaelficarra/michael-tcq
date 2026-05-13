@@ -32,7 +32,20 @@ import remarkRehype from 'remark-rehype';
 import rehypeRaw from 'rehype-raw';
 import { toString as mdastToString } from 'mdast-util-to-string';
 import { fromHtml } from 'hast-util-from-html';
-import type { Root, RootContent, PhrasingContent, Paragraph } from 'mdast';
+import type {
+  Root,
+  RootContent,
+  PhrasingContent,
+  Paragraph,
+  Heading,
+  List,
+  ListItem,
+  Blockquote,
+  Table,
+  TableRow,
+  TableCell,
+  BlockContent,
+} from 'mdast';
 import type { Element, Root as HastRoot, RootContent as HastRootContent, ElementContent } from 'hast';
 
 // -- Allowlists ----------------------------------------------------------
@@ -80,9 +93,13 @@ export const ALLOWED_HTML_TAGS: readonly string[] = [
   'u',
   's',
   'del',
+  'ins',
   'sub',
   'sup',
   'code',
+  'dfn',
+  'abbr',
+  'br',
 ];
 
 /**
@@ -99,9 +116,13 @@ export const ALLOWED_HTML_ATTRS_BY_TAG: Record<string, readonly string[]> = {
   u: [],
   s: [],
   del: [],
+  ins: [],
   sub: [],
   sup: [],
   code: [],
+  dfn: [],
+  abbr: ['title'],
+  br: [],
 };
 
 /**
@@ -110,6 +131,96 @@ export const ALLOWED_HTML_ATTRS_BY_TAG: Record<string, readonly string[]> = {
  * exotic (`file:`, `chrome:`, etc.) is also rejected.
  */
 export const ALLOWED_URL_SCHEMES: readonly string[] = ['http:', 'https:', 'mailto:'];
+
+// -- Block-level allowlists ---------------------------------------------
+
+/**
+ * mdast node types permitted in user-authored *block* markdown — used by
+ * the prologue/epilogue sections of the agenda. Strict superset of
+ * `INLINE_MDAST_TYPES`, so anything that validates as inline also
+ * validates as block. Images are still rejected (handled per-node in
+ * `validateBlockMarkdown`).
+ */
+export const BLOCK_MDAST_TYPES: readonly string[] = [
+  ...INLINE_MDAST_TYPES,
+  'heading',
+  'list',
+  'listItem',
+  'thematicBreak',
+  'blockquote',
+  'code',
+  'table',
+  'tableRow',
+  'tableCell',
+];
+
+/**
+ * Raw HTML tags users are allowed to include in block content. Extends
+ * the inline allowlist with the corresponding raw-HTML tag for every
+ * markdown block construct on `BLOCK_MDAST_TYPES`, so a user can write
+ * either `# heading` or `<h1>heading</h1>` and get the same result.
+ *
+ * Generic structural tags (`div`, `span`) are deliberately omitted —
+ * every supported markdown construct has a corresponding semantic tag
+ * already on this list. Images stay off the list (security posture).
+ */
+export const ALLOWED_BLOCK_HTML_TAGS: readonly string[] = [
+  ...ALLOWED_HTML_TAGS,
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'li',
+  'hr',
+  'blockquote',
+  'pre',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'details',
+  'summary',
+];
+
+/**
+ * Per-tag attribute allowlist for block content. Extends
+ * `ALLOWED_HTML_ATTRS_BY_TAG` with the few attributes that are
+ * load-bearing on block constructs: `<details open>`, `<ol start>`, and
+ * `<th>`/`<td>` cell `align`. Everything else (`class`, `style`, `id`,
+ * `colspan`, `rowspan`, every `on*` handler, …) is rejected so the
+ * sanitiser surface stays tight.
+ */
+export const ALLOWED_BLOCK_HTML_ATTRS_BY_TAG: Record<string, readonly string[]> = {
+  ...ALLOWED_HTML_ATTRS_BY_TAG,
+  p: [],
+  h1: [],
+  h2: [],
+  h3: [],
+  h4: [],
+  h5: [],
+  h6: [],
+  ul: [],
+  ol: ['start'],
+  li: [],
+  hr: [],
+  blockquote: [],
+  pre: [],
+  table: [],
+  thead: [],
+  tbody: [],
+  tr: [],
+  th: ['align'],
+  td: ['align'],
+  details: ['open'],
+  summary: [],
+};
 
 // -- Parsers (cached) ----------------------------------------------------
 
@@ -162,12 +273,21 @@ interface HtmlCheck {
 }
 
 /**
- * Validate one raw HTML fragment (i.e. one mdast `html` node's `value`).
- * mdast emits each tag as its own `html` node, so the value is typically
- * a single open / close / void tag. `hast-util-from-html` parses it as an
- * HTML fragment so we can inspect tag and attributes uniformly.
+ * Validate one raw HTML fragment (i.e. one mdast `html` node's `value`)
+ * against the supplied tag / attribute allowlists. mdast emits each tag
+ * as its own `html` node, so the value is typically a single open /
+ * close / void tag. `hast-util-from-html` parses it as an HTML fragment
+ * so we can inspect tag and attributes uniformly.
+ *
+ * Pass `ALLOWED_HTML_TAGS` + `ALLOWED_HTML_ATTRS_BY_TAG` for inline
+ * contexts (existing behaviour) or the block-level supersets to validate
+ * within prologue/epilogue-style block markdown.
  */
-function checkInlineHtml(value: string): HtmlCheck {
+function checkHtml(
+  value: string,
+  allowedTags: readonly string[],
+  allowedAttrsByTag: Record<string, readonly string[]>,
+): HtmlCheck {
   // `fromHtml` always returns a Root; in fragment mode each top-level
   // node is the parsed element / text. Comments, doctypes, scripts in the
   // input show up as their respective hast types and are rejected below.
@@ -179,10 +299,10 @@ function checkInlineHtml(value: string): HtmlCheck {
     }
     const el = node as Element;
     const tag = el.tagName.toLowerCase();
-    if (!(ALLOWED_HTML_TAGS as readonly string[]).includes(tag)) {
+    if (!allowedTags.includes(tag)) {
       return { ok: false, reason: `<${tag}> is not allowed` };
     }
-    const allowedAttrs = ALLOWED_HTML_ATTRS_BY_TAG[tag] ?? [];
+    const allowedAttrs = allowedAttrsByTag[tag] ?? [];
     for (const [attr, raw] of Object.entries(el.properties ?? {})) {
       // hast normalises property names (e.g. `className`); we only allow
       // the literal HTML attribute names listed for the tag.
@@ -199,7 +319,7 @@ function checkInlineHtml(value: string): HtmlCheck {
     // every nested element is also on the allowlist.
     for (const child of el.children as ElementContent[]) {
       if (child.type === 'element') {
-        const childCheck = checkInlineHtml(`<${child.tagName}></${child.tagName}>`);
+        const childCheck = checkHtml(`<${child.tagName}></${child.tagName}>`, allowedTags, allowedAttrsByTag);
         // The recursion is shallow on purpose: we re-check the tag/attr
         // shape. To validate attrs on the actual child, we walk through
         // the element directly rather than via fromHtml again.
@@ -208,6 +328,16 @@ function checkInlineHtml(value: string): HtmlCheck {
     }
   }
   return { ok: true };
+}
+
+/** Inline-context HTML check — back-compat wrapper around `checkHtml`. */
+function checkInlineHtml(value: string): HtmlCheck {
+  return checkHtml(value, ALLOWED_HTML_TAGS, ALLOWED_HTML_ATTRS_BY_TAG);
+}
+
+/** Block-context HTML check — uses the wider block-allowlist. */
+function checkBlockHtml(value: string): HtmlCheck {
+  return checkHtml(value, ALLOWED_BLOCK_HTML_TAGS, ALLOWED_BLOCK_HTML_ATTRS_BY_TAG);
 }
 
 // -- Public: validation --------------------------------------------------
@@ -303,6 +433,121 @@ function checkInlineSubtree(node: Paragraph | PhrasingContent): ValidationResult
   return { ok: true };
 }
 
+// -- Public: block-level validation -------------------------------------
+
+/**
+ * mdast block-content node types whose children are themselves block
+ * content (paragraph/list/heading/...). Validated recursively via
+ * `checkBlockNode` so a list-inside-a-blockquote-inside-a-list still
+ * lands every leaf on the inline or block allowlist.
+ */
+type BlockContainer = Blockquote | ListItem;
+
+/**
+ * Strict validator for user-authored *block* markdown — used for the
+ * agenda prologue and epilogue. Accepts anything `validateInlineMarkdown`
+ * accepts, plus headings, lists, blockquotes, fenced code blocks,
+ * thematic breaks, GFM tables, and the corresponding raw-HTML tags
+ * (`<h1>`, `<ul>`, `<blockquote>`, `<details>`, …). Images stay
+ * rejected.
+ *
+ * Inline content nested inside a block container is checked against the
+ * existing inline allowlist via `checkInlineSubtree`, so the inline
+ * rules apply uniformly regardless of context.
+ */
+export function validateBlockMarkdown(input: string): ValidationResult {
+  let tree: Root;
+  try {
+    tree = parser.parse(input) as Root;
+  } catch (err) {
+    return { ok: false, reason: (err as Error).message };
+  }
+  if (tree.children.length === 0) return { ok: true };
+  for (const child of tree.children) {
+    const r = checkBlockNode(child);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
+}
+
+function checkBlockNode(node: RootContent | BlockContent): ValidationResult {
+  // Images are rejected at every level — both markdown `![](…)` (which
+  // appears as `type: 'image'` in phrasing content) and raw `<img>`
+  // (caught by the HTML allowlist below).
+  if (node.type === 'image') {
+    return { ok: false, reason: 'Images are not supported' };
+  }
+  if (!(BLOCK_MDAST_TYPES as readonly string[]).includes(node.type)) {
+    return { ok: false, reason: `${describeBlock(node.type)} are not supported` };
+  }
+  switch (node.type) {
+    case 'paragraph':
+    case 'heading': {
+      // Phrasing children — inline allowlist applies.
+      const phrasingParent = node as Paragraph | Heading;
+      for (const child of phrasingParent.children) {
+        const r = checkInlineSubtree(child);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'list': {
+      const list = node as List;
+      for (const item of list.children) {
+        const r = checkBlockNode(item);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'listItem':
+    case 'blockquote': {
+      const container = node as BlockContainer;
+      for (const child of container.children) {
+        const r = checkBlockNode(child);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'table': {
+      const table = node as Table;
+      for (const row of table.children) {
+        const r = checkBlockNode(row);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'tableRow': {
+      const row = node as TableRow;
+      for (const cell of row.children) {
+        const r = checkBlockNode(cell);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'tableCell': {
+      const cell = node as TableCell;
+      for (const child of cell.children) {
+        const r = checkInlineSubtree(child);
+        if (!r.ok) return r;
+      }
+      return { ok: true };
+    }
+    case 'html': {
+      const check = checkBlockHtml(node.value);
+      return check.ok ? { ok: true } : { ok: false, reason: check.reason ?? 'HTML is not allowed' };
+    }
+    case 'thematicBreak':
+    case 'code':
+      // Fenced code-block content is plain text — no inline validation.
+      return { ok: true };
+    default:
+      // Any phrasing node that appears at the block level (e.g. a bare
+      // `text` or `inlineCode` inside the root, which mdast wraps in a
+      // paragraph anyway) goes through the inline checker.
+      return checkInlineSubtree(node as PhrasingContent);
+  }
+}
+
 // -- Public: lenient strip-and-reserialise -------------------------------
 
 /**
@@ -383,6 +628,100 @@ function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): P
   return out;
 }
 
+// -- Public: lenient block strip-and-reserialise -------------------------
+
+/**
+ * Lenient counterpart to `validateBlockMarkdown`. Walks the tree and
+ * drops anything the validator would reject — images vanish, disallowed
+ * raw-HTML fragments are removed, disallowed link schemes are unwrapped
+ * to their link text — while preserving the block structure (paragraphs,
+ * headings, lists, code blocks, tables, …) so the rendered output keeps
+ * its shape. Used by the client renderer as a pre-pass for legacy or
+ * partially-corrupted stored content.
+ */
+export function stripUnsupportedBlockMarkdown(input: string): string {
+  const tree = parser.parse(input) as Root;
+  const cleaned: Root = {
+    type: 'root',
+    children: cleanBlockNodes(tree.children) as RootContent[],
+  };
+  return stringifier.stringify(cleaned).trim();
+}
+
+/**
+ * Recursive block-content cleaner. Returns the kept children for the
+ * caller to splice into its own children array — nodes that should be
+ * dropped entirely (`image`, disallowed block HTML) emit nothing, and
+ * containers (list, blockquote, table) recurse into their bodies.
+ */
+function cleanBlockNodes(nodes: ReadonlyArray<RootContent | BlockContent | PhrasingContent>): Array<RootContent> {
+  const out: RootContent[] = [];
+  for (const node of nodes) {
+    if (node.type === 'image') continue;
+    if (node.type === 'html') {
+      // At block level the wider allowlist applies (`<details>`,
+      // `<hr>`, …). Disallowed tags are dropped wholesale; their
+      // contents — if any — were already separate mdast siblings.
+      if (checkBlockHtml(node.value).ok) out.push(node as RootContent);
+      continue;
+    }
+    if (!(BLOCK_MDAST_TYPES as readonly string[]).includes(node.type)) {
+      // Block type we don't recognise — fall back to text so nothing
+      // load-bearing in the content is lost.
+      const text = mdastToString(node);
+      if (text.length > 0) {
+        out.push({ type: 'paragraph', children: [{ type: 'text', value: text }] });
+      }
+      continue;
+    }
+    switch (node.type) {
+      case 'paragraph':
+      case 'heading': {
+        const phrasingParent = node as Paragraph | Heading;
+        const kept = flattenToInline(phrasingParent.children);
+        out.push({ ...phrasingParent, children: kept } as RootContent);
+        break;
+      }
+      case 'list': {
+        const list = node as List;
+        const kept = cleanBlockNodes(list.children) as ListItem[];
+        out.push({ ...list, children: kept });
+        break;
+      }
+      case 'listItem':
+      case 'blockquote': {
+        const container = node as BlockContainer;
+        const kept = cleanBlockNodes(container.children) as BlockContent[];
+        out.push({ ...container, children: kept } as RootContent);
+        break;
+      }
+      case 'table': {
+        const table = node as Table;
+        const kept = cleanBlockNodes(table.children) as TableRow[];
+        out.push({ ...table, children: kept });
+        break;
+      }
+      case 'tableRow': {
+        const row = node as TableRow;
+        const kept = cleanBlockNodes(row.children) as TableCell[];
+        out.push({ ...row, children: kept } as RootContent);
+        break;
+      }
+      case 'tableCell': {
+        const cell = node as TableCell;
+        const kept = flattenToInline(cell.children);
+        out.push({ ...cell, children: kept } as RootContent);
+        break;
+      }
+      default:
+        // thematicBreak, code, and anything else with no recursive
+        // structure passes through unchanged.
+        out.push(node as RootContent);
+    }
+  }
+  return out;
+}
+
 // -- Public: plain-text extraction --------------------------------------
 
 /**
@@ -434,6 +773,20 @@ const renderPipeline = unified()
  * nodes; this function does not re-enforce the allowlist itself.
  */
 export function parseInlineToHast(input: string): HastRoot {
+  const tree = renderPipeline.parse(input);
+  return renderPipeline.runSync(tree) as HastRoot;
+}
+
+/**
+ * Parse the input as block markdown and return a hast tree with raw
+ * HTML resolved into proper hast elements. Functionally identical to
+ * `parseInlineToHast` — the underlying pipeline parses full markdown
+ * end-to-end either way. The two are exported separately so callers
+ * express which allowlist they expect the tree to comply with: pass
+ * inline-stripped input to the inline renderer, block-stripped input
+ * to the block renderer.
+ */
+export function parseBlockToHast(input: string): HastRoot {
   const tree = renderPipeline.parse(input);
   return renderPipeline.runSync(tree) as HastRoot;
 }

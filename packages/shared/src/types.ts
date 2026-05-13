@@ -359,6 +359,18 @@ export interface MeetingState {
    * session headers; use the helpers in `./helpers.ts` to discriminate.
    */
   agenda: AgendaEntry[];
+  /**
+   * Free-form chair-authored markdown displayed above the agenda. Block
+   * markdown is supported (see `validateBlockMarkdown` in `./markdown.ts`).
+   * Absent / undefined means "unset" — clients render nothing in the
+   * prologue slot, except for chairs, who see a placeholder.
+   */
+  prologue?: string;
+  /**
+   * Free-form chair-authored markdown displayed below the agenda. Same
+   * shape and semantics as `prologue`.
+   */
+  epilogue?: string;
   /** Queue state: entries, ordering, and the closed flag. */
   queue: MeetingQueueState;
   /** Current-agenda-item context: speaker, topic, and timing. */

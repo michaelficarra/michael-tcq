@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   validateInlineMarkdown,
+  validateBlockMarkdown,
   stripUnsupportedMarkdown,
+  stripUnsupportedBlockMarkdown,
   extractPlainText,
   ALLOWED_HTML_TAGS,
+  ALLOWED_BLOCK_HTML_TAGS,
   ALLOWED_URL_SCHEMES,
   AgendaAddPayloadSchema,
   AgendaEditPayloadSchema,
+  AgendaSetProloguePayloadSchema,
+  AgendaSetEpiloguePayloadSchema,
   QueueAddPayloadSchema,
   NextAgendaItemPayloadSchema,
 } from '@tcq/shared';
@@ -208,6 +213,168 @@ describe('Zod schema integration', () => {
       conclusion: '<script>x</script>',
     });
     expect(r.success).toBe(false);
+  });
+});
+
+describe('validateBlockMarkdown', () => {
+  describe('accepts every supported block construct', () => {
+    const cases: Array<[string, string]> = [
+      ['empty input', ''],
+      ['single paragraph', 'hello world'],
+      ['multiple paragraphs', 'first paragraph\n\nsecond paragraph'],
+      ['heading h1', '# h1'],
+      ['heading h6', '###### h6'],
+      ['unordered list', '- a\n- b\n- c'],
+      ['ordered list', '1. a\n2. b'],
+      ['nested list', '- outer\n  - inner'],
+      ['thematic break', '---'],
+      ['blockquote', '> a quote'],
+      ['fenced code block (no lang)', '```\nx = 1\n```'],
+      ['fenced code block (with lang)', '```js\nconst x = 1;\n```'],
+      ['GFM table', '| a | b |\n|---|---|\n| 1 | 2 |'],
+      ['inline subset inside paragraph', 'a **bold** and *italic* and [link](https://x.example)'],
+      ['inline subset inside heading', '# bold **inside** heading'],
+      ['inline subset inside list item', '- a [link](https://x.example) here'],
+      ['<details>/<summary>', '<details><summary>more</summary>hidden content</details>'],
+      ['<br>', 'line one<br>line two'],
+      ['<hr>', '<hr>'],
+      ['raw <h2>', '<h2>via raw HTML</h2>'],
+      ['raw <ul>/<li>', '<ul><li>one</li><li>two</li></ul>'],
+    ];
+    it.each(cases)('%s', (_label, input) => {
+      expect(validateBlockMarkdown(input)).toEqual({ ok: true });
+    });
+  });
+
+  describe('accepts every block-allowlisted HTML tag', () => {
+    // Limited to elements where a bare `<tag></tag>` construct is sensible
+    // to validate; nested structural tags (thead, tbody, tr) are exercised
+    // via the GFM-table case above.
+    const standalone = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'details', 'summary', 'hr', 'br'];
+    it.each(standalone.map((t) => [t]))('<%s>', (tag) => {
+      const input = tag === 'br' || tag === 'hr' ? `<${tag}>` : `<${tag}>x</${tag}>`;
+      expect(validateBlockMarkdown(input)).toEqual({ ok: true });
+    });
+    it('exhaustive block allowlist names match BLOCK_HTML_TAGS', () => {
+      // Sanity: every newly-added block tag is on the allowlist.
+      for (const t of [
+        'p',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'ul',
+        'ol',
+        'li',
+        'hr',
+        'blockquote',
+        'pre',
+        'table',
+        'thead',
+        'tbody',
+        'tr',
+        'th',
+        'td',
+        'details',
+        'summary',
+      ]) {
+        expect(ALLOWED_BLOCK_HTML_TAGS).toContain(t);
+      }
+    });
+  });
+
+  describe('rejects still-disallowed constructs', () => {
+    const cases: Array<[string, string, RegExp]> = [
+      ['image (markdown)', '![alt](https://x.example/img.png)', /Images/],
+      ['raw <img>', '<img src="x">', /<img>/],
+      ['<script>', '<script>alert(1)</script>', /<script>/],
+      ['<iframe>', '<iframe src="x"></iframe>', /<iframe>/],
+      ['<style>', '<style>body{}</style>', /<style>/],
+      ['<div>', '<div>x</div>', /<div>/],
+      ['<form>', '<form></form>', /<form>/],
+      ['javascript: in link', '[click](javascript:alert(1))', new RegExp(ALLOWED_URL_SCHEMES.join(', '))],
+      ['data: in link', '[click](data:text/html,xx)', new RegExp(ALLOWED_URL_SCHEMES.join(', '))],
+      ['onclick handler', '<a href="https://x.example" onclick="x">x</a>', /onclick/i],
+      ['style attribute', '<p style="color: red">x</p>', /style/],
+      ['class attribute', '<h1 class="big">x</h1>', /class/i],
+    ];
+    it.each(cases)('%s', (_label, input, expected) => {
+      const r = validateBlockMarkdown(input);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(expected);
+    });
+  });
+});
+
+describe('stripUnsupportedBlockMarkdown', () => {
+  it('preserves a multi-paragraph document verbatim', () => {
+    const input = 'first paragraph\n\nsecond paragraph';
+    // Whitespace handling differs slightly across serialisers, so check
+    // structural shape: both paragraphs survive.
+    const out = stripUnsupportedBlockMarkdown(input);
+    expect(out).toMatch(/first paragraph[\s\S]+second paragraph/);
+  });
+
+  it('preserves headings, lists, and blockquotes', () => {
+    const input = '# heading\n\n- one\n- two\n\n> a quote';
+    const out = stripUnsupportedBlockMarkdown(input);
+    expect(out).toMatch(/# heading/);
+    expect(out).toMatch(/[-*] one/);
+    expect(out).toMatch(/> a quote/);
+  });
+
+  it('drops a markdown image while preserving surrounding paragraphs', () => {
+    const out = stripUnsupportedBlockMarkdown('para one\n\n![alt](x.png)\n\npara two');
+    expect(out).toContain('para one');
+    expect(out).toContain('para two');
+    expect(out).not.toMatch(/x\.png/);
+  });
+
+  it('drops a disallowed raw <img> while keeping the paragraph', () => {
+    const out = stripUnsupportedBlockMarkdown('hello <img src="x"> world');
+    expect(out).not.toMatch(/<img/);
+    expect(out).toContain('hello');
+    expect(out).toContain('world');
+  });
+});
+
+describe('Prologue / epilogue schema integration', () => {
+  it('AgendaSetProloguePayloadSchema accepts block markdown', () => {
+    const r = AgendaSetProloguePayloadSchema.safeParse({
+      prologue: '# welcome\n\n- agenda link: <https://example.com>',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('AgendaSetProloguePayloadSchema accepts empty string (clears the value)', () => {
+    const r = AgendaSetProloguePayloadSchema.safeParse({ prologue: '' });
+    expect(r.success).toBe(true);
+  });
+
+  it('AgendaSetProloguePayloadSchema accepts an omitted prologue field', () => {
+    const r = AgendaSetProloguePayloadSchema.safeParse({});
+    expect(r.success).toBe(true);
+  });
+
+  it('AgendaSetProloguePayloadSchema rejects an image', () => {
+    const r = AgendaSetProloguePayloadSchema.safeParse({
+      prologue: '![alt](https://x.example/img.png)',
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues[0].message).toMatch(/Images/);
+      expect(r.error.issues[0].message).toMatch(/Prologue/);
+    }
+  });
+
+  it('AgendaSetEpiloguePayloadSchema rejects a <script> tag', () => {
+    const r = AgendaSetEpiloguePayloadSchema.safeParse({
+      epilogue: '<script>alert(1)</script>',
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toMatch(/<script>/);
   });
 });
 

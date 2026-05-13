@@ -15,6 +15,8 @@ import type {
   AgendaAdvancedDelta,
   AgendaDeletedDelta,
   AgendaEditedDelta,
+  AgendaEpilogueSetDelta,
+  AgendaPrologueSetDelta,
   AgendaReorderedDelta,
   ChairsUpdatedDelta,
   PollReactedDelta,
@@ -40,6 +42,8 @@ export type MeetingDeltaAction =
   | { type: 'agenda:edited'; delta: AgendaEditedDelta }
   | { type: 'agenda:deleted'; delta: AgendaDeletedDelta }
   | { type: 'agenda:reordered'; delta: AgendaReorderedDelta }
+  | { type: 'agenda:prologueSet'; delta: AgendaPrologueSetDelta }
+  | { type: 'agenda:epilogueSet'; delta: AgendaEpilogueSetDelta }
   | { type: 'queue:added'; delta: QueueAddedDelta }
   | { type: 'queue:edited'; delta: QueueEditedDelta }
   | { type: 'queue:removed'; delta: QueueRemovedDelta }
@@ -123,6 +127,27 @@ function applyDeltaInner(meeting: MeetingState, action: MeetingDeltaAction): Mee
         .map((id) => byId.get(id))
         .filter((e): e is NonNullable<typeof e> => e !== undefined);
       return { ...meeting, agenda: reordered };
+    }
+    case 'agenda:prologueSet': {
+      // Clearing: drop the key entirely (don't leave a stored empty
+      // string) so the Firestore round-trip stays tidy and the client
+      // empty-vs-unset check is a single `meeting.prologue === undefined`.
+      const next = { ...meeting };
+      if (action.delta.value === undefined || action.delta.value === '') {
+        delete next.prologue;
+      } else {
+        next.prologue = action.delta.value;
+      }
+      return next;
+    }
+    case 'agenda:epilogueSet': {
+      const next = { ...meeting };
+      if (action.delta.value === undefined || action.delta.value === '') {
+        delete next.epilogue;
+      } else {
+        next.epilogue = action.delta.value;
+      }
+      return next;
     }
     case 'queue:added': {
       const orderedIds = [...meeting.queue.orderedIds];

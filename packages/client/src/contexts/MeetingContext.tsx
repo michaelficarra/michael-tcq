@@ -105,6 +105,8 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
     case 'agenda:edited':
     case 'agenda:deleted':
     case 'agenda:reordered':
+    case 'agenda:prologueSet':
+    case 'agenda:epilogueSet':
     case 'queue:added':
     case 'queue:edited':
     case 'queue:removed':

@@ -18,6 +18,8 @@ import {
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
   AgendaReorderPayloadSchema,
+  AgendaSetEpiloguePayloadSchema,
+  AgendaSetProloguePayloadSchema,
   SessionAddPayloadSchema,
   SessionDeletePayloadSchema,
   SessionEditPayloadSchema,
@@ -258,6 +260,8 @@ type DeltaEventName =
   | 'agenda:edited'
   | 'agenda:deleted'
   | 'agenda:reordered'
+  | 'agenda:prologueSet'
+  | 'agenda:epilogueSet'
   | 'queue:added'
   | 'queue:edited'
   | 'queue:removed'
@@ -723,6 +727,41 @@ export function registerSocketHandlers(
       emitDelta(io, meetingManager, joinedMeetingId, 'agenda:reordered', {
         orderedIds: meeting.agenda.map((e) => e.id),
       });
+    });
+
+    // --- agenda:setPrologue ---
+    // Chair sets or clears the agenda prologue (block markdown shown
+    // above the agenda list). Empty or whitespace-only input is
+    // normalised to "cleared" — saving with an empty editor is the
+    // documented way to delete.
+    socket.on('agenda:setPrologue', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can edit the agenda prologue');
+        return;
+      }
+      const parsed = parsePayload(AgendaSetProloguePayloadSchema, payload, socket);
+      if (!parsed) return;
+      const value = parsed.prologue && parsed.prologue.length > 0 ? parsed.prologue : undefined;
+      const ok = meetingManager.setPrologue(joinedMeetingId, value);
+      if (!ok) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:prologueSet', { value });
+    });
+
+    // --- agenda:setEpilogue ---
+    // Same shape as `agenda:setPrologue` but for the epilogue section.
+    socket.on('agenda:setEpilogue', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can edit the agenda epilogue');
+        return;
+      }
+      const parsed = parsePayload(AgendaSetEpiloguePayloadSchema, payload, socket);
+      if (!parsed) return;
+      const value = parsed.epilogue && parsed.epilogue.length > 0 ? parsed.epilogue : undefined;
+      const ok = meetingManager.setEpilogue(joinedMeetingId, value);
+      if (!ok) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'agenda:epilogueSet', { value });
     });
 
     // --- session:add ---

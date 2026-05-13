@@ -14,6 +14,8 @@ const DELTA_EVENT_TYPES = [
   'agenda:edited',
   'agenda:deleted',
   'agenda:reordered',
+  'agenda:prologueSet',
+  'agenda:epilogueSet',
   'queue:added',
   'queue:edited',
   'queue:removed',

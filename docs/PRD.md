@@ -161,7 +161,7 @@ In local development with mock auth, the dropdown is backed by a hardcoded seed 
 
 ### Markdown in Item Names and Queue Topics
 
-Agenda item names, queue entry topics, session names, agenda item conclusions, and poll topics support a limited subset of inline markdown: **bold**, _italic_, ~~strikethrough~~, `code`, [links](), bare-URL autolinks, and a small set of inline HTML tags (`<a>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<del>`, `<sub>`, `<sup>`, `<code>`). The canonical allowlist (and the URL scheme allowlist for links — `http:`, `https:`, `mailto:`) lives in `packages/shared/src/markdown.ts`.
+Agenda item names, queue entry topics, session names, agenda item conclusions, and poll topics support a limited subset of inline markdown: **bold**, _italic_, ~~strikethrough~~, `code`, [links](), bare-URL autolinks, and a small set of inline HTML tags (`<a>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<del>`, `<ins>`, `<sub>`, `<sup>`, `<code>`, `<dfn>`, `<abbr>`, `<br>`). The canonical allowlist (and the URL scheme allowlist for links — `http:`, `https:`, `mailto:`) lives in `packages/shared/src/markdown.ts`.
 
 Validation is **strict at the write boundary** — submitting a heading, list, table, blockquote, image, code block, or any disallowed HTML tag/attribute is rejected with a specific error like _"Headings are not supported"_. Rendering is **lenient**: legacy stored content that pre-dates the validator is silently stripped to its supported subset rather than crashing the page. Agenda import is also lenient — disallowed nodes inside an imported item name are stripped, not cause to reject the import.
 
@@ -187,6 +187,39 @@ A **session** is a named time block that visually groups a contiguous run of age
   - **remaining** — capacity − used, when the full run fits, OR
   - **overflow** — (run total − capacity) when the contiguous run of items that follows the session exceeds its capacity. The "overflow" label replaces the "remaining" label in that case, rendered in a warning colour.
 - **Containment** — The run of agenda items under a session starts at the item immediately after the session and ends at the next session header (or end of agenda). Items whose cumulative durations stay within the capacity are rendered with a left/right margin so they sit visually "inside" the session. Items that would push the running sum past capacity are left unindented but still counted in the overflow calculation.
+
+### Agenda Prologue and Epilogue
+
+Chairs can attach two optional, free-form, sanitised-markdown sections to the agenda:
+
+- **Prologue** — rendered above the agenda list (between the chairs section and the first agenda item).
+- **Epilogue** — rendered below the agenda list.
+
+Both fields accept a wider subset of markdown than the inline allowlist: paragraphs, headings (h1–h6), ordered and unordered lists (including nesting), thematic breaks (`---`), blockquotes, fenced code blocks, GFM tables, `<details>`/`<summary>` disclosure blocks, plus everything from the inline subset (bold, italic, code, links, autolinks, line breaks, allowed inline HTML). Every supported markdown construct's corresponding raw-HTML tag is also accepted, so authors can write `# heading` or `<h1>heading</h1>` interchangeably. Still rejected: images, generic structural tags (`<div>`, `<span>`), and any tag/attribute that's an XSS vector (`<script>`, `<iframe>`, `<form>`, `on*` handlers, `style`, `class`, `id`, …).
+
+#### Visibility
+
+- **Non-chair participants** see only sections that have been populated. When a section is unset, nothing is rendered in its slot.
+- **Chairs** always see a full-width, dashed-border placeholder labelled "Add an agenda prologue" / "Add an agenda epilogue" when the section is unset, so the affordance is discoverable.
+
+#### Editing (Chair Only)
+
+Clicking the dashed placeholder (or the chair-only "edit" control on a populated section) replaces the section with an auto-focused multi-line textarea pre-populated with the current value, and Save / Cancel buttons. Pressing Ctrl/Cmd+Enter while the textarea is focused is equivalent to clicking Save.
+
+Two destructive / overwriting actions are gated behind a confirmation dialogue:
+
+- **Deleting a populated section** — clicking the chair-only "delete" control opens a "Delete prologue/epilogue?" dialogue. The section is only cleared once the chair confirms.
+- **Knowingly overwriting another chair's changes** — when the conflict banner (described below) is showing, clicking Save opens an "Overwrite prologue/epilogue?" dialogue before the chair's draft is committed. Without the conflict banner, Save submits directly.
+
+Saving with an empty textarea still clears the section directly (no confirmation), since the chair is acting on their own draft rather than on another chair's saved content. The two flows differ in scope: the "delete" control acts on the saved content; emptying the editor acts on the chair's own working draft.
+
+#### Concurrent Edits
+
+If another chair updates the same section while the editor is open, a sticky warning banner appears above the textarea ("Another chair has updated the [prologue/epilogue] while you were editing. Saving will overwrite their changes."). The banner does **not** auto-dismiss — chairs can finish their thought and read the warning afterwards. It clears when the chair dismisses it explicitly (×), cancels the edit, or saves. Clicking Save while the banner is showing opens the overwrite confirmation dialogue described above.
+
+#### Rendering
+
+Once populated, the section is rendered for every participant using the block-markdown renderer described above. Links open in a new tab with `rel="noopener noreferrer"` set, matching how inline-markdown links behave elsewhere in the UI. Chairs see "edit" and "delete" affordances in the top-right of each populated section, mirroring the controls on agenda items and queue entries.
 
 ## Queue
 

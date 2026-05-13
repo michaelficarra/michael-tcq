@@ -459,6 +459,23 @@ function pickPresenters(n) {
   return shuffle([...PEOPLE]).slice(0, n);
 }
 
+// Prologue + epilogue: seed both so the agenda tab has non-empty
+// example block-markdown content in dev mode. The strings exercise a
+// representative chunk of the allowlist (headings, lists, inline
+// links, raw `<details>`/`<summary>`).
+actions.push(() =>
+  socket.emit('agenda:setPrologue', {
+    prologue:
+      '# Welcome\n\nA few notes before we start:\n\n- Please mute when not speaking.\n- Add yourself to the queue rather than interrupting.\n- Use **point of order** for procedural objections.',
+  }),
+);
+actions.push(() =>
+  socket.emit('agenda:setEpilogue', {
+    epilogue:
+      '<details><summary>Post-meeting reminders</summary>\n\n- File issues for anything we deferred.\n- Action items go in the meeting notes.\n\n</details>',
+  }),
+);
+
 // Add agenda items. Most have one presenter; some have two or three to
 // exercise the multi-presenter data model.
 selectedAgenda.forEach((item) => {
@@ -575,7 +592,14 @@ socket.on('state', (state) => {
 // catching every event the server defines) keeps the script's
 // expectations narrow — an unrelated delta arriving here would be a sign
 // the protocol or another client has changed in a way we should review.
-const DELTA_EVENTS = ['agenda:added', 'agenda:reordered', 'agenda:advanced', 'queue:added'];
+const DELTA_EVENTS = [
+  'agenda:added',
+  'agenda:reordered',
+  'agenda:advanced',
+  'agenda:prologueSet',
+  'agenda:epilogueSet',
+  'queue:added',
+];
 for (const event of DELTA_EVENTS) {
   socket.on(event, (delta) => {
     if (meetingState) {

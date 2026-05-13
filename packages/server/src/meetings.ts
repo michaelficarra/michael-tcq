@@ -470,6 +470,37 @@ export class MeetingManager {
     return true;
   }
 
+  /**
+   * Set the agenda prologue — free-form chair-authored markdown shown
+   * above the agenda. Pass `undefined` (or the caller already normalised
+   * empty/whitespace to undefined) to clear the section. Returns false
+   * if the meeting doesn't exist.
+   */
+  setPrologue(meetingId: string, value: string | undefined): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+    if (value === undefined) {
+      delete meeting.prologue;
+    } else {
+      meeting.prologue = value;
+    }
+    this.markDirty(meetingId);
+    return true;
+  }
+
+  /** Set the agenda epilogue. Same shape as `setPrologue`. */
+  setEpilogue(meetingId: string, value: string | undefined): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return false;
+    if (value === undefined) {
+      delete meeting.epilogue;
+    } else {
+      meeting.epilogue = value;
+    }
+    this.markDirty(meetingId);
+    return true;
+  }
+
   // -- Session mutations --
 
   /**

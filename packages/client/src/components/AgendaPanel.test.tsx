@@ -573,4 +573,317 @@ describe('AgendaPanel', () => {
       expect(emit).toHaveBeenCalledWith('session:delete', { id: 's1' });
     });
   });
+
+  describe('prologue / epilogue', () => {
+    function makeChairMeeting(overrides: Partial<MeetingState> = {}) {
+      return makeMeeting({
+        users: { alice: chairUser },
+        chairIds: ['alice'],
+        ...overrides,
+      });
+    }
+
+    it('hides both sections from non-chairs when unset', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser, other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
+        chairIds: ['alice'],
+      });
+      renderAgenda(meeting, { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' });
+
+      expect(screen.queryByRole('button', { name: /add an agenda prologue/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /add an agenda epilogue/i })).not.toBeInTheDocument();
+    });
+
+    it('shows both dashed placeholders to chairs when unset', () => {
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByRole('button', { name: /add an agenda prologue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add an agenda epilogue/i })).toBeInTheDocument();
+    });
+
+    it('clicking the prologue placeholder reveals an auto-focused textarea', () => {
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser);
+
+      fireEvent.click(screen.getByRole('button', { name: /add an agenda prologue/i }));
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      expect(textarea).toBeInTheDocument();
+      expect(textarea).toHaveFocus();
+    });
+
+    it('Save emits agenda:setPrologue with the entered text', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add an agenda prologue/i }));
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      fireEvent.change(textarea, { target: { value: 'welcome **everyone**' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: 'welcome **everyone**' });
+    });
+
+    it('Save with an empty textarea emits an empty prologue (server treats as clear)', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add an agenda prologue/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: '' });
+    });
+
+    it('Ctrl+Enter inside the textarea submits', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add an agenda prologue/i }));
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      fireEvent.change(textarea, { target: { value: 'hi' } });
+      fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: 'hi' });
+    });
+
+    it('Cancel discards the draft and returns to the placeholder', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting();
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /add an agenda prologue/i }));
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      fireEvent.change(textarea, { target: { value: 'never sent' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(emit).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /add an agenda prologue/i })).toBeInTheDocument();
+    });
+
+    it('renders populated content via BlockMarkdown and shows chair-only edit/delete', () => {
+      const meeting = makeChairMeeting({ prologue: '# heading\n\nbody text', epilogue: 'see you later' });
+      renderAgenda(meeting, chairUser);
+
+      // BlockMarkdown produces real heading + paragraph elements.
+      expect(screen.getByRole('heading', { level: 1, name: 'heading' })).toBeInTheDocument();
+      expect(screen.getByText('body text')).toBeInTheDocument();
+      expect(screen.getByText('see you later')).toBeInTheDocument();
+
+      // Chair sees edit/delete on each populated section.
+      expect(screen.getByRole('button', { name: /edit prologue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /delete prologue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /edit epilogue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /delete epilogue/i })).toBeInTheDocument();
+    });
+
+    it('non-chairs see populated content but no edit/delete buttons', () => {
+      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const meeting = makeMeeting({
+        users: { alice: chairUser, other },
+        chairIds: ['alice'],
+        prologue: 'visible to all',
+      });
+      renderAgenda(meeting, other);
+
+      expect(screen.getByText('visible to all')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /edit prologue/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /delete prologue/i })).not.toBeInTheDocument();
+    });
+
+    it('clicking the prologue delete button opens a confirmation dialogue', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'to be deleted' });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /delete prologue/i }));
+      // The delete is gated behind a confirmation — no emit yet.
+      expect(emit).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog', { name: /delete prologue/i })).toBeInTheDocument();
+    });
+
+    it('confirming the deletion emits an empty prologue', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'to be deleted' });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /delete prologue/i }));
+      const dialog = screen.getByRole('dialog', { name: /delete prologue/i });
+      fireEvent.click(dialog.querySelector('button[autofocus]') ?? dialog.querySelectorAll('button')[1]);
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: '' });
+    });
+
+    it('cancelling the deletion does not emit', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'to be deleted' });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /delete prologue/i }));
+      const dialog = screen.getByRole('dialog', { name: /delete prologue/i });
+      fireEvent.click(dialog.querySelector('button:not([autofocus])') ?? dialog.querySelectorAll('button')[0]);
+
+      expect(emit).not.toHaveBeenCalled();
+      // The populated content + edit/delete controls are still visible.
+      expect(screen.getByText('to be deleted')).toBeInTheDocument();
+    });
+
+    it('Save with the conflict banner up opens an overwrite confirmation', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'original' });
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+
+      // Open the editor.
+      fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
+
+      // Make a local change so the draft differs from the incoming value.
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      fireEvent.change(textarea, { target: { value: 'local change' } });
+
+      // Simulate a concurrent update from another chair.
+      const remoteUpdate = makeChairMeeting({ prologue: 'remote change' });
+      rerender(
+        <TestMeetingProvider meeting={remoteUpdate} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+
+      // Click Save — this should open the overwrite dialogue, not emit yet.
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(emit).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog', { name: /overwrite prologue/i })).toBeInTheDocument();
+    });
+
+    it('confirming the overwrite emits the draft value', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'original' });
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
+      fireEvent.change(screen.getByRole('textbox', { name: /agenda prologue/i }), {
+        target: { value: 'local change' },
+      });
+      rerender(
+        <TestMeetingProvider meeting={makeChairMeeting({ prologue: 'remote change' })} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      const dialog = screen.getByRole('dialog', { name: /overwrite prologue/i });
+      fireEvent.click(dialog.querySelector('button[autofocus]') ?? dialog.querySelectorAll('button')[1]);
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: 'local change' });
+    });
+
+    it('cancelling the overwrite leaves the editor open with the draft intact', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'original' });
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
+      const textarea = screen.getByRole('textbox', { name: /agenda prologue/i });
+      fireEvent.change(textarea, { target: { value: 'local change' } });
+      rerender(
+        <TestMeetingProvider meeting={makeChairMeeting({ prologue: 'remote change' })} user={chairUser}>
+          <SocketContext value={mockSocket}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      const dialog = screen.getByRole('dialog', { name: /overwrite prologue/i });
+      fireEvent.click(dialog.querySelector('button:not([autofocus])') ?? dialog.querySelectorAll('button')[0]);
+
+      expect(emit).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: /agenda prologue/i })).toHaveValue('local change');
+    });
+
+    it('Save without the conflict banner submits directly (no overwrite dialogue)', () => {
+      const emit = vi.fn();
+      const mockSocket = { emit } as unknown as TypedSocket;
+      const meeting = makeChairMeeting({ prologue: 'original' });
+      renderAgenda(meeting, chairUser, mockSocket);
+
+      fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
+      fireEvent.change(screen.getByRole('textbox', { name: /agenda prologue/i }), {
+        target: { value: 'updated by me' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(emit).toHaveBeenCalledWith('agenda:setPrologue', { prologue: 'updated by me' });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('shows a sticky conflict banner when the value changes mid-edit', () => {
+      const meeting = makeChairMeeting({ prologue: 'original' });
+      const { rerender } = renderAgenda(meeting, chairUser);
+
+      // Open the editor on the populated section.
+      fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      // Simulate another chair's update arriving — rerender with new state.
+      const updated = makeChairMeeting({ prologue: 'updated by someone else' });
+      rerender(
+        <TestMeetingProvider meeting={updated} user={chairUser}>
+          <SocketContext value={null}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+
+      const banner = screen.getByRole('alert');
+      expect(banner).toHaveTextContent(/another chair has updated the prologue/i);
+
+      // The banner is sticky: a further update doesn't dismiss it and doesn't
+      // re-fire any toast — it just stays.
+      const updatedAgain = makeChairMeeting({ prologue: 'another remote change' });
+      rerender(
+        <TestMeetingProvider meeting={updatedAgain} user={chairUser}>
+          <SocketContext value={null}>
+            <AgendaPanel />
+          </SocketContext>
+        </TestMeetingProvider>,
+      );
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+
+      // The dismiss button clears the banner without exiting the editor.
+      fireEvent.click(screen.getByRole('button', { name: /dismiss conflict warning/i }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: /agenda prologue/i })).toBeInTheDocument();
+    });
+  });
 });

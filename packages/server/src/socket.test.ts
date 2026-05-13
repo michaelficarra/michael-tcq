@@ -3013,13 +3013,30 @@ describe('Socket.IO integration', () => {
         driver.emit('agenda:delete', { id: thirdItemId });
       });
 
+      // --- agenda:prologueSet (set, then clear) ---
+      await runStep('agenda:prologueSet (set)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:setPrologue', { prologue: '# welcome\n\n- one\n- two' });
+      });
+      await runStep('agenda:prologueSet (clear)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:setPrologue', { prologue: '' });
+      });
+
+      // --- agenda:epilogueSet (set, then clear) ---
+      await runStep('agenda:epilogueSet (set)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:setEpilogue', { epilogue: 'thanks **everyone**' });
+      });
+      await runStep('agenda:epilogueSet (clear)', driver, surrogate, meeting.id, () => {
+        driver.emit('agenda:setEpilogue', { epilogue: '' });
+      });
+
       surrogate.detach();
       observerSocket.disconnect();
 
       // Final sanity: the version cursor advanced exactly once per
-      // mutation step. 23 mutations were emitted above; the bootstrap
-      // `state` doesn't bump the counter, so the surrogate ends at 23.
-      expect(surrogate.lastSeenVersion).toBe(23);
+      // mutation step. 27 mutations were emitted above (23 original +
+      // 2 prologue + 2 epilogue); the bootstrap `state` doesn't bump
+      // the counter, so the surrogate ends at 27.
+      expect(surrogate.lastSeenVersion).toBe(27);
     });
   });
 

@@ -1381,4 +1381,38 @@ describe('MeetingManager', () => {
       expect(result.kind === 'advanced' && result.item.id).toBe(first.id);
     });
   });
+
+  describe('setPrologue / setEpilogue', () => {
+    it('sets and clears the prologue', () => {
+      const meeting = manager.create([testUser]);
+      expect(meeting.prologue).toBeUndefined();
+
+      expect(manager.setPrologue(meeting.id, 'welcome **everyone**')).toBe(true);
+      expect(meeting.prologue).toBe('welcome **everyone**');
+
+      // Clearing drops the property entirely, not just empties the string —
+      // keeps the persisted state tidy and the unset check unambiguous.
+      expect(manager.setPrologue(meeting.id, undefined)).toBe(true);
+      expect(meeting.prologue).toBeUndefined();
+      expect('prologue' in meeting).toBe(false);
+    });
+
+    it('sets and clears the epilogue independently of the prologue', () => {
+      const meeting = manager.create([testUser]);
+
+      manager.setPrologue(meeting.id, 'top');
+      manager.setEpilogue(meeting.id, 'bottom');
+      expect(meeting.prologue).toBe('top');
+      expect(meeting.epilogue).toBe('bottom');
+
+      manager.setEpilogue(meeting.id, undefined);
+      expect(meeting.prologue).toBe('top');
+      expect(meeting.epilogue).toBeUndefined();
+    });
+
+    it('returns false for a non-existent meeting', () => {
+      expect(manager.setPrologue('no-such-meeting', 'x')).toBe(false);
+      expect(manager.setEpilogue('no-such-meeting', 'x')).toBe(false);
+    });
+  });
 });
