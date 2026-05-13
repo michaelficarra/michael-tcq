@@ -139,7 +139,14 @@ test.describe('Queue Display', () => {
   test('own entries have a visible left border', async ({ page }) => {
     await addQueueEntry(page, 'New Topic', 'My entry');
 
-    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    // Border classes live on the inner styled <div>, not the <li> itself —
+    // the <li> is the premium-border wrapper.
+    const item = page
+      .getByRole('list', { name: 'Queued speakers' })
+      .getByRole('listitem')
+      .first()
+      .locator('> div')
+      .first();
     await expect(item).toHaveCSS('border-left-width', '3px');
   });
 
@@ -154,7 +161,13 @@ test.describe('Queue Display', () => {
   test('Point of Order entries have a highlighted background', async ({ page }) => {
     await addQueueEntry(page, 'Point of Order', 'Urgent');
 
-    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    // Border classes live on the inner styled <div>, not the <li> itself.
+    const item = page
+      .getByRole('list', { name: 'Queued speakers' })
+      .getByRole('listitem')
+      .first()
+      .locator('> div')
+      .first();
     // Point of Order entries have a visible border (red-themed)
     // Check that the item has a border — normal entries don't
     const borderWidth = await item.evaluate((el) => getComputedStyle(el).borderWidth);
@@ -557,8 +570,14 @@ test.describe('Queue Close / Open', () => {
     await addQueueEntry(page, 'Point of Order', 'We are off-topic');
     await expect(page.getByText('We are off-topic')).toBeVisible();
 
-    // The new entry carries the Point of Order red-border styling
-    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    // The new entry carries the Point of Order red-border styling.
+    // Border classes live on the inner styled <div>, not the <li> itself.
+    const item = page
+      .getByRole('list', { name: 'Queued speakers' })
+      .getByRole('listitem')
+      .first()
+      .locator('> div')
+      .first();
     const borderWidth = await item.evaluate((el) => getComputedStyle(el).borderWidth);
     expect(borderWidth).not.toBe('0px');
 
