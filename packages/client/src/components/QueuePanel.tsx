@@ -459,7 +459,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               {agendaItemStartTime && (
                 <CountUpTimer
                   since={agendaItemStartTime}
-                  className="ml-2 text-xs text-stone-400 dark:text-stone-500 tabular-nums"
+                  className="ml-2 text-xs text-stone-600 dark:text-stone-300 tabular-nums"
                   overAfterMinutes={currentAgendaItem.duration}
                 />
               )}
@@ -533,7 +533,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
               className={`text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                          transition-colors presentation-hidden ${
                            nextSpeakerDisabled
-                             ? 'opacity-50 cursor-not-allowed text-stone-400 dark:text-stone-500'
+                             ? 'opacity-50 cursor-not-allowed text-stone-600 dark:text-stone-300'
                              : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer'
                          }`}
             >
@@ -629,8 +629,8 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
             <button
               onClick={handleRestoreQueue}
               disabled={!restoreText.trim()}
-              className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                         enabled:hover:bg-teal-600 transition-colors cursor-pointer
+              className="bg-teal-700 text-white px-4 py-1.5 rounded text-sm font-medium
+                         enabled:hover:bg-teal-800 transition-colors cursor-pointer
                          disabled:opacity-50 disabled:cursor-not-allowed
                          focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
             >
@@ -640,7 +640,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
         )}
 
         {queuedSpeakers.length === 0 && !showRestore ? (
-          <p className="text-stone-400 dark:text-stone-500 italic text-sm">The queue is empty.</p>
+          <p className="text-stone-600 dark:text-stone-300 italic text-sm">The queue is empty.</p>
         ) : (
           <DndContext
             sensors={sensors}
@@ -742,15 +742,15 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowAdvanceConfirm(false)}
-                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
+                className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100
                            transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAdvance}
-                className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                           hover:bg-red-600 transition-colors cursor-pointer
+                className="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium
+                           hover:bg-red-700 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Advance
@@ -949,7 +949,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
           {/* Placeholder for drag handle column */}
           {canDrag && <span className="w-4" />}
 
-          <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
+          <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-center select-none">
             {index + 1}
           </span>
 
@@ -977,14 +977,14 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
             />
             <button
               type="submit"
-              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+              className="text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
             >
               Save
             </button>
             <button
               type="button"
               onClick={handleEditCancel}
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+              className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
             </button>
@@ -1024,7 +1024,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
         )}
 
         {/* Position number */}
-        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-center select-none">
+        <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-center select-none">
           {index + 1}
         </span>
 
@@ -1045,7 +1045,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
           <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
 
           {/* Speaker info */}
-          <div className="text-sm text-stone-500 dark:text-stone-400">
+          <div className="text-sm text-stone-600 dark:text-stone-300">
             <UserBadge user={meeting?.users[entry.userId]} size={16} />
           </div>
         </div>
@@ -1056,7 +1056,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
             {canEdit && (
               <button
                 onClick={startEditing}
-                className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
+                className="text-xs text-stone-600 dark:text-stone-300 hover:text-teal-600 dark:hover:text-teal-400
                            transition-colors cursor-pointer"
                 aria-label={`Edit entry: ${entry.topic}`}
               >
@@ -1066,7 +1066,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
             {canDelete && (
               <button
                 onClick={() => onDelete(entry.id)}
-                className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
+                className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400
                            transition-colors cursor-pointer"
                 aria-label={`Delete entry: ${entry.topic}`}
               >
@@ -1105,13 +1105,13 @@ function parseEntryType(label: string): QueueEntryType | null {
 function entryTypeColor(type: string): string {
   switch (type) {
     case 'topic':
-      return 'text-blue-600';
+      return 'text-blue-700 dark:text-blue-400';
     case 'reply':
-      return 'text-cyan-600';
+      return 'text-cyan-700 dark:text-cyan-400';
     case 'question':
-      return 'text-green-600';
+      return 'text-green-700 dark:text-green-400';
     case 'point-of-order':
-      return 'text-red-600 dark:text-red-400';
+      return 'text-red-700 dark:text-red-400';
     default:
       return 'text-stone-600 dark:text-stone-400';
   }

@@ -66,7 +66,7 @@ describe('CountUpTimer', () => {
     render(<CountUpTimer since={since} overAfterMinutes={5} />);
     const el = screen.getByText('6:00');
     expect(el.className).toContain('font-bold');
-    expect(el.className).toContain('text-red-600');
+    expect(el.className).toContain('text-red-700');
   });
 
   it('does not apply over styling when no estimate is set', () => {

@@ -45,7 +45,7 @@ function HomeTabLink({
       className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
         isActive
           ? 'text-stone-900 dark:text-stone-100'
-          : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
+          : 'text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100'
       }`}
       onClick={(e) => {
         // Modifier-clicks fall through so the browser opens a new tab/window;
@@ -245,15 +245,15 @@ function JoinMeetingCard() {
 
         {/* Error message */}
         {error && (
-          <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">
+          <p className="text-red-700 dark:text-red-400 text-sm mb-2" role="alert">
             {error}
           </p>
         )}
 
         <button
           type="submit"
-          className="mt-2 bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                     hover:bg-teal-600 transition-colors cursor-pointer
+          className="mt-2 bg-teal-700 text-white px-4 py-2 rounded text-sm font-medium
+                     hover:bg-teal-800 transition-colors cursor-pointer
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-800"
         >
           Join
@@ -311,7 +311,7 @@ function NewMeetingCard() {
 
       {/* Error message */}
       {error && (
-        <p className="text-red-600 dark:text-red-400 text-sm mb-2" role="alert">
+        <p className="text-red-700 dark:text-red-400 text-sm mb-2" role="alert">
           {error}
         </p>
       )}
@@ -319,8 +319,8 @@ function NewMeetingCard() {
       <button
         onClick={handleCreate}
         disabled={loading || !user}
-        className="bg-teal-500 text-white px-4 py-2 rounded text-sm font-medium
-                   enabled:hover:bg-teal-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+        className="bg-teal-700 text-white px-4 py-2 rounded text-sm font-medium
+                   enabled:hover:bg-teal-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
                    focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-800"
       >
         {loading ? 'Creating…' : 'Start a New Meeting'}

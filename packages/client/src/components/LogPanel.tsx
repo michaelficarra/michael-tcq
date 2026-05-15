@@ -39,7 +39,7 @@ function RelativeTime({ timestamp }: { timestamp: string }) {
   return (
     <SharedRelativeTime
       timestamp={timestamp}
-      className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap"
+      className="text-xs text-stone-600 dark:text-stone-300 whitespace-nowrap"
     />
   );
 }
@@ -51,7 +51,7 @@ function ParticipantList({ participantIds, users }: { participantIds: string[]; 
 
   return (
     <div className="flex flex-wrap items-center gap-1 mt-1.5">
-      <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Participants:</span>
+      <span className="text-xs text-stone-600 dark:text-stone-300 mr-1">Participants:</span>
       {participantIds.map((id) => (
         <UserBadge key={id} user={users[id]} size={18} className="text-xs text-stone-600 dark:text-stone-300" />
       ))}
@@ -66,12 +66,12 @@ function SpeakerRow({ speaker, users }: { speaker: TopicSpeaker; users: Record<s
 
   return (
     <div className="flex items-start gap-2 py-1 pl-4 border-l-2 border-stone-200 dark:border-stone-700">
-      <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">{label}:</span>
+      <span className="text-xs text-stone-600 dark:text-stone-300 shrink-0">{label}:</span>
       <span className="text-sm text-stone-600 dark:text-stone-300">
         <InlineMarkdown>{speaker.topic}</InlineMarkdown>
       </span>
       {speaker.duration !== undefined && (
-        <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">{formatDuration(speaker.duration)}</span>
+        <span className="text-xs text-stone-600 dark:text-stone-300 shrink-0">{formatDuration(speaker.duration)}</span>
       )}
       <UserBadge
         user={users[speaker.userId]}
@@ -143,7 +143,7 @@ function AgendaItemFinishedEntry({
           <span className="text-sm text-stone-800 dark:text-stone-200">
             <span className="font-medium">Finished:</span> <InlineMarkdown>{entry.itemName}</InlineMarkdown>
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+          <span className="text-xs text-stone-600 dark:text-stone-300">{formatDuration(entry.duration)}</span>
           <UserBadge
             user={users[entry.chairId]}
             size={18}
@@ -153,13 +153,13 @@ function AgendaItemFinishedEntry({
         <ParticipantList participantIds={entry.participantIds} users={users} />
         {entry.conclusion && (
           <div className="mt-1.5 text-sm text-stone-700 dark:text-stone-300">
-            <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Conclusion:</span>
+            <span className="text-xs text-stone-600 dark:text-stone-300 mr-1">Conclusion:</span>
             <InlineMarkdown>{entry.conclusion}</InlineMarkdown>
           </div>
         )}
         {entry.remainingQueue && (
           <details className="mt-1.5">
-            <summary className="text-xs text-stone-400 dark:text-stone-500 cursor-pointer hover:text-stone-600 dark:hover:text-stone-300">
+            <summary className="text-xs text-stone-600 dark:text-stone-300 cursor-pointer hover:text-stone-600 dark:hover:text-stone-300">
               Remaining queue
             </summary>
             <pre className="text-xs text-stone-500 dark:text-stone-400 mt-1 whitespace-pre-wrap font-mono bg-stone-100 dark:bg-stone-800 rounded p-2">
@@ -191,7 +191,7 @@ function TopicDiscussedEntry({
           <span className="text-sm text-stone-600 dark:text-stone-300">
             <InlineMarkdown>{entry.topicName}</InlineMarkdown>
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+          <span className="text-xs text-stone-600 dark:text-stone-300">{formatDuration(entry.duration)}</span>
           <UserBadge
             user={users[speaker.userId]}
             size={18}
@@ -213,7 +213,7 @@ function TopicDiscussedEntry({
         <span className="text-sm text-stone-600 dark:text-stone-300">
           <InlineMarkdown>{entry.topicName}</InlineMarkdown>
         </span>
-        <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+        <span className="text-xs text-stone-600 dark:text-stone-300">{formatDuration(entry.duration)}</span>
         <UserBadge
           user={users[firstSpeaker.userId]}
           size={18}
@@ -240,7 +240,7 @@ function PollRanEntry({ entry, users }: { entry: LogEntry & { type: 'poll-ran' }
           <span className="text-sm text-stone-800 dark:text-stone-200">
             {entry.topic ? <>Ran a poll: {entry.topic}</> : 'Ran a poll'}
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">{formatDuration(entry.duration)}</span>
+          <span className="text-xs text-stone-600 dark:text-stone-300">{formatDuration(entry.duration)}</span>
           <span className="text-xs text-stone-500 dark:text-stone-400">
             {entry.totalVoters} voter{entry.totalVoters !== 1 ? 's' : ''}
           </span>

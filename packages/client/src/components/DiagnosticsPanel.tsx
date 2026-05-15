@@ -221,7 +221,7 @@ function PersistenceSection({ health }: { health: PersistenceHealth }) {
         label="Last failure"
         value={
           health.lastSyncFailedAt ? (
-            <span className={failing ? 'text-red-600 dark:text-red-400' : undefined}>
+            <span className={failing ? 'text-red-700 dark:text-red-400' : undefined}>
               <RelativeTime timestamp={health.lastSyncFailedAt} />
             </span>
           ) : (
@@ -233,7 +233,7 @@ function PersistenceSection({ health }: { health: PersistenceHealth }) {
         <Row
           label="Last error"
           value={
-            <span className="text-red-600 dark:text-red-400 truncate max-w-[16rem]" title={health.lastSyncError}>
+            <span className="text-red-700 dark:text-red-400 truncate max-w-[16rem]" title={health.lastSyncError}>
               {health.lastSyncError}
             </span>
           }
@@ -248,12 +248,12 @@ function ErrorsSection({ totalSinceStart, recent }: { totalSinceStart: number; r
     <div className="md:col-span-2">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">
         Recent errors{' '}
-        <span className="font-normal normal-case tracking-normal text-stone-400 dark:text-stone-500">
+        <span className="font-normal normal-case tracking-normal text-stone-600 dark:text-stone-300">
           ({totalSinceStart} since start)
         </span>
       </h3>
       {recent.length === 0 ? (
-        <p className="text-sm text-stone-400 dark:text-stone-500 italic">No errors recorded.</p>
+        <p className="text-sm text-stone-600 dark:text-stone-300 italic">No errors recorded.</p>
       ) : (
         <div className="max-h-48 overflow-y-auto border border-stone-200 dark:border-stone-700 rounded text-xs">
           <ul className="divide-y divide-stone-100 dark:divide-stone-700">
@@ -261,7 +261,7 @@ function ErrorsSection({ totalSinceStart, recent }: { totalSinceStart: number; r
               <li key={i} className="px-2 py-1.5 flex gap-2 even:bg-stone-100 dark:even:bg-stone-800/50">
                 <span
                   className={`shrink-0 font-medium uppercase ${
-                    e.severity === 'CRITICAL' ? 'text-red-700 dark:text-red-300' : 'text-red-600 dark:text-red-400'
+                    e.severity === 'CRITICAL' ? 'text-red-700 dark:text-red-300' : 'text-red-700 dark:text-red-400'
                   }`}
                   aria-label={`severity ${e.severity}`}
                 >

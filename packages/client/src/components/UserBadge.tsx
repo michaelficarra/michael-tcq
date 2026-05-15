@@ -49,7 +49,7 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
           style={{ width: size, height: size, minWidth: size, minHeight: size }}
           className="rounded-full shrink-0"
         />
-        <span className="text-stone-400 dark:text-stone-500 italic">unknown</span>
+        <span className="text-stone-600 dark:text-stone-300 italic">unknown</span>
       </span>
     );
   }
@@ -101,7 +101,7 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
           // company string doesn't make the badge run off the row. The
           // username and display name stay un-truncated — those are the
           // identifying labels and need to be readable in full.
-          <span className="text-stone-400 dark:text-stone-500" title={user.organisation}>
+          <span className="text-stone-600 dark:text-stone-300" title={user.organisation}>
             {' ('}
             <span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>
             {')'}

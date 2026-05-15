@@ -101,7 +101,7 @@ export function MyMeetingsPanel() {
                 <td className="px-4 py-2">
                   <Link
                     to={`/meeting/${m.id}`}
-                    className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
+                    className="text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
                   >
                     {m.id}
                   </Link>

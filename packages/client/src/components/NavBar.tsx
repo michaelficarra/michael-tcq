@@ -42,7 +42,7 @@ function TabButton({
       className={`group flex items-center py-3 text-base font-medium cursor-pointer transition-colors ${
         isActive
           ? 'text-stone-900 dark:text-stone-100'
-          : 'text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300'
+          : 'text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100'
       }`}
       onClick={(e) => {
         // Let modifier-clicks (Ctrl/Cmd/Shift/Alt) fall through to the browser

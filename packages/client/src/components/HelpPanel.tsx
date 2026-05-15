@@ -63,21 +63,22 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
         </p>
         <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
           <li>
-            <strong className="text-red-600 dark:text-red-400">Point of Order</strong> — for procedural matters that
+            <strong className="text-red-700 dark:text-red-400">Point of Order</strong> — for procedural matters that
             need immediate attention (e.g. "the notes document isn't working", "remote attendees cannot hear the
             presenter"). Use sparingly.
           </li>
           <li>
-            <strong className="text-green-600">Clarifying Question</strong> — for brief factual questions about what was
-            just said. Not for expressing opinions or raising new discussion points.
+            <strong className="text-green-700 dark:text-green-400">Clarifying Question</strong> — for brief factual
+            questions about what was just said. Not for expressing opinions or raising new discussion points.
           </li>
           <li>
-            <strong className="text-cyan-600">Reply</strong> — to respond directly to the current topic being discussed.
-            Only available when there is an active topic. Use this to stay on-topic rather than raising a new thread.
+            <strong className="text-cyan-700 dark:text-cyan-400">Reply</strong> — to respond directly to the current
+            topic being discussed. Only available when there is an active topic. Use this to stay on-topic rather than
+            raising a new thread.
           </li>
           <li>
-            <strong className="text-blue-600">New Topic</strong> — to raise a new line of discussion. This has the
-            lowest priority, so points of order, questions, and replies will be addressed first.
+            <strong className="text-blue-700 dark:text-blue-400">New Topic</strong> — to raise a new line of discussion.
+            This has the lowest priority, so points of order, questions, and replies will be addressed first.
           </li>
         </ul>
 

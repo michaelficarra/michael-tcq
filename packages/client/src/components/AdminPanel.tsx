@@ -90,7 +90,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
       </h2>
 
       {meetings.length === 0 ? (
-        <p className="text-sm text-stone-400 dark:text-stone-500 italic">No active meetings.</p>
+        <p className="text-sm text-stone-600 dark:text-stone-300 italic">No active meetings.</p>
       ) : (
         <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 overflow-hidden">
           <table className="w-full text-sm">
@@ -112,7 +112,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                 // undone by `no-underline` on the child, so striking
                 // the row would strike the Restore button too. Cell-
                 // level decoration leaves the action column clean.
-                const struck = isDeleted ? 'line-through text-stone-400 dark:text-stone-500' : '';
+                const struck = isDeleted ? 'line-through text-stone-600 dark:text-stone-300' : '';
                 return (
                   <tr
                     key={m.id}
@@ -124,7 +124,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                       ) : (
                         <Link
                           to={`/meeting/${m.id}`}
-                          className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
+                          className="text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
                         >
                           {m.id}
                         </Link>
@@ -146,7 +146,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                       {isDeleted ? (
                         <button
                           onClick={() => handleRestore(m.id)}
-                          className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
+                          className="text-xs text-stone-600 dark:text-stone-300 hover:text-teal-600 dark:hover:text-teal-400
                                      transition-colors cursor-pointer"
                         >
                           Restore
@@ -154,7 +154,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                       ) : (
                         <button
                           onClick={() => setDeleteConfirm(m.id)}
-                          className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
+                          className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400
                                      transition-colors cursor-pointer"
                         >
                           Delete
@@ -191,7 +191,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
+                className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100
                            transition-colors cursor-pointer"
               >
                 Cancel
@@ -199,8 +199,8 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
               <button
                 onClick={() => handleDelete(deleteConfirm)}
                 autoFocus
-                className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                           hover:bg-red-600 transition-colors cursor-pointer
+                className="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium
+                           hover:bg-red-700 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Delete

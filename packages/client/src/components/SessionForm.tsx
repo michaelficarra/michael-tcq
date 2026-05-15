@@ -83,15 +83,15 @@ export function SessionForm({ onCancel, onSubmit }: SessionFormProps) {
                        dark:bg-stone-700 dark:text-stone-100
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">Minutes</p>
+          <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5">Minutes</p>
         </div>
 
         {/* Buttons — vertically centred relative to the input row */}
         <div className="flex gap-2 self-center">
           <button
             type="submit"
-            className="bg-teal-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                       hover:bg-teal-600 transition-colors cursor-pointer
+            className="bg-teal-700 text-white px-4 py-1.5 rounded text-sm font-medium
+                       hover:bg-teal-800 transition-colors cursor-pointer
                        focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
           >
             Create
@@ -99,8 +99,8 @@ export function SessionForm({ onCancel, onSubmit }: SessionFormProps) {
           <button
             type="button"
             onClick={onCancel}
-            className="bg-rose-400 text-white px-4 py-1.5 rounded text-sm font-medium
-                       hover:bg-rose-500 transition-colors cursor-pointer
+            className="bg-rose-600 text-white px-4 py-1.5 rounded text-sm font-medium
+                       hover:bg-rose-700 transition-colors cursor-pointer
                        focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
           >
             Cancel

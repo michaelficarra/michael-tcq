@@ -194,7 +194,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
       {/* Agenda item list */}
       {meeting.agenda.length === 0 && !showForm && !showSessionForm ? (
         <div className="mb-4">
-          <p className="text-stone-400 dark:text-stone-500 italic mb-2">No agenda items yet.</p>
+          <p className="text-stone-600 dark:text-stone-300 italic mb-2">No agenda items yet.</p>
           {isChair && !showImport && (
             <button
               onClick={() => {
@@ -254,8 +254,8 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
               <button
                 type="submit"
                 disabled={importing}
-                className="bg-teal-500 text-white px-3 py-1 rounded text-sm font-medium
-                           enabled:hover:bg-teal-600 transition-colors cursor-pointer
+                className="bg-teal-700 text-white px-3 py-1 rounded text-sm font-medium
+                           enabled:hover:bg-teal-800 transition-colors cursor-pointer
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {importing ? 'Importing…' : 'Import'}
@@ -267,12 +267,12 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                   setImportUrl('');
                   setImportError(null);
                 }}
-                className="text-sm text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
+                className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               {importError && (
-                <p className="text-red-600 dark:text-red-400 text-sm w-full" role="alert">
+                <p className="text-red-700 dark:text-red-400 text-sm w-full" role="alert">
                   {importError}
                 </p>
               )}
@@ -475,7 +475,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
         style={style}
         className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
-        <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
+        <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
           {displayNumber}
         </span>
 
@@ -515,14 +515,14 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
           />
           <button
             type="submit"
-            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+            className="text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
           >
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
           >
             Cancel
           </button>
@@ -543,7 +543,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >
       {/* Item number */}
-      <span className="text-lg font-semibold text-stone-400 dark:text-stone-500 tabular-nums min-w-[1.5rem] text-right select-none">
+      <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
         {displayNumber}
       </span>
 
@@ -571,7 +571,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             and as an "estimate" for current and future items. */}
         {item.duration != null && item.duration > 0 && (
           <span
-            className="ml-2 text-sm text-stone-400 dark:text-stone-500 align-middle"
+            className="ml-2 text-sm text-stone-600 dark:text-stone-300 align-middle"
             title={isPast ? 'Duration' : 'Estimate'}
             aria-label={`${isPast ? 'Duration' : 'Estimate'}: ${formatShortDuration(item.duration)}`}
           >
@@ -583,7 +583,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             by the chair via the next-agenda confirmation dialog. */}
         {isPast && item.conclusion && (
           <div className="text-sm text-stone-600 dark:text-stone-400 mt-0.5">
-            <span className="text-xs text-stone-400 dark:text-stone-500 mr-1">Conclusion:</span>
+            <span className="text-xs text-stone-600 dark:text-stone-300 mr-1">Conclusion:</span>
             <InlineMarkdown>{item.conclusion}</InlineMarkdown>
           </div>
         )}
@@ -594,14 +594,14 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
         <div className="flex gap-3 shrink-0 presentation-hidden">
           <button
             onClick={startEditing}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
             aria-label={`Edit ${item.name}`}
           >
             edit
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             aria-label={`Delete ${item.name}`}
           >
             delete
@@ -701,14 +701,14 @@ const SortableSession = memo(function SortableSession({
           />
           <button
             type="submit"
-            className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+            className="text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
           >
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
           >
             Cancel
           </button>
@@ -745,7 +745,7 @@ const SortableSession = memo(function SortableSession({
           used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
         </span>
         {overflowing ? (
-          <span className="text-red-600 dark:text-red-400">
+          <span className="text-red-700 dark:text-red-400">
             overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
           </span>
         ) : (
@@ -760,14 +760,14 @@ const SortableSession = memo(function SortableSession({
         <div className="flex gap-3 shrink-0 presentation-hidden">
           <button
             onClick={startEditing}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
             aria-label={`Edit session ${session.name}`}
           >
             edit
           </button>
           <button
             onClick={() => onDelete(session.id)}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             aria-label={`Delete session ${session.name}`}
           >
             delete
@@ -888,7 +888,7 @@ function ChairsSection() {
             <button
               type="button"
               onClick={() => setAdding(false)}
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+              className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
             </button>
@@ -915,7 +915,7 @@ function ChairsSection() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setRemoveConfirm(null)}
-                className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
+                className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100
                            transition-colors cursor-pointer"
               >
                 Cancel
@@ -923,8 +923,8 @@ function ChairsSection() {
               <button
                 onClick={() => handleRemove(removeConfirm)}
                 autoFocus
-                className="bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium
-                           hover:bg-red-600 transition-colors cursor-pointer
+                className="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium
+                           hover:bg-red-700 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
               >
                 Remove
@@ -1104,18 +1104,18 @@ function EditableMarkdownSection({
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+              className="text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
             >
               Save
             </button>
             <button
               type="button"
               onClick={cancelEditing}
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+              className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
             >
               Cancel
             </button>
-            <span className="text-xs text-stone-400 dark:text-stone-500">
+            <span className="text-xs text-stone-600 dark:text-stone-300">
               {/* Hint mirrors the queue-edit shortcut for muscle-memory consistency. */}
               Ctrl/Cmd+Enter to save
             </span>
@@ -1167,7 +1167,7 @@ function EditableMarkdownSection({
           <button
             type="button"
             onClick={startEditing}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
             aria-label={`Edit ${kind}`}
           >
             edit
@@ -1175,7 +1175,7 @@ function EditableMarkdownSection({
           <button
             type="button"
             onClick={() => setDeleteConfirm(true)}
-            className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+            className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             aria-label={`Delete ${kind}`}
           >
             delete
@@ -1223,8 +1223,8 @@ interface ConfirmDialogueProps {
 function ConfirmDialogue({ title, body, confirmLabel, confirmVariant, onCancel, onConfirm }: ConfirmDialogueProps) {
   const confirmClasses =
     confirmVariant === 'red'
-      ? 'bg-red-500 hover:bg-red-600 focus:ring-red-500'
-      : 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500';
+      ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+      : 'bg-amber-700 hover:bg-amber-800 focus:ring-amber-500';
   return (
     <div
       className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
@@ -1242,7 +1242,7 @@ function ConfirmDialogue({ title, body, confirmLabel, confirmVariant, onCancel, 
           <button
             type="button"
             onClick={onCancel}
-            className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300
+            className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-800 dark:hover:text-stone-100
                        transition-colors cursor-pointer"
           >
             Cancel

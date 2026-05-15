@@ -73,7 +73,7 @@ export function PreferencesModal() {
           <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">Preferences</h2>
           <button
             onClick={closePreferences}
-            className="text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
+            className="text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
             aria-label="Close"
           >
             ✕

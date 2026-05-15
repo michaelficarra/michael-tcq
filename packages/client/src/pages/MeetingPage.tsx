@@ -233,7 +233,7 @@ function MeetingPageInner() {
           </p>
           <Link
             to="/"
-            className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
+            className="text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
           >
             Back to home
           </Link>

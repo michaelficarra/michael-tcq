@@ -56,8 +56,8 @@ export function CountUpTimer({ since, className, overAfterMinutes }: CountUpTime
   const isOver = overAfterMinutes != null && elapsed > overAfterMinutes * 60_000;
   const hasEstimate = overAfterMinutes != null && overAfterMinutes > 0;
 
-  const defaultClass = 'text-xs text-stone-400 dark:text-stone-500 tabular-nums';
-  const overClass = 'text-xs font-bold text-red-600 dark:text-red-400 tabular-nums';
+  const defaultClass = 'text-xs text-stone-600 dark:text-stone-300 tabular-nums';
+  const overClass = 'text-xs font-bold text-red-700 dark:text-red-400 tabular-nums';
 
   // The timebox-end annotation: only meaningful when an estimate is set.
   // Before the deadline → projected wall-clock end time (with day suffix

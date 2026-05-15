@@ -467,6 +467,10 @@ Pressing `f` again (or exiting fullscreen via the browser) returns to normal mod
 
 The application supports light and dark palettes, controlled by the **Colour scheme** setting in the Preferences modal. The default is `System`, which follows the operating system's `prefers-color-scheme` and switches live when the OS setting changes. Users can override by selecting `Light` or `Dark`, and the choice is persisted to `localStorage`.
 
+## Accessibility
+
+UI elements should meet the WCAG 2 AA minimum contrast ratio thresholds (4.5:1 for normal text, 3:1 for large text) in both the light and dark palettes so that users with low vision can read the interface without strain.
+
 ## Real-Time Updates
 
 All meeting state changes are broadcast to all connected participants in real time. This includes:

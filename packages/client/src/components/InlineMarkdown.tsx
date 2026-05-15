@@ -37,7 +37,7 @@ interface InlineMarkdownProps {
 // rendered link here is external (target="_blank") so the class is always
 // applied.
 const LINK_CLASS =
-  'external-link text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 underline';
+  'external-link text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 underline';
 const CODE_CLASS = 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 px-1 rounded text-[0.9em]';
 
 // -- URL safety (mirrors the server-side validator) ---------------------

@@ -58,7 +58,7 @@ export function KeyboardShortcutsDialog({
               className={`text-xs border rounded px-2 py-0.5 cursor-pointer transition-colors ${
                 enabled
                   ? 'border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
-                  : 'border-teal-400 dark:border-teal-600 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/30'
+                  : 'border-teal-400 dark:border-teal-600 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/30'
               }`}
             >
               {enabled ? 'Disable' : 'Enable'}
@@ -66,7 +66,7 @@ export function KeyboardShortcutsDialog({
           </div>
           <button
             onClick={onClose}
-            className="text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
+            className="text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
             aria-label="Close"
           >
             ✕
@@ -81,7 +81,7 @@ export function KeyboardShortcutsDialog({
                   <tr key={`heading-${category}`}>
                     <td
                       colSpan={2}
-                      className={`text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wide pb-1 ${groupIndex === 0 ? 'pt-0' : 'pt-4'}`}
+                      className={`text-xs font-medium text-stone-600 dark:text-stone-300 uppercase tracking-wide pb-1 ${groupIndex === 0 ? 'pt-0' : 'pt-4'}`}
                     >
                       {category}
                     </td>
@@ -105,7 +105,7 @@ export function KeyboardShortcutsDialog({
           </tbody>
         </table>
 
-        <p className="text-xs text-stone-400 dark:text-stone-500 mt-4">
+        <p className="text-xs text-stone-600 dark:text-stone-300 mt-4">
           {enabled
             ? 'Shortcuts are disabled when typing in a text field.'
             : 'Keyboard shortcuts are currently disabled.'}

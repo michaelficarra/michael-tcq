@@ -736,7 +736,7 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
             // the load-bearing identifiers for matching the right user.
             // The parens stay outside the truncation so the closing `)`
             // is always visible.
-            <span className="text-stone-400 dark:text-stone-500 text-xs" title={user.organisation}>
+            <span className="text-stone-600 dark:text-stone-300 text-xs" title={user.organisation}>
               (<span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>)
             </span>
           )}
