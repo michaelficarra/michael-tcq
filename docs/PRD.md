@@ -471,6 +471,8 @@ The application supports light and dark palettes, controlled by the **Colour sch
 
 UI elements should meet the WCAG 2 AA minimum contrast ratio thresholds (4.5:1 for normal text, 3:1 for large text) in both the light and dark palettes so that users with low vision can read the interface without strain.
 
+Any animations should be disabled when the user agent indicates that the user prefers reduced motion (i.e. the CSS `prefers-reduced-motion: reduce` media query matches).
+
 ## Real-Time Updates
 
 All meeting state changes are broadcast to all connected participants in real time. This includes:
