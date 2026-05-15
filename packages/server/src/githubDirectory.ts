@@ -2,13 +2,21 @@
  * GitHub user directory backing the username autocomplete dropdown.
  *
  * Holds two server-wide caches:
- *   - `orgMembers`: org login → set of members (public + concealed) of that
- *     org. Filled by calling `GET /orgs/{org}/members` with the OAuth token
- *     of any logged-in user who is themselves a member of the org.
- *   - `userOrgs`: user ghid → list of org logins they belong to. Filled by
- *     calling `GET /user/orgs` with that user's OAuth token. Acts as the
- *     ACL when answering autocomplete requests — a searcher can only see
- *     members of orgs they themselves belong to.
+ *   - `orgMembers`: org login → set of *public* members of that org,
+ *     each enriched with display name and company so autocomplete and
+ *     agenda import can resolve real-world names that diverge from the
+ *     GitHub login. Filled in two steps: REST `GET /orgs/{org}/public_members`
+ *     enumerates the public membership (no `read:org` scope needed),
+ *     then a batched GraphQL query against `user(login: ...)` fetches
+ *     name + company for up to 100 logins per round-trip. Concealed
+ *     members are intentionally not surfaced — we don't request
+ *     `read:org` and so cannot read them.
+ *   - `userOrgs`: user ghid → list of org logins the user is *publicly* a
+ *     member of. Filled by calling `GET /user/orgs` with that user's
+ *     OAuth token; without `read:org` this endpoint returns only the
+ *     user's public memberships. Acts as the ACL when answering
+ *     autocomplete requests — a searcher can only see members of orgs
+ *     they themselves are a public member of.
  *
  * The cache lives only in process memory. On Cloud Run cold starts each
  * instance pays one refresh per active user; that's acceptable for
@@ -18,16 +26,16 @@
  * `searchUsers` answers autocomplete requests in three tiers:
  *   1. Users in the same meeting as the searcher (the meeting's `users`
  *      map). Fuzzy match.
- *   2. Members of orgs the searcher belongs to. Fuzzy match.
+ *   2. Public members of orgs the searcher publicly belongs to. Fuzzy match.
  *   3. Global GitHub user search via `/search/users`, only called if the
  *      first two tiers produced fewer than `limit` matches. Capped at
  *      `limit` results so even when every result overlaps with tiers 1/2
  *      after dedup the dropdown can still be filled.
  *
  * Tokens revoked or expired by the user are detected centrally in
- * `githubFetchAs`: any 401 clears the searcher's `accessToken` so we don't
- * keep retrying with a known-bad credential, and the request silently
- * degrades (returns `null`).
+ * `githubFetchAs` / `githubGraphqlAs`: any 401 clears the searcher's
+ * `accessToken` so we don't keep retrying with a known-bad credential,
+ * and the request silently degrades (returns `null`).
  */
 
 import type { MeetingState, User, UserKey } from '@tcq/shared';
@@ -194,51 +202,95 @@ function isFresh(fetchedAt: number): boolean {
 }
 
 /**
- * GraphQL query for paginated org membership. Returns members with role
- * (both public and concealed when the caller is a member) and folds in
- * `name` and `company` per node, which the REST `/orgs/{org}/members`
- * endpoint does not expose. Saves us N follow-up `/users/{login}` calls
- * for the display name and company-match data.
+ * Shape of one entry in the `/orgs/{org}/public_members` REST response.
+ * The endpoint returns the standard `SimpleUser` object; the directory
+ * only needs id, login, and avatar_url here. Display name and company are
+ * filled in by a follow-up GraphQL enrichment query.
  */
-const ORG_MEMBERS_QUERY = `
-query OrgMembers($org: String!, $cursor: String) {
-  organization(login: $org) {
-    membersWithRole(first: 100, after: $cursor) {
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        databaseId
-        login
-        name
-        company
-        avatarUrl(size: 80)
-      }
-    }
-  }
-}
-`;
-
-interface OrgMembersConnection {
-  pageInfo: { hasNextPage: boolean; endCursor: string | null };
-  nodes: Array<{
-    databaseId: number | null;
-    login: string;
-    name: string | null;
-    company: string | null;
-    avatarUrl: string;
-  }>;
+interface PublicMemberRest {
+  id: number;
+  login: string;
+  avatar_url: string;
 }
 
-interface OrgMembersGraphqlResponse {
-  organization: { membersWithRole: OrgMembersConnection } | null;
+/** Per-login enrichment result from the batched GraphQL `user(login: ...)` query. */
+interface EnrichedUserNode {
+  databaseId: number | null;
+  login: string;
+  name: string | null;
+  company: string | null;
 }
 
 /**
- * Refresh the membership of one org if stale. Uses the GraphQL API to
- * fetch login + databaseId + name + company + avatarUrl in one query per
- * page (versus REST, which only returns login/id/avatar_url and would
- * require N follow-up `/users/{login}` calls to get name and company).
- * The GraphQL endpoint returns concealed members too when the caller is a
- * member of the org. Coalesces concurrent refreshes via `inflightOrgRefresh`.
+ * Maximum logins enriched in one GraphQL request. The alias pattern below
+ * generates one field per login; GitHub's GraphQL API caps total node count
+ * per request well above this, and keeping the batch at 100 keeps each
+ * request a similar shape to a single REST page.
+ */
+const ENRICH_BATCH_SIZE = 100;
+
+/**
+ * GitHub usernames are 1–39 characters of alphanumerics-or-hyphen (no
+ * leading or trailing hyphen, no consecutive hyphens). The character set
+ * is what matters for safe interpolation into a GraphQL string literal —
+ * the regex below is intentionally a permissive superset (allowing
+ * leading/consecutive hyphens) because the only goal here is to keep the
+ * GraphQL syntactically valid. Anything failing the regex is skipped
+ * silently; the public_members data we already have for that user stays.
+ */
+const SAFE_LOGIN_FOR_GRAPHQL = /^[A-Za-z0-9-]{1,39}$/;
+
+/**
+ * Enrich a list of GitHub logins with display name + company via one or
+ * more batched GraphQL queries. Each request looks like:
+ *
+ *   query { u0: user(login: "alice") { databaseId login name company }
+ *           u1: user(login: "bob")   { databaseId login name company } ... }
+ *
+ * which fetches up to `ENRICH_BATCH_SIZE` users in a single HTTP round-trip.
+ * Returns a Map keyed by lowercased login; missing entries (404s, deleted
+ * users, validation failures) are simply absent and the caller falls back
+ * to the basic info it already had.
+ */
+async function enrichLoginsWithNameAndCompany(
+  session: SessionUser,
+  logins: string[],
+): Promise<Map<string, EnrichedUserNode>> {
+  const out = new Map<string, EnrichedUserNode>();
+  for (let i = 0; i < logins.length; i += ENRICH_BATCH_SIZE) {
+    const batch = logins.slice(i, i + ENRICH_BATCH_SIZE).filter((l) => SAFE_LOGIN_FOR_GRAPHQL.test(l));
+    if (batch.length === 0) continue;
+    const aliases = batch
+      .map((login, idx) => `u${idx}: user(login: "${login}") { databaseId login name company }`)
+      .join('\n  ');
+    const query = `query { ${aliases} }`;
+    // No variables — the aliases above are statically generated and the
+    // login values are character-set-validated, so direct interpolation
+    // is safe and avoids the need for dynamic variable declarations.
+    const data = await githubGraphqlAs<Record<string, EnrichedUserNode | null>>(session, query, {});
+    if (!data) continue; // network / auth / GraphQL-errors failure — keep what we have
+    for (const node of Object.values(data)) {
+      if (node) out.set(node.login.toLowerCase(), node);
+    }
+  }
+  return out;
+}
+
+/**
+ * Refresh the public membership of one org if stale.
+ *
+ * Step 1: REST `GET /orgs/{org}/public_members` paginated with
+ *   `?per_page=100&page=N`. Yields login + numeric id + avatar URL for
+ *   each public member. Stops when a page comes back shorter than
+ *   `per_page` (the canonical "no more pages" signal for GitHub's
+ *   offset-paginated list endpoints) or when we hit `MAX_ORG_PAGES`.
+ *
+ * Step 2: batched GraphQL enrichment via `user(login: ...)` aliases —
+ *   ~one HTTP round-trip per 100 members — to fill in display name and
+ *   company. These would otherwise require an N+1 set of REST
+ *   `/users/{login}` calls.
+ *
+ * Coalesces concurrent refreshes for the same org via `inflightOrgRefresh`.
  */
 async function refreshOrgMembers(session: SessionUser, org: string): Promise<void> {
   const existing = orgMembers.get(org);
@@ -248,34 +300,57 @@ async function refreshOrgMembers(session: SessionUser, org: string): Promise<voi
   if (inflight) return inflight;
 
   const refresh: Promise<void> = (async () => {
-    const members = new Map<number, DirectoryUser>();
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_ORG_PAGES; page++) {
-      const data: OrgMembersGraphqlResponse | null = await githubGraphqlAs<OrgMembersGraphqlResponse>(
+    // Step 1: enumerate the org's public members.
+    const basic: PublicMemberRest[] = [];
+    const PER_PAGE = 100;
+    for (let page = 1; page <= MAX_ORG_PAGES; page++) {
+      const res = await githubFetchAs(
         session,
-        ORG_MEMBERS_QUERY,
-        { org, cursor },
+        `https://api.github.com/orgs/${encodeURIComponent(org)}/public_members?per_page=${PER_PAGE}&page=${page}`,
       );
       // null means auth or network failure — preserve any previously cached
       // entry rather than replacing it with an empty set.
-      if (!data) return;
-      const conn: OrgMembersConnection | undefined = data.organization?.membersWithRole;
-      if (!conn) return; // org doesn't exist or is hidden — leave cache as-is
-      for (const node of conn.nodes) {
-        // databaseId is nullable in the schema only because GitHub no
-        // longer guarantees it for ghost users. In practice it's always
-        // populated for real org members; skip the rare null.
-        if (node.databaseId == null) continue;
-        members.set(node.databaseId, {
-          ghid: node.databaseId,
-          login: node.login,
-          name: node.name?.trim() || node.login,
-          organisation: node.company?.trim() ?? '',
-          avatarUrl: node.avatarUrl,
+      if (!res) return;
+      // 404 means the org doesn't exist (or has no public-members listing
+      // at all). Leave any previously cached entry untouched.
+      if (res.status === 404) return;
+      if (!res.ok) {
+        warning('github_org_members_fetch_failed', {
+          org,
+          status: res.status,
+          ghUsername: session.ghUsername,
         });
+        return;
       }
-      if (!conn.pageInfo.hasNextPage) break;
-      cursor = conn.pageInfo.endCursor;
+      const data = (await res.json()) as PublicMemberRest[];
+      basic.push(...data);
+      // Short page → last page. The `data.length === 0` case is the
+      // empty-org degenerate path (no public members at all) and also
+      // exits cleanly here.
+      if (data.length < PER_PAGE) break;
+    }
+
+    // Step 2: enrich each member with display name + company in batches.
+    const enriched = await enrichLoginsWithNameAndCompany(
+      session,
+      basic.map((m) => m.login),
+    );
+
+    const members = new Map<number, DirectoryUser>();
+    for (const m of basic) {
+      const e = enriched.get(m.login.toLowerCase());
+      members.set(m.id, {
+        ghid: m.id,
+        login: m.login,
+        // `||` (not `??`) so a whitespace-only `name` from GitHub also
+        // falls through to the login — same defensive shape used by
+        // `fetchGitHubUser` in `auth.ts`.
+        name: e?.name?.trim() || m.login,
+        organisation: e?.company?.trim() ?? '',
+        // Use the URL the REST API hands back directly — same as tier 3 does
+        // for `/search/users` results. No size suffix; the CSS sizes it.
+        avatarUrl: m.avatar_url,
+      });
     }
     orgMembers.set(org, { fetchedAt: Date.now(), members });
   })().finally(() => {
@@ -299,6 +374,10 @@ async function refreshUserOrgs(session: SessionUser): Promise<void> {
 
   const refresh = (async () => {
     // Single page is fine — the limit on user/orgs is rarely above one page.
+    // Without `read:org` this endpoint returns only the user's *public*
+    // org memberships, which is exactly the ACL we want for the
+    // reduced-permission directory (a searcher can see members of orgs
+    // they publicly belong to, and only those).
     const res = await githubFetchAs(session, 'https://api.github.com/user/orgs?per_page=100');
     if (!res || !res.ok) {
       if (res) warning('github_user_orgs_fetch_failed', { ghUsername: session.ghUsername, status: res.status });

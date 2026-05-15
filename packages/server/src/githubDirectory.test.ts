@@ -30,13 +30,15 @@ function makeSession(overrides: Partial<SessionUser> = {}): SessionUser {
  * Minimal MeetingState fixture. We only consume `users` from the meeting
  * inside the directory module, so the rest can be left as defaults.
  */
-function makeMeeting(users: Record<string, { ghid: number; ghUsername: string; name: string }>): MeetingState {
+function makeMeeting(
+  users: Record<string, { ghid: number; ghUsername: string; name: string; organisation?: string }>,
+): MeetingState {
   return {
     id: 'm1',
     createdAt: new Date().toISOString(),
     participantIds: [],
     users: Object.fromEntries(
-      Object.entries(users).map(([key, u]) => [key, { ...u, organisation: '' }]),
+      Object.entries(users).map(([key, u]) => [key, { ...u, organisation: u.organisation ?? '' }]),
     ) as MeetingState['users'],
     chairIds: [],
     agenda: [],
@@ -54,36 +56,85 @@ function jsonResponse(body: unknown, init: { status?: number } = {}): Response {
   });
 }
 
+/** Shape of one tier-2 member fixture (mirrors what production assembles after enrichment). */
+interface MemberFixture {
+  id: number;
+  login: string;
+  name?: string;
+  company?: string;
+  avatar_url?: string;
+}
+
 /**
- * Build a GraphQL response for the OrgMembers query. Mirrors the shape
- * the production code expects: a single page (hasNextPage=false) of
- * member nodes.
+ * Build a single-page REST response for `/orgs/{org}/public_members`. The
+ * production code only consumes id, login, and avatar_url from this call —
+ * name and company come from the GraphQL enrichment step below.
  */
-function graphqlMembersResponse(
-  members: Array<{
-    databaseId: number;
-    login: string;
-    name?: string | null;
-    company?: string | null;
-    avatarUrl: string;
-  }>,
-) {
-  return jsonResponse({
-    data: {
-      organization: {
-        membersWithRole: {
-          pageInfo: { hasNextPage: false, endCursor: null },
-          nodes: members.map((m) => ({
-            databaseId: m.databaseId,
-            login: m.login,
-            name: m.name ?? null,
-            company: m.company ?? null,
-            avatarUrl: m.avatarUrl,
-          })),
-        },
-      },
-    },
+function publicMembersResponse(members: MemberFixture[]): Response {
+  return jsonResponse(
+    members.map((m) => ({ id: m.id, login: m.login, avatar_url: m.avatar_url ?? `https://avatars/${m.id}` })),
+  );
+}
+
+/**
+ * Build a GraphQL enrichment response: one alias `u{N}` per requested
+ * login, each returning databaseId / login / name / company. The
+ * production code aliases logins by index, but our tests don't depend on
+ * the specific alias keys — they iterate `Object.values(data)`.
+ */
+function graphqlEnrichResponse(members: MemberFixture[]): Response {
+  const data: Record<string, { databaseId: number; login: string; name: string | null; company: string | null }> = {};
+  members.forEach((m, idx) => {
+    data[`u${idx}`] = {
+      databaseId: m.id,
+      login: m.login,
+      name: m.name ?? null,
+      company: m.company ?? null,
+    };
   });
+  return jsonResponse({ data });
+}
+
+/**
+ * One-shot fetch hook: routes /user/orgs, /orgs/{org}/public_members,
+ * /graphql (enrichment), and /search/users to fixtures. Pass `orgs` as
+ * the user's org list and `members` as the per-org fixture data. Any
+ * other URL throws.
+ */
+function fetchHookForOrgs(
+  orgs: string[],
+  membersByOrg: Record<string, MemberFixture[]>,
+  options: { search?: Array<{ id: number; login: string; avatar_url?: string }> } = {},
+): (url: string, init?: RequestInit) => Promise<Response> {
+  return async (url, init) => {
+    if (url.endsWith('/user/orgs?per_page=100')) {
+      return jsonResponse(orgs.map((login) => ({ login })));
+    }
+    const publicMembersMatch = url.match(/\/orgs\/([^/]+)\/public_members(?:\?|$)/);
+    if (publicMembersMatch) {
+      const org = decodeURIComponent(publicMembersMatch[1]);
+      if (membersByOrg[org]) return publicMembersResponse(membersByOrg[org]);
+      throw new Error(`unexpected org public_members fetch: ${org}`);
+    }
+    if (url === 'https://api.github.com/graphql') {
+      // Echo back enrichment for every login the production query asked
+      // for. Pull logins out of the query body and look them up in the
+      // flat union of all org members so a single org-spanning fixture
+      // map still answers correctly.
+      const body = init?.body ? (JSON.parse(init.body as string) as { query?: string }) : {};
+      const askedLogins = new Set<string>();
+      for (const m of (body.query ?? '').matchAll(/user\(login:\s*"([^"]+)"\)/g)) {
+        askedLogins.add(m[1]);
+      }
+      const flat = Object.values(membersByOrg).flat();
+      const matched = flat.filter((m) => askedLogins.has(m.login));
+      return graphqlEnrichResponse(matched);
+    }
+    if (url.includes('/search/users')) {
+      return jsonResponse({ items: options.search ?? [] });
+    }
+    throw new Error(`unexpected url: ${url}`);
+  };
 }
 
 /**
@@ -106,20 +157,6 @@ function matchesQuery(q: string, login: string, name: string, organisation: stri
   return false;
 }
 
-/**
- * Inspect a GraphQL POST body and route based on the `org` variable so a
- * single fetch hook can answer multiple orgs in one test.
- */
-async function readGraphqlOrg(init: RequestInit | undefined): Promise<string | undefined> {
-  if (!init?.body) return undefined;
-  try {
-    const parsed = JSON.parse(init.body as string) as { variables?: { org?: string } };
-    return parsed.variables?.org;
-  } catch {
-    return undefined;
-  }
-}
-
 describe('githubDirectory', () => {
   let restoreFetch: () => void = () => {};
   // Wrap real OAuth-on so the searchUsers function takes the real-mode branch
@@ -138,33 +175,26 @@ describe('githubDirectory', () => {
   });
 
   describe('warmDirectoryForUser', () => {
-    it('fetches the user orgs then each org members via GraphQL', async () => {
+    it('fetches the user orgs, then each org public_members, then a GraphQL enrichment per batch', async () => {
       const restCalls: string[] = [];
-      const graphqlOrgs: string[] = [];
       restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org) graphqlOrgs.push(org);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([{ databaseId: 10, login: 'alice', avatarUrl: 'a.png' }]);
-          }
-          if (org === 'wintercg') {
-            return graphqlMembersResponse([{ databaseId: 20, login: 'bob', avatarUrl: 'b.png' }]);
-          }
-          throw new Error(`unexpected GraphQL org: ${org}`);
-        }
         restCalls.push(url);
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }, { login: 'wintercg' }]);
-        }
-        throw new Error(`unexpected url: ${url}`);
+        const hook = fetchHookForOrgs(['tc39', 'wintercg'], {
+          tc39: [{ id: 10, login: 'alice', name: 'Alice', company: 'Acme' }],
+          wintercg: [{ id: 20, login: 'bob', name: 'Bob', company: 'Beta' }],
+        });
+        return hook(url, init);
       });
 
       await warmDirectoryForUser(makeSession());
 
-      // The org list comes first via REST, the per-org member queries via GraphQL.
+      // The org list comes first via /user/orgs.
       expect(restCalls[0]).toContain('/user/orgs');
-      expect(graphqlOrgs.sort()).toEqual(['tc39', 'wintercg']);
+      // Both orgs' public_members endpoints get hit.
+      expect(restCalls.some((u) => u.includes('/orgs/tc39/public_members'))).toBe(true);
+      expect(restCalls.some((u) => u.includes('/orgs/wintercg/public_members'))).toBe(true);
+      // The GraphQL endpoint is hit at least once (the enrichment batch).
+      expect(restCalls.filter((u) => u === 'https://api.github.com/graphql').length).toBeGreaterThanOrEqual(1);
     });
 
     it('drops the access token on a 401 from /user/orgs and stops further calls', async () => {
@@ -187,32 +217,56 @@ describe('githubDirectory', () => {
       await warmDirectoryForUser(makeSession({ accessToken: undefined }));
       expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it('handles a user with no public org memberships (empty list) cleanly', async () => {
+      // Without `read:org` GitHub returns only public memberships. A user
+      // who has concealed every membership shows up here as an empty list.
+      // The warm path must complete without errors and without ever calling
+      // the per-org members endpoint.
+      const session = makeSession();
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.endsWith('/user/orgs?per_page=100')) return jsonResponse([]);
+        throw new Error(`unexpected call for user with no public orgs: ${url}`);
+      });
+
+      await expect(warmDirectoryForUser(session)).resolves.toBeUndefined();
+      // Session still authenticated — empty orgs is a valid response, not an error.
+      expect(session.accessToken).toBe('token-searcher');
+    });
+
+    it('skips the GraphQL enrichment call when an org has no public members', async () => {
+      // The empty-org degenerate case: public_members returns [], so
+      // there's nothing to enrich. Production should not fire an empty
+      // GraphQL query — that would just waste a rate-limit point.
+      const session = makeSession();
+      let graphqlCalls = 0;
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.endsWith('/user/orgs?per_page=100')) return jsonResponse([{ login: 'emptyorg' }]);
+        if (url.includes('/orgs/emptyorg/public_members')) return publicMembersResponse([]);
+        if (url === 'https://api.github.com/graphql') {
+          graphqlCalls++;
+          return graphqlEnrichResponse([]);
+        }
+        throw new Error(`unexpected: ${url}`);
+      });
+
+      await warmDirectoryForUser(session);
+      expect(graphqlCalls).toBe(0);
+    });
   });
 
   describe('searchUsers', () => {
-    /** Wires up a complete cache for a searcher in tc39 + wintercg. */
+    /** Wires up a complete cache for a searcher in tc39 + wintercg with enriched names + companies. */
     async function seedCacheFor(session: SessionUser) {
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 100, login: 'alice', name: 'Alice Anderson', company: 'Acme', avatarUrl: 'a.png' },
-              { databaseId: 101, login: 'allison', name: 'Allison Brown', company: 'Bumble', avatarUrl: 'b.png' },
-            ]);
-          }
-          if (org === 'wintercg') {
-            return graphqlMembersResponse([
-              { databaseId: 200, login: 'wendy', name: 'Wendy', company: 'Wing', avatarUrl: 'w.png' },
-            ]);
-          }
-          throw new Error(`unexpected GraphQL org: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }, { login: 'wintercg' }]);
-        }
-        throw new Error(`unexpected url: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39', 'wintercg'], {
+          tc39: [
+            { id: 100, login: 'alice', name: 'Alice Anderson', company: 'Acme' },
+            { id: 101, login: 'allison', name: 'Allison Brown', company: 'Bumble' },
+          ],
+          wintercg: [{ id: 200, login: 'wendy', name: 'Wendy', company: 'Wing' }],
+        }),
+      );
       await warmDirectoryForUser(session);
     }
 
@@ -234,6 +288,32 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'adm', meeting, 5);
       expect(results).toHaveLength(1);
       expect(results[0].avatarUrl).toBe('https://github.com/admin.png?size=80');
+    });
+
+    it('enriches tier-2 entries with display name and company from the GraphQL query', async () => {
+      // Regression guard for the read:user-only path: after a warm, each
+      // cached org member must carry its display name and company string
+      // (filled in by the GraphQL enrichment after REST public_members
+      // returns just login + id + avatar). Searching by either field has
+      // to surface the member.
+      const session = makeSession();
+      await seedCacheFor(session);
+
+      restoreFetch = setFetchForTesting(async (url) => {
+        if (url.includes('/search/users')) return jsonResponse({ items: [] });
+        throw new Error(`unexpected: ${url}`);
+      });
+
+      // Match by display name (which is *not* a substring of the login).
+      const byName = await searchUsers(session, 'Anderson', undefined, 5);
+      expect(byName.map((r) => r.login)).toEqual(['alice']);
+      expect(byName[0].name).toBe('Alice Anderson');
+      expect(byName[0].organisation).toBe('Acme');
+
+      // Match by company.
+      const byCompany = await searchUsers(session, 'Bumble', undefined, 5);
+      expect(byCompany.map((r) => r.login)).toEqual(['allison']);
+      expect(byCompany[0].organisation).toBe('Bumble');
     });
 
     it('returns meeting users (tier 1) before org members (tier 2)', async () => {
@@ -351,22 +431,14 @@ describe('githubDirectory', () => {
     it('matches case-insensitively across query and stored login/name', async () => {
       const session = makeSession();
       // Seed an org cache containing mixed-case logins and names.
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 1, login: 'AliceSmith', avatarUrl: 'a.png' },
-              { databaseId: 2, login: 'bob-jones', avatarUrl: 'b.png' },
-            ]);
-          }
-          throw new Error(`unexpected: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], {
+          tc39: [
+            { id: 1, login: 'AliceSmith', name: 'Alice Smith' },
+            { id: 2, login: 'bob-jones', name: 'Bob Jones' },
+          ],
+        }),
+      );
       await warmDirectoryForUser(session);
 
       // Stub /search/users so tier 3 doesn't crash on a fall-through.
@@ -391,21 +463,9 @@ describe('githubDirectory', () => {
       // the space character has no counterpart in the login and even
       // subsequence matching fails.
       const session = makeSession();
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 1, login: 'SaminaHusein', name: 'Samina Husein', avatarUrl: 's.png' },
-            ]);
-          }
-          throw new Error(`unexpected: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], { tc39: [{ id: 1, login: 'SaminaHusein', name: 'Samina Husein' }] }),
+      );
       await warmDirectoryForUser(session);
 
       restoreFetch = setFetchForTesting(async (url) => {
@@ -434,22 +494,14 @@ describe('githubDirectory', () => {
       // typist can't easily produce the accent, *and* the case where
       // the typed query has the accent but the stored field doesn't.
       const session = makeSession();
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 1, login: 'joseperez', name: 'José Pérez', avatarUrl: 'j.png' },
-              { databaseId: 2, login: 'jurgenschmidt', name: 'Jurgen Schmidt', avatarUrl: 's.png' },
-            ]);
-          }
-          throw new Error(`unexpected: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], {
+          tc39: [
+            { id: 1, login: 'joseperez', name: 'José Pérez' },
+            { id: 2, login: 'jurgenschmidt', name: 'Jurgen Schmidt' },
+          ],
+        }),
+      );
       await warmDirectoryForUser(session);
 
       restoreFetch = setFetchForTesting(async (url) => {
@@ -478,22 +530,14 @@ describe('githubDirectory', () => {
       // Both match the query "al" in the login field, but alice is a
       // prefix match while kallai is only a subsequence; alice must rank
       // first in the same tier.
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 1, login: 'kallai', avatarUrl: 'k.png' },
-              { databaseId: 2, login: 'alice', avatarUrl: 'a.png' },
-            ]);
-          }
-          throw new Error(`unexpected: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], {
+          tc39: [
+            { id: 1, login: 'kallai' },
+            { id: 2, login: 'alice' },
+          ],
+        }),
+      );
       await warmDirectoryForUser(session);
 
       restoreFetch = setFetchForTesting(async (url) => {
@@ -508,32 +552,24 @@ describe('githubDirectory', () => {
     it('ranks any prefix match above any non-prefix match across fields', async () => {
       const session = makeSession();
       // Two candidates:
-      //   - "kappa": login is only a subsequence match for "ali" and the
-      //     name "Alice" is an exact prefix match.
+      //   - "aline": login is only a subsequence match for "ali" and the
+      //     name "Alibaba" is an exact prefix match.
       //   - "alibaba": login is a prefix match for "ali"; name has no match.
       // The login-prefix candidate (alibaba) should still beat the
-      // name-prefix candidate (kappa) because login outweighs name within
+      // name-prefix candidate (aline) because login outweighs name within
       // a class, but BOTH must beat any subsequence-only candidate.
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              // login subsequence for "ali" (a-li-ne), name prefix "ali"
-              { databaseId: 1, login: 'aline', name: 'Alibaba', avatarUrl: 'a.png' },
-              // login prefix for "ali"
-              { databaseId: 2, login: 'alibaba', name: 'Zed', avatarUrl: 'b.png' },
-              // pure subsequence (no prefix anywhere)
-              { databaseId: 3, login: 'xalix', name: 'Xander', avatarUrl: 'c.png' },
-            ]);
-          }
-          throw new Error(`unexpected: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], {
+          tc39: [
+            // login subsequence for "ali" (a-li-ne), name prefix "ali"
+            { id: 1, login: 'aline', name: 'Alibaba' },
+            // login prefix for "ali"
+            { id: 2, login: 'alibaba', name: 'Zed' },
+            // pure subsequence (no prefix anywhere)
+            { id: 3, login: 'xalix', name: 'Xander' },
+          ],
+        }),
+      );
       await warmDirectoryForUser(session);
 
       restoreFetch = setFetchForTesting(async (url) => {
@@ -659,22 +695,14 @@ describe('githubDirectory', () => {
      * "al" has two.
      */
     async function seedOAuthCache(session: SessionUser) {
-      restoreFetch = setFetchForTesting(async (url, init) => {
-        if (url === 'https://api.github.com/graphql') {
-          const org = await readGraphqlOrg(init);
-          if (org === 'tc39') {
-            return graphqlMembersResponse([
-              { databaseId: 100, login: 'alice', name: 'Alice Anderson', company: 'Acme', avatarUrl: 'a.png' },
-              { databaseId: 101, login: 'allison', name: 'Allison Brown', company: 'Bumble', avatarUrl: 'b.png' },
-            ]);
-          }
-          throw new Error(`unexpected GraphQL org: ${org}`);
-        }
-        if (url.endsWith('/user/orgs?per_page=100')) {
-          return jsonResponse([{ login: 'tc39' }]);
-        }
-        throw new Error(`unexpected url: ${url}`);
-      });
+      restoreFetch = setFetchForTesting(
+        fetchHookForOrgs(['tc39'], {
+          tc39: [
+            { id: 100, login: 'alice', name: 'Alice Anderson', company: 'Acme' },
+            { id: 101, login: 'allison', name: 'Allison Brown', company: 'Bumble' },
+          ],
+        }),
+      );
       await warmDirectoryForUser(session);
     }
 

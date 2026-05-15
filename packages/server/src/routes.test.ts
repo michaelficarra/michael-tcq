@@ -701,9 +701,13 @@ describe('Meeting REST routes — import in OAuth mode', () => {
     fixtureBody = '';
     directoryCalls = [];
 
-    // Stub the directory module's fetch hook: respond to /user/orgs
-    // (REST) with one org, and to the GraphQL endpoint with one TC39
-    // member ("Daniel Ehrenberg" → littledan).
+    // Stub the directory module's fetch hook for the two-step warm:
+    //   1. /user/orgs (REST) — returns one org for the chair.
+    //   2. /orgs/tc39/public_members (REST) — returns one TC39 member,
+    //      just login + id + avatar_url (the REST shape).
+    //   3. /graphql (GraphQL enrichment) — fills in display name + company
+    //      for that login so import can resolve "Daniel Ehrenberg" →
+    //      littledan via the display-name field.
     restoreFetch = setFetchForTesting(async (url, init) => {
       directoryCalls.push(url);
       if (url.endsWith('/user/orgs?per_page=100')) {
@@ -712,31 +716,37 @@ describe('Meeting REST routes — import in OAuth mode', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      if (url.includes('/orgs/tc39/public_members')) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: 189835,
+              login: 'littledan',
+              avatar_url: 'https://avatars.githubusercontent.com/u/189835',
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (url === 'https://api.github.com/graphql') {
-        const body = JSON.parse(init?.body as string) as { variables?: { org?: string } };
-        if (body.variables?.org === 'tc39') {
-          return new Response(
-            JSON.stringify({
-              data: {
-                organization: {
-                  membersWithRole: {
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                    nodes: [
-                      {
-                        databaseId: 189835,
-                        login: 'littledan',
-                        name: 'Daniel Ehrenberg',
-                        company: 'Bloomberg',
-                        avatarUrl: 'https://avatars.githubusercontent.com/u/189835',
-                      },
-                    ],
-                  },
-                },
-              },
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          );
+        // Echo back enrichment for whichever logins the production
+        // query asked for. Only littledan is in our fixture, so anything
+        // else gets a null (which the production code skips).
+        const body = init?.body ? (JSON.parse(init.body as string) as { query?: string }) : {};
+        const asked = new Set<string>();
+        for (const m of (body.query ?? '').matchAll(/user\(login:\s*"([^"]+)"\)/g)) asked.add(m[1]);
+        const data: Record<string, unknown> = {};
+        let idx = 0;
+        for (const login of asked) {
+          data[`u${idx++}`] =
+            login === 'littledan'
+              ? { databaseId: 189835, login: 'littledan', name: 'Daniel Ehrenberg', company: 'Bloomberg' }
+              : null;
         }
+        return new Response(JSON.stringify({ data }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
       throw new Error(`unexpected directory fetch: ${url}`);
     });
@@ -804,9 +814,11 @@ describe('Meeting REST routes — import in OAuth mode', () => {
     });
     expect(res.status).toBe(200);
 
-    // The route must have called the GitHub directory APIs before
-    // resolving — otherwise tier 2 would be empty.
+    // The route must have called both directory APIs before resolving —
+    // /user/orgs to enumerate, public_members to list, and GraphQL to
+    // enrich with display name + company so the name-based match wins.
     expect(directoryCalls.some((u) => u.includes('/user/orgs'))).toBe(true);
+    expect(directoryCalls.some((u) => u.includes('/orgs/tc39/public_members'))).toBe(true);
     expect(directoryCalls.some((u) => u === 'https://api.github.com/graphql')).toBe(true);
 
     const meetingRes = await fetch(`${baseUrl}/api/meetings/${meeting.id}`);

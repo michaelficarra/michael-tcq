@@ -74,10 +74,14 @@ export function createAuthRoutes(): Router {
     const params = new URLSearchParams({
       client_id: GITHUB_CLIENT_ID,
       redirect_uri: GITHUB_CALLBACK_URL,
-      // `read:org` is required so we can read the user's org memberships
-      // (`/user/orgs`) and concealed org members (`/orgs/{org}/members`)
-      // for the username autocomplete directory.
-      scope: 'read:user read:org',
+      // Only profile data is needed. The autocomplete directory uses
+      // public-membership endpoints (`/user/orgs` returns publicly-visible
+      // org memberships without `read:org`; `/orgs/{org}/public_members`
+      // returns public members of an org without any user grant beyond
+      // identity), so we deliberately do not request `read:org` — that
+      // scope showed up in the consent screen as access to all of the
+      // user's org memberships including concealed ones in unrelated orgs.
+      scope: 'read:user',
     });
 
     res.redirect(`https://github.com/login/oauth/authorize?${params}`);
