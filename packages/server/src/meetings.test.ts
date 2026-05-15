@@ -66,6 +66,60 @@ describe('MeetingManager', () => {
     expect(manager.has(meeting.id)).toBe(false);
   });
 
+  describe('softDelete / restore', () => {
+    it('softDelete stamps deletedAt and persists, leaving the meeting in memory', async () => {
+      const store = new InMemoryStore();
+      const mgr = new MeetingManager(store);
+      const meeting = mgr.create([testUser]);
+
+      const ok = await mgr.softDelete(meeting.id);
+      expect(ok).toBe(true);
+      // In-memory record retains the meeting (admins still see it),
+      // flagged with an ISO timestamp.
+      expect(mgr.has(meeting.id)).toBe(true);
+      expect(mgr.isDeleted(meeting.id)).toBe(true);
+      expect(mgr.get(meeting.id)!.deletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      // Persistence side-effect: softDelete syncs immediately, so the
+      // store-side copy reflects the flag without waiting for the
+      // 30-second periodic sweep.
+      const stored = await store.load(meeting.id);
+      expect(stored?.deletedAt).toBe(mgr.get(meeting.id)!.deletedAt);
+    });
+
+    it('softDelete is a no-op on an already-deleted meeting (does not refresh deletedAt)', async () => {
+      const meeting = manager.create([testUser]);
+      expect(await manager.softDelete(meeting.id)).toBe(true);
+      const firstStamp = manager.get(meeting.id)!.deletedAt;
+      // Wait long enough that a refreshed timestamp would visibly
+      // differ — confirms the second call short-circuits.
+      await new Promise((r) => setTimeout(r, 5));
+      expect(await manager.softDelete(meeting.id)).toBe(false);
+      expect(manager.get(meeting.id)!.deletedAt).toBe(firstStamp);
+    });
+
+    it('softDelete returns false for a non-existent meeting', async () => {
+      expect(await manager.softDelete('no-such-meeting')).toBe(false);
+    });
+
+    it('undelete clears deletedAt', async () => {
+      const meeting = manager.create([testUser]);
+      await manager.softDelete(meeting.id);
+      const ok = await manager.undelete(meeting.id);
+      expect(ok).toBe(true);
+      expect(manager.isDeleted(meeting.id)).toBe(false);
+      expect(manager.get(meeting.id)!.deletedAt).toBeUndefined();
+    });
+
+    it('undelete returns false for a live (never-deleted) meeting', async () => {
+      const meeting = manager.create([testUser]);
+      expect(await manager.undelete(meeting.id)).toBe(false);
+    });
+
+    it('undelete returns false for a non-existent meeting', async () => {
+      expect(await manager.undelete('no-such-meeting')).toBe(false);
+    });
+  });
+
   it('isChair returns true for chairs, false for others', () => {
     const meeting = manager.create([testUser]);
     expect(manager.isChair(meeting.id, testUser)).toBe(true);

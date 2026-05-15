@@ -343,6 +343,17 @@ export interface MeetingState {
   /** ISO timestamp of when the meeting was first created. */
   createdAt: string;
   /**
+   * ISO timestamp of when the meeting was soft-deleted by an admin, or
+   * absent when the meeting is live. Soft-deleted meetings are hidden
+   * from `My Meetings`, cannot be joined, and reject all non-admin REST
+   * and socket access with a "not found" response — but they remain
+   * visible to admins (rendered with a strikethrough on the Active
+   * Meetings list) and can be restored. The normal 90-day retention
+   * sweep keyed on `operational.lastConnectionTime` is the eventual
+   * reaper that hard-deletes them from the persistent store.
+   */
+  deletedAt?: string;
+  /**
    * Distinct UserKeys of everyone who has joined this meeting via a socket
    * connection. Unlike `users`, which accumulates anyone referenced in the
    * meeting (chairs set at creation, agenda-item presenters, queue

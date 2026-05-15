@@ -14,6 +14,8 @@ interface MeetingInfo {
   participantUsernames: string[];
   currentConnections: number;
   lastConnection: string;
+  /** ISO timestamp of the soft-delete, or null when the meeting is live. */
+  deletedAt: string | null;
 }
 
 export function AdminPanel({ refreshTick }: { refreshTick: number }) {
@@ -45,15 +47,29 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
     fetchMeetings();
   }, [fetchMeetings, refreshTick]);
 
-  /** Delete a meeting after confirmation. */
+  /** Delete a meeting after confirmation. Soft-delete server-side: the
+   *  row stays in the list but flips to a struck-through "deleted" state. */
   async function handleDelete(meetingId: string) {
     const res = await fetch(`/api/admin/meetings/${encodeURIComponent(meetingId)}`, {
       method: 'DELETE',
     });
     if (res.ok) {
-      setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+      // Stamp a client-side `deletedAt` so the row updates immediately;
+      // the next poll will overwrite with the server-canonical timestamp.
+      const now = new Date().toISOString();
+      setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, deletedAt: now } : m)));
     }
     setDeleteConfirm(null);
+  }
+
+  /** Restore a soft-deleted meeting — flips it back to live without confirmation. */
+  async function handleRestore(meetingId: string) {
+    const res = await fetch(`/api/admin/meetings/${encodeURIComponent(meetingId)}/restore`, {
+      method: 'POST',
+    });
+    if (res.ok) {
+      setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, deletedAt: null } : m)));
+    }
   }
 
   /** Format the last connection time for display. */
@@ -88,40 +104,66 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
               </tr>
             </thead>
             <tbody>
-              {meetings.map((m) => (
-                <tr
-                  key={m.id}
-                  className="border-b border-stone-100 dark:border-stone-700 last:border-b-0 hover:bg-stone-100 dark:hover:bg-stone-800/50 transition-colors"
-                >
-                  <td className="px-4 py-2">
-                    <Link
-                      to={`/meeting/${m.id}`}
-                      className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
-                    >
-                      {m.id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">
-                    {m.createdAt ? <RelativeTime timestamp={m.createdAt} /> : '—'}
-                  </td>
-                  <td className="px-4 py-2 text-stone-600 dark:text-stone-400">{formatLastConnection(m)}</td>
-                  <td
-                    className="px-4 py-2 text-stone-600 dark:text-stone-400 cursor-help"
-                    title={m.participantUsernames.join('\n')}
+              {meetings.map((m) => {
+                const isDeleted = m.deletedAt !== null;
+                // `line-through` is applied to each data cell (not the
+                // <tr>) on purpose: CSS text-decoration painted on an
+                // ancestor renders *through* descendants and can't be
+                // undone by `no-underline` on the child, so striking
+                // the row would strike the Restore button too. Cell-
+                // level decoration leaves the action column clean.
+                const struck = isDeleted ? 'line-through text-stone-400 dark:text-stone-500' : '';
+                return (
+                  <tr
+                    key={m.id}
+                    className="border-b border-stone-100 dark:border-stone-700 last:border-b-0 hover:bg-stone-100 dark:hover:bg-stone-800/50 transition-colors"
                   >
-                    {m.participantUsernames.length}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => setDeleteConfirm(m.id)}
-                      className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
-                                 transition-colors cursor-pointer"
+                    <td className={`px-4 py-2 ${struck}`}>
+                      {isDeleted ? (
+                        <span className="font-medium">{m.id}</span>
+                      ) : (
+                        <Link
+                          to={`/meeting/${m.id}`}
+                          className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium transition-colors"
+                        >
+                          {m.id}
+                        </Link>
+                      )}
+                    </td>
+                    <td className={`px-4 py-2 text-stone-600 dark:text-stone-400 ${struck}`}>
+                      {m.createdAt ? <RelativeTime timestamp={m.createdAt} /> : '—'}
+                    </td>
+                    <td className={`px-4 py-2 text-stone-600 dark:text-stone-400 ${struck}`}>
+                      {formatLastConnection(m)}
+                    </td>
+                    <td
+                      className={`px-4 py-2 text-stone-600 dark:text-stone-400 cursor-help ${struck}`}
+                      title={m.participantUsernames.join('\n')}
                     >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      {m.participantUsernames.length}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {isDeleted ? (
+                        <button
+                          onClick={() => handleRestore(m.id)}
+                          className="text-xs text-stone-400 dark:text-stone-500 hover:text-teal-600 dark:hover:text-teal-400
+                                     transition-colors cursor-pointer"
+                        >
+                          Restore
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(m.id)}
+                          className="text-xs text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400
+                                     transition-colors cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -143,7 +185,8 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
             <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Delete Meeting</h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
               Are you sure you want to delete meeting <strong>{deleteConfirm}</strong>? This will disconnect all
-              participants and cannot be undone.
+              participants and hide it from their meeting lists. You can restore it from this panel until the meeting
+              eventually ages out via the standard retention policy.
             </p>
             <div className="flex gap-3 justify-end">
               <button

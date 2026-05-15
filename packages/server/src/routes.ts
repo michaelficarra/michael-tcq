@@ -155,10 +155,12 @@ export function createMeetingRoutes(
     res.status(201).json(meeting);
   });
 
-  // Get a meeting's current state by ID.
+  // Get a meeting's current state by ID. Soft-deleted meetings respond
+  // 404, identical to a never-existed id — non-admin callers should never
+  // be able to tell the difference.
   router.get('/meetings/:id', (req, res) => {
     const meeting = meetingManager.get(req.params.id);
-    if (!meeting) {
+    if (!meeting || meeting.deletedAt !== undefined) {
       res.status(404).json({ error: 'Meeting not found' });
       return;
     }
@@ -187,6 +189,10 @@ export function createMeetingRoutes(
     const key = userKey(user);
     const matches: { id: string; lastActivity: string; currentConnections: number; sortTime: string }[] = [];
     for (const meeting of meetingManager.listAll()) {
+      // Hide soft-deleted meetings — once an admin deletes a meeting it
+      // should disappear from every non-admin surface, including the
+      // home-page rediscovery list.
+      if (meeting.deletedAt !== undefined) continue;
       if (key in meeting.users || meeting.participantIds.includes(key)) {
         const live = getActiveConnectionCount(meeting.id);
         const lastConnectionTime = meeting.operational.lastConnectionTime ?? '';
@@ -220,7 +226,7 @@ export function createMeetingRoutes(
   // for refetches triggered by `log:dirty`.
   router.get('/meetings/:id/log', (req, res) => {
     const meetingId = req.params.id;
-    if (!meetingManager.has(meetingId)) {
+    if (!meetingManager.has(meetingId) || meetingManager.isDeleted(meetingId)) {
       res.status(404).json({ error: 'Meeting not found' });
       return;
     }
@@ -266,7 +272,7 @@ export function createMeetingRoutes(
 
     const meetingId = req.params.id;
     const meeting = meetingManager.get(meetingId);
-    if (!meeting) {
+    if (!meeting || meeting.deletedAt !== undefined) {
       res.status(404).json({ error: 'Meeting not found' });
       return;
     }
@@ -434,13 +440,16 @@ export function createMeetingRoutes(
       participantUsernames: string[];
       currentConnections: number;
       lastConnection: string;
+      /** ISO timestamp when soft-deleted, or null when live. */
+      deletedAt: string | null;
     }[] = [];
 
     // participantIds and lastConnectionTime live on the persisted meeting
     // state so they survive server restarts; currentConnections is live
     // socket-room state maintained in memory. Participant keys are resolved
     // to ghUsernames here so the client can render them without access to
-    // the full meeting users map.
+    // the full meeting users map. Soft-deleted meetings are included so
+    // the admin panel can render them (struck-through) and offer Restore.
     for (const meeting of meetingManager.listAll()) {
       const current = getActiveConnectionCount(meeting.id);
       meetings.push({
@@ -449,6 +458,7 @@ export function createMeetingRoutes(
         participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.ghUsername ?? key),
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
+        deletedAt: meeting.deletedAt ?? null,
       });
     }
 
@@ -531,7 +541,11 @@ export function createMeetingRoutes(
     });
   });
 
-  // Delete a meeting (admin only).
+  // Soft-delete a meeting (admin only). Marks the meeting as deleted —
+  // it stays in the store (and on the admin list, struck-through) so it
+  // can be restored, and the 90-day retention sweep eventually reaps it.
+  // Any currently-connected sockets are evicted so they fall through to
+  // the meeting page's not-found UI.
   router.delete('/admin/meetings/:id', async (req, res) => {
     const user = req.session.user;
     if (!user || !user.isAdmin) {
@@ -540,12 +554,41 @@ export function createMeetingRoutes(
     }
 
     const meetingId = req.params.id;
-    if (!meetingManager.has(meetingId)) {
+    const ok = await meetingManager.softDelete(meetingId);
+    if (!ok) {
+      // Either the meeting doesn't exist or it was already deleted —
+      // surface as 404 in both cases.
       res.status(404).json({ error: 'Meeting not found' });
       return;
     }
 
-    await meetingManager.remove(meetingId);
+    // Boot anyone currently sitting in the room. `disconnectSockets(true)`
+    // closes the underlying connection rather than just leaving the room,
+    // so connected clients see their socket go away and the existing
+    // disconnect / not-found UI handles the rest.
+    io.in(meetingId).disconnectSockets(true);
+    res.json({ ok: true });
+  });
+
+  // Restore a soft-deleted meeting (admin only). Clears `deletedAt`
+  // and persists immediately so the meeting becomes joinable again on
+  // the next refresh.
+  router.post('/admin/meetings/:id/restore', async (req, res) => {
+    const user = req.session.user;
+    if (!user || !user.isAdmin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const meetingId = req.params.id;
+    const ok = await meetingManager.undelete(meetingId);
+    if (!ok) {
+      // 404 covers both "doesn't exist" and "wasn't deleted" — the
+      // admin panel only surfaces Restore for rows it just saw with
+      // a `deletedAt`, so either condition means the panel is stale.
+      res.status(404).json({ error: 'Meeting not found or not deleted' });
+      return;
+    }
     res.json({ ok: true });
   });
 

@@ -424,7 +424,12 @@ export function registerSocketHandlers(
     // that meeting's Socket.IO room and receives the full current state.
     socket.on('join', (meetingId: string) => {
       const meeting = meetingManager.get(meetingId);
-      if (!meeting) {
+      // Soft-deleted meetings are indistinguishable from non-existent
+      // ones over the socket transport — the admin DELETE handler
+      // proactively boots any sockets that were already joined, so the
+      // only callers that hit this branch are clients deep-linking to
+      // a stale id.
+      if (!meeting || meeting.deletedAt !== undefined) {
         socket.emit('error', 'Meeting not found');
         return;
       }

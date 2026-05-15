@@ -279,6 +279,27 @@ describe('Socket.IO integration', () => {
     expect(received).toBe(false);
   });
 
+  it('rejects join on a soft-deleted meeting (no state, emits error)', async () => {
+    // Soft-deleted meetings look exactly like non-existent meetings to
+    // the join handler — error event is fired, no state is sent.
+    const meeting = ctx.meetingManager.create([TEST_USER]);
+    await ctx.meetingManager.softDelete(meeting.id);
+
+    const client = makeClient();
+    await new Promise<void>((r) => client.on('connect', r));
+
+    const errorPromise = waitForEvent<string>(client, 'error');
+    client.emit('join', meeting.id);
+
+    expect(await errorPromise).toBe('Meeting not found');
+
+    const stateArrived = await Promise.race([
+      waitForEvent<MeetingState>(client, 'state').then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 200)),
+    ]);
+    expect(stateArrived).toBe(false);
+  });
+
   // -- Agenda events --
 
   /** Helper: connect a client, join a meeting, and wait for initial state. */

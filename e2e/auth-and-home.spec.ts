@@ -209,6 +209,101 @@ test.describe('Admin Tab', () => {
   });
 });
 
+test.describe('Admin soft-delete and restore', () => {
+  // Each test starts as the default mock-auth user 'admin' (an admin via
+  // .env.test's ADMIN_USERNAMES) and creates a fresh meeting so the
+  // delete/restore cycle is independent from anything else on the list.
+
+  test('clicking Delete soft-deletes the meeting: row stays struck-through with a Restore action', async ({ page }) => {
+    const id = await createMeeting(page);
+
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const row = page.getByRole('row').filter({ hasText: id });
+    await expect(row).toBeVisible();
+
+    // Open delete dialog and confirm
+    await row.getByRole('button', { name: 'Delete' }).click();
+    const dialog = page.getByRole('dialog', { name: /confirm deletion/i });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    // Row sticks around (soft delete) — meeting-ID link is replaced by
+    // a plain span, and a Restore button appears in its place.
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('link', { name: id })).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Restore' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+  });
+
+  test('soft-deleted meeting is no longer joinable (deep-link shows not-found)', async ({ page }) => {
+    const id = await createMeeting(page);
+
+    // Soft-delete the meeting from the admin panel
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const row = page.getByRole('row').filter({ hasText: id });
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(row.getByRole('button', { name: 'Restore' })).toBeVisible();
+
+    // Direct navigation falls through to the meeting-not-found UI rather
+    // than the live meeting page — the server's GET /api/meetings/:id
+    // responds 404 once a meeting has `deletedAt` set.
+    await page.goto(`/meeting/${id}`);
+    await expect(page.getByRole('heading', { name: 'Meeting not found' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to home' })).toBeVisible();
+  });
+
+  test('soft-deleted meeting disappears from My Meetings on the home page', async ({ page }) => {
+    const id = await createMeeting(page);
+
+    // The newly-created meeting surfaces in My Meetings while live.
+    await waitForHomePage(page);
+    const myMeetings = page.getByRole('heading', { name: 'My Meetings' }).locator('..');
+    await expect(myMeetings.getByRole('link', { name: id })).toBeVisible();
+
+    // Soft-delete via the admin panel.
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const adminRow = page.getByRole('row').filter({ hasText: id });
+    await adminRow.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(adminRow.getByRole('button', { name: 'Restore' })).toBeVisible();
+
+    // Back on Join Meeting, the deleted meeting is gone from My Meetings.
+    await page.getByRole('tab', { name: 'Join Meeting' }).click();
+    await expect(myMeetings.getByRole('link', { name: id })).toHaveCount(0);
+  });
+
+  test('Restore brings a soft-deleted meeting back to live state', async ({ page }) => {
+    const id = await createMeeting(page);
+
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const row = page.getByRole('row').filter({ hasText: id });
+
+    // Delete
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(row.getByRole('button', { name: 'Restore' })).toBeVisible();
+
+    // Restore — single-click, no confirmation since the action is reversible.
+    await row.getByRole('button', { name: 'Restore' }).click();
+
+    // Row reverts: link reinstated, Delete button back, Restore gone.
+    await expect(row.getByRole('link', { name: id })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Delete' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Restore' })).toHaveCount(0);
+
+    // And the meeting is joinable again — the meeting page now loads
+    // through to the live view (default tab is Queue) instead of falling
+    // through to the not-found UI.
+    await page.goto(`/meeting/${id}`);
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: 'Meeting not found' })).toHaveCount(0);
+  });
+});
+
 test.describe('User Badge in Nav', () => {
   test('user badge with avatar and name is visible in the navigation bar', async ({ page }) => {
     await waitForHomePage(page);

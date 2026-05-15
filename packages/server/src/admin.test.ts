@@ -13,6 +13,10 @@ import { InMemoryStore } from './test/inMemoryStore.js';
 /** The admin user for these tests. */
 const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin', organisation: '' };
 
+/** Capture of the meeting room ids whose sockets were forcibly disconnected
+ *  by the admin DELETE handler. Reset per test via the beforeEach. */
+const disconnectedRooms: string[] = [];
+
 /** Create a test app with session + routes, authenticated as a specific user. */
 function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) {
   const app = express();
@@ -22,7 +26,18 @@ function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) 
     if (!req.session.user) req.session.user = toSessionUser(user);
     next();
   });
-  app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));
+  // Mock Socket.IO server: `.to(...)` is used by emit paths and `.in(...)`
+  // by the soft-delete handler to evict sockets — both must exist on the
+  // stub even though the tests assert against the captured side-effects.
+  const io = {
+    to: () => ({ emit: () => {} }),
+    in: (roomId: string) => ({
+      disconnectSockets: () => {
+        disconnectedRooms.push(roomId);
+      },
+    }),
+  };
+  app.use('/api', createMeetingRoutes(meetingManager, io as any));
   return app;
 }
 
@@ -49,6 +64,7 @@ describe('Admin endpoints', () => {
     vi.stubEnv('ADMIN_USERNAMES', 'testadmin');
 
     manager = new MeetingManager(new InMemoryStore());
+    disconnectedRooms.length = 0;
     const app = createTestApp(manager);
     ({ baseUrl, close } = await listen(app));
 
@@ -103,28 +119,66 @@ describe('Admin endpoints', () => {
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
       expect(res.status).toBe(403);
     });
+
+    it('includes soft-deleted meetings with a `deletedAt` timestamp', async () => {
+      // Live meeting reports deletedAt: null; deleted meeting reports
+      // the ISO timestamp of the soft-delete so the admin UI can render
+      // it with strikethrough + a Restore button.
+      const live = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const deleted = manager.create([{ ghid: 2, ghUsername: 'other', name: 'Other', organisation: '' }]);
+      await manager.softDelete(deleted.id);
+
+      const res = await fetch(`${baseUrl}/api/admin/meetings`);
+      const body = await res.json();
+      const liveRow = body.find((m: { id: string }) => m.id === live.id);
+      const deletedRow = body.find((m: { id: string }) => m.id === deleted.id);
+      expect(liveRow.deletedAt).toBeNull();
+      expect(deletedRow.deletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
   });
 
   describe('DELETE /api/admin/meetings/:id', () => {
-    it('deletes a meeting', async () => {
+    it('soft-deletes a meeting (stays in memory with deletedAt set)', async () => {
       const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, {
         method: 'DELETE',
       });
       expect(res.status).toBe(200);
+      expect((await res.json()).ok).toBe(true);
 
-      const body = await res.json();
-      expect(body.ok).toBe(true);
+      // Soft delete: meeting remains in memory but is flagged.
+      expect(manager.has(meeting.id)).toBe(true);
+      expect(manager.isDeleted(meeting.id)).toBe(true);
+      expect(manager.get(meeting.id)!.deletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
 
-      // Meeting should no longer exist
-      expect(manager.has(meeting.id)).toBe(false);
+    it('evicts active sockets when a meeting is deleted', async () => {
+      // The handler calls io.in(meetingId).disconnectSockets(true) to
+      // boot anyone sitting in the room so they fall through to the
+      // not-found UI. We capture the targeted room id via the io mock.
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+
+      await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, { method: 'DELETE' });
+
+      expect(disconnectedRooms).toEqual([meeting.id]);
     });
 
     it('returns 404 for non-existent meeting', async () => {
       const res = await fetch(`${baseUrl}/api/admin/meetings/no-such-meeting`, {
         method: 'DELETE',
       });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 when the meeting is already soft-deleted', async () => {
+      // The admin UI only offers Restore for already-deleted rows, so
+      // hitting DELETE twice in a row only happens when the panel is
+      // stale — 404 nudges the caller to refresh.
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      await manager.softDelete(meeting.id);
+
+      const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, { method: 'DELETE' });
       expect(res.status).toBe(404);
     });
 
@@ -137,8 +191,56 @@ describe('Admin endpoints', () => {
       });
       expect(res.status).toBe(403);
 
-      // Meeting should still exist
+      // Meeting should still exist and not be flagged deleted
       expect(manager.has(meeting.id)).toBe(true);
+      expect(manager.isDeleted(meeting.id)).toBe(false);
+    });
+  });
+
+  describe('POST /api/admin/meetings/:id/restore', () => {
+    it('clears deletedAt and makes the meeting joinable again', async () => {
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      await manager.softDelete(meeting.id);
+      expect(manager.isDeleted(meeting.id)).toBe(true);
+
+      const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).ok).toBe(true);
+      expect(manager.isDeleted(meeting.id)).toBe(false);
+      expect(manager.get(meeting.id)!.deletedAt).toBeUndefined();
+    });
+
+    it('returns 404 for a meeting that is not soft-deleted', async () => {
+      // Restoring a live meeting is a no-op signal that the admin
+      // panel is stale; 404 nudges it to refresh, same as restoring a
+      // meeting that doesn't exist.
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+
+      const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 for a non-existent meeting', async () => {
+      const res = await fetch(`${baseUrl}/api/admin/meetings/no-such-meeting/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects non-admin users', async () => {
+      vi.stubEnv('ADMIN_USERNAMES', 'someone-else');
+      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      await manager.softDelete(meeting.id);
+
+      const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}/restore`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(403);
+      expect(manager.isDeleted(meeting.id)).toBe(true);
     });
   });
 

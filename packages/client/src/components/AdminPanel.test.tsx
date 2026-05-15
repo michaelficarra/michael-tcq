@@ -31,6 +31,7 @@ const sampleMeetings = [
     participantUsernames: pineParticipants,
     currentConnections: 7,
     lastConnection: 'now',
+    deletedAt: null,
   },
   {
     id: 'calm-wave-fox',
@@ -38,6 +39,7 @@ const sampleMeetings = [
     participantUsernames: foxParticipants,
     currentConnections: 0,
     lastConnection: '2026-04-13T12:00:00.000Z',
+    deletedAt: null,
   },
 ];
 
@@ -153,7 +155,7 @@ describe('AdminPanel', () => {
     expect(screen.getByRole('dialog', { name: /confirm deletion/i })).toBeInTheDocument();
   });
 
-  it('deletes a meeting when confirmed', async () => {
+  it('soft-deletes a meeting when confirmed — row stays in the list, struck-through, with a Restore action', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve(sampleMeetings),
@@ -181,8 +183,52 @@ describe('AdminPanel', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/admin/meetings/bright-pine-lake', { method: 'DELETE' });
-      // Meeting should be removed from the list
-      expect(screen.queryByText('bright-pine-lake')).not.toBeInTheDocument();
+      // Soft delete: row remains, rendered struck-through, the meeting-ID
+      // link is replaced by a plain span, and the action button becomes Restore.
+      const idCell = screen.getByText('bright-pine-lake');
+      expect(idCell).toBeInTheDocument();
+      expect(idCell.closest('a')).toBeNull();
+      expect(idCell.closest('td')).toHaveClass('line-through');
+      expect(screen.getByText('Restore')).toBeInTheDocument();
+    });
+  });
+
+  it('restores a soft-deleted meeting when Restore is clicked', async () => {
+    // Server returns one live meeting and one already-deleted meeting;
+    // the deleted row shows Restore and POSTs to the restore endpoint.
+    const meetings = [sampleMeetings[0], { ...sampleMeetings[1], deletedAt: '2026-05-01T12:00:00.000Z' }];
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(meetings),
+    });
+
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText('calm-wave-fox')).toBeInTheDocument();
+    });
+
+    // Deleted-row affordances: no link, strikethrough on the id cell,
+    // Restore button instead of Delete.
+    const deletedIdCell = screen.getByText('calm-wave-fox');
+    expect(deletedIdCell.closest('a')).toBeNull();
+    expect(deletedIdCell.closest('td')).toHaveClass('line-through');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ ok: true }),
+    });
+
+    fireEvent.click(screen.getByText('Restore'));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/admin/meetings/calm-wave-fox/restore', { method: 'POST' });
+      // After restore, the row reverts: link reinstated, strikethrough
+      // gone, action button is Delete again.
+      const idCell = screen.getByText('calm-wave-fox');
+      expect(idCell.closest('a')).toHaveAttribute('href', '/meeting/calm-wave-fox');
+      expect(idCell.closest('td')).not.toHaveClass('line-through');
+      expect(screen.queryByText('Restore')).not.toBeInTheDocument();
     });
   });
 

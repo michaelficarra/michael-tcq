@@ -43,7 +43,13 @@ function createTestApp(meetingManager: MeetingManager, user: User = TEST_USER) {
     if (!req.session.user) req.session.user = toSessionUser(user);
     next();
   });
-  app.use('/api', createMeetingRoutes(meetingManager, { to: () => ({ emit: () => {} }) } as any));
+  app.use(
+    '/api',
+    createMeetingRoutes(meetingManager, {
+      to: () => ({ emit: () => {} }),
+      in: () => ({ disconnectSockets: () => {} }),
+    } as any),
+  );
   return app;
 }
 
@@ -162,6 +168,16 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/meetings/no-such-meeting`);
       expect(res.status).toBe(404);
     });
+
+    it('returns 404 for a soft-deleted meeting', async () => {
+      // Soft-deleted meetings are indistinguishable from never-existed
+      // ones to non-admin callers — same 404 status, no leak of the id.
+      const meeting = manager.create([TEST_USER]);
+      await manager.softDelete(meeting.id);
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}`);
+      expect(res.status).toBe(404);
+    });
   });
 
   describe('GET /api/my-meetings', () => {
@@ -175,7 +191,13 @@ describe('Meeting REST routes', () => {
       const app = express();
       app.use(express.json());
       app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
-      app.use('/api', createMeetingRoutes(manager, { to: () => ({ emit: () => {} }) } as any));
+      app.use(
+        '/api',
+        createMeetingRoutes(manager, {
+          to: () => ({ emit: () => {} }),
+          in: () => ({ disconnectSockets: () => {} }),
+        } as any),
+      );
       const { baseUrl: noAuthUrl, close: noAuthClose } = await listen(app);
       try {
         const res = await fetch(`${noAuthUrl}/api/my-meetings`);
@@ -247,6 +269,18 @@ describe('Meeting REST routes', () => {
       expect(body).toEqual([{ id: meeting.id, lastActivity: '2026-01-02T03:04:05.000Z', currentConnections: 0 }]);
     });
 
+    it('hides soft-deleted meetings even when the caller is associated with them', async () => {
+      // A meeting the caller chairs disappears from My Meetings the
+      // instant it is soft-deleted by an admin.
+      const live = manager.create([TEST_USER]);
+      const deleted = manager.create([TEST_USER]);
+      await manager.softDelete(deleted.id);
+
+      const res = await fetch(`${baseUrl}/api/my-meetings`);
+      const body = await res.json();
+      expect(body.map((m: { id: string }) => m.id)).toEqual([live.id]);
+    });
+
     it('sorts in-progress meetings ahead of idle ones, idle ones by recency', async () => {
       const stale = manager.create([TEST_USER]);
       stale.operational.lastConnectionTime = '2026-01-01T00:00:00.000Z';
@@ -264,6 +298,14 @@ describe('Meeting REST routes', () => {
   describe('GET /api/meetings/:id/log', () => {
     it('returns 404 for a non-existent meeting', async () => {
       const res = await fetch(`${baseUrl}/api/meetings/no-such-meeting/log`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 for a soft-deleted meeting', async () => {
+      const meeting = manager.create([TEST_USER]);
+      await manager.softDelete(meeting.id);
+
+      const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`);
       expect(res.status).toBe(404);
     });
 
@@ -421,6 +463,17 @@ describe('Meeting REST routes', () => {
       const key = item.presenterIds[0];
       return meeting.users[key];
     }
+
+    it('returns 404 for a soft-deleted meeting', async () => {
+      // Even a chair can't import into a deleted meeting — the
+      // endpoint matches the "not found" behaviour of GET /meetings/:id
+      // so callers can't keep operating on a tombstoned record.
+      const id = createMeetingWith();
+      await manager.softDelete(id);
+
+      const res = await importAgenda(id, '| Topic |\n|---|\n| Hello |');
+      expect(res.status).toBe(404);
+    });
 
     it('resolves a unique tier-2 (DEV_USERS) name to the real user', async () => {
       // "Daniel Ehrenberg" is exactly one DEV_USERS entry (login littledan).

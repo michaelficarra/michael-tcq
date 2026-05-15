@@ -238,6 +238,49 @@ export class MeetingManager {
     await this.store.remove(id);
   }
 
+  /**
+   * Soft-delete a meeting: stamps `deletedAt` and persists the change
+   * straight away. The meeting stays in memory and in the store so
+   * admins can still see it and restore it; the normal 90-day expiry
+   * sweep keyed on `operational.lastConnectionTime` eventually
+   * hard-deletes it via `remove`.
+   *
+   * Returns true on success; false when the meeting doesn't exist or
+   * was already soft-deleted (no-op rather than a stamp refresh, so
+   * `deletedAt` reflects the *first* deletion).
+   */
+  async softDelete(id: string): Promise<boolean> {
+    const meeting = this.meetings.get(id);
+    if (!meeting || meeting.deletedAt !== undefined) return false;
+    meeting.deletedAt = new Date().toISOString();
+    this.markDirty(id);
+    // High-value mutation — persist now rather than waiting for the
+    // periodic sweep, mirroring the agenda-advance / speaker-advance path.
+    await this.syncOne(id);
+    return true;
+  }
+
+  /**
+   * Clear a meeting's `deletedAt` flag, returning it to the live set.
+   * Named `undelete` rather than `restore` to avoid colliding with the
+   * existing zero-arg `restore()` used at server startup to rehydrate
+   * the manager from the persistent store. Returns true on success;
+   * false when the meeting doesn't exist or isn't currently soft-deleted.
+   */
+  async undelete(id: string): Promise<boolean> {
+    const meeting = this.meetings.get(id);
+    if (!meeting || meeting.deletedAt === undefined) return false;
+    delete meeting.deletedAt;
+    this.markDirty(id);
+    await this.syncOne(id);
+    return true;
+  }
+
+  /** Check whether a meeting has been soft-deleted. */
+  isDeleted(id: string): boolean {
+    return this.meetings.get(id)?.deletedAt !== undefined;
+  }
+
   // -- Log accessors --
 
   /**
