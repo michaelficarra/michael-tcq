@@ -300,3 +300,71 @@ test.describe('network disruption', () => {
   // `socket.test.ts` ("reconnect re-emits state and re-seeds the
   // surrogate", and the gap-detection block).
 });
+
+// ---------------------------------------------------------------------------
+// Prologue concurrent-edit conflict banner.
+//
+// PRD § Agenda Prologue and Epilogue > Concurrent Edits:
+//   "If another chair updates the same section while the editor is open,
+//    a sticky warning banner appears above the textarea... Clicking Save
+//    while the banner is showing opens the overwrite confirmation dialogue."
+//
+// This is one of the few cases where multi-context drives behaviour that
+// can't be exercised at the unit-test layer — the banner only renders
+// when one chair's `value` prop changes mid-edit.
+// ---------------------------------------------------------------------------
+
+test.describe('prologue conflict banner', () => {
+  test('a concurrent update surfaces a banner, and Save opens an overwrite confirmation', async ({ browser, page }) => {
+    const meetingId = await createMeeting(page);
+    await goToAgendaTab(page);
+
+    // First populate the section so the test can edit (not add-new).
+    const placeholder = page.getByRole('button', { name: 'Add an agenda prologue' });
+    await placeholder.click();
+    await page.getByRole('textbox', { name: 'Agenda prologue' }).fill('Original');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Original')).toBeVisible();
+
+    // Open a second chair context. The default mock user "admin" is the
+    // sole chair on this meeting, so we add a new chair "bob" first.
+    await page.getByLabel('Add chair').click();
+    await page.getByPlaceholder('username').fill('bob');
+    await page.getByPlaceholder('username').press('Enter');
+    await expect(page.getByRole('tabpanel', { name: 'Agenda' })).toContainText('bob');
+
+    const second = await openSecondContext(browser, meetingId, { asUser: 'bob' });
+    try {
+      // Chair A (admin) opens the prologue editor.
+      await page.getByRole('button', { name: 'Edit prologue' }).click();
+      const editor = page.getByRole('textbox', { name: 'Agenda prologue' });
+      await expect(editor).toBeVisible();
+      await editor.fill('My edits in progress');
+
+      // Chair B (bob) saves a different prologue in the second context.
+      await goToAgendaTab(second.page);
+      await second.page.getByRole('button', { name: 'Edit prologue' }).click();
+      await second.page.getByRole('textbox', { name: 'Agenda prologue' }).fill("Bob's overwrite");
+      await second.page.getByRole('button', { name: 'Save' }).click();
+
+      // Chair A's editor is still open; the conflict banner appears.
+      await expect(page.getByText(/Another chair has updated the prologue/i)).toBeVisible();
+
+      // Saving while the banner is showing opens the overwrite confirmation.
+      await page.getByRole('button', { name: 'Save' }).click();
+      const overwrite = page.getByRole('dialog', { name: /Overwrite Prologue/i });
+      await expect(overwrite).toBeVisible();
+
+      // Cancelling keeps the banner around and the editor open.
+      await overwrite.getByRole('button', { name: 'Cancel' }).click();
+      await expect(overwrite).not.toBeVisible();
+      await expect(page.getByText(/Another chair has updated the prologue/i)).toBeVisible();
+
+      // Dismissing the banner via the × clears it.
+      await page.getByLabel('Dismiss conflict warning').click();
+      await expect(page.getByText(/Another chair has updated the prologue/i)).not.toBeVisible();
+    } finally {
+      await second.context.close();
+    }
+  });
+});

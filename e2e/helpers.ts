@@ -5,7 +5,8 @@
  * so the default user is automatically logged in as "admin".
  */
 
-import { type Browser, type BrowserContext, type Page, expect } from '@playwright/test';
+import { type Browser, type BrowserContext, type Download, type Locator, type Page, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 /** Wait for the home page to be loaded and the user to be authenticated. */
 export async function waitForHomePage(page: Page) {
@@ -150,13 +151,20 @@ export async function advanceAgenda(page: Page, conclusion?: string) {
 /**
  * Add a queue entry by clicking one of the speaker control buttons.
  * Returns when the entry appears in the queue.
+ *
+ * The button name match is scoped to the "Queue entry types" toolbar group
+ * (rendered by SpeakerControls). Without that scope, an entry already in
+ * the queue can match the same name — e.g. its clickable type badge
+ * ("New Topic:"), or its Edit/Delete buttons with the entry's topic
+ * starting with the same word.
  */
 export async function addQueueEntry(
   page: Page,
   type: 'New Topic' | 'Discuss Current Topic' | 'Clarifying Question' | 'Point of Order',
   topic?: string,
 ) {
-  await page.getByRole('button', { name: type }).click();
+  const controls = page.getByRole('group', { name: 'Queue entry types' });
+  await controls.getByRole('button', { name: type, exact: true }).click();
 
   if (topic) {
     // The entry opens in edit mode — type the topic and save
@@ -198,6 +206,53 @@ export async function openSecondContext(
   }
   await page.goto(`/meeting/${encodeURIComponent(meetingId)}`);
   return { context, page };
+}
+
+/**
+ * Drag `source` onto `target` using a manual mouse sequence.
+ *
+ * @dnd-kit (used by agenda and queue lists) listens to native pointer events
+ * and requires the activation distance to be exceeded before a drag begins.
+ * Playwright's built-in `source.dragTo(target)` is unreliable for this
+ * pattern: it can emit a single mousemove that bypasses the activation
+ * distance check or skips over interpolation points the library relies on.
+ *
+ * This helper:
+ *  1. Resolves source/target bounding boxes
+ *  2. Hovers the source so it is the pointer target
+ *  3. Mouses down, then moves through 8 intermediate points to satisfy the
+ *     activation distance and produce a smooth drag preview
+ *  4. Mouses up on the target
+ *
+ * Both inputs should be the draggable handles (whole row in the agenda;
+ * the ⠿ drag handle in the queue).
+ */
+export async function dragAndDrop(page: Page, source: Locator, target: Locator): Promise<void> {
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error('Drag-and-drop source/target not visible');
+
+  const sx = sourceBox.x + sourceBox.width / 2;
+  const sy = sourceBox.y + sourceBox.height / 2;
+  const tx = targetBox.x + targetBox.width / 2;
+  const ty = targetBox.y + targetBox.height / 2;
+
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  // Interpolated path — each step must clear the 5px activation distance.
+  const steps = 10;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    await page.mouse.move(sx + (tx - sx) * t, sy + (ty - sy) * t, { steps: 2 });
+  }
+  await page.mouse.up();
+}
+
+/** Read a Playwright Download into a UTF-8 string. */
+export async function readDownloadedFile(download: Download): Promise<string> {
+  const path = await download.path();
+  if (!path) throw new Error('Download has no file path (was it cancelled?)');
+  return readFile(path, 'utf8');
 }
 
 /**

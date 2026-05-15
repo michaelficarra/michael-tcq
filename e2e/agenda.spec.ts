@@ -8,6 +8,7 @@ import {
   goToQueueTab,
   goToLogTab,
   advanceAgenda,
+  dragAndDrop,
 } from './helpers.js';
 
 test.describe('Agenda tab', () => {
@@ -424,6 +425,184 @@ test.describe('Agenda tab', () => {
       await goToAgendaTab(page);
       const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
       await expect(agendaPanel.getByText('Decided to revisit next week')).toBeVisible();
+    });
+
+    test('re-editing a past item with a conclusion pre-populates the dialog with the previous text', async ({
+      page,
+    }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+      await addAgendaItem(page, 'First Item', 'admin');
+      await addAgendaItem(page, 'Second Item', 'admin');
+      await startMeeting(page);
+
+      // First pass: record a conclusion.
+      await advanceAgenda(page, 'Initial decision');
+
+      // Drag the first item back below the second so item 1 becomes "current" again.
+      // The drag rules require the move to land on an item — here we just open the
+      // dialog directly by clicking the inline "edit" on the now-past first item
+      // is not the same path; instead, we use the queue Advance flow as the PRD
+      // describes ("If an item that already has a conclusion becomes the current
+      // item again (e.g. via reorder), the dialogue's textarea is pre-populated").
+      // We reorder First Item below Second Item so when Second is advanced past,
+      // First Item becomes current again.
+      await goToAgendaTab(page);
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      const firstRow = agendaPanel.locator('li', { hasText: 'First Item' });
+      const secondRow = agendaPanel.locator('li', { hasText: 'Second Item' });
+      await dragAndDrop(page, firstRow, secondRow);
+
+      // Now the order should be Second (current), First. Advance past Second so
+      // First becomes the current item again. The dialog should pre-populate
+      // with First Item's saved conclusion.
+      await goToQueueTab(page);
+      // Click Next Agenda Item; check the dialog body. Don't use advanceAgenda
+      // here — we want to inspect the prefilled textarea before submitting.
+      await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
+      const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+      // After advancing past Second, First Item is the outgoing item for the
+      // NEXT advance — but the PRD specifically describes the dialog seeded
+      // when the item-with-conclusion becomes current. Advance Second first.
+      await dialog.getByRole('button', { name: 'Advance' }).click();
+      await expect(dialog).not.toBeVisible();
+
+      // Now First Item is the current item. Open the dialog again — its
+      // saved conclusion should pre-populate.
+      await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
+      const dialog2 = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+      await expect(dialog2.getByLabel(/conclusion/i)).toHaveValue('Initial decision');
+    });
+  });
+
+  test.describe('Drag-and-drop reorder', () => {
+    test('chair drags an agenda item to a new position', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+      await addAgendaItem(page, 'Alpha');
+      await addAgendaItem(page, 'Bravo');
+      await addAgendaItem(page, 'Charlie');
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+
+      // Sanity: starting order is Alpha, Bravo, Charlie.
+      // Use textContent comparisons on the ordered list children rather than
+      // numeric badges because session interpolation can affect numbering.
+      const initialNames = await agendaPanel.locator('ol[aria-label="Agenda items"] > li').allTextContents();
+      expect(initialNames[0]).toContain('Alpha');
+      expect(initialNames[1]).toContain('Bravo');
+      expect(initialNames[2]).toContain('Charlie');
+
+      // Drag Alpha down onto Charlie's row.
+      const alpha = agendaPanel.locator('li', { hasText: 'Alpha' });
+      const charlie = agendaPanel.locator('li', { hasText: 'Charlie' });
+      await dragAndDrop(page, alpha, charlie);
+
+      // Order should now be Bravo, Charlie, Alpha (or at minimum Alpha sits
+      // after both originals — the optimistic update settles to the server's
+      // resolved order). We assert Alpha is no longer first.
+      await expect(agendaPanel.locator('ol[aria-label="Agenda items"] > li').first()).not.toContainText('Alpha');
+    });
+
+    test('chair drags a session header to a new position; contained items are recomputed', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // Layout: [Block (60m)] [Alpha 10m] [Bravo 10m] [Charlie 10m]
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Block');
+      await page.getByLabel('Capacity').fill('60');
+      await page.getByRole('button', { name: 'Create' }).click();
+      await addAgendaItem(page, 'Alpha', undefined, 10);
+      await addAgendaItem(page, 'Bravo', undefined, 10);
+      await addAgendaItem(page, 'Charlie', undefined, 10);
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      const sessionRow = agendaPanel.locator('li', { hasText: 'Block' });
+      // Before drag: all three items fit inside Block — used 30m.
+      await expect(sessionRow).toContainText('used 30m');
+
+      // Drag the session below Bravo so it contains only Charlie afterwards.
+      const session = agendaPanel.locator('li', { hasText: 'Block' });
+      const bravo = agendaPanel.locator('li', { hasText: 'Bravo' });
+      await dragAndDrop(page, session, bravo);
+
+      // After drag: only Charlie sits under Block → used 10m.
+      await expect(agendaPanel.locator('li', { hasText: 'Block' })).toContainText('used 10m');
+    });
+  });
+
+  test.describe('Session editing', () => {
+    test('chair edits a session name and capacity inline', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'New Session' }).click();
+      await page.getByLabel('Session Name').fill('Morning');
+      await page.getByLabel('Capacity').fill('45');
+      await page.getByRole('button', { name: 'Create' }).click();
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      // The session header carries its name and capacity. We assert on the
+      // composite text so we don't care about strict-mode duplicates.
+      await expect(agendaPanel.locator('li', { hasText: 'Morning' })).toContainText('capacity 45m');
+
+      // Open the inline edit form for the session.
+      await page.getByRole('button', { name: 'Edit session Morning' }).click();
+      await page.getByLabel('Session name').fill('Afternoon');
+      await page.getByLabel('Session capacity in minutes').fill('90');
+      await page.getByRole('button', { name: 'Save' }).click();
+
+      // Name updates, capacity updates.
+      await expect(agendaPanel.locator('li', { hasText: 'Afternoon' })).toContainText('capacity 1h30m');
+      await expect(agendaPanel.getByText('Morning')).not.toBeVisible();
+    });
+  });
+
+  test.describe('Agenda import', () => {
+    // The full happy-path import exercises a server outbound fetch to
+    // raw.githubusercontent.com, which Playwright cannot intercept (the fetch
+    // happens server-side). Parser correctness is exercised in
+    // packages/server/src/parseAgenda.test.ts against real TC39 fixtures. The
+    // tests below pin down only the client-side UI mechanics and the server's
+    // error response path — both of which only the full stack can demonstrate.
+
+    test('chair opens the import form, submits a URL, and receives a server error for a missing fixture', async ({
+      page,
+    }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'Import Agenda from URL' }).click();
+
+      // Form fields visible
+      const urlInput = page.getByLabel('Agenda markdown URL');
+      await expect(urlInput).toBeVisible();
+      await expect(urlInput).toBeFocused();
+
+      // Submit a URL that satisfies the client's regex but points to a
+      // non-existent TC39 agenda document. The server fetches it and surfaces
+      // the failure as a 502 error which the form renders in an alert.
+      await urlInput.fill('https://github.com/tc39/agendas/blob/main/1900/01.md');
+      await page.getByRole('button', { name: 'Import' }).click();
+
+      // The error message bubbles up to the form's alert region. We only
+      // assert that *some* error is shown — the exact wording depends on
+      // upstream (404 vs 503 vs DNS), but the form always renders the alert.
+      await expect(page.getByRole('alert')).toBeVisible({ timeout: 15_000 });
+    });
+
+    test('Cancel closes the import form without affecting the agenda', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      await page.getByRole('button', { name: 'Import Agenda from URL' }).click();
+      await page.getByLabel('Agenda markdown URL').fill('https://github.com/tc39/agendas/blob/main/2026/03.md');
+      await page.getByRole('button', { name: 'Cancel' }).click();
+
+      // Back to the empty state with the trigger button visible.
+      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
+      await expect(page.getByText('No agenda items yet.')).toBeVisible();
     });
   });
 });

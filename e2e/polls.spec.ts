@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { createMeeting, goToAgendaTab, goToQueueTab, addAgendaItem, startMeeting } from './helpers.js';
+import { createMeeting, goToAgendaTab, goToQueueTab, goToLogTab, addAgendaItem, startMeeting } from './helpers.js';
+import { installClipboardMock, getClipboard } from './mocks.js';
 
 /** Set up a started meeting with one agenda item. */
 async function setupStartedMeeting(page: import('@playwright/test').Page) {
@@ -207,5 +208,149 @@ test.describe('Termination', () => {
 
     // "Create Poll" button should reappear since there is no active poll
     await expect(page.getByRole('button', { name: 'Create Poll' })).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Poll configuration — option editing and single-select mode
+// ---------------------------------------------------------------------------
+
+test.describe('Poll setup option editing', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupStartedMeeting(page);
+  });
+
+  test('chairs can add a new option and edit its label', async ({ page }) => {
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create poll' });
+
+    await expect(dialog.getByLabel('Option label')).toHaveCount(6);
+
+    // Add an option — a 7th input appears with an empty label.
+    await dialog.getByRole('button', { name: /Add Option/i }).click();
+    await expect(dialog.getByLabel('Option label')).toHaveCount(7);
+
+    // Fill the new option's label.
+    const newOption = dialog.getByLabel('Option label').nth(6);
+    await newOption.fill('Custom label');
+    await expect(newOption).toHaveValue('Custom label');
+
+    // Edit an existing label.
+    const first = dialog.getByLabel('Option label').first();
+    await first.fill('Edited label');
+    await expect(first).toHaveValue('Edited label');
+  });
+
+  test('single-select mode replaces previous selection on a new click', async ({ page }) => {
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    const setup = page.getByRole('dialog', { name: 'Create poll' });
+
+    // Uncheck "Allow selecting multiple options" → single-select mode.
+    const multi = setup.getByLabel('Allow selecting multiple options');
+    await expect(multi).toBeChecked();
+    await multi.uncheck();
+
+    await setup.getByRole('button', { name: 'Start Poll' }).click();
+    const active = page.getByRole('dialog', { name: 'Active poll' });
+    await expect(active).toBeVisible();
+
+    const positive = active.getByRole('button', { name: /^Positive:/ });
+    const following = active.getByRole('button', { name: /^Following:/ });
+
+    await positive.click();
+    await expect(positive).toHaveAttribute('aria-pressed', 'true');
+
+    // Selecting Following should auto-deselect Positive in single-select mode.
+    await following.click();
+    await expect(following).toHaveAttribute('aria-pressed', 'true');
+    await expect(positive).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reactions — hover tooltip exposes reactor names
+// ---------------------------------------------------------------------------
+
+test.describe('Reaction tooltips', () => {
+  test('reaction button title carries the reactor name once selected', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    await page.getByRole('dialog', { name: 'Create poll' }).getByRole('button', { name: 'Start Poll' }).click();
+    const active = page.getByRole('dialog', { name: 'Active poll' });
+    await expect(active).toBeVisible();
+
+    const button = active.getByRole('button', { name: /^Strong Positive:/ });
+    // Before any reactions the title falls back to the label.
+    await expect(button).toHaveAttribute('title', /Strong Positive/i);
+
+    await button.click();
+    // After reacting, the title should now mention the reactor (the default
+    // mock user is "admin" / display name "Admin"). The exact format is up
+    // to the component — we only assert the reactor's identity surfaces.
+    await expect(button).toHaveAttribute('title', /admin/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Copy Results — clipboard contents sorted by count descending
+// ---------------------------------------------------------------------------
+
+test.describe('Copy Results', () => {
+  test('Copy Results writes a summary to the clipboard sorted by count descending', async ({ page }) => {
+    await installClipboardMock(page);
+    await setupStartedMeeting(page);
+
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    await page.getByRole('dialog', { name: 'Create poll' }).getByRole('button', { name: 'Start Poll' }).click();
+    const active = page.getByRole('dialog', { name: 'Active poll' });
+    await expect(active).toBeVisible();
+
+    // React to two distinct options so the sort has work to do. With one
+    // viewer we can only produce counts of 0 or 1, but the sort criterion
+    // ("sort by count descending") still distinguishes reacted vs unreacted.
+    await active.getByRole('button', { name: /^Positive:/ }).click();
+
+    await active.getByRole('button', { name: 'Copy Results' }).click();
+
+    const writes = await getClipboard(page);
+    expect(writes.length).toBeGreaterThan(0);
+    const summary = writes.at(-1)!;
+    // The first non-zero line should be the reacted option.
+    const firstLine = summary.split('\n').find((l) => /\b1\b/.test(l));
+    expect(firstLine).toMatch(/Positive/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Log — "Ran a poll" entry surfaces after Stop Poll
+// ---------------------------------------------------------------------------
+
+test.describe('Poll log entry', () => {
+  test('stopping a poll records a "Ran a poll" entry in the meeting log', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    const setup = page.getByRole('dialog', { name: 'Create poll' });
+    await setup.getByLabel('Poll topic').fill('Approve this proposal?');
+    await setup.getByRole('button', { name: 'Start Poll' }).click();
+
+    const active = page.getByRole('dialog', { name: 'Active poll' });
+    await expect(active).toBeVisible();
+
+    // Cast one reaction so the log records a non-zero voter count.
+    await active.getByRole('button', { name: /^Strong Positive:/ }).click();
+
+    await active.getByRole('button', { name: 'Stop Poll' }).click();
+    await expect(active).not.toBeVisible();
+
+    await goToLogTab(page);
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+
+    // The log includes a poll-ran entry with the topic, voter count, and
+    // results summary.
+    await expect(logPanel.getByText(/Ran a poll: Approve this proposal\?/)).toBeVisible();
+    await expect(logPanel.getByText(/1 voter/)).toBeVisible();
+    await expect(logPanel.getByText(/Strong Positive:\s*1/)).toBeVisible();
   });
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForHomePage, createMeeting, switchUser } from './helpers.js';
+import { waitForHomePage, createMeeting, switchUser, goToAgendaTab, openSecondContext } from './helpers.js';
 
 test.describe('Authentication / Login', () => {
   test('mock auth auto-logs in as default user', async ({ page }) => {
@@ -342,5 +342,89 @@ test.describe('Mock Auth User Switcher', () => {
     await input.press('Enter');
     // Wait for the identity to update
     await expect(nav).toContainText('testuser');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin — chair-list editing and diagnostics content
+// ---------------------------------------------------------------------------
+
+test.describe('Admin chair-list bypass and diagnostics', () => {
+  test('admin edits the chair list of a meeting they are not a chair of', async ({ page }) => {
+    // Create the meeting as a non-admin "bob"; admin will never be made a chair.
+    await waitForHomePage(page);
+    await switchUser(page, 'bob');
+    const meetingId = await createMeeting(page);
+
+    // Switch back to admin (default ADMIN_USERNAMES entry).
+    await waitForHomePage(page);
+    await switchUser(page, 'admin');
+    await page.goto(`/meeting/${encodeURIComponent(meetingId)}`);
+    await goToAgendaTab(page);
+    const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+
+    // Admin should see the chairs section with the "+" affordance even
+    // though they are not a chair — admin bypasses the chair-only gate.
+    await expect(page.getByLabel('Add chair')).toBeVisible();
+    await page.getByLabel('Add chair').click();
+    await page.getByPlaceholder('username').fill('carol');
+    await page.getByPlaceholder('username').press('Enter');
+    await expect(agendaPanel).toContainText('carol');
+  });
+
+  test('admin self-removes as the last chair (leaves chair list empty)', async ({ page }) => {
+    await waitForHomePage(page);
+    // Admin creates the meeting, so admin starts as the sole chair.
+    const meetingId = await createMeeting(page);
+    await page.goto(`/meeting/${encodeURIComponent(meetingId)}`);
+    await goToAgendaTab(page);
+
+    // Admins are allowed to remove themselves even when they are the last
+    // chair (the regular-chair "must remain ≥1" rule does not apply).
+    await page.getByLabel('Remove chair admin').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+
+    // Chair list should be empty — but the chairs heading itself remains.
+    const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+    await expect(agendaPanel.getByRole('heading', { name: 'Chairs' })).toBeVisible();
+    await expect(agendaPanel.getByLabel(/Remove chair/)).toHaveCount(0);
+  });
+
+  test('Diagnostics panel renders sections for uptime, memory, persistence, and recent errors', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const adminTabPanel = page.getByRole('heading', { name: 'Diagnostics' }).locator('..');
+    await expect(adminTabPanel).toBeVisible();
+    // Uptime row.
+    await expect(adminTabPanel.getByText(/Uptime/i)).toBeVisible();
+    // Memory metrics surface as RSS / Heap used / Heap total — assert RSS.
+    await expect(adminTabPanel.getByText(/RSS/)).toBeVisible();
+    // Persistence section.
+    await expect(adminTabPanel.getByText(/Persistence|dirty|sync/i).first()).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Home — My Meetings activity display
+// ---------------------------------------------------------------------------
+
+test.describe('My Meetings activity display', () => {
+  test('shows "now (N active)" when at least one client is connected', async ({ page, browser }) => {
+    const id = await createMeeting(page);
+    // Admin is still connected to /meeting/:id. Open a second context so the
+    // home-page poll surfaces an active connection on this row regardless
+    // of any other rows that may exist in admin's panel from earlier work
+    // in the same worker.
+    const { context } = await openSecondContext(browser, id);
+    try {
+      await waitForHomePage(page);
+      const panel = page.getByRole('heading', { name: 'My Meetings' }).locator('..');
+      await expect(panel).toBeVisible();
+      // Find the row for our just-created meeting and assert its activity cell.
+      const row = panel.getByRole('row').filter({ hasText: id });
+      await expect(row.getByText(/now\s*\(\d+ active\)/)).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await context.close();
+    }
   });
 });

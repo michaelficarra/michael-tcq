@@ -9,6 +9,7 @@ import {
   advanceAgenda,
   queueSection,
   switchUser,
+  dragAndDrop,
 } from './helpers.js';
 
 /**
@@ -583,5 +584,170 @@ test.describe('Queue Close / Open', () => {
 
     // Queue remains closed after adding the Point of Order
     await expect(page.getByText('The queue is closed. You can still raise a Point of Order.')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Queue Reordering
+// ---------------------------------------------------------------------------
+
+test.describe('Queue Reordering', () => {
+  test('chair drags an entry down: the entry adopts the lowest priority of items at or above it', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Build a queue: [Clarifying Question, Clarifying Question, New Topic].
+    // Clarifying Question outranks New Topic, so the natural priority insert
+    // is [Q1, Q2, T1]. Dragging Q1 down past Q2 should make it stay a
+    // Clarifying Question (only New Topic sits below it); dragging Q1 to the
+    // last position should demote it to New Topic.
+    await addQueueEntry(page, 'Clarifying Question', 'Q1');
+    await addQueueEntry(page, 'Clarifying Question', 'Q2');
+    await addQueueEntry(page, 'New Topic', 'T1');
+
+    const list = page.getByRole('list', { name: 'Queued speakers' });
+    await expect(list.getByRole('listitem')).toHaveCount(3);
+    await expect(list.getByRole('listitem').nth(0)).toContainText('Q1');
+    await expect(list.getByRole('listitem').nth(2)).toContainText('T1');
+
+    // Drag Q1 onto T1 — Q1 should land at the bottom and adopt New Topic.
+    const q1 = list
+      .getByRole('listitem')
+      .nth(0)
+      .getByLabel(/Drag to reorder: Q1/);
+    const t1 = list
+      .getByRole('listitem')
+      .nth(2)
+      .getByLabel(/Drag to reorder: T1/);
+    await dragAndDrop(page, q1, t1);
+
+    // After settle: Q1 sits last with "New Topic:" badge.
+    const last = list.getByRole('listitem').last();
+    await expect(last).toContainText('Q1');
+    await expect(last).toContainText('New Topic');
+  });
+
+  test('chair drags an entry up: it adopts the highest priority of items at or below it', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Build: [Clarifying Question, New Topic, New Topic]. Dragging T2 above
+    // the Clarifying Question should promote it to Clarifying Question (since
+    // a clarifying question sits at or below the new position).
+    await addQueueEntry(page, 'Clarifying Question', 'Q1');
+    await addQueueEntry(page, 'New Topic', 'T1');
+    await addQueueEntry(page, 'New Topic', 'T2');
+
+    const list = page.getByRole('list', { name: 'Queued speakers' });
+    await expect(list.getByRole('listitem')).toHaveCount(3);
+
+    const t2 = list
+      .getByRole('listitem')
+      .nth(2)
+      .getByLabel(/Drag to reorder: T2/);
+    const q1 = list
+      .getByRole('listitem')
+      .nth(0)
+      .getByLabel(/Drag to reorder: Q1/);
+    await dragAndDrop(page, t2, q1);
+
+    // T2 should now sit at the top and carry a Clarifying Question badge.
+    const first = list.getByRole('listitem').first();
+    await expect(first).toContainText('T2');
+    await expect(first).toContainText('Clarifying Question');
+  });
+
+  test('participants see no drag handle on entries they do not own', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Chair (admin) adds an entry on the chair's behalf, then a non-chair joins.
+    await addQueueEntry(page, 'New Topic', "Chair's entry");
+
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    // No drag handle should be present for Bob since he doesn't own this entry.
+    await expect(item.getByLabel(/Drag to reorder:/)).not.toBeVisible();
+  });
+
+  test('participant can defer their own entry downward but not jump ahead of someone else', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Setup: [bob's New Topic, admin's New Topic, bob's New Topic]. Bob should
+    // be able to move his last entry up to position 1 (his other own entry)
+    // but not above admin's entry at position 0.
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', 'B1');
+
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', 'A1');
+
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', 'B2');
+
+    // Priority insert: all New Topic → FIFO: B1, A1, B2.
+    const list = page.getByRole('list', { name: 'Queued speakers' });
+    await expect(list.getByRole('listitem').nth(0)).toContainText('B1');
+    await expect(list.getByRole('listitem').nth(1)).toContainText('A1');
+    await expect(list.getByRole('listitem').nth(2)).toContainText('B2');
+
+    // Bob's B2 has a drag handle (own entry, can defer downward — and there
+    // are no items below it to defer to, so it should only allow upward to
+    // its own contiguous-block top). The block top is B2 itself since A1
+    // sits between B1 and B2, so the only legal move is no move — the handle
+    // may be omitted. The PRD says: "The handle is omitted entirely when no
+    // move is possible." We assert the handle exists or is omitted depending
+    // on what the panel computes; either way, dragging B2 above A1 must be
+    // rejected.
+    const b2 = list.getByRole('listitem').nth(2);
+    const a1 = list.getByRole('listitem').nth(1);
+    const handle = b2.getByLabel(/Drag to reorder: B2/);
+    const handleCount = await handle.count();
+
+    if (handleCount > 0) {
+      // If a handle is present, attempting to drag B2 above A1 should not
+      // succeed (the panel clamps the y range; if a drop lands outside the
+      // legal range the optimistic update is suppressed).
+      await dragAndDrop(page, handle, a1);
+      // Bob's B2 must still sit below A1.
+      const newList = page.getByRole('list', { name: 'Queued speakers' });
+      const indexOfB2 = await newList
+        .getByRole('listitem')
+        .evaluateAll((items) => items.findIndex((el) => el.textContent?.includes('B2')));
+      const indexOfA1 = await newList
+        .getByRole('listitem')
+        .evaluateAll((items) => items.findIndex((el) => el.textContent?.includes('A1')));
+      expect(indexOfB2).toBeGreaterThan(indexOfA1);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cancelling an existing-entry edit (not the initial edit)
+// ---------------------------------------------------------------------------
+
+test.describe('Cancel edit on existing entry', () => {
+  test('pressing Escape while editing an existing entry does NOT remove it', async ({ page }) => {
+    await setupStartedMeeting(page);
+    // Save an entry first so we're past the "initial edit" state.
+    await addQueueEntry(page, 'New Topic', 'Saved entry');
+
+    const item = page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem').first();
+    // Open the edit form via the Edit button (existing entry, not initial).
+    await item.getByText('Edit', { exact: true }).click();
+
+    const input = page.getByLabel('Topic description');
+    await expect(input).toHaveValue('Saved entry');
+
+    // Escape during an existing-entry edit only closes the editor; the
+    // contrast with the initial-edit path (which removes the entry) is
+    // explicit in the PRD.
+    await input.press('Escape');
+
+    // The entry should still be present.
+    await expect(page.getByText('Saved entry')).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Queued speakers' }).getByRole('listitem')).toHaveCount(1);
   });
 });

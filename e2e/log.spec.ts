@@ -9,6 +9,8 @@ import {
   addQueueEntry,
   advanceAgenda,
   queueSection,
+  switchUser,
+  readDownloadedFile,
 } from './helpers.js';
 
 test.describe('Log Tab', () => {
@@ -183,6 +185,182 @@ test.describe('Log Tab', () => {
     expect(content).toContain('Exported topic');
     expect(content).toContain('Participants');
     expect(content).toContain('@admin');
+  });
+
+  test('"Finished" entry records duration, participants, and a collapsible remaining-queue disclosure', async ({
+    page,
+  }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'First', 'admin');
+    await addAgendaItem(page, 'Second', 'admin');
+    await startMeeting(page);
+
+    // Participants by switching users and adding queue entries.
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', "Bob's topic");
+    // Advance Bob to the floor so his speaking-time accumulates.
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking')).toContainText("Bob's topic");
+
+    // Leave a remaining entry in the queue so the disclosure renders.
+    await switchUser(page, 'carol');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', 'Carol unsaid');
+
+    // Advance the agenda — the previous item should be Finished with the
+    // remaining-queue disclosure populated.
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await advanceAgenda(page);
+    await expect(queueSection(page, 'Agenda Item')).toContainText('Second');
+
+    await goToLogTab(page);
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+
+    // Finished entry shows up — its duration span sits inside the same
+    // entry block; we look for a duration formatted by formatDuration.
+    await expect(logPanel.getByText(/Finished:/)).toBeVisible();
+
+    // The remaining-queue <details> disclosure is present and expandable.
+    const remainingSummary = logPanel.getByText('Remaining queue');
+    await expect(remainingSummary).toBeVisible();
+    await remainingSummary.click();
+    await expect(logPanel.getByText(/Carol unsaid/)).toBeVisible();
+  });
+
+  test('Topic-discussed entry uses compact format for a single speaker', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Solo', 'admin');
+    await startMeeting(page);
+    await addQueueEntry(page, 'New Topic', 'Solo topic');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking')).toContainText('Solo topic');
+    // Advance past the speaker to finalise the topic.
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(page.getByText('Nobody speaking yet')).toBeVisible();
+
+    await goToLogTab(page);
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+    // Compact layout: no nested rows under the topic entry.
+    // We assert presence of the topic and absence of the inner pl-4 nested
+    // row container that the expanded format adds.
+    const topicLine = logPanel.getByText('Solo topic');
+    await expect(topicLine).toBeVisible();
+    // No nested SpeakerRow (those have a `pl-4 border-l-2` left-border style).
+    const nested = logPanel.locator('div.pl-4');
+    await expect(nested).toHaveCount(0);
+  });
+
+  test('Topic-discussed entry uses expanded format for a topic with replies', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Many speakers', 'admin');
+    await startMeeting(page);
+
+    // First speaker introduces the topic.
+    await addQueueEntry(page, 'New Topic', 'Discussion topic');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking')).toContainText('Discussion topic');
+
+    // Reply queued under the topic — same chair adds it for simplicity.
+    await addQueueEntry(page, 'Discuss Current Topic', 'A reply');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking')).toContainText('A reply');
+
+    // Clear current speaker so the topic finalises in the log.
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(page.getByText('Nobody speaking yet')).toBeVisible();
+
+    await goToLogTab(page);
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+    await expect(logPanel.getByText('Discussion topic')).toBeVisible();
+    // Expanded format: the reply renders as a nested row.
+    await expect(logPanel.getByText('A reply')).toBeVisible();
+    // The expanded format uses a `pl-4 border-l-2` indent on nested rows.
+    await expect(logPanel.locator('div.pl-4').first()).toBeVisible();
+  });
+
+  test('Point of Order entries are excluded from the log', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item with interruption', 'admin');
+    await startMeeting(page);
+
+    // First a normal topic so we have something to interrupt.
+    await addQueueEntry(page, 'New Topic', 'Normal topic');
+    const nextSpeaker = page.getByRole('button', { name: 'Next Speaker' });
+    await expect(nextSpeaker).toBeEnabled();
+    await nextSpeaker.click();
+    await expect(queueSection(page, 'Speaking')).toContainText('Normal topic');
+
+    // Now a Point of Order — it goes to the head of the queue.
+    await addQueueEntry(page, 'Point of Order', 'Procedural interruption');
+    await expect(nextSpeaker).toBeEnabled();
+    await nextSpeaker.click();
+    await expect(queueSection(page, 'Speaking')).toContainText('Procedural interruption');
+
+    // Advance past the POO speaker — waiting for the button to settle between
+    // clicks so debounce/cooldown doesn't intermittently disable it.
+    await expect(nextSpeaker).toBeEnabled();
+    await nextSpeaker.click();
+    // Speaker may end up cleared or on a different entry; we don't care which.
+    // What matters is reaching the log tab afterwards.
+
+    await goToLogTab(page);
+    const logPanel = page.getByRole('tabpanel', { name: 'Log' });
+    // Normal topic surfaces.
+    await expect(logPanel.getByText('Normal topic')).toBeVisible();
+    // The Point of Order entry text must NOT appear in the log.
+    await expect(logPanel.getByText('Procedural interruption')).not.toBeVisible();
+  });
+
+  test('Export markdown includes a participants table sorted by speaking time descending', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Export item', 'admin');
+    await startMeeting(page);
+
+    // Get bob to attend (count as participant) without speaking.
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    // Back to admin, who speaks the topic.
+    await switchUser(page, 'admin');
+    await goToQueueTab(page);
+    await addQueueEntry(page, 'New Topic', 'Admin speaks');
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(queueSection(page, 'Speaking')).toContainText('Admin speaks');
+    // Advance past so the topic finalises with a duration.
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+
+    await goToLogTab(page);
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export' }).click();
+    const content = await readDownloadedFile(await downloadPromise);
+
+    // Markdown structure: agenda heading, topic list, participants table.
+    expect(content).toContain('# Meeting Log');
+    expect(content).toContain('## Export item');
+    expect(content).toContain('**New Topic:** Admin speaks');
+    expect(content).toContain('## Participants');
+    expect(content).toMatch(/\|\s*Speaker\s*\|\s*Time\s*\|/);
+    // Both attendees appear in the participants table — bob with 0s.
+    expect(content).toContain('@admin');
+    expect(content).toContain('@bob');
+    // Admin has a non-zero duration, so should sort before bob (0s) in the
+    // table. We locate the two rows and assert admin appears first.
+    const tableMatch = content.split('## Participants')[1] ?? '';
+    const adminIndex = tableMatch.indexOf('@admin');
+    const bobIndex = tableMatch.indexOf('@bob');
+    expect(adminIndex).toBeGreaterThan(-1);
+    expect(bobIndex).toBeGreaterThan(adminIndex);
+    // All timestamps are UTC.
+    expect(content).toMatch(/UTC/);
   });
 
   test('log updates in real time as events occur', async ({ page }) => {

@@ -9,6 +9,7 @@ import {
   addAgendaItem,
   startMeeting,
   advanceAgenda,
+  addQueueEntry,
 } from './helpers.js';
 
 test.describe('Creating a Meeting', () => {
@@ -162,6 +163,70 @@ test.describe('Meeting Flow', () => {
     // "Introducing: Follow-up" topic introduction the speaker section
     // renders for the auto-activated item's first presenter.
     await expect(page.getByText('Follow-up', { exact: true })).toBeVisible();
+  });
+
+  test('adding a session while concluded does NOT auto-activate (only items do)', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Only Item', 'admin');
+    await startMeeting(page);
+    await advanceAgenda(page); // conclude the only item
+
+    await goToQueueTab(page);
+    await expect(page.getByText(/Meeting concluded/i)).toBeVisible();
+
+    // Add a session header — should NOT auto-activate (sessions never
+    // become the current item).
+    await goToAgendaTab(page);
+    await page.getByRole('button', { name: 'New Session' }).click();
+    await page.getByLabel('Session Name').fill('Wrap up');
+    await page.getByLabel('Capacity').fill('30');
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await goToQueueTab(page);
+    // Meeting still concluded; no current item picked up from the session.
+    await expect(page.getByText(/Meeting concluded/i)).toBeVisible();
+  });
+
+  test('Next Agenda Item dialog warns about clearing the queue and shows the entry count', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'First', 'admin');
+    await addAgendaItem(page, 'Second', 'admin');
+    await startMeeting(page);
+
+    // Stack a couple of entries in the queue.
+    await addQueueEntry(page, 'New Topic', 'A');
+    await addQueueEntry(page, 'New Topic', 'B');
+
+    await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
+    const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+    await expect(dialog).toBeVisible();
+    // The dialog body warns about queue clearing and includes the count "2".
+    await expect(dialog.getByText(/clear the speaker queue.*2.*entries/i)).toBeVisible();
+  });
+
+  test('Ctrl/Cmd+Enter inside the conclusion textarea submits the dialog', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'First', 'admin');
+    await addAgendaItem(page, 'Second', 'admin');
+    await startMeeting(page);
+
+    await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
+    const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+    await expect(dialog).toBeVisible();
+
+    // The textarea is autofocused; type a conclusion, then submit via
+    // Ctrl+Enter on Linux/Windows or Cmd+Enter on macOS.
+    const textarea = dialog.getByLabel(/conclusion/i);
+    await textarea.fill('Decided via shortcut');
+    const submitKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
+    await textarea.press(submitKey);
+
+    await expect(dialog).not.toBeVisible();
+    // Current item should have moved on.
+    await expect(page.getByRole('region', { name: 'Agenda Item' })).toContainText('Second');
   });
 });
 
