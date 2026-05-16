@@ -32,6 +32,24 @@ test.describe('Authentication / Login', () => {
     await waitForHomePage(page);
     await expect(page.getByRole('navigation')).toContainText('Admin');
   });
+
+  test('logging in from a meeting deep-link returns to that meeting', async ({ page }) => {
+    // Create a meeting while logged in so we have a real id, then log out
+    // and deep-link back to it — the LoginPage should preserve the URL so
+    // clicking "Log in with GitHub" returns us to the same meeting page
+    // instead of the home page.
+    const id = await createMeeting(page);
+    await page.goto('/auth/logout');
+    await page.waitForURL('/');
+
+    await page.goto(`/meeting/${encodeURIComponent(id)}`);
+    await expect(page.getByRole('link', { name: 'Log in with GitHub' })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Log in with GitHub' }).click();
+    await page.waitForURL(`**/meeting/${encodeURIComponent(id)}`);
+    // The meeting page renders (Queue tab is the default).
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+  });
 });
 
 test.describe('Home Page', () => {

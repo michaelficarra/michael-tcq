@@ -5,9 +5,18 @@
  * redirects to /auth/github to start the OAuth flow.
  */
 
+import { useLocation } from 'react-router-dom';
 import { Logo } from '../components/Logo.js';
 
 export function LoginPage() {
+  // Preserve whatever deep-link the user landed on so the server's
+  // /auth/github handler can redirect back here after OAuth completes.
+  // For "/" we skip the query param — it's the default redirect target
+  // and there's no point round-tripping it.
+  const { pathname, search, hash } = useLocation();
+  const current = `${pathname}${search}${hash}`;
+  const loginHref = current === '/' ? '/auth/github' : `/auth/github?returnTo=${encodeURIComponent(current)}`;
+
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100 flex flex-col">
       <header className="border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-6 py-3">
@@ -19,7 +28,7 @@ export function LoginPage() {
           <h1 className="text-2xl font-semibold text-stone-800 dark:text-stone-200 mb-2">Welcome to TCQ</h1>
           <p className="text-stone-500 dark:text-stone-400 mb-6">A structured meeting discussion queue.</p>
           <a
-            href="/auth/github"
+            href={loginHref}
             className="inline-block bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 px-6 py-2.5 rounded-lg
                        font-medium hover:bg-stone-900 dark:hover:bg-stone-300 transition-colors
                        focus:outline-none focus:ring-2 focus:ring-stone-800 dark:focus:ring-stone-200 focus:ring-offset-2 dark:focus:ring-offset-stone-900"

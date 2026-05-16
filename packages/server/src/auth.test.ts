@@ -46,6 +46,35 @@ describe('Auth routes', () => {
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toBe('/');
     });
+
+    it('redirects to a safe returnTo path in mock auth mode', async () => {
+      // A logged-out user deep-linking to a meeting should land back
+      // on that meeting after the (mock) auth round-trip.
+      const res = await fetch(`${baseUrl}/auth/github?returnTo=%2Fmeeting%2Ffoo`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/meeting/foo');
+    });
+
+    // Open-redirect guard: anything that the browser might resolve to a
+    // different origin must be rejected — otherwise an attacker could
+    // craft phishing links that bounce through our login endpoint.
+    it('rejects protocol-relative returnTo', async () => {
+      const res = await fetch(`${baseUrl}/auth/github?returnTo=%2F%2Fevil.com`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/');
+    });
+
+    it('rejects absolute-URL returnTo', async () => {
+      const res = await fetch(`${baseUrl}/auth/github?returnTo=https%3A%2F%2Fevil.com`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/');
+    });
+
+    it('rejects backslash-prefixed returnTo', async () => {
+      const res = await fetch(`${baseUrl}/auth/github?returnTo=%2F%5Cevil.com`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/');
+    });
   });
 
   describe('GET /auth/github/callback', () => {

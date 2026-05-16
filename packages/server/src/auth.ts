@@ -56,6 +56,20 @@ export async function fetchGitHubUser(username: string): Promise<User | null> {
   };
 }
 
+/**
+ * Validate a candidate post-login redirect URL. Only same-origin paths are
+ * allowed: must start with "/" but not "//" or "/\" (which browsers may
+ * interpret as protocol-relative cross-origin URLs). Anything else returns
+ * null so the caller falls back to "/" — this is the open-redirect guard
+ * on the `returnTo` query parameter accepted by GET /auth/github.
+ */
+function sanitiseReturnTo(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  if (raw[0] !== '/') return null;
+  if (raw[1] === '/' || raw[1] === '\\') return null;
+  return raw;
+}
+
 export function createAuthRoutes(): Router {
   const router = Router();
 
@@ -63,12 +77,25 @@ export function createAuthRoutes(): Router {
   // Redirect to GitHub's OAuth authorisation page. The user will be
   // asked to grant our app access to their profile information.
   router.get('/github', (req, res) => {
+    // Allow callers (e.g. LoginPage) to specify where to land after
+    // login completes. Validated to reject open-redirect attempts.
+    const returnTo = sanitiseReturnTo(req.query.returnTo);
+
     if (!GITHUB_CLIENT_ID) {
-      // In mock auth mode, just clear the logged-out flag and redirect home.
-      // The mock auth middleware will auto-populate the user on next request.
+      // In mock auth mode, just clear the logged-out flag and redirect.
+      // The mock auth middleware will auto-populate the user on next request,
+      // so we can land directly on the requested URL without round-tripping
+      // through req.session.returnTo.
       delete req.session.mockLoggedOut;
-      res.redirect('/');
+      res.redirect(returnTo ?? '/');
       return;
+    }
+
+    // Production OAuth — stash the requested URL in the session so the
+    // /github/callback handler can redirect back to it once GitHub has
+    // sent us the authorisation code.
+    if (returnTo) {
+      req.session.returnTo = returnTo;
     }
 
     const params = new URLSearchParams({

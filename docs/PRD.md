@@ -56,7 +56,7 @@ Both treatments are visible to every participant in the meeting, not only to the
 
 ## Authentication
 
-Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application. Unauthenticated users see a login page with a "Log in with GitHub" button.
+Users authenticate via GitHub OAuth. Their GitHub display name, username, and organisation are used as their identity within the application. Unauthenticated users see a login page with a "Log in with GitHub" button. When an unauthenticated user follows a deep link to a specific page (e.g. a meeting URL), completing login returns them to that page rather than the home page.
 
 When GitHub OAuth is not configured, the server runs in mock auth mode with a fake user, allowing development without creating an OAuth App. In mock auth mode, a dev user-switcher in the navigation bar allows switching between different mock identities.
 

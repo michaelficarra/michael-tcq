@@ -64,16 +64,33 @@ function renderHomePage() {
 }
 
 describe('LoginPage', () => {
+  // LoginPage reads useLocation() to attach the current URL to the login
+  // link as a returnTo param, so every render needs a Router context.
+  function renderAt(path: string) {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+  }
+
   it('renders the TCQ branding', () => {
-    render(<LoginPage />);
+    renderAt('/');
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
-  it('renders a "Log in with GitHub" link', () => {
-    render(<LoginPage />);
+  it('renders a "Log in with GitHub" link without returnTo on the root path', () => {
+    renderAt('/');
     const link = screen.getByText('Log in with GitHub');
     expect(link).toBeInTheDocument();
+    // No returnTo param: "/" is already the default post-login redirect.
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github');
+  });
+
+  it('includes a returnTo param when rendered at a non-root deep link', () => {
+    renderAt('/meeting/foo');
+    const link = screen.getByText('Log in with GitHub');
+    expect(link.closest('a')).toHaveAttribute('href', '/auth/github?returnTo=%2Fmeeting%2Ffoo');
   });
 });
 
