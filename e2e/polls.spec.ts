@@ -309,7 +309,14 @@ test.describe('Copy Results', () => {
     // React to two distinct options so the sort has work to do. With one
     // viewer we can only produce counts of 0 or 1, but the sort criterion
     // ("sort by count descending") still distinguishes reacted vs unreacted.
-    await active.getByRole('button', { name: /^Positive:/ }).click();
+    const positive = active.getByRole('button', { name: /^Positive:/ });
+    await positive.click();
+    // Wait for the server round-trip to apply before copying — Copy Results
+    // builds its summary synchronously from the client's current
+    // poll.reactions, so without this wait the clipboard can land an
+    // all-zero snapshot. The title gaining the reactor's name is the same
+    // settle signal used by the "Reaction tooltips" test above.
+    await expect(positive).toHaveAttribute('title', /admin/i);
 
     await active.getByRole('button', { name: 'Copy Results' }).click();
 

@@ -252,12 +252,22 @@ export async function dragAndDrop(page: Page, source: Locator, target: Locator):
     throw new Error('Drag-and-drop target not visible after activation');
   }
   const tx = liveTargetBox.x + liveTargetBox.width / 2;
-  const ty = liveTargetBox.y + liveTargetBox.height / 2;
+  const targetCentreY = liveTargetBox.y + liveTargetBox.height / 2;
+
+  // Aim at the target's FAR edge in the drag direction rather than its
+  // centre. @dnd-kit's verticalListSortingStrategy only commits to
+  // "insert active after over" once the active rect's centre has crossed
+  // the over rect's centre in the drag direction; dropping exactly on
+  // the centre is a 50/50 boundary race and reproducibly mis-lands on
+  // webkit. Inset by 2px so the drop is unambiguously still over the
+  // target (rather than the next item up/down).
+  const dragsDown = targetCentreY > sy + 8;
+  const ty = dragsDown ? liveTargetBox.y + liveTargetBox.height - 2 : liveTargetBox.y + 2;
 
   // Interpolated path from the post-activation pointer position to the
-  // (now re-resolved) target centre. Multiple sub-steps give @dnd-kit's
-  // pointer move stream enough samples to keep the collision-detection
-  // hot path stable.
+  // (now re-resolved) target drop point. Multiple sub-steps give
+  // @dnd-kit's pointer move stream enough samples to keep the
+  // collision-detection hot path stable.
   const steps = 10;
   const startX = sx;
   const startY = sy + 8;
