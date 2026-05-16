@@ -240,6 +240,16 @@ When the last client disconnects from a meeting, a cleanup timer starts (e.g. 5 
 - **SQLite** — Works well locally but Cloud Run's filesystem is ephemeral, so SQLite data would be lost on container replacement — defeating the purpose of persistence.
 - **GCP Cloud Storage** — Could store meeting state as JSON blobs. Simpler than Firestore but has higher latency for frequent small writes and no document-level operations. Firestore is a better fit for structured data that changes frequently.
 
+### Application Settings: Runtime-Mutable Singleton
+
+A small `AppSettings` document holds global, admin-managed settings that change at runtime — currently just the **premium-tier user list** (the runtime replacement for the former `PREMIUM_USERNAMES` env var; see `docs/PRD.md` for the user-facing description). A single `AppSettingsManager` mediates reads and writes:
+
+- Reads are synchronous — every state broadcast goes through `isPremium(user)`, which is a `Set` membership check against the canonical (trimmed, lowercased) form.
+- Writes are eager — each add/remove awaits the underlying store before returning, so a 200 from the admin endpoint implies the change is durable.
+- Persistence mirrors the meeting-store split: `FileAppSettingsStore` writes a single JSON file at `.data/app-settings.json` (atomic via tmp + rename) for local dev; `FirestoreAppSettingsStore` writes a single document at `app-settings/singleton` for production. The default-on-missing semantics keep first boot crash-free.
+
+When an admin adds or removes a premium username, the server scans the in-memory meetings map and re-emits a full `state` snapshot to every meeting room whose `users` map contains that username. Other rooms see no traffic. This rides on the existing `emitFullState` path — `decorateMeetingForClient` already re-runs `stampPremium` from the manager on every emit, so the badge / glow flips on or off for connected participants without a refresh.
+
 ### Sessions: Firestore
 
 User sessions are also stored in Firestore, using a Firestore-backed session store for `express-session`. This keeps the persistence layer unified (one backing store rather than two) and means sessions survive container restarts, so users do not need to re-authenticate after a redeployment.

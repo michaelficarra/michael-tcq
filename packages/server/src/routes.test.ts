@@ -8,7 +8,14 @@ import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
+import { AppSettingsManager } from './appSettingsManager.js';
+import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
 import * as socket from './socket.js';
+
+/** Shared no-op AppSettingsManager for tests that don't exercise premium flow. */
+function emptyAppSettings(): AppSettingsManager {
+  return new AppSettingsManager(new InMemoryAppSettingsStore());
+}
 
 /**
  * Helper: make a request to the Express app without starting a real HTTP server.
@@ -45,10 +52,14 @@ function createTestApp(meetingManager: MeetingManager, user: User = TEST_USER) {
   });
   app.use(
     '/api',
-    createMeetingRoutes(meetingManager, {
-      to: () => ({ emit: () => {} }),
-      in: () => ({ disconnectSockets: () => {} }),
-    } as any),
+    createMeetingRoutes(
+      meetingManager,
+      {
+        to: () => ({ emit: () => {} }),
+        in: () => ({ disconnectSockets: () => {} }),
+      } as any,
+      emptyAppSettings(),
+    ),
   );
   return app;
 }
@@ -193,10 +204,14 @@ describe('Meeting REST routes', () => {
       app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
       app.use(
         '/api',
-        createMeetingRoutes(manager, {
-          to: () => ({ emit: () => {} }),
-          in: () => ({ disconnectSockets: () => {} }),
-        } as any),
+        createMeetingRoutes(
+          manager,
+          {
+            to: () => ({ emit: () => {} }),
+            in: () => ({ disconnectSockets: () => {} }),
+          } as any,
+          emptyAppSettings(),
+        ),
       );
       const { baseUrl: noAuthUrl, close: noAuthClose } = await listen(app);
       try {
@@ -832,7 +847,7 @@ describe('Meeting REST routes — import in OAuth mode', () => {
       }
       next();
     });
-    app.use('/api', createMeetingRoutes(manager, { to: () => ({ emit: () => {} }) } as never));
+    app.use('/api', createMeetingRoutes(manager, { to: () => ({ emit: () => {} }) } as never, emptyAppSettings()));
     ({ baseUrl, close } = await listen(app));
     return () => close();
   });

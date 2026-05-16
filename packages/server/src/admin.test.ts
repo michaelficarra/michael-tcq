@@ -9,6 +9,8 @@ import { toSessionUser } from './session.js';
 import { error as logError, critical as logCritical } from './logger.js';
 import { resetErrorBuffer } from './errorBuffer.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
+import { AppSettingsManager } from './appSettingsManager.js';
+import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
 
 /** The admin user for these tests. */
 const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin', organisation: '' };
@@ -18,7 +20,7 @@ const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin',
 const disconnectedRooms: string[] = [];
 
 /** Create a test app with session + routes, authenticated as a specific user. */
-function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) {
+function createTestApp(meetingManager: MeetingManager, appSettings: AppSettingsManager, user: User = ADMIN_USER) {
   const app = express();
   app.use(express.json());
   app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
@@ -37,7 +39,7 @@ function createTestApp(meetingManager: MeetingManager, user: User = ADMIN_USER) 
       },
     }),
   };
-  app.use('/api', createMeetingRoutes(meetingManager, io as any));
+  app.use('/api', createMeetingRoutes(meetingManager, io as any, appSettings));
   return app;
 }
 
@@ -56,6 +58,7 @@ async function listen(app: express.Express) {
 
 describe('Admin endpoints', () => {
   let manager: MeetingManager;
+  let appSettings: AppSettingsManager;
   let baseUrl: string;
   let close: () => void;
 
@@ -64,8 +67,9 @@ describe('Admin endpoints', () => {
     vi.stubEnv('ADMIN_USERNAMES', 'testadmin');
 
     manager = new MeetingManager(new InMemoryStore());
+    appSettings = new AppSettingsManager(new InMemoryAppSettingsStore());
     disconnectedRooms.length = 0;
-    const app = createTestApp(manager);
+    const app = createTestApp(manager, appSettings);
     ({ baseUrl, close } = await listen(app));
 
     return () => {
@@ -393,12 +397,12 @@ describe('Admin endpoints', () => {
   });
 
   describe('GET /api/me (premium flag)', () => {
-    it('includes isPremium: true when the user is in PREMIUM_USERNAMES', async () => {
+    it('includes isPremium: true when the user is in the admin-managed premium list', async () => {
       // The user menu (UserBadge) renders the premium mark only when
       // /api/me reports isPremium:true on the authed user, so this is
       // the wire-level invariant that lets the badge appear next to the
       // logged-in user's own name.
-      vi.stubEnv('PREMIUM_USERNAMES', 'testadmin');
+      await appSettings.addPremiumUsername('testadmin');
       const res = await fetch(`${baseUrl}/api/me`);
       const body = await res.json();
       expect(body.isPremium).toBe(true);
@@ -406,10 +410,173 @@ describe('Admin endpoints', () => {
 
     it('omits isPremium entirely for non-premium users', async () => {
       // Same omit-when-false convention as isAdmin.
-      vi.stubEnv('PREMIUM_USERNAMES', 'someone-else');
+      await appSettings.addPremiumUsername('someone-else');
       const res = await fetch(`${baseUrl}/api/me`);
       const body = await res.json();
       expect('isPremium' in body).toBe(false);
+    });
+  });
+
+  describe('Premium-user admin endpoints', () => {
+    describe('GET /api/admin/premium-users', () => {
+      it('returns an empty list when nothing has been added', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`);
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).toEqual({ usernames: [] });
+      });
+
+      it('returns the persisted list, sorted lexicographically', async () => {
+        // Seed in non-alphabetical order to verify the manager sorts on
+        // output. The client relies on a stable order so its local
+        // optimistic state stays in sync with the canonical list.
+        await appSettings.addPremiumUsername('charlie');
+        await appSettings.addPremiumUsername('alice');
+        await appSettings.addPremiumUsername('bob');
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`);
+        const body = await res.json();
+        expect(body).toEqual({ usernames: ['alice', 'bob', 'charlie'] });
+      });
+
+      it('returns 403 for non-admin users', async () => {
+        // Mint a new test app with a non-admin caller; share the same
+        // managers so settings persisted above still apply.
+        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const otherApp = createTestApp(manager, appSettings, nonAdmin);
+        const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
+        try {
+          const res = await fetch(`${otherUrl}/api/admin/premium-users`);
+          expect(res.status).toBe(403);
+        } finally {
+          closeOther();
+        }
+      });
+    });
+
+    describe('POST /api/admin/premium-users', () => {
+      it('adds a username, persists, and returns the updated list', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'NewPremium' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        // Stored canonically — lowercased.
+        expect(body.usernames).toEqual(['newpremium']);
+        // Manager reflects the same state — confirms it went through
+        // the manager, not just bounced off the HTTP layer.
+        expect(appSettings.getPremiumUsernames()).toEqual(['newpremium']);
+      });
+
+      it('is idempotent — re-adding an existing username succeeds without duplication', async () => {
+        await appSettings.addPremiumUsername('alice');
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'alice' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.usernames).toEqual(['alice']);
+      });
+
+      it('normalises @-prefix and surrounding whitespace before validating', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: '  @ Alice ' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.usernames).toEqual(['alice']);
+      });
+
+      it('returns 400 for an empty username', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: '   ' }),
+        });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 400 for a username with invalid characters', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'invalid_underscore' }),
+        });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 400 for a username longer than the GitHub limit', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'a'.repeat(40) }),
+        });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 403 for non-admin users', async () => {
+        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const otherApp = createTestApp(manager, appSettings, nonAdmin);
+        const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
+        try {
+          const res = await fetch(`${otherUrl}/api/admin/premium-users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'jane-doe' }),
+          });
+          expect(res.status).toBe(403);
+        } finally {
+          closeOther();
+        }
+      });
+    });
+
+    describe('DELETE /api/admin/premium-users/:username', () => {
+      it('removes a username and returns the updated list', async () => {
+        await appSettings.addPremiumUsername('alice');
+        await appSettings.addPremiumUsername('bob');
+        const res = await fetch(`${baseUrl}/api/admin/premium-users/alice`, { method: 'DELETE' });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.usernames).toEqual(['bob']);
+        expect(appSettings.getPremiumUsernames()).toEqual(['bob']);
+      });
+
+      it('is idempotent — deleting a username not in the list returns 200', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/premium-users/never-was-here`, { method: 'DELETE' });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.usernames).toEqual([]);
+      });
+
+      it('returns 400 when the path param fails validation', async () => {
+        // A path-encoded invalid username (`%21` is `!`) — the route
+        // validates after decoding via the same schema as POST.
+        const res = await fetch(`${baseUrl}/api/admin/premium-users/bad%21name`, { method: 'DELETE' });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 403 for non-admin users', async () => {
+        await appSettings.addPremiumUsername('alice');
+        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const otherApp = createTestApp(manager, appSettings, nonAdmin);
+        const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
+        try {
+          const res = await fetch(`${otherUrl}/api/admin/premium-users/alice`, { method: 'DELETE' });
+          expect(res.status).toBe(403);
+          // Sanity: server-side list unchanged.
+          expect(appSettings.getPremiumUsernames()).toEqual(['alice']);
+        } finally {
+          closeOther();
+        }
+      });
     });
   });
 });

@@ -20,6 +20,8 @@ import { FileMeetingStore } from './fileStore.js';
 import { FirestoreMeetingStore } from './firestoreStore.js';
 import { sessionDocParser } from './sessionDocParser.js';
 import type { MeetingStore } from './store.js';
+import { AppSettingsManager } from './appSettingsManager.js';
+import { FileAppSettingsStore, FirestoreAppSettingsStore, type AppSettingsStore } from './appSettingsStore.js';
 import { createMeetingRoutes } from './routes.js';
 import { createAuthRoutes } from './auth.js';
 import { requireAuth } from './requireAuth.js';
@@ -75,6 +77,7 @@ const STORE_TYPE = process.env.STORE ?? 'file';
 // "firestore" uses Google Cloud Firestore — for production.
 
 let meetingStore: MeetingStore;
+let appSettingsStore: AppSettingsStore;
 let sessionStore: session.Store | undefined;
 
 if (STORE_TYPE === 'firestore') {
@@ -92,6 +95,7 @@ if (STORE_TYPE === 'firestore') {
   const firestoreOpts = databaseId ? { databaseId } : {};
   const db = new Firestore(firestoreOpts);
   meetingStore = new FirestoreMeetingStore(firestoreOpts);
+  appSettingsStore = new FirestoreAppSettingsStore(firestoreOpts);
   sessionStore = new FirestoreStore({
     database: db,
     collection: 'sessions',
@@ -107,10 +111,14 @@ if (STORE_TYPE === 'firestore') {
   const fileStore = new FileMeetingStore(dataDir);
   await fileStore.init();
   meetingStore = fileStore;
+  // App settings live alongside the meetings directory, not inside it,
+  // so `FileMeetingStore.loadAll` doesn't try to parse them as a meeting.
+  appSettingsStore = new FileAppSettingsStore(join(dataDir, '..', 'app-settings.json'));
   // sessionStore left as undefined — uses express-session's default MemoryStore
 }
 
 const meetingManager = new MeetingManager(meetingStore);
+const appSettingsManager = new AppSettingsManager(appSettingsStore);
 
 // --- Session middleware (shared between Express and Socket.IO) ---
 
@@ -163,7 +171,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/version', versionHandler);
 
 // All other /api routes require an authenticated session
-app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io));
+app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io, appSettingsManager));
 
 // --- Static file serving (production) ---
 // In production, the Express server serves the Vite-built client assets.
@@ -224,7 +232,7 @@ io.engine.use(sessionMiddleware);
 io.engine.use(mockAuth);
 
 // Register all Socket.IO event handlers (join, disconnect, etc.)
-registerSocketHandlers(io, meetingManager);
+registerSocketHandlers(io, meetingManager, appSettingsManager);
 
 // --- Start ---
 
@@ -255,6 +263,16 @@ async function start() {
     await meetingManager.restore();
   } catch (err) {
     logError('restore_failed', { error: serialiseError(err) });
+  }
+
+  // Restore admin-managed app settings (currently: the premium-tier
+  // user list). Best-effort: a failure here only loses the premium
+  // badge, which is cosmetic. The manager keeps its default empty
+  // list and the server still boots.
+  try {
+    await appSettingsManager.restore();
+  } catch (err) {
+    logError('appsettings_restore_failed', { error: serialiseError(err) });
   }
 
   // Start periodic sync (writes dirty meetings to the store every 30 seconds)

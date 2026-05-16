@@ -35,6 +35,7 @@ import {
 import { createPortal } from 'react-dom';
 import { normaliseGithubUsername } from '@tcq/shared';
 import { FALLBACK_AVATAR } from './UserBadge.js';
+import { CircleXIcon } from './icons.js';
 
 interface DirectoryUser {
   ghid: number;
@@ -425,13 +426,7 @@ function MultiCombobox(props: MultiProps) {
               // chip input.
               className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
             >
-              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <CircleXIcon className="w-3.5 h-3.5" />
             </button>
           </span>
         ))}

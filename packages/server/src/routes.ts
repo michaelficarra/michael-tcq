@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
-import type { User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
-import { CreateMeetingBodySchema, ImportAgendaBodySchema, SwitchUserBodySchema, userKey } from '@tcq/shared';
+import type { PremiumUsersResponse, User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import {
+  CreateMeetingBodySchema,
+  ImportAgendaBodySchema,
+  PremiumUserBodySchema,
+  SwitchUserBodySchema,
+  userKey,
+} from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth.js';
 import { isOAuthConfigured } from './mockAuth.js';
@@ -13,12 +19,13 @@ import {
   type DirectoryUser,
 } from './githubDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
-import { getActiveConnectionCount, emitFullState } from './socket.js';
+import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
 import { toSessionUser, toClientUser } from './session.js';
 import { getRecentErrors, getErrorCount } from './errorBuffer.js';
 import { getHttpCounters } from './httpCounters.js';
 import { getSocketCounters } from './socketCounters.js';
+import type { AppSettingsManager } from './appSettingsManager.js';
 
 /**
  * REST routes for meeting management.
@@ -31,6 +38,7 @@ import { getSocketCounters } from './socketCounters.js';
 export function createMeetingRoutes(
   meetingManager: MeetingManager,
   io: Server<ClientToServerEvents, ServerToClientEvents>,
+  appSettings: AppSettingsManager,
 ): Router {
   const router = Router();
 
@@ -44,7 +52,7 @@ export function createMeetingRoutes(
       return;
     }
     // toClientUser strips the OAuth access token (server-only) before serialising.
-    res.json({ ...toClientUser(user), mockAuth: !isOAuthConfigured() });
+    res.json({ ...toClientUser(user, appSettings), mockAuth: !isOAuthConfigured() });
   });
 
   // --- Dev-only: switch the mock user ---
@@ -73,7 +81,7 @@ export function createMeetingRoutes(
     delete req.session.mockLoggedOut;
     // Mock-auth users have no access token to leak, but route through
     // toClientUser anyway for consistency with /api/me.
-    res.json(toClientUser(req.session.user));
+    res.json(toClientUser(req.session.user, appSettings));
   });
 
   // --- GitHub username autocomplete ---
@@ -419,7 +427,7 @@ export function createMeetingRoutes(
     // Broadcast the updated state to all connected clients
     // Bulk import — a single full-state emit is cheaper than firing an
     // `agenda:added` delta per imported item.
-    emitFullState(io, meetingManager, meetingId);
+    emitFullState(io, meetingManager, meetingId, appSettings);
 
     res.json({ imported: items.length });
   });
@@ -568,6 +576,66 @@ export function createMeetingRoutes(
     // disconnect / not-found UI handles the rest.
     io.in(meetingId).disconnectSockets(true);
     res.json({ ok: true });
+  });
+
+  // --- Premium-user list (admin only) ---
+  // Runtime-managed replacement for the former `PREMIUM_USERNAMES` env
+  // var. Add/remove operations persist eagerly through the
+  // `AppSettingsManager` and trigger a scoped re-broadcast to any
+  // meeting rooms the affected user is sitting in, so badges/glow flip
+  // on/off live without a page refresh.
+
+  router.get('/admin/premium-users', (req, res) => {
+    const user = req.session.user;
+    if (!user || !user.isAdmin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    res.json(response);
+  });
+
+  router.post('/admin/premium-users', async (req, res) => {
+    const user = req.session.user;
+    if (!user || !user.isAdmin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+    const parsed = PremiumUserBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
+      return;
+    }
+    // `addPremiumUsername` returns the canonical form when a new row was
+    // added, or null when the username was already present (idempotent —
+    // admins double-clicking shouldn't see an error). We only broadcast
+    // on an actual change so a repeated click doesn't generate spurious
+    // socket traffic.
+    const added = await appSettings.addPremiumUsername(parsed.data.username);
+    if (added !== null) broadcastPremiumChange(io, meetingManager, appSettings, added);
+    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    res.json({ ok: true, ...response });
+  });
+
+  router.delete('/admin/premium-users/:username', async (req, res) => {
+    const user = req.session.user;
+    if (!user || !user.isAdmin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+    // Validate the path param through the same schema so an admin can't
+    // remove garbage shapes. `decodeURIComponent` already happened in
+    // Express's param parsing.
+    const parsed = PremiumUserBodySchema.safeParse({ username: req.params.username });
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid username' });
+      return;
+    }
+    const canonical = parsed.data.username;
+    const removed = await appSettings.removePremiumUsername(canonical);
+    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, canonical);
+    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    res.json({ ok: true, ...response });
   });
 
   // Restore a soft-deleted meeting (admin only). Clears `deletedAt`

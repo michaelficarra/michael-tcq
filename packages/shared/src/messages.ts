@@ -477,6 +477,45 @@ export const ImportAgendaBodySchema = z.object({
 });
 export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
 
+/**
+ * GitHub username field enforcing GitHub's documented login rules:
+ * 1–39 characters, alphanumeric or hyphen, must not begin or end with
+ * a hyphen. Normalises leading `@` and surrounding whitespace, then
+ * lowercases to the canonical form stored server-side. Used for admin
+ * mutations of the premium-tier list, where we want to reject obvious
+ * garbage at the API boundary even though premium membership is
+ * checked case-insensitively.
+ */
+const strictGithubUsername = z
+  .string()
+  .transform((s) => normaliseGithubUsername(s).toLowerCase())
+  .pipe(
+    z
+      .string()
+      .min(1, 'Username is required')
+      .max(39, 'GitHub usernames are at most 39 characters')
+      .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Invalid GitHub username'),
+  );
+
+/**
+ * POST /api/admin/premium-users — add a username to the premium tier
+ * list. Admin only; idempotent (re-adding an existing username is a
+ * no-op success).
+ */
+export const PremiumUserBodySchema = z.object({
+  username: strictGithubUsername,
+});
+export type PremiumUserBody = z.infer<typeof PremiumUserBodySchema>;
+
+/**
+ * Shape of the responses from the admin premium-user endpoints. `usernames`
+ * is sorted lexicographically over the canonical lowercased form so
+ * clients can use referential/stringified equality for change detection.
+ */
+export interface PremiumUsersResponse {
+  usernames: string[];
+}
+
 // -- Event interfaces --
 
 /** Events the server sends to connected clients. */

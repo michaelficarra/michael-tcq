@@ -146,6 +146,8 @@ GCP_SERVICE_ACCOUNT=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
 CLOUD_RUN_SERVICE=tcq
 ```
 
+> **Premium tier** is no longer configured via an environment variable. Admins manage the premium-user list from the **Premium Users** section of the home-page Admin tab once the service is running; the list is persisted in Firestore (`app-settings/singleton`) and survives restarts. On a fresh deploy the list starts empty — an admin must repopulate it via the Admin tab.
+
 Generate a random session secret with:
 
 ```sh

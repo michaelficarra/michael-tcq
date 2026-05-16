@@ -8,7 +8,7 @@
 
 import type { User } from '@tcq/shared';
 import { isAdmin } from './admin.js';
-import { isPremium } from './premium.js';
+import type { AppSettingsManager } from './appSettingsManager.js';
 
 /**
  * The authenticated user as stored on the session. `User` plus a cached
@@ -41,18 +41,22 @@ export function toSessionUser(user: User): SessionUser {
  * already treats absence as falsy.
  *
  * `isPremium` is re-evaluated per response (not cached on the session)
- * to match the Socket.IO broadcast path's `stampPremium`, so changes to
- * `PREMIUM_USERNAMES` propagate without forcing a re-login.
+ * against the admin-managed premium list, mirroring the Socket.IO
+ * broadcast path's `stampPremium`, so admin toggles take effect on the
+ * next response without forcing a re-login.
  */
-export function toClientUser(user: SessionUser): User & { isAdmin?: true; isPremium?: true } {
+export function toClientUser(
+  user: SessionUser,
+  appSettings: AppSettingsManager,
+): User & { isAdmin?: true; isPremium?: true } {
   // Strip `isPremium` from the input as well — this function is the
-  // authority on the wire-side flag, recomputed from the env var below.
+  // authority on the wire-side flag, recomputed from the manager below.
   const { accessToken: _accessToken, isAdmin, isPremium: _isPremium, ...rest } = user;
   void _accessToken;
   void _isPremium;
   const result: User & { isAdmin?: true; isPremium?: true } = { ...rest };
   if (isAdmin) result.isAdmin = true;
-  if (isPremium(rest)) result.isPremium = true;
+  if (appSettings.isPremium(rest)) result.isPremium = true;
   return result;
 }
 

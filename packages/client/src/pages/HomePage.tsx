@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { AdminPanel } from '../components/AdminPanel.js';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.js';
+import { PremiumUsersPanel } from '../components/PremiumUsersPanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
 import { MyMeetingsPanel } from '../components/MyMeetingsPanel.js';
@@ -194,6 +195,7 @@ function AdminSection() {
   return (
     <>
       <AdminPanel refreshTick={refreshTick} />
+      <PremiumUsersPanel refreshTick={refreshTick} />
       <DiagnosticsPanel refreshTick={refreshTick} />
     </>
   );

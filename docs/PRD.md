@@ -45,7 +45,9 @@ The distinct participant count reflects how many unique users have joined the me
 
 ### Premium-tier users
 
-Premium-tier users are designated by GitHub username via server configuration (a separate list from the admins list). The tier is a user-visible status that may gate additional features over time. Two initial visual treatments mark a premium user:
+Premium-tier users are designated by GitHub username via the **Premium Users** section of the Admin tab on the home page. Admins add or remove premium users at runtime; changes take effect immediately for every connected participant of any meeting where the affected user is present — the premium badge appears or disappears next to their name and their queue-entry glow turns on or off without a refresh. The premium list is persisted server-side and survives restarts.
+
+The tier is a user-visible status that may gate additional features over time. Two initial visual treatments mark a premium user:
 
 - A verification-style badge is shown after the user's display name **everywhere their name appears** (queue entries, agenda chairs and presenters, current speaker, current topic, meeting log, user menu, etc.). The badge gently pulses in a heartbeat rhythm (disabled when the viewer prefers reduced motion) and surfaces a `TCQ Premium™` tooltip on hover.
 - Queue entries belonging to a premium user have a soft animated colour glow behind the row.

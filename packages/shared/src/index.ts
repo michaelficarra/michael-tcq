@@ -50,6 +50,8 @@ export type {
   CreateMeetingBody,
   SwitchUserBody,
   ImportAgendaBody,
+  PremiumUserBody,
+  PremiumUsersResponse,
   ChairsUpdatedDelta,
   AgendaAddedDelta,
   AgendaEditedDelta,
@@ -91,7 +93,10 @@ export {
   CreateMeetingBodySchema,
   SwitchUserBodySchema,
   ImportAgendaBodySchema,
+  PremiumUserBodySchema,
 } from './messages.js';
+export type { AppSettings } from './appSettings.js';
+export { DEFAULT_APP_SETTINGS } from './appSettings.js';
 export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
 export {
   userKey,

@@ -20,6 +20,8 @@ import { toSessionUser } from './session.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
 import { createClientSurrogate } from './test/clientSurrogate.js';
 import { emitInParallel } from './test/concurrency.js';
+import { AppSettingsManager } from './appSettingsManager.js';
+import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
 
 // --- Helpers ---
 
@@ -36,6 +38,7 @@ interface TestContext {
   httpServer: HttpServer;
   io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
   meetingManager: MeetingManager;
+  appSettings: AppSettingsManager;
   baseUrl: string;
 }
 
@@ -69,6 +72,7 @@ function createTestServer(user: User = TEST_USER): TestContext {
   app.use(authMiddleware);
 
   const meetingManager = new MeetingManager(new InMemoryStore());
+  const appSettings = new AppSettingsManager(new InMemoryAppSettingsStore());
 
   // Match the production parser choice (see packages/server/src/index.ts)
   // so the existing handler tests double as integration coverage for the
@@ -84,9 +88,9 @@ function createTestServer(user: User = TEST_USER): TestContext {
   io.engine.use(sessionMiddleware);
   io.engine.use(authMiddleware);
 
-  registerSocketHandlers(io, meetingManager);
+  registerSocketHandlers(io, meetingManager, appSettings);
 
-  return { httpServer, io, meetingManager, baseUrl: '' };
+  return { httpServer, io, meetingManager, appSettings, baseUrl: '' };
 }
 
 /** Start the test server on a random port. */
@@ -3483,16 +3487,12 @@ describe('Socket.IO integration', () => {
   //     covered by the existing "reconnect re-emits state and re-seeds
   //     the surrogate" test in the gap-detection block above.
   describe('premium-tier stamping on broadcast', () => {
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
     it('marks premium users with isPremium:true and omits the field for non-premium users', async () => {
       // The connecting user (TEST_USER, ghUsername=testuser) is premium; the
       // second chair is not. The emitted state should carry isPremium:true
       // on the premium user and have no isPremium key at all on the other,
       // so absence stays the bandwidth-saving default.
-      vi.stubEnv('PREMIUM_USERNAMES', 'testuser');
+      await ctx.appSettings.addPremiumUsername('testuser');
       const otherChair: User = { ghid: 2, ghUsername: 'plainuser', name: 'Plain User', organisation: '' };
       const meeting = ctx.meetingManager.create([TEST_USER, otherChair]);
 
@@ -3510,7 +3510,7 @@ describe('Socket.IO integration', () => {
       // Make the joining client premium; when they add a queue entry, the
       // resulting queue:added delta piggybacks their User record — which
       // should also carry the isPremium flag.
-      vi.stubEnv('PREMIUM_USERNAMES', 'testuser');
+      await ctx.appSettings.addPremiumUsername('testuser');
       const meeting = ctx.meetingManager.create([TEST_USER]);
       // Advance to an agenda item so the queue is open for entries.
       const item: AgendaItem = { kind: 'item', id: 'a1', name: 'Item 1', presenterIds: [] };
@@ -3524,6 +3524,44 @@ describe('Socket.IO integration', () => {
       const delta = await deltaPromise;
       const piggybacked = delta.users?.[asUserKey('testuser')];
       expect(piggybacked?.isPremium).toBe(true);
+    });
+
+    it('broadcastPremiumChange re-emits state to rooms where the affected user is present', async () => {
+      // Simulates an admin adding a username to the premium list: only
+      // meetings whose users map contains that username should receive a
+      // fresh `state` event. We hook the io.to(...).emit machinery so we
+      // can count emissions per room without depending on a second
+      // connected client per meeting.
+      const otherUser: User = { ghid: 7, ghUsername: 'about-to-be-premium', name: 'P', organisation: '' };
+      const containingMeeting = ctx.meetingManager.create([TEST_USER, otherUser]);
+      const unrelatedMeeting = ctx.meetingManager.create([TEST_USER]);
+
+      const emitsPerRoom = new Map<string, number>();
+      const origTo = ctx.io.to.bind(ctx.io);
+      vi.spyOn(ctx.io, 'to').mockImplementation((room: string | string[]) => {
+        // BroadcastOperator.to accepts string|string[]; the broadcast
+        // helper only ever passes a single room id, but we narrow here
+        // to satisfy the typed signature.
+        const roomId = Array.isArray(room) ? room.join(',') : room;
+        const real = origTo(room);
+        return new Proxy(real, {
+          get(target, prop, recv) {
+            if (prop === 'emit') {
+              return (event: string, ..._args: unknown[]) => {
+                if (event === 'state') emitsPerRoom.set(roomId, (emitsPerRoom.get(roomId) ?? 0) + 1);
+                return true;
+              };
+            }
+            return Reflect.get(target, prop, recv);
+          },
+        });
+      });
+
+      const { broadcastPremiumChange } = await import('./socket.js');
+      broadcastPremiumChange(ctx.io, ctx.meetingManager, ctx.appSettings, 'about-to-be-premium');
+
+      expect(emitsPerRoom.get(containingMeeting.id) ?? 0).toBe(1);
+      expect(emitsPerRoom.get(unrelatedMeeting.id) ?? 0).toBe(0);
     });
   });
 
