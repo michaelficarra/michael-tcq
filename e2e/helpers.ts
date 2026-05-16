@@ -229,21 +229,41 @@ export async function openSecondContext(
  */
 export async function dragAndDrop(page: Page, source: Locator, target: Locator): Promise<void> {
   const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  if (!sourceBox || !targetBox) throw new Error('Drag-and-drop source/target not visible');
+  if (!sourceBox) throw new Error('Drag-and-drop source not visible');
 
   const sx = sourceBox.x + sourceBox.width / 2;
   const sy = sourceBox.y + sourceBox.height / 2;
-  const tx = targetBox.x + targetBox.width / 2;
-  const ty = targetBox.y + targetBox.height / 2;
 
   await page.mouse.move(sx, sy);
   await page.mouse.down();
-  // Interpolated path — each step must clear the 5px activation distance.
+  // Nudge ~8px down to clear @dnd-kit's 5px activation distance BEFORE
+  // resolving the target. Once a drag activates the source collapses to
+  // its drag overlay and sibling rows reflow; the target's pre-drag
+  // bounding box can land in the gap left behind by a taller source
+  // (e.g. a past agenda item with a saved conclusion underneath its
+  // name). Re-resolving here keeps the final drop point aimed at the
+  // target's current on-screen position. Webkit was reproducibly missing
+  // the drop in the taller-source case with the pre-drag coordinates.
+  await page.mouse.move(sx, sy + 8, { steps: 2 });
+
+  const liveTargetBox = await target.boundingBox();
+  if (!liveTargetBox) {
+    await page.mouse.up();
+    throw new Error('Drag-and-drop target not visible after activation');
+  }
+  const tx = liveTargetBox.x + liveTargetBox.width / 2;
+  const ty = liveTargetBox.y + liveTargetBox.height / 2;
+
+  // Interpolated path from the post-activation pointer position to the
+  // (now re-resolved) target centre. Multiple sub-steps give @dnd-kit's
+  // pointer move stream enough samples to keep the collision-detection
+  // hot path stable.
   const steps = 10;
+  const startX = sx;
+  const startY = sy + 8;
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
-    await page.mouse.move(sx + (tx - sx) * t, sy + (ty - sy) * t, { steps: 2 });
+    await page.mouse.move(startX + (tx - startX) * t, startY + (ty - startY) * t, { steps: 2 });
   }
   await page.mouse.up();
 }

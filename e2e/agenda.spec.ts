@@ -453,6 +453,14 @@ test.describe('Agenda tab', () => {
       const secondRow = agendaPanel.locator('li', { hasText: 'Second Item' });
       await dragAndDrop(page, firstRow, secondRow);
 
+      // Wait for the optimistic-then-server reorder to settle before
+      // leaving the agenda tab. Surfaces a clear "drag did not reorder"
+      // failure here instead of an opaque timeout three lines later on
+      // the Next-Agenda-Item button (which is gated on currentAgendaItem
+      // and is therefore the first downstream casualty if the reorder
+      // silently no-ops).
+      await expect(agendaPanel.locator('ol[aria-label="Agenda items"] > li').first()).toContainText('Second Item');
+
       // Now the order should be Second (current), First. Advance past Second so
       // First becomes the current item again. The dialog should pre-populate
       // with First Item's saved conclusion.
