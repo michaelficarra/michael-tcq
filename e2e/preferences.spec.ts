@@ -45,10 +45,19 @@ test.describe('Preferences modal', () => {
     await expect(prefs.getByLabel('Keyboard shortcuts')).not.toBeChecked();
     // Close via Escape.
     await page.locator('body').press('Escape');
+    // Wait for the modal-close commit to finish. Firefox has been observed
+    // to flake on the menuitem click below when the dropdown opens while
+    // React is still committing the modal unmount: the outside-click
+    // pointerdown handler in HamburgerMenu can detach the menuitem before
+    // Playwright dispatches the click.
+    await expect(prefs).not.toBeVisible();
 
     // The shortcuts dialog can still be opened — but `?` is now disabled.
     // Re-enable from the preferences modal via hamburger menu.
     await page.getByLabel('Open menu').click();
+    // Wait for the dropdown to be present before targeting a menuitem
+    // inside it. Same render-timing race as above.
+    await expect(page.getByRole('menu')).toBeVisible();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     await prefs.getByLabel('Keyboard shortcuts').check();
     await expect(prefs.getByLabel('Keyboard shortcuts')).toBeChecked();
