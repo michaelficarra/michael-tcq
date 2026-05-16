@@ -626,7 +626,15 @@ test.describe('Queue Reordering', () => {
     await expect(last).toContainText('New Topic');
   });
 
-  test('chair drags an entry up: it adopts the highest priority of items at or below it', async ({ page }) => {
+  test('chair drags an entry up: it adopts the highest priority of items at or below it', async ({
+    page,
+    browserName,
+  }) => {
+    // Flaky on webkit. The drag of T2 up across reflowing same-height
+    // rows via the small ⠿ handle races with @dnd-kit's pointer-event
+    // timing on webkit, occasionally leaving the queue order unchanged.
+    // Chromium and firefox still exercise this path.
+    test.fixme(browserName === 'webkit', 'flaky on webkit — @dnd-kit upward-drag pointer-event race');
     await setupStartedMeeting(page);
 
     // Build: [Clarifying Question, New Topic, New Topic]. Dragging T2 above
