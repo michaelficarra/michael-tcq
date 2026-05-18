@@ -1,8 +1,16 @@
 # Deploying TCQ
 
-TCQ is deployed as a single Docker container on Google Cloud Run, with Firestore for persistent storage. See [ARCHITECTURE.md](ARCHITECTURE.md) for the rationale behind these choices.
+TCQ is deployed as Docker containers on a Google Compute Engine VM running Container-Optimized OS (COS), with Caddy in front of it for automatic HTTPS and Firestore for persistent storage. See [ARCHITECTURE.md](ARCHITECTURE.md) for the rationale behind these choices.
 
-Deployment is driven by `scripts/deploy.sh`. The script is self-bootstrapping: on first run it walks you through GCP setup interactively (installing `gcloud` if needed, creating the project, linking billing, provisioning Firestore and a service account and an Artifact Registry repo, writing `.env.production`). On subsequent runs it just builds and deploys.
+The architecture is chosen to be as hands-off as a self-hosted setup gets:
+
+- **COS** auto-updates the OS and Docker on a managed schedule. No package manager, no SSH-driven OS patches.
+- **Caddy** runs as a Docker container in front of TCQ and obtains a Let's Encrypt certificate for the configured domain automatically. Renewals happen on its own; nothing to remember.
+- **systemd** units (one per container) restart automatically on crash and on boot — including after COS auto-update reboots — so the only manual recovery scenario is a VM-wide failure.
+- **Cloud Logging** picks up container stdout/stderr via the COS-built-in fluent-bit forwarding, activated by the `google-logging-enabled=true` instance metadata flag. The structured JSON logs the server already emits show up as queryable LogEntry records — same operator experience as on Cloud Run.
+- **Cloud Monitoring** picks up VM metrics the same way via `google-monitoring-enabled=true`.
+
+Deployment is driven by `scripts/deploy.sh`. The script is self-bootstrapping: on first run it walks you through GCP setup interactively (installing `gcloud` if needed, creating the project, linking billing, provisioning Firestore, the service account, the Artifact Registry repo, the static IP, the firewall rule, and the VM, writing `.env.production`). On subsequent runs it builds the image, pushes it to Artifact Registry, copies a fresh env file to the VM via `gcloud compute scp`, and restarts the `tcq` systemd unit.
 
 ## Environment Files
 
@@ -13,15 +21,16 @@ TCQ uses environment-specific `.env` files:
 | `.env.development` | Local development defaults (no secrets) | Yes               |
 | `.env.production`  | Production config and secrets           | No (gitignored)   |
 
-The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In development (`npm run dev`), `NODE_ENV` is unset so `.env.development` is used. In production (`NODE_ENV=production`), `.env.production` is used.
+The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In development (`npm run dev`), `NODE_ENV` is unset so `.env.development` is used. On the VM, the systemd unit passes `NODE_ENV=production` and the rest of the server config via `--env-file=/etc/tcq/env`, which `scripts/deploy.sh` writes (and rewrites on every deploy).
 
-`.env.production` is written by `scripts/deploy.sh` on the recommended path below — you don't need to hand-author it unless you're following the manual path.
+`.env.production` on your local machine is written by `scripts/deploy.sh` on the recommended path below — you don't need to hand-author it unless you're following the manual path.
 
 ## Prerequisites
 
-- A [Google Cloud](https://cloud.google.com/) account
-- [Docker](https://docs.docker.com/get-docker/) installed locally
-- The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) — the deploy script offers to install it if it's missing
+- A [Google Cloud](https://cloud.google.com/) account.
+- A domain name you can point at the VM via an A record. **Required** — Caddy uses it to obtain a TLS certificate; the deploy can't complete without one. The script asks for it up front and will let you set up DNS while it provisions; HTTPS starts working once both DNS and the VM are in place.
+- [Docker](https://docs.docker.com/get-docker/) installed locally.
+- The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) — the deploy script offers to install it if it's missing.
 - A clean git working tree — the deploy script refuses to run with uncommitted or untracked changes, since the deployed image is always tagged `:latest` and a dirty deploy leaves no record of what actually shipped. Commit or stash before running.
 
 ## First-Time Setup (Recommended)
@@ -32,14 +41,16 @@ The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In
 The script will:
 
 - Offer to install `gcloud` via Homebrew (if available) or the official tarball, when it isn't already on your PATH.
-- Prompt for the values it needs — GCP project ID, region, Cloud Run service name, admin GitHub usernames.
+- Prompt for the values it needs — GCP project ID, region/zone, VM name, custom domain, admin GitHub usernames.
 - Let you pick a billing account from a menu of those attached to your gcloud account.
-- Create the GCP project (if new), link billing, enable the required APIs, create the Firestore database, the Cloud Run service account (with the right IAM bindings), and the Artifact Registry repository.
+- Create the GCP project (if new), link billing, enable the required APIs, create the Firestore database, the VM service account (with the right IAM bindings), and the Artifact Registry repository.
+- Reserve a static external IP, create a firewall rule for tcp:80 and tcp:443.
 - Generate `SESSION_SECRET` and write everything collected so far to `.env.production`.
-- Build the Docker image, push it, and deploy to Cloud Run.
-- Once the first deploy finishes, print a pre-filled GitHub OAuth App registration URL. Click it, hit **Register application**, copy the Client ID and Client Secret back into the prompt, and the script redeploys with real GitHub auth enabled.
+- Build the Docker image, push it, provision the VM with cloud-init that installs both systemd units (`tcq` and `caddy`) on first boot, copy a fresh env file to the VM via `gcloud compute scp`, and restart the `tcq` unit.
+- Print the static IP so you can configure your DNS A record.
+- Once the first deploy finishes, print a pre-filled GitHub OAuth App registration URL. Click it, hit **Register application**, copy the Client ID and Client Secret back into the prompt, and the script copies the new env to the VM and restarts.
 
-Every step is idempotent. Re-running the script with a fully populated `.env.production` skips every prompt and behaves as a plain build + push + deploy.
+Every step is idempotent. Re-running the script with a fully populated `.env.production` skips every prompt and behaves as a plain build + push + redeploy.
 
 ## First-Time Setup (Manual)
 
@@ -47,7 +58,7 @@ If you'd rather provision by hand — for learning purposes, or because you want
 
 ### 1. Create a GCP project
 
-_Why:_ every GCP resource (Firestore, Cloud Run, Artifact Registry) lives inside a project. This also becomes the active context for the rest of the `gcloud` calls below.
+_Why:_ every GCP resource (Firestore, Compute Engine, Artifact Registry) lives inside a project. This also becomes the active context for the rest of the `gcloud` calls below.
 
 ```sh
 gcloud projects create <your-project-id> --name="TCQ"
@@ -56,7 +67,7 @@ gcloud config set project <your-project-id>
 
 ### 2. Link a billing account
 
-_Why:_ Cloud Run and Artifact Registry require a billing account attached, even though TCQ fits comfortably inside the always-free tier. The script does this for you via a menu; manually, list open billing accounts and link one:
+_Why:_ Compute Engine, Artifact Registry, and Firestore all require a billing account attached, even though TCQ on an `e2-micro` fits comfortably inside the always-free tier (744 hours/month per region in `us-east1`, `us-central1`, or `us-west1`).
 
 ```sh
 gcloud billing accounts list --filter=open=true
@@ -65,15 +76,20 @@ gcloud billing projects link <your-project-id> --billing-account=<account-id>
 
 ### 3. Enable required APIs
 
-_Why:_ Firestore, Cloud Run, and Artifact Registry are disabled by default on new projects; using them before they're enabled returns a 403.
+_Why:_ each of these is disabled by default on new projects; using them before they're enabled returns a 403.
 
 ```sh
-gcloud services enable firestore.googleapis.com run.googleapis.com artifactregistry.googleapis.com
+gcloud services enable \
+  compute.googleapis.com \
+  firestore.googleapis.com \
+  artifactregistry.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com
 ```
 
 ### 4. Create a Firestore database
 
-_Why:_ Firestore holds persistent meeting state. Use a free-tier eligible region: `us-east1`, `us-central1`, or `us-west1`.
+_Why:_ Firestore holds persistent meeting state. Use a free-tier eligible region: `us-east1`, `us-central1`, or `us-west1`. Keep the VM in the same region for low-latency reads and to avoid cross-region egress charges.
 
 ```sh
 gcloud firestore databases create --location=us-central1
@@ -97,16 +113,22 @@ gcloud firestore fields ttls update expireAt \
 
 If you used a custom database ID in step 4, add `--database=<your-database-id>`.
 
-### 6. Create a service account for Cloud Run
+### 6. Create a service account for the VM
 
-_Why:_ Cloud Run needs an identity that can read and write Firestore without shipping a key file. The first IAM binding grants the service account access to Firestore; the second grants the deploying user the right to attach this service account to a Cloud Run revision.
+_Why:_ the VM needs an identity that can read Firestore, pull container images from Artifact Registry, and write to Cloud Logging and Monitoring without shipping a key file. The first four bindings grant those; the last grants the deploying user the right to attach this service account to the VM.
 
 ```sh
-gcloud iam service-accounts create tcq-cloudrun --display-name="TCQ Cloud Run"
+gcloud iam service-accounts create tcq-vm --display-name="TCQ VM"
 
-gcloud projects add-iam-policy-binding <your-project-id> \
-  --member="serviceAccount:tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com" \
-  --role="roles/datastore.user"
+for role in \
+    roles/datastore.user \
+    roles/artifactregistry.reader \
+    roles/logging.logWriter \
+    roles/monitoring.metricWriter; do
+  gcloud projects add-iam-policy-binding <your-project-id> \
+    --member="serviceAccount:tcq-vm@<your-project-id>.iam.gserviceaccount.com" \
+    --role="$role"
+done
 
 gcloud projects add-iam-policy-binding <your-project-id> \
   --member="user:$(gcloud config get account)" \
@@ -115,16 +137,40 @@ gcloud projects add-iam-policy-binding <your-project-id> \
 
 ### 7. Create an Artifact Registry repository
 
-_Why:_ Cloud Run pulls the TCQ image from somewhere; Artifact Registry is Google's first-party Docker registry. The second command registers a Docker credential helper so `docker push` can authenticate.
+_Why:_ the VM pulls the TCQ image from somewhere; Artifact Registry is Google's first-party Docker registry. The second command registers a Docker credential helper so `docker push` from your local machine can authenticate.
 
 ```sh
 gcloud artifacts repositories create tcq --repository-format=docker --location=us-central1
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-### 8. Write `.env.production`
+### 8. Reserve a static external IP
 
-_Why:_ `scripts/deploy.sh` reads every value it needs from this file. The `GITHUB_*` fields come later — they depend on the Cloud Run URL, which doesn't exist until after the first deploy.
+_Why:_ a static IP keeps the VM's address stable across stop/start cycles and reboots — important because your DNS A record points at it. The IP is free while attached to a running VM.
+
+```sh
+gcloud compute addresses create tcq-ip --region=us-central1
+gcloud compute addresses describe tcq-ip --region=us-central1 --format='value(address)'
+```
+
+Note the address — it's what your DNS A record will point at.
+
+### 9. Create a firewall rule
+
+_Why:_ Compute Engine VMs have an implicit-deny firewall by default. The rule below opens tcp:80 (Let's Encrypt HTTP-01 validation, plus the redirect Caddy serves) and tcp:443 (HTTPS) only on VMs tagged `tcq-server`.
+
+```sh
+gcloud compute firewall-rules create tcq-allow-http-https \
+  --direction=INGRESS \
+  --action=ALLOW \
+  --rules=tcp:80,tcp:443 \
+  --source-ranges=0.0.0.0/0 \
+  --target-tags=tcq-server
+```
+
+### 10. Write `.env.production`
+
+_Why:_ `scripts/deploy.sh` reads every value it needs from this file. The `GITHUB_*` fields come later — they depend on the domain URL, which has to resolve before Caddy can issue a certificate.
 
 Create `.env.production` in the project root:
 
@@ -142,8 +188,10 @@ SESSION_SECRET=<random-secret>
 # Deployment
 GCP_PROJECT_ID=<your-project-id>
 GCP_REGION=us-central1
-GCP_SERVICE_ACCOUNT=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
-CLOUD_RUN_SERVICE=tcq
+GCP_ZONE=us-central1-a
+GCP_SERVICE_ACCOUNT=tcq-vm@<your-project-id>.iam.gserviceaccount.com
+VM_NAME=tcq
+CUSTOM_DOMAIN=<your-domain>
 ```
 
 > **Premium tier** is no longer configured via an environment variable. Admins manage the premium-user list from the **Premium Users** section of the home-page Admin tab once the service is running; the list is persisted in Firestore (`app-settings/singleton`) and survives restarts. On a fresh deploy the list starts empty — an admin must repopulate it via the Admin tab.
@@ -154,24 +202,42 @@ Generate a random session secret with:
 head -c 32 /dev/urandom | base64 | tr -d '=/+' | head -c 40
 ```
 
-### 9. First deploy (without OAuth)
+### 11. Provision the VM
 
-_Why:_ GitHub OAuth needs the Cloud Run URL, and you don't know it until the service exists. Deploy once with mock auth to get the URL.
+_Why:_ this creates the e2-micro VM running Container-Optimized OS, attaches the static IP, applies the `tcq-server` tag (so the firewall rule lets traffic through), and runs cloud-init on first boot to install both systemd units (`tcq` and `caddy`) and the Caddyfile. The `google-logging-enabled` and `google-monitoring-enabled` metadata flags wire up Cloud Logging and Cloud Monitoring with no agent install.
+
+The simplest path is to let `scripts/deploy.sh` do this — it generates the cloud-init from your `.env.production` and runs the right `gcloud compute instances create` invocation. The manual equivalent is to copy that command out of the script after a first run.
+
+### 12. Configure DNS
+
+_Why:_ Caddy needs DNS to resolve before it can complete the Let's Encrypt HTTP-01 challenge. The VM's `caddy` container retries until both ports are open and DNS is correct, so the order of "create VM" / "set up DNS" doesn't matter.
+
+In your DNS provider, add an A record:
+
+```
+<your-domain>  →  <static-ip-from-step-8>
+```
+
+If you also want the apex domain or a different subdomain to work, add an A record for each.
+
+### 13. First deploy (without OAuth)
+
+_Why:_ GitHub OAuth needs the domain URL, which doesn't really work until the certificate is issued. Deploy once with mock auth to confirm everything is wired up.
 
 ```sh
 ./scripts/deploy.sh
 ```
 
-The script warns that GitHub OAuth isn't configured — the server will run in mock auth mode. Note the **service URL** it prints at the end.
+The script warns that GitHub OAuth isn't configured — the server will run in mock auth mode. Visit `https://<your-domain>` to confirm Caddy has a valid cert and TCQ is reachable.
 
-### 10. Register a GitHub OAuth App
+### 14. Register a GitHub OAuth App
 
 _Why:_ this is the one step that can't be automated — GitHub's API doesn't expose OAuth App creation.
 
-Open a pre-filled registration form (substitute your Cloud Run URL):
+Open a pre-filled registration form (substitute your domain):
 
 ```
-https://github.com/settings/applications/new?oauth_application%5Bname%5D=TCQ&oauth_application%5Burl%5D=https%3A%2F%2F<your-cloud-run-url>&oauth_application%5Bcallback_url%5D=https%3A%2F%2F<your-cloud-run-url>%2Fauth%2Fgithub%2Fcallback
+https://github.com/settings/applications/new?oauth_application%5Bname%5D=TCQ&oauth_application%5Burl%5D=https%3A%2F%2F<your-domain>&oauth_application%5Bcallback_url%5D=https%3A%2F%2F<your-domain>%2Fauth%2Fgithub%2Fcallback
 ```
 
 Click **Register application**, then generate a **Client Secret**. Note the **Client ID** and **Client Secret**.
@@ -179,12 +245,12 @@ Click **Register application**, then generate a **Client Secret**. Note the **Cl
 If the pre-fill link doesn't work for you, register manually at [GitHub Developer Settings > OAuth Apps](https://github.com/settings/developers) with:
 
 - **Application name:** `TCQ`
-- **Homepage URL:** `https://<your-cloud-run-url>`
-- **Authorization callback URL:** `https://<your-cloud-run-url>/auth/github/callback`
+- **Homepage URL:** `https://<your-domain>`
+- **Authorization callback URL:** `https://<your-domain>/auth/github/callback`
 
-### 11. Redeploy with OAuth
+### 15. Redeploy with OAuth
 
-_Why:_ the server reads GitHub credentials at boot, so they have to be baked into a fresh Cloud Run revision.
+_Why:_ the server reads GitHub credentials at boot, so they have to be in the env file the systemd unit passes to the container. The deploy script rewrites `/etc/tcq/env` and restarts the unit on every run.
 
 Add to `.env.production`:
 
@@ -192,7 +258,7 @@ Add to `.env.production`:
 # GitHub OAuth
 GITHUB_CLIENT_ID=<client-id>
 GITHUB_CLIENT_SECRET=<client-secret>
-GITHUB_CALLBACK_URL=https://<your-cloud-run-url>/auth/github/callback
+GITHUB_CALLBACK_URL=https://<your-domain>/auth/github/callback
 ```
 
 Then redeploy:
@@ -211,7 +277,7 @@ After the initial setup, deploying is a single command:
 ./scripts/deploy.sh
 ```
 
-The script reads all configuration from `.env.production`, builds the image, pushes it, and deploys.
+The script reads all configuration from `.env.production`, builds the image, pushes it, copies a fresh env file to the VM, and restarts the `tcq` unit. Caddy doesn't need touching unless you change the domain — its config is in the cloud-init that ran at VM creation.
 
 ## Deploying from a Different Machine
 
@@ -240,20 +306,20 @@ gcloud config set project <your-project-id>
 
 ### 4. Confirm your gcloud account has the right IAM roles
 
-_Why:_ deploying touches three different services, each with its own permission. If any are missing, the relevant step fails with a 403 partway through. Owners and editors already have all of these; for a least-privilege deployer, grant:
+_Why:_ deploying touches several services, each with its own permission. If any are missing, the relevant step fails with a 403 partway through. Owners and editors already have all of these; for a least-privilege deployer, grant:
 
-| Role                                                     | Why                                                              |
-| -------------------------------------------------------- | ---------------------------------------------------------------- |
-| `roles/run.admin`                                        | Update the Cloud Run service and its env vars.                   |
-| `roles/artifactregistry.writer`                          | Push the Docker image to the `tcq` Artifact Registry repository. |
-| `roles/iam.serviceAccountUser` on `$GCP_SERVICE_ACCOUNT` | Attach the Cloud Run service account to a new revision.          |
+| Role                                                     | Why                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `roles/compute.instanceAdmin.v1`                         | Create the VM, reserve the IP, create firewall rules, SSH to the VM via gcloud. |
+| `roles/artifactregistry.writer`                          | Push the Docker image to the `tcq` Artifact Registry repository.                |
+| `roles/iam.serviceAccountUser` on `$GCP_SERVICE_ACCOUNT` | Attach the VM service account to the instance.                                  |
 
 Grant with:
 
 ```sh
 gcloud projects add-iam-policy-binding <your-project-id> \
   --member="user:<deployer-email>" \
-  --role="roles/run.admin"
+  --role="roles/compute.instanceAdmin.v1"
 # ...repeat for the other two roles.
 ```
 
@@ -268,100 +334,56 @@ cd <repo>
 ./scripts/deploy.sh
 ```
 
-What you do **not** need on the new machine: `service-account.json` (only used by local code that talks to Firestore directly; production gets its credentials from the Cloud Run service account).
+What you do **not** need on the new machine: `service-account.json` (only used by local code that talks to Firestore directly; the VM gets its credentials from its attached service account).
 
-## Custom Domain (optional)
+## SSH Access
 
-By default the service is reachable at the auto-assigned `https://<service>-<hash>-<region>.run.app` URL. To put your own domain in front of it — keeping the DNS zone wherever you already manage it — there are four moving parts: a Cloud Run domain mapping (which provisions a managed TLS cert), the DNS records the mapping prints, the GitHub OAuth App's callback URL, and the `GITHUB_CALLBACK_URL` env var the server reads at boot.
-
-A DNS record alone isn't enough: Cloud Run returns 404 for any `Host` header that hasn't been bound to a service via a domain mapping.
-
-### 1. Verify domain ownership
-
-_Why:_ Cloud Run won't create a domain mapping for a domain you haven't proven you control. This is a one-time per-account step that opens Google Search Console in a browser.
+For inspecting logs, debugging, or one-off operations:
 
 ```sh
-gcloud domains verify <your-domain>
+gcloud compute ssh <VM_NAME> --zone=<GCP_ZONE>
 ```
 
-### 2. Create the Cloud Run domain mapping
-
-_Why:_ this binds the hostname to your Cloud Run service and requests a managed TLS certificate. It also tells you exactly which DNS records to add.
+Useful commands once on the VM:
 
 ```sh
-gcloud beta run domain-mappings create \
-  --service=<CLOUD_RUN_SERVICE> \
-  --domain=<your-domain> \
-  --region=<GCP_REGION>
+# Container logs (live tail)
+sudo journalctl -u tcq.service -f
+sudo journalctl -u caddy.service -f
 
-gcloud beta run domain-mappings describe \
-  --domain=<your-domain> \
-  --region=<GCP_REGION> \
-  --format='value(status.resourceRecords)'
+# Restart a container manually
+sudo systemctl restart tcq.service
+
+# Confirm both containers are running
+sudo docker ps
 ```
 
-Use the same `CLOUD_RUN_SERVICE` and `GCP_REGION` values as in `.env.production`.
-
-### 3. Add the records to your DNS zone
-
-_Why:_ the records the previous step printed are how DNS resolution finally points at Google's edge. An apex domain gets `A` + `AAAA` records; a subdomain gets a single `CNAME` to `ghs.googlehosted.com`.
-
-Apply them in your registrar / DNS provider's zone editor. The managed certificate provisions automatically once DNS resolves correctly — typically a few minutes, occasionally up to ~15. Check with:
-
-```sh
-gcloud beta run domain-mappings describe \
-  --domain=<your-domain> \
-  --region=<GCP_REGION>
-```
-
-`CertificateProvisioned: True` means TLS is live.
-
-### 4. Update the GitHub OAuth App
-
-_Why:_ GitHub will reject any `redirect_uri` that doesn't match the OAuth App's registered callback URL. If you skip this step, sign-in fails with a `redirect_uri mismatch` error after the domain switch.
-
-In GitHub → Settings → Developer settings → OAuth Apps → your TCQ app, set:
-
-- **Homepage URL:** `https://<your-domain>`
-- **Authorization callback URL:** `https://<your-domain>/auth/github/callback`
-
-### 5. Update `.env.production` and redeploy
-
-_Why:_ the server reads `GITHUB_CALLBACK_URL` at boot to construct the OAuth redirect, so the new value has to be baked into a fresh Cloud Run revision. Setting `CUSTOM_DOMAIN` makes future runs of `deploy.sh` (specifically the OAuth bootstrap path that runs when `GITHUB_CLIENT_ID` is missing) use your domain instead of the `.run.app` URL.
-
-Add to `.env.production`:
-
-```
-CUSTOM_DOMAIN=<your-domain>
-GITHUB_CALLBACK_URL=https://<your-domain>/auth/github/callback
-```
-
-Then:
-
-```sh
-./scripts/deploy.sh
-```
+The same logs are also available in Cloud Logging — search for `resource.type="gce_instance"` and `resource.labels.instance_id="<your-vm-id>"`.
 
 ## Configuration Notes
 
-- **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
-- **`--session-affinity`** — Routes reconnecting clients to the same instance.
-- **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 6. No key file needed in production.
-- **`GIT_SHA`** — `scripts/deploy.sh` sets this to `git rev-parse HEAD` on every deploy and passes it to Cloud Run via `--set-env-vars`. The server exposes it at `GET /api/version` (plain text, public) so monitoring tools can identify which commit is running. In development the variable is unset and the endpoint returns 204.
+- **Container-Optimized OS** — auto-updates the OS and Docker. The default channel (`cos-stable`) takes update reboots on a managed schedule; the systemd units are configured with `Restart=always` so both containers come back automatically. No manual patching.
+- **Caddyfile** — written by cloud-init at VM creation. Changing the Caddyfile (e.g. adding a second hostname) requires SSH-ing in and editing `/etc/caddy/Caddyfile`, then `sudo systemctl restart caddy.service`. If you change `CUSTOM_DOMAIN` in `.env.production`, the simplest reset is to delete the VM and re-run the script — cloud-init will re-render the Caddyfile from the new value.
+- **Static IP** — `${VM_NAME}-ip` is reserved as a regional external address. Keep it attached to the VM; if you delete the VM without releasing the address, GCP charges a small idle-IP fee.
+- **Firewall** — only ports 80 and 443 are open externally (and only to VMs tagged `tcq-server`). Port 3000 is bound to `127.0.0.1` inside the VM and never reachable from the public internet; Caddy is the only thing talking to it.
+- **Firestore credentials** — the VM's attached service account has Firestore access via `roles/datastore.user`. No key file needed in production.
+- **`GIT_SHA`** — `scripts/deploy.sh` sets this to `git rev-parse HEAD` on every deploy and writes it to `/etc/tcq/env`. The server exposes it at `GET /api/version` (plain text, public) so monitoring tools can identify which commit is running. In development the variable is unset and the endpoint returns 204.
 - **Pre-existing session documents** — Session docs written before TTL was enabled have no `expireAt` field, so the policy will not delete them. They are stale (the cookies themselves expired long ago) and can be deleted in one shot via the Firestore console, or left in place to be overwritten on next login under the same session ID.
-- **vCPU allocation** — `scripts/deploy.sh` does not pass `--cpu`, so Cloud Run uses the default of 1 vCPU per instance. Cloud Run's request-based billing charges for the _full duration_ of every in-flight request, and a WebSocket counts as one long request — so for a meeting with N attendees connected for H hours, the per-meeting vCPU bill is approximately `1 × H × 3600` vCPU-seconds regardless of how busy the CPU is. With the default 1 vCPU, the 180,000 vCPU-seconds/month free tier covers ~2 meetings of 24 active hours each. **Adding `--cpu 0.5` to the `gcloud run deploy` call would halve that bill** (~4 free meetings/month) without otherwise changing behaviour, since Socket.IO message routing and msgpack/deflate are well within 0.5 vCPU's headroom for ~50–60 attendees. Going lower (0.25 or 0.08 vCPU) starts to risk burst-handling latency on busy moments like poll reactions or drag-reorders. Worth load-testing before changing the production setting.
+- **Resource sizing** — `e2-micro` provides 2 shared vCPUs and 1 GB RAM. TCQ at 50–60 concurrent users uses well under both — Socket.IO message routing and the in-memory `MeetingState` are light. If you find yourself wanting more headroom (or more meetings concurrently), `e2-small` or `e2-medium` are drop-in replacements; change `--machine-type` in `ensure_vm` and re-run. Note that anything bigger than `e2-micro` falls outside the always-free tier.
+- **No autoscaling** — there's exactly one VM. If TCQ outgrows it, the migration is to a load balancer + multiple VMs in a managed instance group, which is no longer free.
 
 ## Checking Deployment Status
 
 ```sh
-# View the service URL
-gcloud run services describe tcq --region=us-central1 --format='value(status.url)'
+# View the VM's external IP (should match your DNS A record)
+gcloud compute instances describe <VM_NAME> --zone=<GCP_ZONE> \
+  --format='value(networkInterfaces[0].accessConfigs[0].natIP)'
 
-# View recent logs
-gcloud run services logs read tcq --region=us-central1 --limit=50
+# Tail TCQ logs from your local machine
+gcloud compute ssh <VM_NAME> --zone=<GCP_ZONE> --command='sudo journalctl -u tcq.service -n 100 --no-pager'
 
-# List revisions
-gcloud run revisions list --service=tcq --region=us-central1
+# Or the same via Cloud Logging
+gcloud logging read 'resource.type="gce_instance" AND severity>=INFO' --limit=50 --format=json
 ```
 
 ## Local Firestore Testing
@@ -371,7 +393,7 @@ To test Firestore locally (optional — the file store works for most developmen
 ```sh
 # Create a service account key
 gcloud iam service-accounts keys create service-account.json \
-  --iam-account=tcq-cloudrun@<your-project-id>.iam.gserviceaccount.com
+  --iam-account=tcq-vm@<your-project-id>.iam.gserviceaccount.com
 ```
 
 The key file is saved as `service-account.json` (already in `.gitignore`). Add to `.env.development` or `.env`:
