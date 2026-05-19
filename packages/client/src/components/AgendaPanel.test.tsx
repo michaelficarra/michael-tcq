@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { AgendaPanel } from './AgendaPanel.js';
@@ -286,6 +286,129 @@ describe('AgendaPanel', () => {
 
       expect(screen.queryByText('should be hidden — current')).not.toBeInTheDocument();
       expect(screen.queryByText('should be hidden — upcoming')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Auto-scroll on tab visibility', () => {
+    const a: User = { ghid: 10, ghUsername: 'a', name: 'A', organisation: '' };
+
+    // jsdom doesn't implement scrollIntoView; stub on Element.prototype.
+    let scrollSpy: ReturnType<typeof vi.fn>;
+    beforeEach(() => {
+      scrollSpy = vi.fn();
+      Element.prototype.scrollIntoView = scrollSpy;
+    });
+
+    it('tags the current row with the tcq-agenda-current-item marker class', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
+          { kind: 'item', id: '3', name: 'Upcoming', presenterIds: ['a'] },
+        ],
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      const currentLi = screen.getByText('Current').closest('li')!;
+      expect(currentLi.className).toMatch(/tcq-agenda-current-item/);
+      expect(screen.getByText('Past').closest('li')!.className).not.toMatch(/tcq-agenda-current-item/);
+      expect(screen.getByText('Upcoming').closest('li')!.className).not.toMatch(/tcq-agenda-current-item/);
+    });
+
+    it('scrolls the current item into view when the panel transitions from hidden to visible', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
+        ],
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting}>
+          <AgendaPanel hidden />
+        </TestMeetingProvider>,
+      );
+      // While hidden, the inner content (and therefore the current row) isn't rendered, so no scroll.
+      expect(scrollSpy).not.toHaveBeenCalled();
+
+      // Reveal the panel.
+      rerender(
+        <TestMeetingProvider meeting={meeting}>
+          <AgendaPanel hidden={false} />
+        </TestMeetingProvider>,
+      );
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
+    });
+
+    it('scrolls on initial mount when the panel starts visible with a current item set', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['a'] }],
+        current: { agendaItemId: '1', topicSpeakers: [] },
+      });
+      renderAgenda(meeting);
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not scroll when the current item changes while the panel is already visible', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [
+          { kind: 'item', id: '1', name: 'First', presenterIds: ['a'] },
+          { kind: 'item', id: '2', name: 'Second', presenterIds: ['a'] },
+        ],
+        current: { agendaItemId: '1', topicSpeakers: [] },
+      });
+
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting}>
+          <AgendaPanel hidden={false} />
+        </TestMeetingProvider>,
+      );
+      expect(scrollSpy).toHaveBeenCalledTimes(1); // initial mount counts as a visibility edge
+
+      // Chair advances — current item changes but visibility doesn't.
+      const advanced = makeMeeting({
+        users: { a },
+        agenda: meeting.agenda,
+        current: { agendaItemId: '2', topicSpeakers: [] },
+      });
+      rerender(
+        <TestMeetingProvider meeting={advanced}>
+          <AgendaPanel hidden={false} />
+        </TestMeetingProvider>,
+      );
+
+      // Still one call — advancement alone must not trigger an auto-scroll.
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not scroll when there is no current item', () => {
+      const meeting = makeMeeting({
+        users: { a },
+        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['a'] }],
+        // No current.agendaItemId — meeting hasn't started.
+      });
+
+      const { rerender } = render(
+        <TestMeetingProvider meeting={meeting}>
+          <AgendaPanel hidden />
+        </TestMeetingProvider>,
+      );
+      rerender(
+        <TestMeetingProvider meeting={meeting}>
+          <AgendaPanel hidden={false} />
+        </TestMeetingProvider>,
+      );
+
+      expect(scrollSpy).not.toHaveBeenCalled();
     });
   });
 
