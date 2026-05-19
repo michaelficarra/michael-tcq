@@ -43,7 +43,7 @@ export function ConnectionStatus({ connected, activeConnections }: ConnectionSta
 
   // Shared label used by the hover pill, the native title tooltip, and
   // the aria-label so all three surfaces show identical copy.
-  const connectedLabel = `Connected — ${activeConnections} active connection${activeConnections === 1 ? '' : 's'}`;
+  const connectedLabel = `Connected — ${activeConnections} active participant connection${activeConnections === 1 ? '' : 's'}`;
 
   return (
     // Hover handlers live on the outer container rather than the 10px dot

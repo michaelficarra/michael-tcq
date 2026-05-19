@@ -65,14 +65,14 @@ describe('ConnectionStatus', () => {
       render(<ConnectionStatus connected={true} activeConnections={3} />);
       const dot = screen.getByLabelText(/^Connected —/);
       fireEvent.mouseEnter(dot);
-      expect(screen.getByRole('tooltip')).toHaveTextContent('Connected — 3 active connections');
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Connected — 3 active participant connections');
     });
 
     it('uses singular form when there is one connection', () => {
       render(<ConnectionStatus connected={true} activeConnections={1} />);
       const dot = screen.getByLabelText(/^Connected —/);
       fireEvent.mouseEnter(dot);
-      expect(screen.getByRole('tooltip')).toHaveTextContent('Connected — 1 active connection');
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Connected — 1 active participant connection');
     });
 
     it('disappears on mouse leave', () => {
