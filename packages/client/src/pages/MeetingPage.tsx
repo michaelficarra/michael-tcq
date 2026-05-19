@@ -35,26 +35,34 @@ function MeetingPageInner() {
     return TABS.includes(hash as Tab) ? (hash as Tab) : 'queue';
   });
 
-  // Sync tab state → URL fragment, but only when activeTab actually changes,
-  // not on initial mount. Mounting at `/meeting/<id>` (no hash) should leave
-  // the URL alone — the hash only appears once the user actually clicks a
-  // different tab. The ref captures the last synced value, so StrictMode's
-  // double-invoke of effects in dev is a no-op (ref and current match on
-  // the second run).
+  // Sync tab state → URL fragment via `pushState` so each tab change is a
+  // distinct history entry. The browser back button then returns to the
+  // previous tab instead of skipping past the meeting page entirely. The
+  // ref skips the initial mount (prev matches current). Hashchange-driven
+  // updates (browser back/forward) set a flag that suppresses the next
+  // push, otherwise we'd ping-pong history.
   const prevActiveTabRef = useRef<Tab>(activeTab);
+  const skipNextPushRef = useRef(false);
   useEffect(() => {
     if (prevActiveTabRef.current === activeTab) return;
     prevActiveTabRef.current = activeTab;
-    window.history.replaceState(null, '', `#${activeTab}`);
+    if (skipNextPushRef.current) {
+      skipNextPushRef.current = false;
+      return;
+    }
+    window.history.pushState(null, '', `#${activeTab}`);
   }, [activeTab]);
 
-  // Listen for hashchange events (browser back/forward)
+  // Listen for hashchange events (browser back/forward). An empty/unknown
+  // hash maps to the default tab so navigating back to the bare URL still
+  // resolves to a real tab. The skip flag prevents the resulting state
+  // change from being treated as a fresh tab click and re-pushed.
   useEffect(() => {
     function handleHashChange() {
       const hash = window.location.hash.slice(1);
-      if (TABS.includes(hash as Tab)) {
-        setActiveTab(hash as Tab);
-      }
+      const next: Tab = TABS.includes(hash as Tab) ? (hash as Tab) : 'queue';
+      skipNextPushRef.current = true;
+      setActiveTab(next);
     }
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
