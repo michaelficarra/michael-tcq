@@ -212,17 +212,17 @@ test.describe('presence and identity', () => {
     const dot = page.getByLabel(/active connection/i);
 
     // First context, alone — exactly 1 active connection.
-    await expect(dot).toHaveAttribute('aria-label', /1 active connection/);
+    await expect(dot).toHaveAttribute('aria-label', /1 active participant connection/);
 
     const second = await openSecondContext(browser, meetingId);
     try {
-      await expect(dot).toHaveAttribute('aria-label', /2 active connections/);
+      await expect(dot).toHaveAttribute('aria-label', /2 active participant connections/);
     } finally {
       await second.context.close();
     }
 
     // After the second context closes, the count returns to 1.
-    await expect(dot).toHaveAttribute('aria-label', /1 active connection/);
+    await expect(dot).toHaveAttribute('aria-label', /1 active participant connection/);
   });
 
   test('a queue entry added under a different mock identity surfaces with that identity', async ({ browser, page }) => {
