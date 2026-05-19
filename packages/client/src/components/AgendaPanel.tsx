@@ -671,7 +671,7 @@ const SortableSession = memo(function SortableSession({
   const overflowAmount = runTotal - session.capacity;
 
   const baseClasses =
-    'flex flex-wrap items-center gap-3 border-y border-stone-300 dark:border-stone-600 px-2 py-1.5 rounded bg-stone-100 dark:bg-stone-800';
+    'flex flex-wrap items-center gap-3 border-y border-stone-300 dark:border-stone-600 px-2 py-1.5 bg-stone-100 dark:bg-stone-800';
 
   if (editing) {
     return (
