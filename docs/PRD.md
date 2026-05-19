@@ -106,6 +106,8 @@ The meeting view has four tabs:
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown with Preferences, Report an issue, and Log out entries; the Report an issue entry opens the project's GitHub repository in a new tab. Clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
+The active tab is reflected in the URL as a hash fragment (`#queue`, `#agenda`, `#log`, `#help`). Switching tabs pushes a new browser-history entry, so the back button returns to the previously viewed tab rather than leaving the meeting. The browser back/forward buttons update the active tab in place without pushing further entries. An empty or unrecognised hash resolves to the Queue tab.
+
 Any link that points to a destination outside the application — whether it appears in a user-generated markdown field (agenda item names, queue topics, conclusions, session names, poll topics) or in the application chrome itself (e.g. the hamburger menu's Report an issue entry) — opens in a new tab/window and displays a small northeast-facing arrow indicator next to the link text so users can tell, before clicking, that the link leaves TCQ.
 
 ## Agenda
@@ -247,9 +249,9 @@ The queue is closed by default when a meeting is created (before the meeting sta
 
 ### Entering the Queue
 
-Clicking one of the entry type buttons immediately adds the participant to the queue with a placeholder topic description. The entry appears in the queue for all connected users in real time, and the new entry's topic field opens in inline edit mode with the placeholder text selected so the participant can immediately type a more specific description. The Reply button is only visible when there is a current topic.
+Clicking one of the entry type buttons immediately adds the participant to the queue with a placeholder topic description. The entry appears in the queue for all connected users in real time, and the new entry's topic field opens in inline edit mode with the placeholder text selected so the participant can immediately type a more specific description. The Reply button is only visible when there is a current topic, and the `r` keyboard shortcut is similarly a no-op when there is no current topic.
 
-Because the button and the server-side add happen over the network, a chair may advance to a different topic (or advance the agenda item, which clears the topic) in the gap between a participant clicking Reply and the server processing the add. In that case the reply is rejected, the participant sees an error ("Topic has changed — your reply was not added"), and the inline edit form does not open.
+Because the button and the server-side add happen over the network, the current topic may change in the gap between a participant clicking Reply and the server processing the add. The reply is rejected in either of two cases. If a chair has advanced to a different topic (one that is still current), the participant sees "Topic has changed — your reply was not added". If there is no current topic at all when the server processes the reply (for example, the agenda item has just been advanced and the topic has been cleared), the participant sees "No topic is currently active - you can not reply". In both cases the inline edit form does not open.
 
 If the participant presses Escape or clicks Cancel at any point during the initial editing of a new entry, the entry is removed from the queue. This applies regardless of whether the placeholder text has been modified. Cancelling an edit on an existing entry (opened via the Edit button) does not remove it.
 
@@ -451,6 +453,8 @@ Browser-native notifications can be enabled from the Preferences modal. The top-
 - **When the current agenda item exceeds its time estimate** — a time-based notification that fires once, the moment the current agenda item crosses its estimate. Skipped if the item was already overrun when the page loaded. Off by default.
 
 If the user denies permission at the browser prompt (or permission was already denied for the site), the top-level toggle silently stays off. If permission is later revoked through browser settings, the next in-page transition detects the change, self-heals the preference back to off, and no notification is fired. Notifications fire regardless of whether the tab is in the foreground.
+
+Notification bodies that draw on user-authored markdown fields (topics, agenda item names, conclusions) are shown as plain text — link syntax collapses to the link label and any other inline markdown is stripped — because the browser's Notifications API displays the body verbatim with no formatting support.
 
 All settings persist to `localStorage`.
 
