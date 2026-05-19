@@ -12,7 +12,12 @@
 
 import { z } from 'zod';
 import { normaliseGithubUsername } from './helpers.js';
-import { validateBlockMarkdown, validateInlineMarkdown } from './markdown.js';
+import {
+  sanitiseBlockMarkdown,
+  sanitiseInlineMarkdown,
+  validateBlockMarkdown,
+  validateInlineMarkdown,
+} from './markdown.js';
 import type {
   ActivePoll,
   AgendaEntry,
@@ -169,15 +174,20 @@ const requiredTrimmed = (field: string) => z.string().trim().min(1, `${field} is
  * only the supported subset (see `markdown.ts`). Used for fields whose
  * value is rendered back through `InlineMarkdown` on the client.
  *
- * `superRefine` (rather than `refine`) is used so the validator's
- * specific reason — e.g. *"Headings are not supported"* — surfaces in
- * the form error rather than a generic message.
+ * The pipeline is: trim → require non-empty → sanitise (escape any
+ * disallowed HTML / image / bad-URL link to its literal source) →
+ * validate residual markdown-level issues. Sanitisation runs first so
+ * the validator never sees HTML-shaped problems — those become visible
+ * text, not save failures. The validator still surfaces a specific
+ * reason — e.g. *"Headings are not supported"* — for the issues it
+ * does catch (block constructs in inline context).
  */
 const markdownString = (field: string, requiredMsg = `${field} is required`) =>
   z
     .string()
     .trim()
     .min(1, requiredMsg)
+    .transform((val) => sanitiseInlineMarkdown(val))
     .superRefine((val, ctx) => {
       const r = validateInlineMarkdown(val);
       if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
@@ -193,6 +203,7 @@ const optionalMarkdownString = (field: string) =>
     .string()
     .trim()
     .min(1, `${field} cannot be empty`)
+    .transform((val) => sanitiseInlineMarkdown(val))
     .superRefine((val, ctx) => {
       const r = validateInlineMarkdown(val);
       if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
@@ -202,36 +213,41 @@ const optionalMarkdownString = (field: string) =>
 /**
  * Optional markdown string that also accepts the empty string as a way
  * to clear the value (used for `conclusion` and the poll `topic`).
- * Validation is skipped when empty/undefined.
+ * Sanitisation + validation are skipped when empty. `.optional()` wraps
+ * the whole transform chain so the property type stays optional in
+ * inferred `z.object` shapes.
  */
 const clearableMarkdownString = (field: string) =>
   z
     .string()
     .trim()
-    .optional()
+    .transform((val) => (val.length === 0 ? val : sanitiseInlineMarkdown(val)))
     .superRefine((val, ctx) => {
-      if (val === undefined || val.length === 0) return;
+      if (val.length === 0) return;
       const r = validateInlineMarkdown(val);
       if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
-    });
+    })
+    .optional();
 
 /**
  * Optional *block* markdown string that also accepts the empty string
  * as a way to clear the value. Used for the agenda prologue/epilogue,
  * which support multi-paragraph + lists + headings + the rest of the
- * block allowlist (see `markdown.ts`). Validation is skipped when
- * empty/undefined.
+ * block allowlist (see `markdown.ts`). Sanitisation + validation are
+ * skipped when empty; `.optional()` wraps the chain so the property
+ * type stays optional.
  */
 const clearableBlockMarkdownString = (field: string) =>
   z
     .string()
     .trim()
-    .optional()
+    .transform((val) => (val.length === 0 ? val : sanitiseBlockMarkdown(val)))
     .superRefine((val, ctx) => {
-      if (val === undefined || val.length === 0) return;
+      if (val.length === 0) return;
       const r = validateBlockMarkdown(val);
       if (!r.ok) ctx.addIssue({ code: 'custom', message: `${field}: ${r.reason}` });
-    });
+    })
+    .optional();
 
 /**
  * GitHub-username field: accepts an optional leading `@` and surrounding

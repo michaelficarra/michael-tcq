@@ -7,18 +7,31 @@
  * renderer (used on the client) live here so the supported subset has a
  * single source of truth.
  *
- * Two policies, one allowlist:
+ * Three concerns, one allowlist:
  *
- *   - **Strict (write boundary).** `validateInlineMarkdown` parses the
- *     input, walks the AST, and rejects anything outside the allowlist
- *     with a specific reason. Wired into Zod via the `markdownString`
- *     helper in `messages.ts`.
- *   - **Lenient (render path, agenda import).** `stripUnsupportedMarkdown`
- *     parses, removes anything outside the allowlist (HTML tags become
- *     bare text, block-level wrappers flatten to inline content), and
- *     re-serialises. Used by the client renderer as a pre-pass so that
- *     legacy stored data — which predates this validator — still renders
- *     safely instead of throwing.
+ *   - **HTML sanitisation.** `sanitiseInlineMarkdown` /
+ *     `sanitiseBlockMarkdown` walk the AST and replace any disallowed
+ *     raw-HTML fragment (bad tag, bad attribute on an allowed tag, or
+ *     disallowed URL scheme on `<a href>`) with a text node containing
+ *     the original source — so the offending markup *appears as written*
+ *     rather than being silently dropped. Markdown links with disallowed
+ *     URL schemes are likewise escaped to their literal source. Markdown
+ *     constructs that aren't HTML at all (images, block-level constructs
+ *     in inline context) are left untouched here; the validator
+ *     surfaces them as feedback to the author.
+ *   - **Strict validation (write boundary).** `validateInlineMarkdown`
+ *     parses the input and rejects anything outside the allowlist that
+ *     sanitisation didn't already neutralise — i.e. markdown-level
+ *     issues like headings in inline context, images, or block
+ *     constructs we don't render. Wired into Zod via the
+ *     `markdownString` helper in `messages.ts`, where it runs *after*
+ *     sanitisation so the validator never trips on HTML-shaped problems.
+ *   - **Lenient strip (render path, agenda import).**
+ *     `stripUnsupportedMarkdown` builds on sanitisation and *additionally*
+ *     drops markdown-level constructs the validator would reject
+ *     (images vanish; block wrappers flatten to inline content). Used by
+ *     the client renderer as a pre-pass so that legacy stored data —
+ *     which predates this validator — still renders without throwing.
  *
  * The supported subset is intentionally inline-only. See the constants
  * below for the precise lists.
@@ -548,18 +561,82 @@ function checkBlockNode(node: RootContent | BlockContent): ValidationResult {
   }
 }
 
+// -- Image / link → literal-source reconstruction ------------------------
+
+/**
+ * Reconstruct the markdown source for an image node so it can be emitted
+ * as a literal text node — disallowed images are escaped (rather than
+ * dropped) so the original `![alt](url)` appears as written to the
+ * reader. The remark-stringify pass that runs over the resulting tree
+ * escapes the leading `!` / `[` so the round-trip lands on a text hast
+ * node, never an image element again.
+ */
+function imageSourceLiteral(alt: string | null | undefined, url: string, title: string | null | undefined): string {
+  const t = typeof title === 'string' && title.length > 0 ? ` "${title.replace(/"/g, '\\"')}"` : '';
+  return `![${alt ?? ''}](${url}${t})`;
+}
+
+/**
+ * Reconstruct the markdown source for a link node whose URL scheme is
+ * disallowed (typically `javascript:` or `data:`). The link is emitted
+ * verbatim as text so the reader can see what was written rather than
+ * an unwrapped link text whose target silently vanished. Inner
+ * formatting is collapsed to its plain-text content — preserving the
+ * formatting would require splicing children back inline, which defeats
+ * the "appear as written" intent.
+ */
+function linkSourceLiteral(node: {
+  url: string;
+  title?: string | null;
+  children: ReadonlyArray<PhrasingContent>;
+}): string {
+  const inner = mdastToString({ type: 'paragraph', children: node.children as PhrasingContent[] } as Paragraph);
+  const t = typeof node.title === 'string' && node.title.length > 0 ? ` "${node.title.replace(/"/g, '\\"')}"` : '';
+  return `[${inner}](${node.url}${t})`;
+}
+
+// -- Public: HTML sanitisation (write-boundary path) ---------------------
+
+/**
+ * Sanitise inline markdown: replace any HTML fragment outside the inline
+ * allowlist — disallowed tag, disallowed attribute on an allowed tag,
+ * disallowed URL scheme on `<a href>`, comment / doctype / cdata content
+ * — with a text node containing the original source. Markdown images and
+ * links with disallowed URL schemes are likewise escaped to their literal
+ * source. Other markdown constructs are left untouched so the strict
+ * validator can flag them with a specific reason at the write boundary.
+ */
+export function sanitiseInlineMarkdown(input: string): string {
+  const tree = parser.parse(input) as Root;
+  tree.children = escapeNodes(tree.children) as RootContent[];
+  return stringifier.stringify(tree).trim();
+}
+
+/**
+ * Sanitise block markdown — same contract as `sanitiseInlineMarkdown`
+ * but using the wider block allowlist (`<details>`, `<table>`, …) so
+ * prologue / epilogue authors can use the full block subset and only
+ * unsupported tags get escaped.
+ */
+export function sanitiseBlockMarkdown(input: string): string {
+  const tree = parser.parse(input) as Root;
+  tree.children = escapeNodes(tree.children, /* block */ true) as RootContent[];
+  return stringifier.stringify(tree).trim();
+}
+
 // -- Public: lenient strip-and-reserialise -------------------------------
 
 /**
  * Lenient counterpart to `validateInlineMarkdown`. Parses the input,
- * removes any node that the validator would reject (HTML tags become
- * bare text, block-level wrappers flatten to their inline content), and
- * re-serialises. Used by:
+ * runs the same HTML-escape pass as `sanitiseInlineMarkdown`, and also
+ * flattens block-level wrappers (headings, lists, blockquotes, …) to
+ * their inline text content so the result is a single paragraph the
+ * inline renderer can display. Used by:
  *
  *   - the client renderer as a pre-pass for legacy stored data;
  *   - the agenda import parser, where pre-existing TC39 markdown often
- *     includes constructs we don't render (e.g. `<sub>`, embedded images
- *     as raw HTML) but the surviving inline content is still useful.
+ *     includes constructs we don't render but the surviving inline
+ *     content is still useful.
  */
 export function stripUnsupportedMarkdown(input: string): string {
   const tree = parser.parse(input) as Root;
@@ -574,29 +651,34 @@ export function stripUnsupportedMarkdown(input: string): string {
 /**
  * Reduce a forest of mdast nodes (block- or inline-level) to a flat list
  * of phrasing content. Block wrappers (paragraph, heading, list, etc.)
- * are replaced by their flattened children; disallowed inline nodes
- * become their text content; HTML tags are stripped to their inner text.
+ * are replaced by their flattened children. Disallowed HTML, markdown
+ * images, and disallowed-scheme links are all escaped to text nodes
+ * containing their original source so they appear as written rather
+ * than vanishing silently.
  */
 function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): PhrasingContent[] {
   const out: PhrasingContent[] = [];
   for (const node of nodes) {
-    // Images are explicitly disallowed — drop entirely (don't surface
-    // their alt text, which is rarely useful in this context).
-    if (node.type === 'image') continue;
+    if (node.type === 'image') {
+      // Markdown image — escape the source so the reader sees the
+      // original `![alt](url)` rather than a missing element.
+      out.push({ type: 'text', value: imageSourceLiteral(node.alt, node.url, node.title) });
+      continue;
+    }
     if (node.type === 'html') {
       // For inline HTML: keep allow-listed tags verbatim (mdast emits
       // open/close as separate nodes; adjacent text carries the content).
-      // For disallowed HTML at root level (`<script>`, `<div>`, etc.),
-      // drop the tags and any inner text — mdast doesn't produce text
-      // children for block-level HTML, so dropping the html node is
-      // sufficient.
+      // Disallowed HTML becomes a text node containing the original tag
+      // source so the markup appears as the author wrote it.
       const check = checkInlineHtml(node.value);
       if (check.ok) out.push(node);
+      else out.push({ type: 'text', value: node.value });
       continue;
     }
     if (!(INLINE_MDAST_TYPES as readonly string[]).includes(node.type)) {
       // Block-level (heading, list, blockquote, etc.) — descend into its
-      // children, which yields just the inline content.
+      // children, which yields just the inline content. Lenient-only;
+      // the sanitise path keeps the original block node.
       const text = mdastToString(node);
       if (text.length > 0) {
         // Insert a separating space so adjacent block content doesn't
@@ -607,8 +689,9 @@ function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): P
       continue;
     }
     if (node.type === 'link' && !isAllowedUrl(node.url)) {
-      // Disallowed URL — keep the link text, drop the link wrapper.
-      out.push(...flattenToInline(node.children));
+      // Disallowed URL — emit the link source as literal text so the
+      // suspicious href is visible rather than silently unwrapped.
+      out.push({ type: 'text', value: linkSourceLiteral(node) });
       continue;
     }
     if (node.type === 'paragraph') {
@@ -624,6 +707,53 @@ function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): P
       continue;
     }
     out.push(node as PhrasingContent);
+  }
+  return out;
+}
+
+/**
+ * Walk a forest of block- or inline-level nodes and replace disallowed
+ * HTML / images / bad-URL links with text nodes containing the original
+ * source. Used by `sanitiseInlineMarkdown` / `sanitiseBlockMarkdown` —
+ * unlike `flattenToInline`, this does *not* flatten block wrappers to
+ * text, so block structure (paragraphs, headings, lists, tables, …)
+ * survives intact for the validator to inspect (inline-context) or for
+ * the block renderer to use (block-context). The `block` flag picks the
+ * wider block HTML allowlist.
+ */
+function escapeNodes(
+  nodes: ReadonlyArray<RootContent | BlockContent | PhrasingContent>,
+  block = false,
+): Array<RootContent | BlockContent | PhrasingContent> {
+  const out: Array<RootContent | BlockContent | PhrasingContent> = [];
+  for (const node of nodes) {
+    if (node.type === 'image') {
+      // Markdown image at any level — escape to literal source text.
+      out.push({ type: 'text', value: imageSourceLiteral(node.alt, node.url, node.title) });
+      continue;
+    }
+    if (node.type === 'html') {
+      const check = block ? checkBlockHtml(node.value) : checkInlineHtml(node.value);
+      if (check.ok) {
+        out.push(node);
+      } else {
+        out.push({ type: 'text', value: node.value });
+      }
+      continue;
+    }
+    if (node.type === 'link' && !isAllowedUrl(node.url)) {
+      out.push({ type: 'text', value: linkSourceLiteral(node) });
+      continue;
+    }
+    if ('children' in node) {
+      // Recurse to clean nested content while preserving the wrapper.
+      const cleaned = escapeNodes(node.children as Array<RootContent | BlockContent | PhrasingContent>, block);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (node as any).children = cleaned;
+      out.push(node);
+      continue;
+    }
+    out.push(node);
   }
   return out;
 }
@@ -650,19 +780,33 @@ export function stripUnsupportedBlockMarkdown(input: string): string {
 
 /**
  * Recursive block-content cleaner. Returns the kept children for the
- * caller to splice into its own children array — nodes that should be
- * dropped entirely (`image`, disallowed block HTML) emit nothing, and
- * containers (list, blockquote, table) recurse into their bodies.
+ * caller to splice into its own children array. Disallowed HTML,
+ * markdown images, and bad-URL links are replaced with text nodes
+ * containing the literal source so they appear as written; block
+ * wrappers we don't recognise fall back to a paragraph of their text
+ * content; containers (list, blockquote, table) recurse into their
+ * bodies.
  */
 function cleanBlockNodes(nodes: ReadonlyArray<RootContent | BlockContent | PhrasingContent>): Array<RootContent> {
   const out: RootContent[] = [];
   for (const node of nodes) {
-    if (node.type === 'image') continue;
+    if (node.type === 'image') {
+      // Markdown image — escape to a paragraph of literal source text.
+      out.push({
+        type: 'paragraph',
+        children: [{ type: 'text', value: imageSourceLiteral(node.alt, node.url, node.title) }],
+      });
+      continue;
+    }
     if (node.type === 'html') {
       // At block level the wider allowlist applies (`<details>`,
-      // `<hr>`, …). Disallowed tags are dropped wholesale; their
-      // contents — if any — were already separate mdast siblings.
-      if (checkBlockHtml(node.value).ok) out.push(node as RootContent);
+      // `<hr>`, …). Disallowed block-level HTML is escaped to a
+      // paragraph of literal text so it shows up in the rendered output.
+      if (checkBlockHtml(node.value).ok) {
+        out.push(node as RootContent);
+      } else {
+        out.push({ type: 'paragraph', children: [{ type: 'text', value: node.value }] });
+      }
       continue;
     }
     if (!(BLOCK_MDAST_TYPES as readonly string[]).includes(node.type)) {

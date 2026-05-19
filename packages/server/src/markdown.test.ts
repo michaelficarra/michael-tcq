@@ -130,12 +130,19 @@ describe('stripUnsupportedMarkdown', () => {
     expect(stripUnsupportedMarkdown('- one\n- two\n- three')).toContain('one');
   });
 
-  it('strips a disallowed HTML tag but keeps its inner text', () => {
-    // mdast emits `<script>` `alert(1)` `</script>` as separate inline
-    // tokens. The html tags are dropped; the text inside survives.
+  it('escapes a disallowed HTML tag as literal text so it appears as written', () => {
+    // mdast emits `<script>` `x` `</script>` as separate inline tokens.
+    // The opening/closing tags are escaped to text — the inner `x`
+    // survives. The result re-parses as text, never as an html node.
     const out = stripUnsupportedMarkdown('hi <script>x</script>');
-    expect(out).not.toMatch(/<script>/);
+    // Stringify escapes `<` with a leading backslash, so the raw
+    // unescaped `<script>` (as a regex match without backslash) must
+    // not appear adjacent in the output.
+    expect(out).not.toMatch(/(^|[^\\])<script>/);
+    expect(out).toContain('<script>');
+    expect(out).toContain('</script>');
     expect(out).toContain('hi');
+    expect(out).toContain('x');
   });
 
   it('keeps an allow-listed HTML tag', () => {
@@ -144,14 +151,18 @@ describe('stripUnsupportedMarkdown', () => {
     expect(out).toContain('</sub>');
   });
 
-  it('drops a link with a disallowed URL scheme but keeps the link text', () => {
+  it('escapes a link with a disallowed URL scheme as literal source', () => {
     const out = stripUnsupportedMarkdown('[ok](javascript:alert(1))');
-    expect(out).not.toMatch(/javascript:/);
+    // The whole link source survives as visible text — the dangerous
+    // URL is no longer silently hidden behind the link text.
+    expect(out).toContain('javascript:alert(1)');
     expect(out).toContain('ok');
   });
 
-  it('returns an empty string for input that becomes empty after stripping', () => {
-    expect(stripUnsupportedMarkdown('![alt](x.png)')).toBe('');
+  it('escapes a markdown image as literal source so the original `![alt](url)` survives', () => {
+    const out = stripUnsupportedMarkdown('![alt](x.png)');
+    expect(out).toContain('alt');
+    expect(out).toContain('x.png');
   });
 });
 
@@ -177,13 +188,19 @@ describe('Zod schema integration', () => {
     }
   });
 
-  it('AgendaAddPayloadSchema rejects a javascript: link', () => {
+  it('AgendaAddPayloadSchema sanitises a javascript: link through to literal source', () => {
+    // Bad-URL links are now escaped at the write boundary rather than
+    // rejected — the dangerous URL becomes visible text in the stored
+    // value, which is much more informative than a save failure.
     const r = AgendaAddPayloadSchema.safeParse({
       name: '[click](javascript:alert(1))',
       presenterUsernames: ['alice'],
     });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0].message).toContain(ALLOWED_URL_SCHEMES.join(', '));
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.name).toContain('javascript:alert(1)');
+      expect(r.data.name).toContain('click');
+    }
   });
 
   it('AgendaEditPayloadSchema (optional name) rejects a heading when provided', () => {
@@ -207,12 +224,19 @@ describe('Zod schema integration', () => {
     expect(r.success).toBe(true);
   });
 
-  it('NextAgendaItemPayloadSchema rejects an invalid conclusion when provided', () => {
+  it('NextAgendaItemPayloadSchema sanitises a disallowed-HTML conclusion through to literal text', () => {
     const r = NextAgendaItemPayloadSchema.safeParse({
       currentAgendaItemId: 'x',
       conclusion: '<script>x</script>',
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      // The script tag survives as visible source rather than being
+      // rejected — and the stored value re-parses to text, so the
+      // renderer never produces an actual <script> element.
+      expect(r.data.conclusion).toContain('<script>');
+      expect(r.data.conclusion).toContain('</script>');
+    }
   });
 });
 
@@ -325,18 +349,23 @@ describe('stripUnsupportedBlockMarkdown', () => {
     expect(out).toMatch(/> a quote/);
   });
 
-  it('drops a markdown image while preserving surrounding paragraphs', () => {
+  it('escapes a markdown image as literal source while preserving surrounding paragraphs', () => {
     const out = stripUnsupportedBlockMarkdown('para one\n\n![alt](x.png)\n\npara two');
     expect(out).toContain('para one');
     expect(out).toContain('para two');
-    expect(out).not.toMatch(/x\.png/);
+    // The image source survives as visible markdown rather than vanishing.
+    expect(out).toContain('alt');
+    expect(out).toContain('x.png');
   });
 
-  it('drops a disallowed raw <img> while keeping the paragraph', () => {
+  it('escapes a disallowed raw <img> as literal text inside the paragraph', () => {
     const out = stripUnsupportedBlockMarkdown('hello <img src="x"> world');
-    expect(out).not.toMatch(/<img/);
     expect(out).toContain('hello');
     expect(out).toContain('world');
+    // The opening tag survives as visible text — re-parses to a text
+    // node, never an <img> element.
+    expect(out).toContain('<img');
+    expect(out).not.toMatch(/(^|[^\\])<img/);
   });
 });
 
@@ -358,23 +387,26 @@ describe('Prologue / epilogue schema integration', () => {
     expect(r.success).toBe(true);
   });
 
-  it('AgendaSetProloguePayloadSchema rejects an image', () => {
+  it('AgendaSetProloguePayloadSchema sanitises an image to literal source', () => {
     const r = AgendaSetProloguePayloadSchema.safeParse({
       prologue: '![alt](https://x.example/img.png)',
     });
-    expect(r.success).toBe(false);
-    if (!r.success) {
-      expect(r.error.issues[0].message).toMatch(/Images/);
-      expect(r.error.issues[0].message).toMatch(/Prologue/);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.prologue).toContain('alt');
+      expect(r.data.prologue).toContain('x.example/img.png');
     }
   });
 
-  it('AgendaSetEpiloguePayloadSchema rejects a <script> tag', () => {
+  it('AgendaSetEpiloguePayloadSchema sanitises a <script> tag to literal text', () => {
     const r = AgendaSetEpiloguePayloadSchema.safeParse({
       epilogue: '<script>alert(1)</script>',
     });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0].message).toMatch(/<script>/);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.epilogue).toContain('<script>');
+      expect(r.data.epilogue).toContain('</script>');
+    }
   });
 });
 

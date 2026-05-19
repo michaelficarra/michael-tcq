@@ -120,6 +120,8 @@ export {
   BLOCK_MDAST_TYPES,
   validateInlineMarkdown,
   validateBlockMarkdown,
+  sanitiseInlineMarkdown,
+  sanitiseBlockMarkdown,
   stripUnsupportedMarkdown,
   stripUnsupportedBlockMarkdown,
   extractPlainText,
