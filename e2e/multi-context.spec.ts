@@ -209,7 +209,7 @@ test.describe('presence and identity', () => {
 
     // The dot exposes its connection count via aria-label, which
     // updates whenever the server emits an `activeConnections` event.
-    const dot = page.getByLabel(/active connection/i);
+    const dot = page.getByLabel(/active participant connection/i);
 
     // First context, alone — exactly 1 active connection.
     await expect(dot).toHaveAttribute('aria-label', /1 active participant connection/);
@@ -270,8 +270,8 @@ test.describe('network disruption', () => {
     const second = await openSecondContext(browser, meetingId);
     try {
       // Pre-condition: indicator shows connected.
-      const dot = second.page.getByLabel(/active connection|disconnected/i);
-      await expect(dot).toHaveAttribute('aria-label', /active connection/);
+      const dot = second.page.getByLabel(/active participant connection|disconnected/i);
+      await expect(dot).toHaveAttribute('aria-label', /active participant connection/);
 
       // Take just the second context offline. The Socket.IO client
       // detects the dropped transport and `connected` flips to false,
