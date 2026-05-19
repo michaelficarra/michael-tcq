@@ -345,7 +345,7 @@ Then:
 ## Configuration Notes
 
 - **`--timeout 3600`** — Maximum 60-minute timeout for WebSocket connections. Socket.IO reconnects transparently when the timeout is reached.
-- **`--session-affinity`** — Routes reconnecting clients to the same instance.
+- **`--scaling=1`** — Manual scaling: the service runs exactly one instance, always on (no scale-to-zero, no autoscaling above one). Meeting state lives in process memory, so a second instance would split clients across two divergent views of the queue, agenda, and log. With only one instance, there is no "other" instance to be routed to. Trade-off: the single instance bills continuously rather than only while requests are in flight. Raising the instance count requires shared state (e.g. moving the meeting store out of memory) and would also need `--session-affinity` to keep a given client pinned to one instance.
 - **Firestore credentials** — Cloud Run's service account has Firestore access via the IAM role granted in step 6. No key file needed in production.
 - **`GIT_SHA`** — `scripts/deploy.sh` sets this to `git rev-parse HEAD` on every deploy and passes it to Cloud Run via `--set-env-vars`. The server exposes it at `GET /api/version` (plain text, public) so monitoring tools can identify which commit is running. In development the variable is unset and the endpoint returns 204.
 - **Pre-existing session documents** — Session docs written before TTL was enabled have no `expireAt` field, so the policy will not delete them. They are stale (the cookies themselves expired long ago) and can be deleted in one shot via the Firestore console, or left in place to be overwritten on next login under the same session ID.
