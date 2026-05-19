@@ -40,13 +40,15 @@ describe('InlineMarkdown', () => {
     expect(code.tagName).toBe('CODE');
   });
 
-  it('strips disallowed HTML rather than rendering it', () => {
-    // Disallowed tags (and their inner content, since the inner content
-    // is a payload here, not user prose) are dropped wholesale. The
-    // page must contain neither a real <script> element nor the text.
+  it('renders disallowed HTML as literal text rather than executing it', () => {
+    // Disallowed tags are escaped to their source form: the reader sees
+    // the `<script>` as visible text, but no actual <script> element is
+    // created (so nothing executes) and the payload remains visible.
     const { container } = render(<InlineMarkdown>{'<script>alert("xss")</script>'}</InlineMarkdown>);
     expect(container.querySelector('script')).toBeNull();
-    expect(container.textContent).not.toContain('alert');
+    expect(container.textContent).toContain('<script>');
+    expect(container.textContent).toContain('</script>');
+    expect(container.textContent).toContain('alert("xss")');
   });
 
   it('does not use dangerouslySetInnerHTML', () => {
@@ -74,10 +76,14 @@ describe('InlineMarkdown', () => {
     expect(a?.getAttribute('href')).toBe('https://x.example');
   });
 
-  it('drops a markdown link with a javascript: URL but renders the text', () => {
+  it('renders a markdown link with a javascript: URL as literal source', () => {
+    // Bad URL schemes no longer get silently unwrapped to their text;
+    // the whole link source survives as visible markdown so the reader
+    // sees what was actually written.
     const { container } = render(<InlineMarkdown>{'[click](javascript:alert(1))'}</InlineMarkdown>);
     expect(container.querySelector('a')).toBeNull();
-    expect(container.textContent).toContain('click');
+    expect(container.textContent).toContain('[click]');
+    expect(container.textContent).toContain('javascript:alert(1)');
   });
 
   it('renders legacy heading-syntax content as plain text', () => {
