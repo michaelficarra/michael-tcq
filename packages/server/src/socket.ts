@@ -919,16 +919,23 @@ export function registerSocketHandlers(
       // Precondition check for replies: the topic the user intended to reply
       // to must still be the current topic. `undefined` in the payload means
       // the client didn't send the precondition — treat that as a mismatch
-      // for replies so stale clients can't silently bypass the guard. The
+      // for replies so stale clients can't silently bypass the guard. There
+      // must also actually be a current topic — a reply with no topic to
+      // reply to is nonsensical regardless of what the client claimed. The
       // asUsername path (chair-driven bulk restore) bypasses this — it's a
       // deliberate admin operation, not a UI race.
       if (parsed.type === 'reply' && !parsed.asUsername) {
         const currentSpeakerId = addMeeting?.current.topic?.speakerId ?? null;
         const claimedSpeakerId = parsed.currentTopicSpeakerId ?? null;
-        if (parsed.currentTopicSpeakerId === undefined || currentSpeakerId !== claimedSpeakerId) {
+        const noActiveTopic = currentSpeakerId === null;
+        const preconditionMismatch =
+          parsed.currentTopicSpeakerId === undefined || currentSpeakerId !== claimedSpeakerId;
+        if (noActiveTopic || preconditionMismatch) {
           // Re-broadcast state to the stale client so it reconciles.
           if (addMeeting) socket.emit('state', decorateMeetingForClient(addMeeting, appSettings));
-          const message = 'Topic has changed — your reply was not added';
+          const message = noActiveTopic
+            ? 'No topic is currently active - you can not reply'
+            : 'Topic has changed — your reply was not added';
           socket.emit('error', message);
           respond({ ok: false, error: message });
           return;

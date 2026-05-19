@@ -931,6 +931,29 @@ describe('Socket.IO integration', () => {
       expect(ctx.meetingManager.get(meetingId)!.queue.orderedIds).toHaveLength(1);
     });
 
+    it('rejects a reply when there is no current topic at all', async () => {
+      // Don't drive to a current.topic state — just join a fresh meeting so
+      // current.topic is null. A client that sends `currentTopicSpeakerId: null`
+      // in this state must not be allowed to add a reply (matches with null
+      // would pass the equality check on its own).
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      const ackPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        client.emit('queue:add', { type: 'reply', topic: 'No topic reply', currentTopicSpeakerId: null }, resolve);
+      });
+
+      const error = await errorPromise;
+      const ack = await ackPromise;
+
+      expect(error).toMatch(/no topic is currently active/i);
+      expect(ack.ok).toBe(false);
+      expect(ack.error).toMatch(/no topic is currently active/i);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
+    });
+
     it('bypasses the precondition when the chair adds a reply via asUsername', async () => {
       const { client, meetingId } = await setupWithCurrentTopic();
 
@@ -2337,24 +2360,34 @@ describe('Socket.IO integration', () => {
 
       const client = await joinMeeting(meeting.id);
 
-      // Start meeting
+      // Start meeting — intro speaker is current, no current.topic yet
       let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
       await statePromise;
 
-      // Add a reply and advance to it. current.topic is undefined at this
-      // point (the agenda intro doesn't count as a queued topic), so the
-      // precondition is explicitly null.
+      // Queue a topic and advance to it so current.topic is populated
       statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('queue:add', { type: 'reply', topic: 'My reply', currentTopicSpeakerId: null });
+      client.emit('queue:add', { type: 'topic', topic: 'My topic' });
       let state = await statePromise;
 
       statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
       client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
       state = await statePromise;
 
-      // Reply should be in the same topic group as the intro (not finalised yet)
+      const topicSpeakerId = state.current.topic!.speakerId;
+
+      // Add a reply against the live current.topic and advance to it
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'reply', topic: 'My reply', currentTopicSpeakerId: topicSpeakerId });
+      state = await statePromise;
+
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:next', { currentSpeakerEntryId: state.current.speaker?.id ?? null }, () => {});
+      state = await statePromise;
+
+      // Reply should be in the same topic group as the topic (not finalised yet)
       expect(state.current.topicSpeakers).toHaveLength(2);
+      expect(state.current.topicSpeakers[0].type).toBe('topic');
       expect(state.current.topicSpeakers[1].type).toBe('reply');
       expect(state.current.topicSpeakers[1].topic).toBe('My reply');
     });

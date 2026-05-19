@@ -129,6 +129,10 @@ function MeetingPageInner() {
   const addQueueEntry = useCallback(
     (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
       if (!socket || !meeting) return;
+      // Reply only makes sense against a current topic — match the button's
+      // visibility gate so the `r` shortcut is a no-op when there's nothing
+      // to reply to.
+      if (type === 'reply' && !meeting.current.topic) return;
       // Point of Order is always permitted — procedural interruptions bypass
       // the queue-closed gate for non-chairs.
       if (meeting.queue.closed && !isChair && type !== 'point-of-order') return;
