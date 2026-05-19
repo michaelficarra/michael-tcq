@@ -121,6 +121,28 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     return map;
   }, [agenda]);
 
+  // Scroll the current agenda item into view whenever the tab becomes
+  // visible (including the initial mount when the user lands directly on
+  // `#agenda`). Seeded `true` so the first render with `hidden=false` is
+  // treated as a hidden→visible edge. Re-runs when `currentAgendaItemId`
+  // changes too, but the `!wasHidden` guard makes that a no-op — the
+  // trigger is *tab visibility*, not *active-item change*.
+  //
+  // The active row is tagged with the dedicated `tcq-agenda-current-item`
+  // class (see SortableAgendaItem below). Keeping the marker class
+  // separate from the Tailwind utility classes means visual restyling
+  // can't break the scroll behaviour by accident.
+  const prevHiddenRef = useRef(true);
+  const currentAgendaItemId = meeting?.current.agendaItemId;
+  useEffect(() => {
+    const wasHidden = prevHiddenRef.current;
+    prevHiddenRef.current = hidden;
+    if (!wasHidden || hidden) return;
+    if (!currentAgendaItemId) return;
+    const el = document.querySelector('.tcq-agenda-current-item');
+    el?.scrollIntoView({ block: 'center', behavior: 'auto' });
+  }, [hidden, currentAgendaItemId]);
+
   // When hidden (not the active tab) or meeting state not yet loaded, render
   // only the empty tabpanel shell. Keeping the shell in the DOM avoids the
   // mount/unmount race on tab switch that caused Firefox CI flakes; skipping
@@ -467,6 +489,11 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   // Items that fit within the preceding session's capacity are indented
   // so the session visually "contains" them.
   const containedClasses = isContained ? 'ml-4 md:ml-6' : '';
+  // Dedicated marker class on the current row. Used as the JS query hook
+  // for the auto-scroll-into-view effect in AgendaPanel — kept separate
+  // from the Tailwind utility classes so visual restyling can't break the
+  // scroll behaviour, and so the selector intent reads clearly.
+  const currentMarker = isCurrent ? 'tcq-agenda-current-item' : '';
 
   // --- Editing mode: inline form ---
   if (editing) {
@@ -474,7 +501,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${currentMarker} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
         <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
           {displayNumber}
@@ -539,7 +566,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
-      } ${dimClasses} ${containedClasses} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      } ${dimClasses} ${containedClasses} ${currentMarker} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       aria-label={isChair ? `Drag to reorder item ${displayNumber}` : undefined}
       {...(isChair ? { ...attributes, ...listeners } : {})}
     >

@@ -613,4 +613,46 @@ test.describe('Agenda tab', () => {
       await expect(page.getByText('No agenda items yet.')).toBeVisible();
     });
   });
+
+  test.describe('Auto-scroll to current item', () => {
+    test('switching back to the Agenda tab brings the current item into view', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // Setup at the default viewport so the New Agenda Item / Create
+      // buttons stay easily reachable for the helpers; we shrink the
+      // viewport afterwards so the current row sits well below the fold
+      // when the agenda tab is revealed.
+      for (let i = 1; i <= 10; i++) {
+        await addAgendaItem(page, `Item ${i}`);
+      }
+
+      await startMeeting(page);
+      // Advance through five items so item 6 is the current one — far
+      // enough down the list to live below the fold once we shrink the
+      // viewport.
+      for (let i = 0; i < 5; i++) {
+        await advanceAgenda(page);
+      }
+
+      // Now shrink the viewport so the assertion meaningfully exercises
+      // the scroll behaviour rather than being a no-op.
+      await page.setViewportSize({ width: 800, height: 480 });
+
+      // Park the shared scroll container at the very top so the auto-scroll
+      // has work to do when the tab is revealed.
+      await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 0));
+
+      await goToAgendaTab(page);
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      const currentRow = agendaPanel.locator('li.tcq-agenda-current-item');
+      // The feature being verified is "whichever row is current ends up
+      // visible after the tab switch" — deliberately don't assert on the
+      // item's name, since the precise number-of-advances → current-item
+      // mapping is sensitive to how quickly each advance round-trip
+      // completes and varies between local and CI.
+      await expect(currentRow).toBeInViewport();
+    });
+  });
 });

@@ -176,6 +176,8 @@ The Agenda tab shows the list of meeting chairs at the top, followed by a number
 
 The current agenda item — the one actively being discussed — is displayed with a background highlight and a high-contrast text colour so it stands out from the rest of the list. Items that have already been covered (those sitting above the current item) are dimmed/greyed. All other items use the default styling. Before the meeting starts, no item is highlighted or dimmed. Dimmed past items remain fully interactable: chairs can still edit them, delete them, or drag them to reorder. Past items that have a saved conclusion render the conclusion text underneath the item name (with inline markdown rendered).
 
+Whenever the Agenda tab becomes visible — switching to it from another tab, or landing on it via the URL fragment — the current agenda item is automatically scrolled into the centre of the viewport, so a participant returning to the agenda doesn't have to hunt for the actively-discussed row. The scroll is a no-op when there is no current item (e.g. before the meeting starts or after it has concluded).
+
 ### Sessions
 
 A **session** is a named time block that visually groups a contiguous run of agenda items by capacity. Sessions are not themselves agenda items — advancement (next agenda item) skips over them, and the items a session "contains" are derived from its position in the list, not from any parent/child linkage.
