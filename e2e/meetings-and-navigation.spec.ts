@@ -308,6 +308,51 @@ test.describe('Navigation', () => {
     await expect(helpTab).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('browser back/forward traverses tab history before leaving the meeting page', async ({ page }) => {
+    // Each tab click is a real history entry (pushState), so the browser
+    // back button steps backwards through the tabs the user visited and
+    // only leaves the meeting page once the tab stack is exhausted.
+    // "Start a New Meeting" navigates to `/meeting/:id#agenda`, so the
+    // first meeting-page history entry already carries the #agenda hash.
+    const meetingId = await createMeeting(page);
+    // Meeting IDs are `[a-z]+-[a-z]+-[a-z]+` and encodeURIComponent is a
+    // no-op for those unreserved chars, so the path is safe to drop into
+    // a regex without escaping.
+    const meetingPath = `/meeting/${encodeURIComponent(meetingId)}`;
+
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+
+    await goToQueueTab(page);
+    await expect(page).toHaveURL(new RegExp(`${meetingPath}#queue$`));
+
+    await goToLogTab(page);
+    await expect(page).toHaveURL(new RegExp(`${meetingPath}#log$`));
+
+    // Back: Log → Queue.
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`${meetingPath}#queue$`));
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+
+    // Back again: Queue → Agenda (the initial #agenda entry from creation).
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`${meetingPath}#agenda$`));
+    await expect(page.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+
+    // Forward: Agenda → Queue again.
+    await page.goForward();
+    await expect(page).toHaveURL(new RegExp(`${meetingPath}#queue$`));
+    await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+
+    // Two more back steps exit to the previous page (the home page that
+    // created the meeting): one for #queue → #agenda, one for the meeting
+    // page itself. Verifies the meeting-page tab history doesn't trap the
+    // user — back eventually escapes to the referring page.
+    await page.goBack();
+    await page.goBack();
+    await page.waitForURL('/');
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
+  });
+
   test('middle-clicking a meeting tab opens that view in a new browser tab without changing the current one', async ({
     page,
     context,
