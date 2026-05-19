@@ -11,12 +11,23 @@
 
 import { useEffect, useRef } from 'react';
 import type { MeetingState } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
+import { userKey, extractPlainText } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { showNotification } from '../lib/notifications.js';
 import { isAgendaItem } from '@tcq/shared';
 import type { AgendaItem } from '@tcq/shared';
+
+/**
+ * Render notification bodies as plain text. Topics, item names, and
+ * conclusions are user-authored markdown, but the Web Notifications API
+ * shows `body` verbatim with no markup support — so raw `[label](url)`
+ * syntax leaks through. Run it through the markdown parser and pull out
+ * just the readable text (links become their label).
+ */
+function notify(title: string, body: string): void {
+  showNotification(title, { body: extractPlainText(body) });
+}
 
 /**
  * The agenda item immediately after the current one, or `undefined` if
@@ -79,7 +90,7 @@ export function useMeetingNotifications(): void {
       if (prevHead !== nextHead && nextHead) {
         const entry = meeting.queue.entries[nextHead];
         if (entry && entry.userId === me) {
-          showNotification("You're up next", { body: entry.topic });
+          notify("You're up next", entry.topic);
         }
       }
     }
@@ -90,7 +101,7 @@ export function useMeetingNotifications(): void {
       const prevNext = nextAgendaItem(prev);
       const next = nextAgendaItem(meeting);
       if (next && next.id !== prevNext?.id && next.presenterIds.includes(me)) {
-        showNotification('Your agenda item is next', { body: next.name });
+        notify('Your agenda item is next', next.name);
       }
     }
 
@@ -105,10 +116,10 @@ export function useMeetingNotifications(): void {
       if (current) {
         if (!prev.current.agendaItemId) {
           if (notificationPrefs.onMeetingStarted) {
-            showNotification('Meeting started', { body: `First item: ${current.name}` });
+            notify('Meeting started', `First item: ${current.name}`);
           }
         } else if (notificationPrefs.onAgendaAdvance) {
-          showNotification('Agenda advanced', { body: `Now discussing: ${current.name}` });
+          notify('Agenda advanced', `Now discussing: ${current.name}`);
         }
       }
     }
@@ -118,7 +129,7 @@ export function useMeetingNotifications(): void {
     // don't need to be notified about their own action.
     if (notificationPrefs.onPollStarted && !prev.poll && meeting.poll && meeting.poll.startChairId !== me) {
       const body = meeting.poll.topic ? `Topic: ${meeting.poll.topic}` : 'A poll is now open.';
-      showNotification('Poll started', { body });
+      notify('Poll started', body);
     }
 
     // 3b. A clarifying question was raised while you are the current topic author.
@@ -130,7 +141,7 @@ export function useMeetingNotifications(): void {
         const entry = meeting.queue.entries[id];
         if (!entry || entry.type !== 'question' || entry.userId === me) continue;
         const authorName = meeting.users[entry.userId]?.name ?? entry.userId;
-        showNotification('Clarifying question', { body: `${authorName} · ${entry.topic}` });
+        notify('Clarifying question', `${authorName} · ${entry.topic}`);
       }
     }
 
@@ -142,7 +153,7 @@ export function useMeetingNotifications(): void {
         const entry = meeting.queue.entries[id];
         if (!entry || entry.userId === me) continue;
         const authorName = meeting.users[entry.userId]?.name ?? entry.userId;
-        showNotification('Point of order', { body: `${authorName} · ${entry.topic}` });
+        notify('Point of order', `${authorName} · ${entry.topic}`);
       }
     }
   }, [meeting, user, notificationsEnabled, setNotificationsEnabled, notificationPrefs]);
@@ -175,9 +186,7 @@ export function useMeetingNotifications(): void {
     if (delay <= 0) return;
 
     const timeoutId = window.setTimeout(() => {
-      showNotification('Time limit reached', {
-        body: `"${currentItemName}" has passed its ${currentEstimate}-minute estimate.`,
-      });
+      notify('Time limit reached', `"${currentItemName}" has passed its ${currentEstimate}-minute estimate.`);
     }, delay);
 
     return () => window.clearTimeout(timeoutId);
