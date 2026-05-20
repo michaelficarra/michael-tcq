@@ -18,11 +18,15 @@ async function listen(app: express.Express): Promise<{ baseUrl: string; close: (
 describe('GET /api/version', () => {
   let baseUrl: string;
   let close: () => void;
-  // Save and restore GIT_SHA so tests don't leak into each other or the wider suite.
+  // Save and restore GIT_SHA / K_REVISION so tests don't leak into each other
+  // or the wider suite.
   let originalGitSha: string | undefined;
+  let originalKRevision: string | undefined;
 
   beforeEach(async () => {
     originalGitSha = process.env.GIT_SHA;
+    originalKRevision = process.env.K_REVISION;
+    delete process.env.K_REVISION;
     const app = express();
     app.get('/api/version', versionHandler);
     ({ baseUrl, close } = await listen(app));
@@ -34,6 +38,11 @@ describe('GET /api/version', () => {
       delete process.env.GIT_SHA;
     } else {
       process.env.GIT_SHA = originalGitSha;
+    }
+    if (originalKRevision === undefined) {
+      delete process.env.K_REVISION;
+    } else {
+      process.env.K_REVISION = originalKRevision;
     }
   });
 
@@ -74,7 +83,7 @@ describe('GET /api/version', () => {
     const res = await fetch(`${baseUrl}/api/version`, { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^application\/json/);
-    expect(await res.json()).toEqual({ sha });
+    expect(await res.json()).toEqual({ sha, revision: null });
   });
 
   it('returns JSON when application/json is ranked above text/plain', async () => {
@@ -85,7 +94,7 @@ describe('GET /api/version', () => {
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^application\/json/);
-    expect(await res.json()).toEqual({ sha });
+    expect(await res.json()).toEqual({ sha, revision: null });
   });
 
   it('returns plain text when text/plain is ranked above application/json', async () => {
@@ -94,6 +103,25 @@ describe('GET /api/version', () => {
     const res = await fetch(`${baseUrl}/api/version`, {
       headers: { Accept: 'text/plain;q=1.0, application/json;q=0.5' },
     });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/plain/);
+    expect(await res.text()).toBe(sha);
+  });
+
+  it('includes K_REVISION in the JSON response when set', async () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    process.env.GIT_SHA = sha;
+    process.env.K_REVISION = 'tcq-00042-abc';
+    const res = await fetch(`${baseUrl}/api/version`, { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sha, revision: 'tcq-00042-abc' });
+  });
+
+  it('omits K_REVISION from the plain text response even when set', async () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    process.env.GIT_SHA = sha;
+    process.env.K_REVISION = 'tcq-00042-abc';
+    const res = await fetch(`${baseUrl}/api/version`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^text\/plain/);
     expect(await res.text()).toBe(sha);
