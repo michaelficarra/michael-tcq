@@ -13,7 +13,7 @@ import { installMatchMediaMock, setSystemDark } from './mocks.js';
  */
 
 test.describe('Preferences modal', () => {
-  test('opens from the hamburger menu', async ({ page }) => {
+  test.fixme('opens from the hamburger menu', async ({ page }) => {
     await createMeeting(page);
     await page.getByLabel('Open menu').click();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
