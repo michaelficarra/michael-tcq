@@ -745,11 +745,15 @@ export function registerSocketHandlers(
       const parsed = parsePayload(AgendaDeletePayloadSchema, payload, socket);
       if (!parsed) return;
 
-      // `currentCleared` tells the client whether `current.agendaItemId` was
-      // wiped because we just deleted what was the current item. Compute it
-      // *before* the delete since the manager mutates `current` in place.
+      // The current agenda item is off-limits — the chair must advance
+      // (Next Agenda Item) to move off it before it can be deleted.
+      // Emit a distinct error so the UI can explain why if it somehow
+      // sends the request despite hiding the button.
       const meetingBefore = meetingManager.get(joinedMeetingId);
-      const wasCurrent = meetingBefore?.current.agendaItemId === parsed.id;
+      if (meetingBefore?.current.agendaItemId === parsed.id) {
+        socket.emit('error', 'Cannot delete the current agenda item');
+        return;
+      }
 
       const deleted = meetingManager.deleteAgendaItem(joinedMeetingId, parsed.id);
       if (!deleted) {
@@ -759,7 +763,7 @@ export function registerSocketHandlers(
 
       emitDelta(io, meetingManager, joinedMeetingId, 'agenda:deleted', {
         id: parsed.id,
-        currentCleared: !!wasCurrent,
+        currentCleared: false,
       });
     });
 
