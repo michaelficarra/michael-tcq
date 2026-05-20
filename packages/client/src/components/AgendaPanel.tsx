@@ -48,6 +48,8 @@ import { useSocket } from '../contexts/SocketContext.js';
 import { computeContainment } from '../lib/containment.js';
 import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
+import { useNow } from '../lib/secondClock.js';
+import { formatElapsed } from './CountUpTimer.js';
 import { BlockMarkdown } from './BlockMarkdown.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
@@ -357,6 +359,9 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                       isPast={isPastFinal || index < currentIndex}
                       isCurrent={index === currentIndex}
                       isIndented={isContained || isOverflow}
+                      overflowAmount={containment.overflowAmount.get(entry.id) ?? 0}
+                      isFirstOverflow={showOverflowHeader}
+                      currentItemStartedAt={index === currentIndex ? meeting.current.agendaItemStartTime : undefined}
                       onDelete={handleDelete}
                     />
                   </Fragment>
@@ -440,6 +445,29 @@ interface SortableAgendaItemProps {
    * headers, which are flush with the agenda's outer edge.
    */
   isIndented: boolean;
+  /**
+   * How much this item contributes to its session's overflow, in minutes.
+   * Zero when the item fits within capacity. For the first item that
+   * straddles the capacity line this is only the protruding remainder;
+   * for items further down the overflow tail it equals the full duration.
+   * Summed across a session's items it equals `runTotal − capacity`.
+   */
+  overflowAmount: number;
+  /**
+   * True when this is the first item in its session's overflow tail (the
+   * item that sits immediately after the auto-inserted overflow
+   * subheader). Gates the `(overflows Xm)` text annotation: only the
+   * first overflowing item in each run carries the badge so the agenda
+   * doesn't repeat the same signal on every overflow row.
+   */
+  isFirstOverflow: boolean;
+  /**
+   * ISO timestamp at which the chair advanced onto this item, when this
+   * item is the current one. Drives the live elapsed-time display.
+   * Undefined for every non-current item so they don't subscribe to the
+   * 1-second clock.
+   */
+  currentItemStartedAt: string | undefined;
   onDelete: (id: string) => void;
 }
 
@@ -452,6 +480,9 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   isPast,
   isCurrent,
   isIndented,
+  overflowAmount,
+  isFirstOverflow,
+  currentItemStartedAt,
   onDelete,
 }: SortableAgendaItemProps) {
   const { meeting } = useMeetingState();
@@ -647,6 +678,25 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             {formatShortDuration(item.duration)}
           </span>
         )}
+
+        {/* Static "(overflows Xm)" annotation — shown once per session
+            run, on the first item that sits in the overflow tail. Avoids
+            repeating the same signal on every overflow row, since the
+            overflow subheader plus this single badge already make the
+            boundary clear. */}
+        {isFirstOverflow && overflowAmount > 0 && (
+          <span
+            className="ml-2 text-sm font-medium text-red-700 dark:text-red-400 align-middle tabular-nums"
+            aria-label={`Overflows by ${formatShortDuration(overflowAmount)}`}
+          >
+            (overflows {formatShortDuration(overflowAmount)})
+          </span>
+        )}
+
+        {/* Live elapsed readout for the current row only. Mounted
+            conditionally so non-current rows don't subscribe to the
+            1-second clock. */}
+        {isCurrent && currentItemStartedAt && <CurrentItemElapsed startedAt={currentItemStartedAt} />}
 
         {/* Conclusion — only shown for past items that have one. Authored
             by the chair via the next-agenda confirmation dialog. */}
@@ -846,6 +896,34 @@ const SortableSession = memo(function SortableSession({
     </li>
   );
 });
+
+// -- Live elapsed indicator for the current item --
+
+interface CurrentItemElapsedProps {
+  /** ISO timestamp when the chair advanced onto this item. */
+  startedAt: string;
+}
+
+/**
+ * Mounted only on the current agenda row. Subscribes to the shared
+ * 1-second clock and renders a live `(elapsed M:SS)` (or `H:MM:SS`)
+ * readout next to the row's duration text. Kept as its own component
+ * so non-current rows don't subscribe to the clock and re-render every
+ * second.
+ */
+function CurrentItemElapsed({ startedAt }: CurrentItemElapsedProps) {
+  const now = useNow();
+  const elapsedMs = Math.max(0, now - new Date(startedAt).getTime());
+  return (
+    <span
+      className="ml-2 text-sm text-stone-700 dark:text-stone-200 align-middle tabular-nums"
+      title={`Started ${new Date(startedAt).toLocaleString()}`}
+      aria-label={`Elapsed: ${formatElapsed(elapsedMs)}`}
+    >
+      (elapsed {formatElapsed(elapsedMs)})
+    </span>
+  );
+}
 
 // -- Overflow subsection header --
 
