@@ -173,7 +173,11 @@ describe('AgendaPanel', () => {
     renderAgenda(meeting, chairUser);
 
     const li = screen.getByText('Joint').closest('li')!;
-    expect(li.className).toMatch(/border-l-teal-500/);
+    // Own-item highlight is painted by an absolutely-positioned teal
+    // strip in the left indicator column (the same column where the
+    // overflow bar can overlay).
+    const tealStrip = li.querySelector('.bg-teal-500');
+    expect(tealStrip).not.toBeNull();
   });
 
   it('shows presenter organisation in parentheses', () => {

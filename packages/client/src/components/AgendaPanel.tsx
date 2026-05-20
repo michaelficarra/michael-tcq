@@ -47,6 +47,7 @@ import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/Mee
 import { useSocket } from '../contexts/SocketContext.js';
 import { computeContainment } from '../lib/containment.js';
 import { AgendaForm } from './AgendaForm.js';
+import { AgendaItemDurationBar } from './AgendaItemDurationBar.js';
 import { SessionForm } from './SessionForm.js';
 import { useNow } from '../lib/secondClock.js';
 import { formatElapsed } from './CountUpTimer.js';
@@ -463,9 +464,9 @@ interface SortableAgendaItemProps {
   isFirstOverflow: boolean;
   /**
    * ISO timestamp at which the chair advanced onto this item, when this
-   * item is the current one. Drives the live elapsed-time display.
-   * Undefined for every non-current item so they don't subscribe to the
-   * 1-second clock.
+   * item is the current one. Drives the live elapsed-time display and
+   * the darker overlay on the indicator column. Undefined for every
+   * non-current item so they don't subscribe to the 1-second clock.
    */
   currentItemStartedAt: string | undefined;
   onDelete: (id: string) => void;
@@ -566,15 +567,40 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   // scroll behaviour, and so the selector intent reads clearly.
   const currentMarker = isCurrent ? 'tcq-agenda-current-item' : '';
 
+  // Left indicator column: an optional teal "your item" stripe layered
+  // behind the colored duration bar. The bar itself is delegated to
+  // AgendaItemDurationBar — we only render the static (estimate-scale)
+  // bar here when the row isn't the current one; on the current row,
+  // CurrentItemElapsed mounts a live (dynamic-scale) bar with elapsed
+  // shading + an orange "over estimate" segment.
+  const leftIndicators = (
+    <>
+      {isOwnItem && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 w-0.75 bg-teal-500 dark:bg-teal-500 pointer-events-none"
+        />
+      )}
+      {!isCurrent && (
+        <AgendaItemDurationBar
+          durationMinutes={item.duration ?? undefined}
+          overflowAmount={overflowAmount}
+          isIndented={isIndented}
+        />
+      )}
+    </>
+  );
+
   // --- Editing mode: inline form ---
   if (editing) {
     return (
       <li
         ref={setNodeRef}
         style={style}
-        className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${currentMarker} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+        className={`relative flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${currentMarker}`}
       >
         {dragHandle}
+        {leftIndicators}
         <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
           {displayNumber}
         </span>
@@ -636,11 +662,12 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
+      className={`relative flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
-      } ${dimClasses} ${containedClasses} ${currentMarker} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
+      } ${dimClasses} ${containedClasses} ${currentMarker}`}
     >
       {dragHandle}
+      {leftIndicators}
 
       {/* Item number */}
       <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
@@ -693,10 +720,17 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
           </span>
         )}
 
-        {/* Live elapsed readout for the current row only. Mounted
-            conditionally so non-current rows don't subscribe to the
-            1-second clock. */}
-        {isCurrent && currentItemStartedAt && <CurrentItemElapsed startedAt={currentItemStartedAt} />}
+        {/* Live elapsed readout + dark overlay on the indicator column,
+            for the current row only. Mounted conditionally so non-current
+            rows don't subscribe to the 1-second clock. */}
+        {isCurrent && currentItemStartedAt && (
+          <CurrentItemElapsed
+            startedAt={currentItemStartedAt}
+            durationMinutes={item.duration ?? undefined}
+            overflowAmount={overflowAmount}
+            isIndented={isIndented}
+          />
+        )}
 
         {/* Conclusion — only shown for past items that have one. Authored
             by the chair via the next-agenda confirmation dialog. */}
@@ -907,26 +941,56 @@ const SortableSession = memo(function SortableSession({
 interface CurrentItemElapsedProps {
   /** ISO timestamp when the chair advanced onto this item. */
   startedAt: string;
+  /** Estimated duration in minutes, or undefined when no estimate was set. */
+  durationMinutes: number | undefined;
+  /**
+   * Item's overflow contribution to its session, in minutes. Drives the
+   * red segment of the bar and its tooltip. Zero for items that fit
+   * within capacity.
+   */
+  overflowAmount: number;
+  /**
+   * Whether the row sits inside a session run. Gates the bar rendering
+   * altogether: when false there's no session-capacity context to plot
+   * against, so we render only the elapsed text.
+   */
+  isIndented: boolean;
 }
 
 /**
  * Mounted only on the current agenda row. Subscribes to the shared
- * 1-second clock and renders a live `(elapsed M:SS)` (or `H:MM:SS`)
- * readout next to the row's duration text. Kept as its own component
- * so non-current rows don't subscribe to the clock and re-render every
- * second.
+ * 1-second clock and renders:
+ *
+ *   - A live `<AgendaItemDurationBar>` instance with the elapsed-time
+ *     overlay (dynamic-scale, includes the orange "over estimate"
+ *     segment when applicable).
+ *   - A live `M:SS` (or `H:MM:SS`) elapsed-time readout placed alongside
+ *     the duration text in the row content.
+ *
+ * Both elements are siblings of the row's other content; the bar's
+ * absolutely-positioned segments anchor to the row's positioned `<li>`,
+ * regardless of where in the JSX tree this component sits.
  */
-function CurrentItemElapsed({ startedAt }: CurrentItemElapsedProps) {
+function CurrentItemElapsed({ startedAt, durationMinutes, overflowAmount, isIndented }: CurrentItemElapsedProps) {
   const now = useNow();
   const elapsedMs = Math.max(0, now - new Date(startedAt).getTime());
+
   return (
-    <span
-      className="ml-2 text-sm text-stone-700 dark:text-stone-200 align-middle tabular-nums"
-      title={`Started ${new Date(startedAt).toLocaleString()}`}
-      aria-label={`Elapsed: ${formatElapsed(elapsedMs)}`}
-    >
-      (elapsed {formatElapsed(elapsedMs)})
-    </span>
+    <>
+      <AgendaItemDurationBar
+        durationMinutes={durationMinutes}
+        overflowAmount={overflowAmount}
+        isIndented={isIndented}
+        elapsedMs={elapsedMs}
+      />
+      <span
+        className="ml-2 text-sm text-stone-700 dark:text-stone-200 align-middle tabular-nums"
+        title={`Started ${new Date(startedAt).toLocaleString()}`}
+        aria-label={`Elapsed: ${formatElapsed(elapsedMs)}`}
+      >
+        (elapsed {formatElapsed(elapsedMs)})
+      </span>
+    </>
   );
 }
 
