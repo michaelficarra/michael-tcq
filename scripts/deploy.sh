@@ -479,7 +479,8 @@ deploy_service() {
     --allow-unauthenticated \
     --set-env-vars "$ENV_VARS" \
     --timeout 3600 \
-    --scaling=1
+    --scaling=1 \
+    --concurrency=1000
 }
 
 get_service_url() {
