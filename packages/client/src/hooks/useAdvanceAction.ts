@@ -8,9 +8,12 @@
  * Includes two layers of protection against accidental double-advancement:
  * - **Debounce** (DEBOUNCE_MS ms): rapid repeated calls are ignored.
  * - **Cooldown** (COOLDOWN_MS ms): after a speaker change attributed to another
- *   user is detected in an incoming state update, the action is temporarily
- *   disabled so the chair can see who is now speaking before advancing again.
- *   Self-initiated advancements skip the cooldown (the debounce suffices).
+ *   user, or a change to the next queue entry (insertion/removal/reorder),
+ *   the action is temporarily disabled so the chair can see what's coming up
+ *   before advancing. Self-initiated speaker advancements skip the cooldown
+ *   (the debounce suffices); changes to the next queue entry always cool down
+ *   even when self-initiated, because the chair may have already started
+ *   reaching for the button.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -55,54 +58,65 @@ export function useAdvanceAction(event: AdvanceEvent): { fire: (extras?: Advance
   const [debounceActive, setDebounceActive] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Track previous speaker ID so we can detect when it changes.
+  // Track previous values so we can detect changes between renders.
   // `undefined` means we haven't seen any state yet (initial render).
   const prevSpeakerRef = useRef<string | null | undefined>(undefined);
+  const prevNextEntryRef = useRef<string | null | undefined>(undefined);
 
   // Extract primitive values for the effect's dep array. The eslint
   // react-hooks rule can't reason through nested optional chaining, so
-  // we lift the two primitives the effect actually observes.
+  // we lift the primitives the effect actually observes.
   const currentSpeakerId = meeting?.current.speaker?.id ?? null;
+  const nextQueueEntryId = meeting?.queue.orderedIds[0] ?? null;
   const lastAdvancementBy = meeting?.operational.lastAdvancementBy;
 
-  // Detect speaker advancement from any source (server state broadcast).
-  // setState is called via setTimeout to avoid synchronous setState in
-  // the effect body (which triggers cascading renders).
+  // Detect speaker advancement or changes to the next queue entry from any
+  // source (server state broadcast). setState is called via setTimeout to
+  // avoid synchronous setState in the effect body (which triggers cascading
+  // renders).
   useEffect(() => {
     if (event !== 'queue:next') return;
 
-    const prevId = prevSpeakerRef.current;
+    const prevSpeaker = prevSpeakerRef.current;
+    const prevNext = prevNextEntryRef.current;
 
-    if (prevId === undefined) {
+    if (prevSpeaker === undefined || prevNext === undefined) {
       // First render — just record, don't trigger cooldown.
       prevSpeakerRef.current = currentSpeakerId;
+      prevNextEntryRef.current = nextQueueEntryId;
       return;
     }
 
-    if (currentSpeakerId !== prevId) {
-      prevSpeakerRef.current = currentSpeakerId;
+    const speakerChanged = currentSpeakerId !== prevSpeaker;
+    const nextChanged = nextQueueEntryId !== prevNext;
 
-      // Skip cooldown for self-initiated advancements — the debounce
-      // alone is sufficient to prevent accidental double-fires.
+    if (!speakerChanged && !nextChanged) return;
+
+    prevSpeakerRef.current = currentSpeakerId;
+    prevNextEntryRef.current = nextQueueEntryId;
+
+    // Self-initiated speaker advancement skips cooldown — the debounce
+    // alone is sufficient to prevent accidental double-fires. (The next
+    // entry also shifts on self-advance, but that's the expected outcome,
+    // not a surprise the chair needs time to absorb.)
+    if (speakerChanged) {
       const selfInitiated = user != null && lastAdvancementBy === userKey(user);
       if (selfInitiated) return;
-
-      cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
-
-      const enableTimer = setTimeout(() => setCooldown(true), 0);
-      const disableTimer = setTimeout(() => {
-        cooldownUntilRef.current = 0;
-        setCooldown(false);
-      }, COOLDOWN_MS);
-
-      return () => {
-        clearTimeout(enableTimer);
-        clearTimeout(disableTimer);
-      };
     }
 
-    return undefined;
-  }, [currentSpeakerId, event, user, lastAdvancementBy]);
+    cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
+
+    const enableTimer = setTimeout(() => setCooldown(true), 0);
+    const disableTimer = setTimeout(() => {
+      cooldownUntilRef.current = 0;
+      setCooldown(false);
+    }, COOLDOWN_MS);
+
+    return () => {
+      clearTimeout(enableTimer);
+      clearTimeout(disableTimer);
+    };
+  }, [currentSpeakerId, nextQueueEntryId, event, user, lastAdvancementBy]);
 
   // Clear the debounce timer on unmount so it doesn't fire `setDebounceActive`
   // on an unmounted component (happens in tests that click the button and
