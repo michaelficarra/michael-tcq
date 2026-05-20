@@ -883,13 +883,33 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
-    disabled: !canDrag || editing,
+    // Stays draggable while editing — owner/chair can reorder mid-edit and
+    // the in-progress form state survives because the component is keyed by
+    // entry.id in the parent list. The position/ownership rules in canDrag
+    // still apply unchanged.
+    disabled: !canDrag,
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  // Shared drag handle used in both display and editing modes. Cursor
+  // direction reflects the legal moves for this entry's current position;
+  // when no move is legal, the handle is omitted.
+  const dragHandle = canDrag ? (
+    <span
+      className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
+        canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
+      } select-none text-sm leading-none presentation-hidden`}
+      aria-label={`Drag to reorder: ${entry.topic}`}
+      {...attributes}
+      {...listeners}
+    >
+      ⠿
+    </span>
+  ) : null;
 
   const canEdit = isOwnEntry || isChair;
   const canDelete = isOwnEntry || isChair;
@@ -946,8 +966,7 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
               : `border-b border-stone-100 dark:border-stone-700 ${index % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-100 dark:bg-stone-800'}`
           } ${entry.type !== 'point-of-order' && isOwnEntry ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
         >
-          {/* Placeholder for drag handle column */}
-          {canDrag && <span className="w-4" />}
+          {dragHandle}
 
           <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-center select-none">
             {index + 1}
@@ -1009,19 +1028,9 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
         {/* Drag handle — rendered only when the entry has at least one legal
             move from its current position. The cursor advertises which
             directions are legal: ns-resize for both, n-resize for up only,
-            s-resize for down only. */}
-        {canDrag && (
-          <span
-            className={`text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 ${
-              canMoveUp && canMoveDown ? 'cursor-ns-resize' : canMoveUp ? 'cursor-n-resize' : 'cursor-s-resize'
-            } select-none text-sm leading-none presentation-hidden`}
-            aria-label={`Drag to reorder: ${entry.topic}`}
-            {...attributes}
-            {...listeners}
-          >
-            ⠿
-          </span>
-        )}
+            s-resize for down only. The same handle is used in the editing
+            branch above so reorder stays available mid-edit. */}
+        {dragHandle}
 
         {/* Position number */}
         <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-center select-none">

@@ -294,7 +294,7 @@ Chairs can click the type badge (e.g. "New Topic:") on any queue entry to cycle 
 
 ### Queue Editing
 
-Chairs can edit any queue entry's topic inline. Participants can edit their own entries.
+Chairs can edit any queue entry's topic inline. Participants can edit their own entries. The drag handle remains active while an entry is in edit mode (subject to the same per-entry move rules described under "Queue Reordering"), so a reorder mid-edit preserves the in-progress changes.
 
 ### Copy and Restore Queue (Chair Only)
 
