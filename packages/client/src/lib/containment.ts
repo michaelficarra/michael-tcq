@@ -7,8 +7,10 @@
  * long as the running `used` stays within capacity — the contained set is a
  * strict contiguous **prefix** of the run. As soon as one item would push the
  * sum over capacity, the prefix ends and no later item in the same run is
- * contained (even if it's small enough to fit on its own). The run itself
- * continues to accumulate `runTotal` so "overflow" displays the full excess.
+ * contained (even if it's small enough to fit on its own). Those tail items
+ * are tracked in `overflowBy` so the UI can group them under an "overflow"
+ * subsection header. The run itself continues to accumulate `runTotal` so
+ * "overflow" displays the full excess.
  *
  * A run ends at the next session header or the end of the agenda.
  *
@@ -23,6 +25,12 @@ import { isAgendaItem, isSession } from '@tcq/shared';
 export interface Containment {
   /** For each agenda item that's contained, which session contains it. */
   containedBy: Map<string, string>;
+  /**
+   * For each agenda item that sits past its session's capacity prefix,
+   * which session it overflows from. Items in this map still belong
+   * (visually) to that session's run — they just exceed its capacity.
+   */
+  overflowBy: Map<string, string>;
   /** For each session, the sum of durations of its contained items. */
   used: Map<string, number>;
   /**
@@ -34,6 +42,7 @@ export interface Containment {
 
 export function computeContainment(entries: AgendaEntry[]): Containment {
   const containedBy = new Map<string, string>();
+  const overflowBy = new Map<string, string>();
   const used = new Map<string, number>();
   const runTotal = new Map<string, number>();
 
@@ -65,7 +74,12 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
     activeRunTotal += minutes;
     runTotal.set(activeSessionId, activeRunTotal);
 
-    if (prefixClosed) continue;
+    if (prefixClosed) {
+      // Once the prefix is closed, every remaining item in the run is
+      // overflow (regardless of individual size).
+      overflowBy.set(entry.id, activeSessionId);
+      continue;
+    }
 
     if (activeUsed + minutes <= activeCapacity) {
       activeUsed += minutes;
@@ -75,8 +89,9 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
       // This item would overflow — close the prefix so later (possibly
       // smaller) items aren't squeezed in past a larger overflowing one.
       prefixClosed = true;
+      overflowBy.set(entry.id, activeSessionId);
     }
   }
 
-  return { containedBy, used, runTotal };
+  return { containedBy, overflowBy, used, runTotal };
 }

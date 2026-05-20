@@ -657,11 +657,53 @@ describe('AgendaPanel', () => {
       renderAgenda(meeting);
 
       // Capacity 30m, used 30m (first two fit exactly), overflow = 40 - 30 = 10m.
-      expect(screen.getByText(/overflow/i)).toBeInTheDocument();
+      // Two "overflow" labels render: the session header's status and the
+      // auto-inserted overflow subsection divider above the third item.
+      expect(screen.getAllByText(/overflow/i).length).toBeGreaterThanOrEqual(2);
       expect(screen.queryByText(/remaining/i)).not.toBeInTheDocument();
       // Both the session overflow amount and the "Third" item render as "10m".
       // Presence of at least two matching nodes confirms the overflow amount is shown.
       expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('renders an "overflow" subsection divider before the first overflowing item', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
+        ],
+      });
+      const { container } = renderAgenda(meeting);
+
+      const overflowHeader = container.querySelector('[aria-label="Overflow"]');
+      expect(overflowHeader).not.toBeNull();
+      // The overflow header must sit between the last contained item ("Second")
+      // and the first overflowing item ("Third"), inside the agenda list.
+      const list = container.querySelector('ol[aria-label="Agenda items"]');
+      expect(list).not.toBeNull();
+      const children = Array.from(list!.children);
+      const overflowIndex = children.findIndex((el) => el.getAttribute('aria-label') === 'Overflow');
+      const secondIndex = children.findIndex((el) => (el.textContent ?? '').includes('Second'));
+      const thirdIndex = children.findIndex((el) => (el.textContent ?? '').includes('Third'));
+      expect(overflowIndex).toBeGreaterThan(secondIndex);
+      expect(overflowIndex).toBeLessThan(thirdIndex);
+    });
+
+    it('does not render an "overflow" subsection divider when the run fits', () => {
+      const meeting = makeMeeting({
+        users: { alice: chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Roomy', capacity: 60 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
+        ],
+      });
+      const { container } = renderAgenda(meeting);
+
+      expect(container.querySelector('[aria-label="Overflow"]')).toBeNull();
     });
 
     it('numbers agenda items sequentially, skipping session headers', () => {

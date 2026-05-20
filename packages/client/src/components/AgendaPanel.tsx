@@ -12,6 +12,7 @@
  */
 
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -319,31 +320,48 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
             disabled={!isChair}
           >
             <ol className="space-y-1 mb-4" aria-label="Agenda items">
-              {meeting.agenda.map((entry, index) =>
-                isSession(entry) ? (
-                  <SortableSession
-                    key={entry.id}
-                    session={entry}
-                    isChair={isChair}
-                    used={containment.used.get(entry.id) ?? 0}
-                    runTotal={containment.runTotal.get(entry.id) ?? 0}
-                    onDelete={handleDeleteSession}
-                  />
-                ) : (
-                  <SortableAgendaItem
-                    key={entry.id}
-                    item={entry}
-                    index={index}
-                    displayNumber={itemNumbers.get(entry.id) ?? 0}
-                    isChair={isChair}
-                    isOwnItem={!!user && entry.presenterIds.includes(userKey(user))}
-                    isPast={isPastFinal || index < currentIndex}
-                    isCurrent={index === currentIndex}
-                    isContained={containment.containedBy.has(entry.id)}
-                    onDelete={handleDelete}
-                  />
-                ),
-              )}
+              {meeting.agenda.map((entry, index) => {
+                if (isSession(entry)) {
+                  return (
+                    <SortableSession
+                      key={entry.id}
+                      session={entry}
+                      isChair={isChair}
+                      used={containment.used.get(entry.id) ?? 0}
+                      runTotal={containment.runTotal.get(entry.id) ?? 0}
+                      onDelete={handleDeleteSession}
+                    />
+                  );
+                }
+                const overflowSessionId = containment.overflowBy.get(entry.id);
+                const prev = meeting.agenda[index - 1];
+                const prevOverflowSessionId =
+                  prev && isAgendaItem(prev) ? containment.overflowBy.get(prev.id) : undefined;
+                // The overflow header marks the boundary where the
+                // contained prefix ends and the overflow tail begins.
+                // Render it once per run, immediately before the first
+                // overflow item.
+                const showOverflowHeader =
+                  overflowSessionId !== undefined && overflowSessionId !== prevOverflowSessionId;
+                const isContained = containment.containedBy.has(entry.id);
+                const isOverflow = overflowSessionId !== undefined;
+                return (
+                  <Fragment key={entry.id}>
+                    {showOverflowHeader && <OverflowHeader />}
+                    <SortableAgendaItem
+                      item={entry}
+                      index={index}
+                      displayNumber={itemNumbers.get(entry.id) ?? 0}
+                      isChair={isChair}
+                      isOwnItem={!!user && entry.presenterIds.includes(userKey(user))}
+                      isPast={isPastFinal || index < currentIndex}
+                      isCurrent={index === currentIndex}
+                      isIndented={isContained || isOverflow}
+                      onDelete={handleDelete}
+                    />
+                  </Fragment>
+                );
+              })}
             </ol>
           </SortableContext>
         </DndContext>
@@ -416,10 +434,12 @@ interface SortableAgendaItemProps {
    */
   isCurrent: boolean;
   /**
-   * True when this item is visually contained within the preceding session
-   * header — adds a left/right margin so the item sits "inside" the session.
+   * True when this item belongs to a session run (either fits within capacity
+   * or sits in the overflow tail) — adds a left/right margin so the item sits
+   * "inside" the session, visually distinguishing it from session and overflow
+   * headers, which are flush with the agenda's outer edge.
    */
-  isContained: boolean;
+  isIndented: boolean;
   onDelete: (id: string) => void;
 }
 
@@ -431,7 +451,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   isOwnItem,
   isPast,
   isCurrent,
-  isContained,
+  isIndented,
   onDelete,
 }: SortableAgendaItemProps) {
   const { meeting } = useMeetingState();
@@ -504,9 +524,11 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
       ? 'bg-white dark:bg-stone-900'
       : 'bg-stone-100/50 dark:bg-stone-800/50';
   const dimClasses = isPast ? 'opacity-60 text-stone-500 dark:text-stone-500' : '';
-  // Items that fit within the preceding session's capacity are indented
-  // so the session visually "contains" them.
-  const containedClasses = isContained ? 'ml-4 md:ml-6' : '';
+  // Items belonging to a session run (contained or overflow) are indented
+  // so the session visually "contains" them. Overflow items stay indented
+  // alongside contained items; the boundary between them is signalled by
+  // the auto-inserted overflow subsection header rendered above.
+  const containedClasses = isIndented ? 'ml-4 md:ml-6' : '';
   // Dedicated marker class on the current row. Used as the JS query hook
   // for the auto-scroll-into-view effect in AgendaPanel — kept separate
   // from the Tailwind utility classes so visual restyling can't break the
@@ -824,6 +846,44 @@ const SortableSession = memo(function SortableSession({
     </li>
   );
 });
+
+// -- Overflow subsection header --
+
+/**
+ * Auto-inserted divider that visually separates a session's contained
+ * items from its overflow tail. Indented alongside the items it groups
+ * so the reader sees it as a subheader *inside* the session, not as a
+ * peer of the top-level session header.
+ *
+ * Driven entirely by `computeContainment` — appears once per session run
+ * whose items exceed capacity, immediately before the first overflowing
+ * item. Not draggable and not part of the SortableContext: containment is
+ * recomputed from the agenda order on every render.
+ */
+function OverflowHeader() {
+  return (
+    <li
+      aria-label="Overflow"
+      // Inline divider: ── overflow ──. Two flex-grown rules flank the
+      // label so it reads as a section break that *belongs to* the items
+      // below it, not as a heavy banner.
+      className="ml-4 md:ml-6 flex items-center gap-2 px-2"
+    >
+      <span aria-hidden="true" className="flex-1 border-t border-red-300 dark:border-red-900/60" />
+      <span
+        // Down-arrows flank the label so the divider also reads as a
+        // directional signal: the items below are the overflow.
+        className="text-[0.7rem] font-bold uppercase tracking-wide text-red-700 dark:text-red-400 leading-tight
+                   flex items-center gap-1"
+      >
+        <span aria-hidden="true">↓</span>
+        overflow
+        <span aria-hidden="true">↓</span>
+      </span>
+      <span aria-hidden="true" className="flex-1 border-t border-red-300 dark:border-red-900/60" />
+    </li>
+  );
+}
 
 // -- Chairs section with inline editing --
 
