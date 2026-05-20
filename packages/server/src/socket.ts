@@ -33,6 +33,7 @@ import {
   QueueRemovePayloadSchema,
   QueueReorderPayloadSchema,
   QueueSetClosedPayloadSchema,
+  QUEUE_ENTRY_DEFAULT_TOPICS,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
@@ -455,6 +456,15 @@ export function registerSocketHandlers(
 
     // Track which meeting this socket has joined (at most one).
     let joinedMeetingId: string | null = null;
+
+    // Queue entries this socket added via the interactive (pending) path
+    // and which haven't been finalised yet. On disconnect we finalise any
+    // still-pending entries with the default-for-type topic so the row
+    // doesn't get stuck on a bouncing-dots typing indicator for every
+    // remaining participant. Entries are removed from this set when the
+    // socket finalises them or when they're noticed to be no longer
+    // pending (edit/remove from elsewhere clears the flag).
+    const pendingEntryIds = new Set<string>();
 
     // --- join ---
     // Client sends the meeting ID it wants to join. The socket is added to
@@ -970,12 +980,35 @@ export function registerSocketHandlers(
         };
       }
 
-      const entry = meetingManager.addQueueEntry(joinedMeetingId, parsed.type, parsed.topic, entryUser);
+      // Decide whether this is a "pending initial-edit" add or a finished
+      // add. The asUsername (chair restore) path never creates pending
+      // entries — those represent already-saved entries being re-added, not
+      // a user composing a topic in real time. For the interactive path we
+      // honour the client's `pending` flag; when set, we also stamp the
+      // default-for-type topic so the entry has a sensible value to fall
+      // back to if the author cancels (Escape/empty Save).
+      const isPendingAdd = parsed.pending === true && !parsed.asUsername;
+      const topic = parsed.topic ?? (isPendingAdd ? QUEUE_ENTRY_DEFAULT_TOPICS[parsed.type] : '');
+      if (!topic) {
+        // Non-pending adds without a topic are invalid (the schema lets it
+        // through because pending omits it, but a chair-restore must supply
+        // one). Surface a clear error rather than persisting an empty topic.
+        socket.emit('error', 'Topic is required');
+        respond({ ok: false, error: 'Topic is required' });
+        return;
+      }
+
+      const entry = meetingManager.addQueueEntry(joinedMeetingId, parsed.type, topic, entryUser, isPendingAdd);
       if (!entry) {
         socket.emit('error', 'Failed to add queue entry');
         respond({ ok: false, error: 'Failed to add queue entry' });
         return;
       }
+
+      // Track for disconnect-finalise. Only the socket that created the
+      // pending entry tracks it; if the user has another tab open with the
+      // editor, that other tab is unaffected by this socket's disconnect.
+      if (isPendingAdd) pendingEntryIds.add(entry.id);
 
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
@@ -1026,6 +1059,13 @@ export function registerSocketHandlers(
         socket.emit('error', 'Queue entry not found');
         return;
       }
+
+      // `editQueueEntry` clears the `pending` flag for us when the entry
+      // was in the initial-edit state — editing the topic constitutes
+      // finalising the composition. We still need to drop the id from the
+      // per-socket disconnect-cleanup set so the eventual disconnect
+      // doesn't try to delete the now-finalised entry.
+      if (entry.pending) pendingEntryIds.delete(parsed.id);
 
       const updatedEntry = meetingManager.getQueueEntry(joinedMeetingId, parsed.id);
       if (!updatedEntry) return;
@@ -1547,6 +1587,26 @@ export function registerSocketHandlers(
         reason,
         ...(joinedMeetingId ? { meetingId: joinedMeetingId } : {}),
       });
+
+      // Remove any queue entries this socket left in the initial-editing
+      // state. Without this, an author who closes their tab mid-compose
+      // would strand a typing-indicator on every participant's screen
+      // forever. This mirrors the Escape/Cancel path (delete the entry).
+      // Race guards: skip ids whose entry is already gone or no longer
+      // pending (e.g. the author finalised via a queue:edit from this or
+      // another tab before the disconnect was processed).
+      if (joinedMeetingId && pendingEntryIds.size > 0) {
+        for (const entryId of pendingEntryIds) {
+          const current = meetingManager.getQueueEntry(joinedMeetingId, entryId);
+          if (!current || !current.pending) continue;
+          if (meetingManager.removeQueueEntry(joinedMeetingId, entryId)) {
+            emitDelta(io, meetingManager, joinedMeetingId, 'queue:removed', {
+              id: entryId,
+            });
+          }
+        }
+        pendingEntryIds.clear();
+      }
 
       if (joinedMeetingId) {
         decrementClientCount(io, joinedMeetingId, meetingManager);

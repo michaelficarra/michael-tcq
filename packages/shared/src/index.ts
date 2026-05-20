@@ -97,7 +97,13 @@ export {
 } from './messages.js';
 export type { AppSettings } from './appSettings.js';
 export { DEFAULT_APP_SETTINGS } from './appSettings.js';
-export { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_PRIORITY, DEFAULT_POLL_OPTIONS } from './constants.js';
+export {
+  QUEUE_ENTRY_TYPES,
+  QUEUE_ENTRY_LABELS,
+  QUEUE_ENTRY_PRIORITY,
+  QUEUE_ENTRY_DEFAULT_TOPICS,
+  DEFAULT_POLL_OPTIONS,
+} from './constants.js';
 export {
   userKey,
   asUserKey,

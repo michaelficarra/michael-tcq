@@ -553,6 +553,11 @@ async function addQueueEntryAsUser(username, item) {
     tmpSocket.emit('join', meetingId);
   });
   tmpSocket.once('state', () => {
+    // Seed entries are added in the finished state — `pending` is omitted
+    // so the server treats this as a normal (non-initial-edit) add and
+    // stamps the supplied topic directly. The temp socket disconnects
+    // shortly after; if it had added a pending entry instead, the server
+    // would delete it on disconnect, which isn't what we want for a seed.
     tmpSocket.emit('queue:add', { type: 'topic', topic: item.topic });
     setTimeout(() => tmpSocket.disconnect(), 100);
   });

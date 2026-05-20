@@ -1054,6 +1054,173 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  describe('queue:add pending', () => {
+    it('stamps pending=true and the default-for-type topic when topic is omitted', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', pending: true });
+      const state = await statePromise;
+
+      expect(state.queue.orderedIds).toHaveLength(1);
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
+      expect(entry.pending).toBe(true);
+      expect(entry.topic).toBe('New topic');
+    });
+
+    it('uses the default-for-type topic appropriate to each type', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'question', pending: true });
+      const state = await statePromise;
+
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
+      expect(entry.type).toBe('question');
+      expect(entry.topic).toBe('Clarifying question');
+      expect(entry.pending).toBe(true);
+    });
+
+    it('ignores `pending` on the chair asUsername (bulk-restore) path', async () => {
+      // Bulk restore is an admin operation that re-adds already-finished
+      // entries — it must never produce a pending row that would render as
+      // bouncing dots for every participant.
+      const chair = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([chair]);
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', topic: 'Restored', pending: true, asUsername: 'someone' });
+      const state = await statePromise;
+
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
+      expect(entry.topic).toBe('Restored');
+      expect(entry.pending).toBeUndefined();
+    });
+
+    it('rejects a non-pending add that omits the topic', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:add', { type: 'topic' });
+      const error = await errorPromise;
+
+      expect(error).toMatch(/topic is required/i);
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
+    });
+  });
+
+  describe('queue:edit clears pending', () => {
+    it('clears the pending flag when the author edits a pending entry', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      // Add a pending entry, then edit it with the author's topic.
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', pending: true });
+      let state = await statePromise;
+      const entryId = state.queue.orderedIds[0];
+      expect(state.queue.entries[entryId].pending).toBe(true);
+
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:edit', { id: entryId, topic: 'My actual topic' });
+      state = await statePromise;
+
+      const entry = state.queue.entries[entryId];
+      expect(entry.topic).toBe('My actual topic');
+      expect(entry.pending).toBeUndefined();
+    });
+  });
+
+  describe('queue:remove on pending entries', () => {
+    it('removes the pending entry on owner-initiated cancel', async () => {
+      // The cancel/Escape path: the author's client emits queue:remove
+      // against its own pending entry.
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const client = await joinMeeting(meeting.id);
+
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', pending: true });
+      let state = await statePromise;
+      const entryId = state.queue.orderedIds[0];
+
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:remove', { id: entryId });
+      state = await statePromise;
+
+      expect(state.queue.orderedIds).toHaveLength(0);
+    });
+
+    it('on author disconnect, pending entries are deleted', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      // Author opens a socket and adds a pending entry, then disconnects
+      // without finalising. A separate viewer socket observes the
+      // resulting `queue:removed` delta and the empty queue.
+      const viewer = await joinMeeting(meeting.id);
+      const author = await joinMeeting(meeting.id);
+
+      let entryId: string;
+      {
+        const statePromise = waitForChange(viewer, ctx.meetingManager, meeting.id);
+        author.emit('queue:add', { type: 'topic', pending: true });
+        const state = await statePromise;
+        entryId = state.queue.orderedIds[0];
+        expect(state.queue.entries[entryId].pending).toBe(true);
+      }
+
+      // Author drops; viewer should see the queue go empty.
+      const removedPromise = waitForChange(viewer, ctx.meetingManager, meeting.id);
+      author.disconnect();
+      const finalState = await removedPromise;
+      expect(finalState.queue.orderedIds).toHaveLength(0);
+      expect(finalState.queue.entries[entryId]).toBeUndefined();
+    });
+
+    it('on author disconnect, an already-finalised entry survives', async () => {
+      // The author adds a pending entry, edits it (clearing pending), then
+      // disconnects. The entry must stay in the queue — disconnect-delete
+      // only fires for entries that are still pending at the moment of
+      // disconnect.
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+
+      const viewer = await joinMeeting(meeting.id);
+      const author = await joinMeeting(meeting.id);
+
+      let entryId: string;
+      {
+        const statePromise = waitForChange(viewer, ctx.meetingManager, meeting.id);
+        author.emit('queue:add', { type: 'topic', pending: true });
+        const state = await statePromise;
+        entryId = state.queue.orderedIds[0];
+      }
+      {
+        const statePromise = waitForChange(viewer, ctx.meetingManager, meeting.id);
+        author.emit('queue:edit', { id: entryId, topic: 'Finalised topic' });
+        await statePromise;
+      }
+
+      author.disconnect();
+      // Wait briefly to let any disconnect work settle, then assert the
+      // entry is still present and finalised.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const finalState = ctx.meetingManager.get(meeting.id)!;
+      expect(finalState.queue.orderedIds).toContain(entryId);
+      expect(finalState.queue.entries[entryId].topic).toBe('Finalised topic');
+      expect(finalState.queue.entries[entryId].pending).toBeUndefined();
+    });
+  });
+
   describe('queue:remove', () => {
     it('removes own entry from the queue', async () => {
       const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };

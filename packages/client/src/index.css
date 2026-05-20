@@ -141,6 +141,56 @@ abbr {
 }
 
 /*
+ * Typing-indicator dots — shown in place of a queue entry's topic while
+ * the entry is in the "pending initial-edit" state. Three round dots
+ * bounce up in sequence on a 1.2s loop, mimicking the typing indicator
+ * commonly seen in chat UIs. Sized in em so they scale with the inline
+ * text context they're embedded in; coloured via `currentColor` so the
+ * caller can tint them by setting the text colour on the wrapper.
+ * Disabled (but kept faintly visible) for users who prefer reduced motion.
+ */
+.tcq-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  line-height: 1;
+}
+.tcq-typing-dots > span {
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: tcq-typing-dot 1.2s ease-in-out infinite;
+}
+.tcq-typing-dots > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.tcq-typing-dots > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes tcq-typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-0.25em);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tcq-typing-dots > span {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/*
  * External-link indicator — appends a tiny northeast-facing arrow to any
  * <a> tagged with `.external-link` (currently: user-generated markdown
  * links rendered by <InlineMarkdown>, and the "Report an issue" entry in

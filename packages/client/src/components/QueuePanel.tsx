@@ -60,7 +60,7 @@ interface QueuePanelProps {
   /** ID of a newly added queue entry that should open in edit mode. */
   autoEditEntryId: string | null;
   /** Add a queue entry with placeholder text and trigger auto-edit. */
-  onAddEntry: (type: import('@tcq/shared').QueueEntryType, placeholder: string) => void;
+  onAddEntry: (type: import('@tcq/shared').QueueEntryType) => void;
   /** Called when the auto-edit has been consumed by the entry component. */
   onAutoEditConsumed: () => void;
   /** Hide the panel when not the active tab (rendered but excluded from a11y tree). */
@@ -838,24 +838,43 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
 }: SortableQueueEntryProps) {
   const { meeting } = useMeetingState();
   const socket = useSocket();
-  const [editing, setEditing] = useState(initialEditing);
-  const [editTopic, setEditTopic] = useState(initialEditing ? entry.topic : '');
-  // Track whether we're in the initial editing state for a freshly created entry.
-  // When true and the text hasn't been modified, Cancel/Escape removes the entry.
-  const [isNewEntry, setIsNewEntry] = useState(initialEditing);
 
-  // When initialEditing transitions to true, enter edit mode and
-  // notify the parent so it can clear the flag.
+  // The entry is "pending" when the server has it in the initial-editing
+  // state — the author just added it and hasn't finalised. All viewers see
+  // a typing-indicator (bouncing dots) instead of the topic; the owner
+  // additionally sees the inline editor. The pending flag clears via
+  // `queue:finalize` (Save/Cancel/Escape) or on the author's disconnect.
+  const isPending = entry.pending === true;
+
+  // Open the editor automatically when:
+  //   - this is the author's freshly-added pending entry (`isPending &&
+  //     isOwnEntry`), or
+  //   - the parent flagged this entry via `autoEditEntryId` (legacy /
+  //     post-edit-pencil case).
+  // Once cleared (Save/Cancel), `editing` goes false; the pending flag
+  // also clears via the server delta, so we won't reopen.
+  const shouldOpenInitially = (isPending && isOwnEntry) || initialEditing;
+  const [editing, setEditing] = useState(shouldOpenInitially);
+  // Both pending entries (server stamps the default-for-type as the
+  // topic) and pencil-edits on already-saved entries pre-fill with the
+  // current `entry.topic`. The input is pre-selected on mount so the
+  // author can either type over the default or submit it as-is.
+  const [editTopic, setEditTopic] = useState(shouldOpenInitially ? entry.topic : '');
+
+  // When `initialEditing` or `isPending` flips on while we're not yet in
+  // edit mode (e.g. the `queue:added` delta just arrived for the author's
+  // own add), enter edit mode and notify the parent so it can clear
+  // `autoEditEntryId`.
   useEffect(() => {
-    if (initialEditing && !editing) {
-      setEditTopic(entry.topic); // eslint-disable-line react-hooks/set-state-in-effect
+    if (shouldOpenInitially && !editing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditTopic(entry.topic);
       setEditing(true);
-      setIsNewEntry(true);
     }
     if (initialEditing) {
       onEditingStarted?.();
     }
-  }, [initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shouldOpenInitially, initialEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ref callback for the edit input — focuses and selects text only
   // on initial mount, not on re-renders.
@@ -911,7 +930,12 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
     </span>
   ) : null;
 
-  const canEdit = isOwnEntry || isChair;
+  // Pencil-edit is suppressed while the entry is pending: the owner's
+  // editor is auto-open via the pending flow, and a chair-driven
+  // `queue:edit` here wouldn't clear `pending`, leaving the dots stuck.
+  // Delete remains available so a chair can clean up an abandoned pending
+  // entry (e.g. the author's socket survived disconnect-finalise somehow).
+  const canEdit = (isOwnEntry || isChair) && !isPending;
   const canDelete = isOwnEntry || isChair;
 
   // Premium-tier owners get an animated gradient/glow border around their
@@ -931,28 +955,51 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
   /** Open the inline edit form, pre-populated with current topic. */
   function startEditing() {
     setEditTopic(entry.topic);
-    setIsNewEntry(false);
     setEditing(true);
   }
 
-  /** Submit the edit and close the form. */
+  /**
+   * Submit the edit and close the form.
+   *
+   * - Non-empty input on a pending entry: emit `queue:edit` with the
+   *   typed topic. The server clears `pending` as part of handling the
+   *   edit (any edit on a pending entry counts as the finalisation).
+   * - Empty input on a pending entry: treat as cancel — remove the entry.
+   *   The input is pre-filled with the default-for-type, so reaching
+   *   empty requires the author to have deliberately cleared it.
+   * - Non-pending pencil-edit: emit `queue:edit` with the topic; reject
+   *   empty input (existing entries can't be edited to nothing).
+   */
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = editTopic.trim();
+    if (isPending) {
+      if (trimmed) {
+        socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
+      } else {
+        socket?.emit('queue:remove', { id: entry.id });
+      }
+      setEditing(false);
+      return;
+    }
     if (!trimmed) return;
-
     socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
-    setIsNewEntry(false);
     setEditing(false);
   }
 
-  /** Cancel editing. If this is a new entry with unmodified text, delete it. */
+  /**
+   * Cancel editing. For pending entries, remove the entry from the queue
+   * (the entry only exists because the author was composing; cancelling
+   * means they changed their mind). For non-pending entries, just close
+   * the editor — the saved state is unchanged.
+   */
   function handleEditCancel() {
-    if (isNewEntry) {
-      onDelete(entry.id);
-    } else {
+    if (isPending) {
+      socket?.emit('queue:remove', { id: entry.id });
       setEditing(false);
+      return;
     }
+    setEditing(false);
   }
 
   // --- Editing mode: inline form ---
@@ -984,11 +1031,14 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
               onKeyDown={(e) => {
                 if (e.key === 'Escape') handleEditCancel();
               }}
-              required
+              // Pending entries allow empty submit (server falls through to
+              // the default-for-type topic). Pencil-edits on already-saved
+              // entries still require non-empty.
+              required={!isPending}
               aria-label="Topic description"
               // Focus and select all text on mount so the user can
-              // immediately start typing to replace the placeholder.
-              // Uses a stable ref via useCallback to run only once.
+              // immediately start typing. (For pending entries the input
+              // starts empty, so the select is a no-op.)
               ref={editInputRef}
               className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
                          dark:bg-stone-700 dark:text-stone-100
@@ -1051,7 +1101,19 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
           ) : (
             <span className={`text-sm font-semibold ${entryTypeColor(entry.type)}`}>{entryTypeLabel(entry.type)}:</span>
           )}
-          <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
+          {isPending ? (
+            <span
+              className="tcq-typing-dots ml-1 text-stone-500 dark:text-stone-400 align-middle"
+              role="status"
+              aria-label="Composing topic"
+            >
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : (
+            <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
+          )}
 
           {/* Speaker info */}
           <div className="text-sm text-stone-600 dark:text-stone-300">

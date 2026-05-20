@@ -128,9 +128,12 @@ function MeetingPageInner() {
   const isChair = useIsChair();
 
   /**
-   * Add a queue entry with placeholder text, then trigger auto-edit on
-   * the new entry. Used by both keyboard shortcuts and the SpeakerControls
-   * buttons.
+   * Add a queue entry in the "pending initial-edit" state and trigger
+   * auto-edit on it. The server stamps the entry with the default-for-type
+   * topic and `pending: true`; until the author finalises (Save / Cancel /
+   * Escape), every participant's row renders a typing-indicator in place
+   * of the topic text. Used by both keyboard shortcuts and the
+   * SpeakerControls buttons.
    *
    * For replies, sends the current topic's speakerId as a precondition so
    * the server can reject the add when the chair has advanced onto a
@@ -140,7 +143,7 @@ function MeetingPageInner() {
    * a later unrelated broadcast can't mis-fire the auto-edit.
    */
   const addQueueEntry = useCallback(
-    (type: 'topic' | 'reply' | 'question' | 'point-of-order', placeholder: string) => {
+    (type: 'topic' | 'reply' | 'question' | 'point-of-order') => {
       if (!socket || !meeting) return;
       // Reply only makes sense against a current topic — match the button's
       // visibility gate so the `r` shortcut is a no-op when there's nothing
@@ -163,7 +166,10 @@ function MeetingPageInner() {
       };
       socket.once('queue:added', queueAddedHandler);
 
-      socket.emit('queue:add', { type, topic: placeholder, currentTopicSpeakerId }, (response) => {
+      // No topic is sent — the server fills in the default-for-type. The
+      // `pending: true` flag tells the server to render this as an
+      // initial-edit entry (typing dots for all viewers).
+      socket.emit('queue:add', { type, pending: true, currentTopicSpeakerId }, (response) => {
         if (!response.ok) {
           socket.off('queue:added', queueAddedHandler);
         }
@@ -184,23 +190,23 @@ function MeetingPageInner() {
 
   const shortcuts = useMemo<Shortcut[]>(
     () => [
-      { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic', 'New topic'), category: 'Queue' },
+      { key: 'n', description: 'New Topic', action: () => addQueueEntry('topic'), category: 'Queue' },
       {
         key: 'r',
         description: 'Reply to current topic',
-        action: () => addQueueEntry('reply', 'Reply'),
+        action: () => addQueueEntry('reply'),
         category: 'Queue',
       },
       {
         key: 'c',
         description: 'Clarifying Question',
-        action: () => addQueueEntry('question', 'Clarifying question'),
+        action: () => addQueueEntry('question'),
         category: 'Queue',
       },
       {
         key: 'p',
         description: 'Point of Order',
-        action: () => addQueueEntry('point-of-order', 'Point of order'),
+        action: () => addQueueEntry('point-of-order'),
         category: 'Queue',
       },
       {

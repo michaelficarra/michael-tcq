@@ -53,18 +53,18 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'Discuss Current Topic' })).toBeInTheDocument();
   });
 
-  it('calls onAddEntry with type and placeholder on click', () => {
+  it('calls onAddEntry with the type on click', () => {
     const { onAddEntry } = renderControls(makeMeeting());
 
     fireEvent.click(screen.getByRole('button', { name: 'Clarifying Question' }));
-    expect(onAddEntry).toHaveBeenCalledWith('question', 'Clarifying question');
+    expect(onAddEntry).toHaveBeenCalledWith('question');
   });
 
-  it('calls onAddEntry with topic type and placeholder for New Topic', () => {
+  it('calls onAddEntry with topic type for New Topic', () => {
     const { onAddEntry } = renderControls(makeMeeting());
 
     fireEvent.click(screen.getByRole('button', { name: 'New Topic' }));
-    expect(onAddEntry).toHaveBeenCalledWith('topic', 'New topic');
+    expect(onAddEntry).toHaveBeenCalledWith('topic');
   });
 
   it('has an accessible group label', () => {

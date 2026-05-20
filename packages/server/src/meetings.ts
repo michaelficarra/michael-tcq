@@ -741,15 +741,26 @@ export class MeetingManager {
    *
    * Returns the created entry, or null if the meeting doesn't exist.
    */
-  addQueueEntry(meetingId: string, type: QueueEntryType, topic: string, user: User): QueueEntry | null {
+  addQueueEntry(
+    meetingId: string,
+    type: QueueEntryType,
+    topic: string,
+    user: User,
+    pending: boolean = false,
+  ): QueueEntry | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
+    // `pending` is only stamped when true so non-pending entries (the
+    // overwhelming majority — chair restore, advance-prepend, all tests)
+    // serialise without the field. Existing entries persisted before this
+    // change therefore round-trip unchanged.
     const entry: QueueEntry = {
       id: randomUUID(),
       type,
       topic,
       userId: ensureUser(meeting, user),
+      ...(pending ? { pending: true } : {}),
     };
 
     meeting.queue.entries[entry.id] = entry;
@@ -775,8 +786,10 @@ export class MeetingManager {
 
   /**
    * Edit an existing queue entry. Only the provided fields are updated;
-   * omitted fields are left unchanged. Returns true if the entry was
-   * found and updated.
+   * omitted fields are left unchanged. If the entry was in the
+   * "pending initial-edit" state, that flag is cleared too — editing a
+   * pending entry's topic constitutes finalising the composition.
+   * Returns true if the entry was found and updated.
    */
   editQueueEntry(meetingId: string, entryId: string, updates: { topic?: string; type?: QueueEntryType }): boolean {
     const meeting = this.meetings.get(meetingId);
@@ -787,6 +800,7 @@ export class MeetingManager {
 
     if (updates.topic !== undefined) entry.topic = updates.topic;
     if (updates.type !== undefined) entry.type = updates.type;
+    if (entry.pending) delete entry.pending;
 
     this.markDirty(meetingId);
     return true;

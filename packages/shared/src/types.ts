@@ -87,6 +87,17 @@ export interface QueueEntry {
   type: QueueEntryType;
   topic: string;
   userId: UserKey;
+  /**
+   * True while the author is in the initial editing state — i.e. they have
+   * just added the entry and have not yet saved or cancelled. While true,
+   * clients render a typing-indicator (bouncing dots) in place of `topic`.
+   * Cleared by `queue:finalize`, on author socket disconnect, and on
+   * `queue:edit`/`queue:remove` paths that act on the same entry.
+   *
+   * Optional so meetings persisted before this field was introduced
+   * rehydrate as non-pending without migration.
+   */
+  pending?: boolean;
 }
 
 /**

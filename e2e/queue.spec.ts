@@ -10,6 +10,7 @@ import {
   queueSection,
   switchUser,
   dragAndDrop,
+  openSecondContext,
 } from './helpers.js';
 
 /**
@@ -80,13 +81,16 @@ test.describe('Entering the Queue', () => {
     await expect(page.getByText('Test topic')).toBeVisible();
   });
 
-  test('new entries open in edit mode with text pre-selected', async ({ page }) => {
+  test('new entries open in edit mode with the default text pre-filled and selected', async ({ page }) => {
     await page.getByRole('button', { name: 'New Topic' }).click();
 
-    // The edit input should be visible
+    // The edit input should be visible, focused, and pre-filled with the
+    // default-for-type topic so the author can either type over it or
+    // submit it as-is.
     const input = page.getByLabel('Topic description');
     await expect(input).toBeVisible();
     await expect(input).toBeFocused();
+    await expect(input).toHaveValue('New topic');
   });
 
   test('pressing Escape during initial edit removes the entry', async ({ page }) => {
@@ -96,7 +100,18 @@ test.describe('Entering the Queue', () => {
     await expect(input).toBeVisible();
     await input.press('Escape');
 
-    // The entry should be removed — queue should be empty
+    // The entry should be removed — queue should be empty.
+    await expect(page.getByText('The queue is empty.')).toBeVisible();
+  });
+
+  test('clearing the input and clicking Save removes the entry', async ({ page }) => {
+    await page.getByRole('button', { name: 'New Topic' }).click();
+
+    const input = page.getByLabel('Topic description');
+    // Clear the pre-filled default text and submit; behaves like cancel.
+    await input.fill('');
+    await page.getByRole('button', { name: 'Save' }).click();
+
     await expect(page.getByText('The queue is empty.')).toBeVisible();
   });
 
@@ -107,10 +122,41 @@ test.describe('Entering the Queue', () => {
     await input.fill('My custom topic');
     await page.getByRole('button', { name: 'Save' }).click();
 
-    // Entry should now be in display mode with the custom text
+    // Entry should now be in display mode with the custom text and no
+    // lingering typing-indicator.
     await expect(page.getByText('My custom topic')).toBeVisible();
-    // Edit input should no longer be visible
     await expect(input).not.toBeVisible();
+    await expect(page.getByRole('status', { name: 'Composing topic' })).toHaveCount(0);
+  });
+
+  test('other participants see a typing indicator while the author composes', async ({ page, browser }) => {
+    // Author opens the editor (pending entry, default text pre-filled). A
+    // second browser context as a different user should render the
+    // typing-indicator in place of the topic on the same row. Once the
+    // author saves a custom topic, the indicator disappears for the viewer.
+    const meetingId = decodeURIComponent(new URL(page.url()).pathname.split('/meeting/')[1]);
+    await page.getByRole('button', { name: 'New Topic' }).click();
+    // Confirm the editor is open on the author's side before bringing up
+    // the viewer; without this we can race the server's queue:added.
+    await expect(page.getByLabel('Topic description')).toBeVisible();
+
+    const { context: viewerCtx, page: viewerPage } = await openSecondContext(browser, meetingId, {
+      asUser: 'alice',
+    });
+    try {
+      await goToQueueTab(viewerPage);
+      const viewerIndicator = viewerPage.getByRole('status', { name: 'Composing topic' });
+      await expect(viewerIndicator).toBeVisible();
+
+      // Author finalises with a custom topic. The viewer's indicator goes
+      // away and the topic text appears.
+      await page.getByLabel('Topic description').fill('Resolved topic');
+      await page.getByRole('button', { name: 'Save' }).click();
+      await expect(viewerIndicator).toHaveCount(0);
+      await expect(viewerPage.getByText('Resolved topic')).toBeVisible();
+    } finally {
+      await viewerCtx.close();
+    }
   });
 });
 

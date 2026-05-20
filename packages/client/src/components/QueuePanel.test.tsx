@@ -654,7 +654,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice', pending: true } }, ['q1']),
     });
     renderQueue(meeting, chairUser, mockSocket);
 
@@ -687,7 +687,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice', pending: true } }, ['q1']),
     });
 
     render(
@@ -713,7 +713,7 @@ describe('QueuePanel', () => {
 
     const meeting = makeMeeting({
       users: { alice: chairUser },
-      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice' } }, ['q1']),
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'alice', pending: true } }, ['q1']),
     });
 
     render(

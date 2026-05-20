@@ -356,7 +356,21 @@ export type QueueEditPayload = z.infer<typeof QueueEditPayloadSchema>;
 /** Payload for adding a queue entry. */
 export const QueueAddPayloadSchema = z.object({
   type: QueueEntryTypeSchema,
-  topic: markdownString('Topic'),
+  /**
+   * The entry's topic. Optional: when omitted, the server uses the default
+   * topic for the type (see `QUEUE_ENTRY_DEFAULT_TOPICS`). The interactive
+   * add path leaves this off because the author hasn't typed anything yet;
+   * the chair `asUsername` restore path passes it explicitly.
+   */
+  topic: optionalMarkdownString('Topic'),
+  /**
+   * When true, the entry is added in the "pending initial edit" state — its
+   * topic is shown to all participants as a typing-indicator (bouncing dots)
+   * until the author finalises via `queue:finalize`. Only honoured for the
+   * interactive add path; ignored when `asUsername` is set (bulk restore
+   * always produces finished entries).
+   */
+  pending: z.boolean().optional(),
   /**
    * Optional: GitHub username to add the entry as. Chair only. When omitted,
    * the entry is added as the current session user.
@@ -634,7 +648,11 @@ export interface ClientToServerEvents {
   /** Update the list of meeting chairs. Chair only. At least one must remain. */
   'meeting:updateChairs': (payload: ChairsUpdatePayload) => void;
 
-  /** Edit an existing queue entry (owner or chair). */
+  /**
+   * Edit an existing queue entry (owner or chair). When the targeted
+   * entry is in the "pending initial-edit" state, the server additionally
+   * clears the `pending` flag — editing the topic constitutes finalising.
+   */
   'queue:edit': (payload: QueueEditPayload) => void;
 
   /** Add a new agenda item (chair only). */

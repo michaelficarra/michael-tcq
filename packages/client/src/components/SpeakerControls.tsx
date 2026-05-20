@@ -1,8 +1,10 @@
 /**
  * Speaker entry controls — the row of buttons for entering the speaker queue.
  *
- * Clicking a button calls onAddEntry with the type and placeholder text.
- * The parent handles emitting the socket event and triggering auto-edit.
+ * Clicking a button calls onAddEntry with the type. The parent handles
+ * emitting the socket event (in the "pending initial-edit" state) and
+ * triggering auto-edit. The default topic that participants see if the
+ * author cancels comes from the server via `QUEUE_ENTRY_DEFAULT_TOPICS`.
  *
  * Four entry types are shown as coloured buttons:
  * - New Topic (blue)
@@ -18,8 +20,6 @@ import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 const ENTRY_TYPES: {
   type: QueueEntryType;
   label: string;
-  /** Placeholder topic text used when immediately entering the queue. */
-  placeholder: string;
   /** Tailwind classes for the button background. */
   bgClass: string;
   /** Whether this type requires a current topic to be visible. */
@@ -28,36 +28,32 @@ const ENTRY_TYPES: {
   {
     type: 'topic',
     label: 'New Topic',
-    placeholder: 'New topic',
     bgClass: 'bg-blue-700 enabled:hover:bg-blue-800',
     requiresTopic: false,
   },
   {
     type: 'reply',
     label: 'Discuss Current Topic',
-    placeholder: 'Reply',
     bgClass: 'bg-cyan-700 enabled:hover:bg-cyan-800',
     requiresTopic: true,
   },
   {
     type: 'question',
     label: 'Clarifying Question',
-    placeholder: 'Clarifying question',
     bgClass: 'bg-green-700 enabled:hover:bg-green-800',
     requiresTopic: false,
   },
   {
     type: 'point-of-order',
     label: 'Point of Order',
-    placeholder: 'Point of order',
     bgClass: 'bg-rose-700 enabled:hover:bg-rose-800',
     requiresTopic: false,
   },
 ];
 
 interface SpeakerControlsProps {
-  /** Called to add an entry to the queue with a placeholder topic. */
-  onAddEntry: (type: QueueEntryType, placeholder: string) => void;
+  /** Called to add an entry to the queue (in the pending initial-edit state). */
+  onAddEntry: (type: QueueEntryType) => void;
 }
 
 export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
@@ -81,7 +77,7 @@ export function SpeakerControls({ onAddEntry }: SpeakerControlsProps) {
           return (
             <button
               key={config.type}
-              onClick={() => onAddEntry(config.type, config.placeholder)}
+              onClick={() => onAddEntry(config.type)}
               disabled={disabled}
               className={`text-white text-sm font-medium px-3 py-1.5 rounded
                          transition-colors

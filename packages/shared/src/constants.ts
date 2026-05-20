@@ -24,6 +24,23 @@ export const QUEUE_ENTRY_PRIORITY: Record<QueueEntryType, number> = {
 };
 
 /**
+ * Default topic text for each queue entry type. Stamped by the server as
+ * the initial topic on an interactive (pending) add — the entry needs a
+ * well-formed topic string even though the value isn't shown while the
+ * `pending` flag is true (clients render a typing-indicator instead).
+ * The author's Save replaces this; Escape/Cancel removes the entry
+ * entirely, so the default is never user-visible in the normal flow. It
+ * remains as a defensive fallback in case a pending row leaks past the
+ * usual paths.
+ */
+export const QUEUE_ENTRY_DEFAULT_TOPICS: Record<QueueEntryType, string> = {
+  'point-of-order': 'Point of order',
+  question: 'Clarifying question',
+  reply: 'Reply',
+  topic: 'New topic',
+};
+
+/**
  * Default poll options. Used when the chair starts a poll without
  * customising the options. The IDs are stable strings so they can
  * be referenced in tests and defaults.
