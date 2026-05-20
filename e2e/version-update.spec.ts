@@ -54,7 +54,7 @@ test.describe('Stale-version reload', () => {
     // different revision than the one the WebSocket bound to.
     revision = 'tcq-002-def';
 
-    // Advance past the 30 s poll interval — the next poll observes a
+    // Advance past the 30-second poll interval. The next poll sees a
     // diverged revision and flips the hook into "stale".
     const stalePoll = page.waitForResponse((r) => r.url().endsWith('/api/version'));
     await page.clock.runFor(30_500);
