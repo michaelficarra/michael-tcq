@@ -456,9 +456,11 @@ test.describe('Agenda tab', () => {
       // First Item becomes current again.
       await goToAgendaTab(page);
       const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
-      const firstRow = agendaPanel.locator('li', { hasText: 'First Item' });
+      // Agenda items are draggable from their ⠿ handle only; the drop
+      // target can still be any element overlapping the destination row.
+      const firstHandle = agendaPanel.locator('li', { hasText: 'First Item' }).getByLabel(/^Drag to reorder item/);
       const secondRow = agendaPanel.locator('li', { hasText: 'Second Item' });
-      await dragAndDrop(page, firstRow, secondRow);
+      await dragAndDrop(page, firstHandle, secondRow);
 
       // Wait for the optimistic-then-server reorder to settle before
       // leaving the agenda tab. Surfaces a clear "drag did not reorder"
@@ -508,10 +510,11 @@ test.describe('Agenda tab', () => {
       expect(initialNames[1]).toContain('Bravo');
       expect(initialNames[2]).toContain('Charlie');
 
-      // Drag Alpha down onto Charlie's row.
-      const alpha = agendaPanel.locator('li', { hasText: 'Alpha' });
+      // Drag Alpha down onto Charlie's row. Agenda items are draggable from
+      // their ⠿ handle only (sessions remain whole-row draggable).
+      const alphaHandle = agendaPanel.locator('li', { hasText: 'Alpha' }).getByLabel(/^Drag to reorder item/);
       const charlie = agendaPanel.locator('li', { hasText: 'Charlie' });
-      await dragAndDrop(page, alpha, charlie);
+      await dragAndDrop(page, alphaHandle, charlie);
 
       // Order should now be Bravo, Charlie, Alpha (or at minimum Alpha sits
       // after both originals — the optimistic update settles to the server's

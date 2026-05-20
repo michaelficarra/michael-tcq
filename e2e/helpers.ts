@@ -224,8 +224,9 @@ export async function openSecondContext(
  *     activation distance and produce a smooth drag preview
  *  4. Mouses up on the target
  *
- * Both inputs should be the draggable handles (whole row in the agenda;
- * the ⠿ drag handle in the queue).
+ * The source should be the draggable handle: the ⠿ handle for queue
+ * entries and agenda items; the whole row for agenda sessions.
+ * The target can be any element whose bounding box covers the drop position.
  */
 export async function dragAndDrop(page: Page, source: Locator, target: Locator): Promise<void> {
   const sourceBox = await source.boundingBox();

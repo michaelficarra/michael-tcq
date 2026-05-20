@@ -443,13 +443,31 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
-    disabled: !isChair || editing,
+    // Stays draggable while editing — the chair can reorder an item mid-edit
+    // and the in-progress form state survives because the component is keyed
+    // by item.id in the parent list, so React keeps the instance across the
+    // reorder.
+    disabled: !isChair,
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  // Shared drag handle used in both display and editing modes. Mirrors the
+  // queue's ⠿ handle (QueuePanel's SortableQueueEntry), but with a fixed
+  // ns-resize cursor — agenda items have no per-direction restriction logic.
+  const dragHandle = isChair ? (
+    <span
+      className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 cursor-ns-resize select-none text-sm leading-none presentation-hidden"
+      aria-label={`Drag to reorder item ${displayNumber}`}
+      {...attributes}
+      {...listeners}
+    >
+      ⠿
+    </span>
+  ) : null;
 
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
@@ -503,6 +521,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
         style={style}
         className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${rowBackground} ${dimClasses} ${containedClasses} ${currentMarker} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
       >
+        {dragHandle}
         <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
           {displayNumber}
         </span>
@@ -566,10 +585,10 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
       style={style}
       className={`flex items-center gap-3 border-b border-stone-100 dark:border-stone-700 pb-2 pt-1 px-2 rounded ${
         isDragging ? 'opacity-50 bg-stone-200 dark:bg-stone-700' : rowBackground
-      } ${dimClasses} ${containedClasses} ${currentMarker} ${isChair ? 'cursor-grab active:cursor-grabbing' : ''} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
-      aria-label={isChair ? `Drag to reorder item ${displayNumber}` : undefined}
-      {...(isChair ? { ...attributes, ...listeners } : {})}
+      } ${dimClasses} ${containedClasses} ${currentMarker} ${isOwnItem ? 'border-l-3 border-l-teal-500 dark:border-l-teal-500' : ''}`}
     >
+      {dragHandle}
+
       {/* Item number */}
       <span className="text-lg font-semibold text-stone-600 dark:text-stone-300 tabular-nums min-w-[1.5rem] text-right select-none">
         {displayNumber}
