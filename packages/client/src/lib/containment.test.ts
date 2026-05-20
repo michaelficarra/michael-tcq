@@ -29,9 +29,10 @@ describe('computeContainment', () => {
 
   it('contains items that fit within capacity and reports the used sum', () => {
     const entries: AgendaEntry[] = [session('s', 30), item('a', 10), item('b', 15)];
-    const { containedBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
     expect(containedBy.get('b')).toBe('s');
+    expect(overflowBy.size).toBe(0);
     expect(used.get('s')).toBe(25);
     expect(runTotal.get('s')).toBe(25);
   });
@@ -55,10 +56,11 @@ describe('computeContainment', () => {
     // Capacity 30, items 15+15+10 — the first two fit exactly (30), the
     // third overflows. runTotal should be 40.
     const entries: AgendaEntry[] = [session('s', 30), item('a', 15), item('b', 15), item('c', 10)];
-    const { containedBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
     expect(containedBy.get('b')).toBe('s');
     expect(containedBy.has('c')).toBe(false);
+    expect(overflowBy.get('c')).toBe('s');
     expect(used.get('s')).toBe(30);
     expect(runTotal.get('s')).toBe(40);
   });
@@ -87,9 +89,11 @@ describe('computeContainment', () => {
     // would fit on its own but must NOT be contained — the prefix is
     // broken at the 40.
     const entries: AgendaEntry[] = [session('s', 30), item('a', 40), item('b', 5)];
-    const { containedBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
     expect(containedBy.has('a')).toBe(false);
     expect(containedBy.has('b')).toBe(false);
+    expect(overflowBy.get('a')).toBe('s');
+    expect(overflowBy.get('b')).toBe('s');
     expect(used.get('s')).toBe(0);
     expect(runTotal.get('s')).toBe(45);
   });
@@ -99,12 +103,31 @@ describe('computeContainment', () => {
     // closes), 5 (would fit if squeezed, but must be excluded). runTotal
     // reflects the full run for correct overflow display.
     const entries: AgendaEntry[] = [session('s', 30), item('a', 10), item('b', 40), item('c', 5)];
-    const { containedBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
     expect(containedBy.has('b')).toBe(false);
     expect(containedBy.has('c')).toBe(false);
+    expect(overflowBy.get('b')).toBe('s');
+    expect(overflowBy.get('c')).toBe('s');
     expect(used.get('s')).toBe(10);
     expect(runTotal.get('s')).toBe(55);
+  });
+
+  it('does not record overflow for items outside any session run', () => {
+    const entries: AgendaEntry[] = [item('a', 10), session('s', 30), item('b', 5)];
+    const { overflowBy } = computeContainment(entries);
+    expect(overflowBy.has('a')).toBe(false);
+    expect(overflowBy.has('b')).toBe(false);
+  });
+
+  it('marks every overflow item across two consecutive overflowing sessions', () => {
+    // Each session's overflow tail is scoped to its own run; the second
+    // session's run starts fresh after the boundary.
+    const entries: AgendaEntry[] = [session('s1', 10), item('a', 15), item('b', 5), session('s2', 5), item('c', 20)];
+    const { overflowBy } = computeContainment(entries);
+    expect(overflowBy.get('a')).toBe('s1');
+    expect(overflowBy.get('b')).toBe('s1');
+    expect(overflowBy.get('c')).toBe('s2');
   });
 
   it('handles an item whose own duration exceeds the remaining capacity', () => {
