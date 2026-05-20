@@ -3,9 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { PreferencesProvider } from './contexts/PreferencesContext.js';
 import { PreferencesModal } from './components/PreferencesModal.js';
-import { StaleVersionBanner } from './components/StaleVersionBanner.js';
 import { LoginPage } from './pages/LoginPage.js';
-import { useStaleVersionCheck } from './hooks/useStaleVersionCheck.js';
 
 // Route-level code splitting: HomePage and MeetingPage each pull in a
 // large slice of the dependency tree (MeetingPage in particular owns the
@@ -28,9 +26,6 @@ function LoadingScreen() {
  * check whether the user is authenticated.
  */
 function App() {
-  // Polls /api/version to detect a redeploy. Mounted at the root so the
-  // staleness check survives route changes within the SPA.
-  const stale = useStaleVersionCheck();
   return (
     <PreferencesProvider>
       <AuthProvider>
@@ -39,7 +34,6 @@ function App() {
         </BrowserRouter>
       </AuthProvider>
       <PreferencesModal />
-      {stale && <StaleVersionBanner />}
     </PreferencesProvider>
   );
 }

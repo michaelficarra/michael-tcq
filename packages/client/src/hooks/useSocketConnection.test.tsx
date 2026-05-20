@@ -287,6 +287,19 @@ describe('useSocketConnection — connection lifecycle', () => {
     expect(ioMock).toHaveBeenCalledTimes(2);
   });
 
+  it('H.10b: a server:revision event stores the revision in context', () => {
+    const { result } = renderHookInProvider();
+    const h = harnesses[0];
+
+    expect(result.current.state.serverRevision).toBeNull();
+
+    act(() => {
+      h.deliver('server:revision', { revision: 'tcq-00042-abc' });
+    });
+
+    expect(result.current.state.serverRevision).toBe('tcq-00042-abc');
+  });
+
   it('H.10: a browser offline event dispatches setConnected:false ahead of the WS detecting', () => {
     const { result } = renderHookInProvider();
     const h = harnesses[0];

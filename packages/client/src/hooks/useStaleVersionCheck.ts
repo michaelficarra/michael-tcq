@@ -1,23 +1,31 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Polls `/api/version` and detects when the current revision differs from
- * the one observed on first poll. Used to surface a "this tab is stale"
- * banner after a Cloud Run redeploy: existing WebSocket connections stay
- * pinned to the old (drained-but-alive) revision, so HTTP requests are
- * the only side-channel that sees the new revision.
+ * Polls `/api/version` and reports whether the deployed Cloud Run
+ * revision has changed out from under the WebSocket this tab is bound
+ * to. Cloud Run keeps an old revision alive after a redeploy until its
+ * in-flight requests drain — including long-lived WebSockets — so a
+ * client whose socket is on the drained-old revision needs to reload
+ * to catch up.
  *
- * Returns `true` once a revision mismatch is observed. Stays `false` if
- * the endpoint returns 204 (no GIT_SHA — local dev, tests) or if
- * `revision` is null in the JSON response (deployed without K_REVISION,
- * which Cloud Run injects automatically, so this is mostly defensive).
+ * `baselineRevision` is the revision the WebSocket reported on connect.
+ * It's the authoritative reference because that's where the socket
+ * actually lives; the client's first HTTP request to `/api/version`
+ * could land on a different revision if a deploy slips between the
+ * two, which would falsely flag the tab as stale.
+ *
+ * Returns `true` once a poll observes a revision different from
+ * `baselineRevision`. Stays `false` while `baselineRevision` is `null`
+ * (the WebSocket hasn't reported one yet, or the server isn't on
+ * Cloud Run), when the endpoint returns 204 (`GIT_SHA` unset — local
+ * dev, tests), or when the response `revision` is `null`.
  */
-export function useStaleVersionCheck(pollIntervalMs = 30_000): boolean {
+export function useStaleVersionCheck(baselineRevision: string | null, pollIntervalMs = 30_000): boolean {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
+    if (baselineRevision == null) return;
     let cancelled = false;
-    let baseline: string | null = null;
 
     async function poll() {
       try {
@@ -27,11 +35,7 @@ export function useStaleVersionCheck(pollIntervalMs = 30_000): boolean {
         const body: { revision: string | null } = await res.json();
         if (cancelled) return;
         if (body.revision == null) return;
-        if (baseline == null) {
-          baseline = body.revision;
-          return;
-        }
-        if (body.revision !== baseline) {
+        if (body.revision !== baselineRevision) {
           setStale(true);
         }
       } catch {
@@ -46,7 +50,7 @@ export function useStaleVersionCheck(pollIntervalMs = 30_000): boolean {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [pollIntervalMs]);
+  }, [baselineRevision, pollIntervalMs]);
 
   return stale;
 }

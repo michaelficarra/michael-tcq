@@ -16,6 +16,7 @@ function makeState(overrides?: Partial<MeetingContextState>): MeetingContextStat
     activeConnections: 0,
     error: null,
     lastSeenVersion: null,
+    serverRevision: null,
     ...overrides,
   };
 }

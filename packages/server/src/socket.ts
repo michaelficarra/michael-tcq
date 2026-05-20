@@ -501,6 +501,13 @@ export function registerSocketHandlers(
       // picks up display-name / company changes between sessions.
       ensureUser(meeting, user);
 
+      // Tell the client which Cloud Run revision this socket is bound to.
+      // Sent before `state` so the client's revision baseline is set
+      // before any other meeting traffic flows. `K_REVISION` is injected
+      // by Cloud Run; absent in local dev / tests, in which case the
+      // client's staleness check is a no-op.
+      socket.emit('server:revision', { revision: process.env.K_REVISION ?? null });
+
       // Send the full current state to this socket only
       socket.emit('state', decorateMeetingForClient(meeting, appSettings));
     });

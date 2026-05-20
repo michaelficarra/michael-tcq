@@ -52,7 +52,11 @@ export default defineConfig({
   ],
   webServer: {
     command: [
-      `export NODE_ENV=test DATA_DIR=${dataDir} PORT=${SERVER_PORT}`,
+      // K_REVISION is set so the server emits a non-null revision on the
+      // `server:revision` WebSocket event, which the stale-version e2e
+      // test relies on as the baseline it compares `/api/version` polls
+      // against.
+      `export NODE_ENV=test DATA_DIR=${dataDir} PORT=${SERVER_PORT} K_REVISION=tcq-test-baseline`,
       `&& npm run build -w packages/shared`,
       `&& npx concurrently`,
       `-n server,client`,

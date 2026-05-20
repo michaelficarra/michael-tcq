@@ -14,6 +14,7 @@ import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
+import { useStaleVersionCheck } from '../hooks/useStaleVersionCheck.js';
 import { useKeyboardShortcuts, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { useMeetingNotifications } from '../hooks/useMeetingNotifications.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
@@ -26,6 +27,7 @@ import { HelpPanel } from '../components/HelpPanel.js';
 import { LogPanel } from '../components/LogPanel.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
 import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
+import { StaleVersionBanner } from '../components/StaleVersionBanner.js';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
 function MeetingPageInner() {
@@ -71,10 +73,13 @@ function MeetingPageInner() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { shortcutsEnabled, setShortcutsEnabled, togglePreferences } = usePreferences();
   const [presentationMode, setPresentationMode] = useState(false);
-  const { meeting, connected, activeConnections, error } = useMeetingState();
+  const { meeting, connected, activeConnections, error, serverRevision } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const { user } = useAuth();
   const socket = useSocketConnection(meetingId ?? '', user?.ghid ?? null);
+  // Watches for a Cloud Run revision change vs the revision this WebSocket
+  // bound to; flips true so we can surface the reload banner.
+  const versionStale = useStaleVersionCheck(serverRevision);
 
   // Push the authenticated user from AuthContext into MeetingContext
   // so that components like useIsChair() can check permissions.
@@ -322,6 +327,14 @@ function MeetingPageInner() {
 
         {/* Connection status indicator */}
         <ConnectionStatus connected={connected} activeConnections={activeConnections} />
+
+        {/*
+          Reload banner shown when the WebSocket is bound to a Cloud Run
+          revision that's been superseded by a newer deploy. Rendered
+          here (not at app root) because the staleness check needs the
+          WebSocket's revision as its baseline — see useStaleVersionCheck.
+        */}
+        {versionStale && <StaleVersionBanner />}
 
         {/* Keyboard shortcuts dialog */}
         {showShortcuts && (

@@ -556,6 +556,28 @@ export interface ServerToClientEvents {
   activeConnections: (count: number) => void;
 
   /**
+   * The Cloud Run revision (`K_REVISION`) this server process is running
+   * under, sent once per socket on join. The client uses it as the
+   * baseline for a periodic `/api/version` poll: if the polled revision
+   * later differs from this one, the WebSocket is pinned to a drained
+   * old revision (Cloud Run keeps the previous instance alive only to
+   * serve in-flight requests, which includes the long-lived WebSocket),
+   * and the page reloads to migrate to the new revision.
+   *
+   * Sourcing the baseline from the WebSocket — rather than from the
+   * client's own first `/api/version` request — closes a race: an HTTP
+   * request and the WebSocket handshake can land on different revisions
+   * if a deploy straddles them, and the WebSocket revision is the
+   * authoritative one because that's where the long-lived connection
+   * actually lives.
+   *
+   * `revision` is `null` when the server isn't running on Cloud Run
+   * (local dev, tests) — the client treats `null` as "no staleness
+   * check applies".
+   */
+  'server:revision': (info: { revision: string | null }) => void;
+
+  /**
    * Notification that the meeting log has new entries. Carries the id
    * of the latest entry so a client that has already fetched up to that
    * id can short-circuit. Emitted to every socket in the meeting room

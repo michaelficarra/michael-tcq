@@ -130,12 +130,13 @@ function waitForEvent<T>(socket: TypedClientSocket, event: string): Promise<T> {
  * the older `waitForEvent<MeetingState>(client, 'state')` pattern, which
  * assumed every mutation re-broadcast the full state.
  *
- * `log:dirty` and `activeConnections` are ignored — they are
- * notifications, not state-change broadcasts, and a stray late arrival
- * from a previous mutation could otherwise resolve a fresh `waitForChange`
- * before the new mutation has even reached the server.
+ * `log:dirty`, `activeConnections`, and `server:revision` are ignored —
+ * they are notifications, not state-change broadcasts, and a stray late
+ * arrival (e.g. the `server:revision` event that immediately precedes
+ * the initial `state` on join) could otherwise resolve a fresh
+ * `waitForChange` before the new mutation has even reached the server.
  */
-const IGNORED_EVENTS_FOR_WAIT = new Set(['log:dirty', 'activeConnections']);
+const IGNORED_EVENTS_FOR_WAIT = new Set(['log:dirty', 'activeConnections', 'server:revision']);
 function waitForChange(socket: TypedClientSocket, mgr: MeetingManager, meetingId: string): Promise<MeetingState> {
   return new Promise<MeetingState>((resolve, reject) => {
     socket.onAny(function handler(event: string) {

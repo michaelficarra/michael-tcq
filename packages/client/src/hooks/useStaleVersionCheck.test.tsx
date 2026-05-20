@@ -1,7 +1,8 @@
 /**
  * Tests for `useStaleVersionCheck` — the polling hook that watches
  * `/api/version` for a Cloud Run revision change and flips to `true`
- * once the revision diverges from the first observed value.
+ * once a poll observes a revision different from the WebSocket-reported
+ * baseline.
  *
  * Uses fake timers to drive the poll interval; `waitFor` is avoided
  * because its internal retry loop conflicts with `vi.useFakeTimers()`.
@@ -34,13 +35,24 @@ describe('useStaleVersionCheck', () => {
     vi.unstubAllGlobals();
   });
 
-  it('stays false while the revision matches the baseline', async () => {
+  it('does not poll while baselineRevision is null', async () => {
+    const fetchMock = mockVersionFetch([{ status: 200, body: { sha: 'a', revision: 'r-x' } }]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useStaleVersionCheck(null, 1000));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(result.current).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('stays false while polls match the baseline revision', async () => {
     vi.stubGlobal('fetch', mockVersionFetch([{ status: 200, body: { sha: 'a', revision: 'r-1' } }]));
 
-    const { result } = renderHook(() => useStaleVersionCheck(1000));
+    const { result } = renderHook(() => useStaleVersionCheck('r-1', 1000));
 
-    // Flush the initial poll's microtasks (the fetch resolves immediately
-    // because the mock awaits no real I/O).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -52,24 +64,13 @@ describe('useStaleVersionCheck', () => {
     expect(result.current).toBe(false);
   });
 
-  it('flips to true when a later poll sees a different revision', async () => {
-    vi.stubGlobal(
-      'fetch',
-      mockVersionFetch([
-        { status: 200, body: { sha: 'a', revision: 'r-1' } },
-        { status: 200, body: { sha: 'b', revision: 'r-2' } },
-      ]),
-    );
+  it('flips to true when a poll observes a revision different from the baseline', async () => {
+    vi.stubGlobal('fetch', mockVersionFetch([{ status: 200, body: { sha: 'b', revision: 'r-2' } }]));
 
-    const { result } = renderHook(() => useStaleVersionCheck(1000));
+    const { result } = renderHook(() => useStaleVersionCheck('r-1', 1000));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(result.current).toBe(false);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
     });
     expect(result.current).toBe(true);
   });
@@ -77,7 +78,7 @@ describe('useStaleVersionCheck', () => {
   it('stays false when the endpoint returns 204 (no GIT_SHA / local dev)', async () => {
     vi.stubGlobal('fetch', mockVersionFetch([{ status: 204 }]));
 
-    const { result } = renderHook(() => useStaleVersionCheck(1000));
+    const { result } = renderHook(() => useStaleVersionCheck('r-1', 1000));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
@@ -86,15 +87,9 @@ describe('useStaleVersionCheck', () => {
   });
 
   it('stays false when revision is null in the response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      mockVersionFetch([
-        { status: 200, body: { sha: 'a', revision: null } },
-        { status: 200, body: { sha: 'b', revision: null } },
-      ]),
-    );
+    vi.stubGlobal('fetch', mockVersionFetch([{ status: 200, body: { sha: 'a', revision: null } }]));
 
-    const { result } = renderHook(() => useStaleVersionCheck(1000));
+    const { result } = renderHook(() => useStaleVersionCheck('r-1', 1000));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
@@ -107,28 +102,45 @@ describe('useStaleVersionCheck', () => {
     const fetchMock = vi.fn(async () => {
       call++;
       if (call === 1) throw new Error('network down');
-      if (call === 2) return { status: 200, json: async () => ({ sha: 'a', revision: 'r-1' }) } as unknown as Response;
       return { status: 200, json: async () => ({ sha: 'b', revision: 'r-2' }) } as unknown as Response;
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { result } = renderHook(() => useStaleVersionCheck(1000));
+    const { result } = renderHook(() => useStaleVersionCheck('r-1', 1000));
 
-    // Initial poll throws → baseline still unset.
+    // First poll throws — hook stays false.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current).toBe(false);
 
-    // Second poll succeeds → baseline = r-1.
+    // Next poll succeeds and reports a different revision.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
+    expect(result.current).toBe(true);
+  });
+
+  it('starts polling once a baseline arrives', async () => {
+    const fetchMock = mockVersionFetch([{ status: 200, body: { sha: 'b', revision: 'r-2' } }]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result, rerender } = renderHook(
+      ({ baseline }: { baseline: string | null }) => useStaleVersionCheck(baseline, 1000),
+      { initialProps: { baseline: null as string | null } },
+    );
+
+    // No baseline → no polling, no flip.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(result.current).toBe(false);
 
-    // Third poll diverges → stale.
+    // Baseline arrives → poll fires and observes a diverged revision.
+    rerender({ baseline: 'r-1' });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current).toBe(true);
   });
