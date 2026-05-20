@@ -3,7 +3,7 @@
  * Updates every second. Shows M:SS for under an hour, H:MM:SS for an hour+.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useNow } from '../lib/secondClock.js';
 import { formatDeadline, formatFullTimestamp, relativeTime } from '../lib/timeFormat.js';
 
 interface CountUpTimerProps {
@@ -28,29 +28,8 @@ export function formatElapsed(ms: number): string {
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-// -- Shared 1-second clock for all timer instances --
-// A single interval triggers re-renders for all CountUpTimer instances.
-// getNow returns Date.now() directly so the value is always fresh.
-
-const _listeners = new Set<() => void>();
-
-setInterval(() => {
-  for (const listener of _listeners) listener();
-}, 1000);
-
-function subscribeNow(listener: () => void) {
-  _listeners.add(listener);
-  return () => {
-    _listeners.delete(listener);
-  };
-}
-
-function getNow() {
-  return Date.now();
-}
-
 export function CountUpTimer({ since, className, overAfterMinutes }: CountUpTimerProps) {
-  const now = useSyncExternalStore(subscribeNow, getNow);
+  const now = useNow();
 
   const elapsed = now - new Date(since).getTime();
   const isOver = overAfterMinutes != null && elapsed > overAfterMinutes * 60_000;

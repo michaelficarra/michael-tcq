@@ -56,11 +56,14 @@ describe('computeContainment', () => {
     // Capacity 30, items 15+15+10 — the first two fit exactly (30), the
     // third overflows. runTotal should be 40.
     const entries: AgendaEntry[] = [session('s', 30), item('a', 15), item('b', 15), item('c', 10)];
-    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, overflowAmount, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
     expect(containedBy.get('b')).toBe('s');
     expect(containedBy.has('c')).toBe(false);
     expect(overflowBy.get('c')).toBe('s');
+    // First overflowing item, contained prefix uses 30/30; the full
+    // duration of 'c' is the protruding remainder.
+    expect(overflowAmount.get('c')).toBe(10);
     expect(used.get('s')).toBe(30);
     expect(runTotal.get('s')).toBe(40);
   });
@@ -103,12 +106,17 @@ describe('computeContainment', () => {
     // closes), 5 (would fit if squeezed, but must be excluded). runTotal
     // reflects the full run for correct overflow display.
     const entries: AgendaEntry[] = [session('s', 30), item('a', 10), item('b', 40), item('c', 5)];
-    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
+    const { containedBy, overflowBy, overflowAmount, used, runTotal } = computeContainment(entries);
     expect(containedBy.get('a')).toBe('s');
     expect(containedBy.has('b')).toBe(false);
     expect(containedBy.has('c')).toBe(false);
     expect(overflowBy.get('b')).toBe('s');
     expect(overflowBy.get('c')).toBe('s');
+    // 'b' straddles the line: 10 fit, 40 contributes (10 + 40 − 30) = 20m.
+    // 'c' sits entirely past the closed prefix: its whole 5m is overflow.
+    // Sum (20 + 5 = 25) matches runTotal − capacity (55 − 30 = 25).
+    expect(overflowAmount.get('b')).toBe(20);
+    expect(overflowAmount.get('c')).toBe(5);
     expect(used.get('s')).toBe(10);
     expect(runTotal.get('s')).toBe(55);
   });

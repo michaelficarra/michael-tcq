@@ -31,6 +31,15 @@ export interface Containment {
    * (visually) to that session's run — they just exceed its capacity.
    */
   overflowBy: Map<string, string>;
+  /**
+   * Per-item overflow contribution in minutes. For the first item that
+   * crosses the capacity line, this is only the *protruding* portion
+   * (`used + duration − capacity`); for items further down the run, the
+   * prefix is already closed so the full duration counts. Summing the
+   * values for a session's items equals `runTotal − capacity`, so this
+   * map lets the UI annotate individual items without recomputing.
+   */
+  overflowAmount: Map<string, number>;
   /** For each session, the sum of durations of its contained items. */
   used: Map<string, number>;
   /**
@@ -43,6 +52,7 @@ export interface Containment {
 export function computeContainment(entries: AgendaEntry[]): Containment {
   const containedBy = new Map<string, string>();
   const overflowBy = new Map<string, string>();
+  const overflowAmount = new Map<string, number>();
   const used = new Map<string, number>();
   const runTotal = new Map<string, number>();
 
@@ -76,8 +86,10 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
 
     if (prefixClosed) {
       // Once the prefix is closed, every remaining item in the run is
-      // overflow (regardless of individual size).
+      // overflow (regardless of individual size) — its whole duration
+      // counts toward the session's overflow total.
       overflowBy.set(entry.id, activeSessionId);
+      overflowAmount.set(entry.id, minutes);
       continue;
     }
 
@@ -86,12 +98,15 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
       used.set(activeSessionId, activeUsed);
       containedBy.set(entry.id, activeSessionId);
     } else {
-      // This item would overflow — close the prefix so later (possibly
-      // smaller) items aren't squeezed in past a larger overflowing one.
+      // This item straddles the capacity line: the part up to capacity
+      // doesn't overflow, only the remainder does. After this, the
+      // prefix is closed so subsequent items contribute their full
+      // duration above.
       prefixClosed = true;
       overflowBy.set(entry.id, activeSessionId);
+      overflowAmount.set(entry.id, activeUsed + minutes - activeCapacity);
     }
   }
 
-  return { containedBy, overflowBy, used, runTotal };
+  return { containedBy, overflowBy, overflowAmount, used, runTotal };
 }
