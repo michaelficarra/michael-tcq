@@ -494,6 +494,8 @@ All meeting state changes are broadcast to all connected participants in real ti
 
 A small connection status indicator is displayed in the bottom-right corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state. While connected, hovering the indicator reveals the current number of active connections to the meeting.
 
+If the deployed server version changes while a participant is in a meeting — for example after a redeploy — a banner appears at the top of the meeting page reading "A new version of TCQ is available. Reloading in N seconds&hellip;" with a countdown and an immediate "Reload now" button. The page reloads automatically after the countdown. The short grace period lets participants copy anything they were typing before the reload discards in-progress input. The check is scoped to the meeting page (the only surface that pins the participant to a specific server via a long-lived WebSocket); other pages reload naturally on next interaction.
+
 ## Error Handling
 
 - Fatal errors (e.g. "Meeting not found") are shown as a full-page error with a link back to the home page.

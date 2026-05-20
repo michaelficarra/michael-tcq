@@ -33,6 +33,7 @@ export function TestMeetingProvider({
     activeConnections,
     error: null,
     lastSeenVersion: meeting?.operational.version ?? null,
+    serverRevision: null,
   };
 
   return (

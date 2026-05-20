@@ -34,6 +34,15 @@ export interface MeetingContextState {
    * drops the delta.
    */
   lastSeenVersion: number | null;
+
+  /**
+   * Cloud Run revision (`K_REVISION`) of the server process this socket
+   * is bound to. Reported by the server via `server:revision` once per
+   * socket, and used as the authoritative baseline for the staleness
+   * check that polls `/api/version`. `null` before the event arrives or
+   * when the server isn't running on Cloud Run (local dev, tests).
+   */
+  serverRevision: string | null;
 }
 
 const initialState: MeetingContextState = {
@@ -43,6 +52,7 @@ const initialState: MeetingContextState = {
   activeConnections: 0,
   error: null,
   lastSeenVersion: null,
+  serverRevision: null,
 };
 
 // -- Actions --
@@ -53,6 +63,7 @@ export type MeetingAction =
   | { type: 'setConnected'; connected: boolean }
   | { type: 'setActiveConnections'; count: number }
   | { type: 'setError'; error: string }
+  | { type: 'setServerRevision'; revision: string | null }
   | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
   | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number }
   // Versioned delta actions — one per `ServerToClientEvents` delta event.
@@ -81,6 +92,8 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
       return { ...state, activeConnections: action.count };
     case 'setError':
       return { ...state, error: action.error };
+    case 'setServerRevision':
+      return { ...state, serverRevision: action.revision };
     case 'optimisticAgendaReorder': {
       if (!state.meeting) return state;
       const agenda = [...state.meeting.agenda];

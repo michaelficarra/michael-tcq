@@ -137,6 +137,15 @@ export function useSocketConnection(meetingId: string, userGhid: number | null):
       dispatch({ type: 'setActiveConnections', count });
     });
 
+    // The server reports its Cloud Run revision once per socket on
+    // join. Stored in context so the staleness check can compare
+    // periodic `/api/version` polls against the revision this
+    // WebSocket actually landed on (not whatever the first HTTP
+    // request happened to hit).
+    socket.on('server:revision', ({ revision }) => {
+      dispatch({ type: 'setServerRevision', revision });
+    });
+
     // Server-side validation errors (e.g. "Meeting not found",
     // "Only chairs can..." etc.)
     socket.on('error', (message) => {
