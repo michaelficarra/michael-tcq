@@ -708,7 +708,10 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
         )}
       </div>
 
-      {/* Edit and delete buttons — chairs only */}
+      {/* Edit and delete buttons — chairs only. Delete is hidden for the
+          current agenda item: discussion is in progress, and the chair
+          must advance off it (Next Agenda Item) before it can be removed.
+          The server enforces the same rule. */}
       {isChair && (
         <div className="flex gap-3 shrink-0 presentation-hidden">
           <button
@@ -718,13 +721,15 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
           >
             edit
           </button>
-          <button
-            onClick={() => onDelete(item.id)}
-            className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-            aria-label={`Delete ${item.name}`}
-          >
-            delete
-          </button>
+          {!isCurrent && (
+            <button
+              onClick={() => onDelete(item.id)}
+              className="text-xs text-stone-600 dark:text-stone-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+              aria-label={`Delete ${item.name}`}
+            >
+              delete
+            </button>
+          )}
         </div>
       )}
     </li>

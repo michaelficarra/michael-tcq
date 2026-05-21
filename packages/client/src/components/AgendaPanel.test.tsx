@@ -114,6 +114,27 @@ describe('AgendaPanel', () => {
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
   });
 
+  it('hides the delete button for the current agenda item', () => {
+    // The chair must advance off an item (Next Agenda Item) before it can
+    // be deleted — discussion is in progress.
+    const meeting = makeMeeting({
+      users: { alice: chairUser },
+      chairIds: ['alice'],
+      agenda: [
+        { kind: 'item', id: 'item-current', name: 'Currently discussing', presenterIds: ['alice'] },
+        { kind: 'item', id: 'item-next', name: 'Next up', presenterIds: ['alice'] },
+      ],
+      current: { topicSpeakers: [], agendaItemId: 'item-current' },
+    });
+    renderAgenda(meeting, chairUser);
+
+    // Edit button stays available for the current item; delete does not.
+    expect(screen.getByRole('button', { name: /edit currently discussing/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /delete currently discussing/i })).not.toBeInTheDocument();
+    // Other items (not current) still have the delete button.
+    expect(screen.getByRole('button', { name: /delete next up/i })).toBeInTheDocument();
+  });
+
   it('emits agenda:delete when delete button is clicked', () => {
     const emit = vi.fn();
     const mockSocket = { emit } as unknown as TypedSocket;

@@ -598,6 +598,30 @@ describe('Socket.IO integration', () => {
 
       expect(state.agenda).toHaveLength(0);
     });
+
+    it('refuses to delete the current agenda item and emits an error', async () => {
+      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const meeting = ctx.meetingManager.create([owner]);
+      const first = ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner])!;
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+      // Advance onto `first` so it becomes the current agenda item.
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+      expect(ctx.meetingManager.get(meeting.id)!.current.agendaItemId).toBe(first.id);
+
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = new Promise<string>((resolve) => {
+        client.once('error', (msg: string) => resolve(msg));
+      });
+      client.emit('agenda:delete', { id: first.id });
+      const msg = await errorPromise;
+
+      expect(msg).toBe('Cannot delete the current agenda item');
+      // The agenda is unchanged and `current.agendaItemId` still points at `first`.
+      const after = ctx.meetingManager.get(meeting.id)!;
+      expect(after.agenda).toHaveLength(2);
+      expect(after.current.agendaItemId).toBe(first.id);
+    });
   });
 
   describe('agenda:reorder', () => {

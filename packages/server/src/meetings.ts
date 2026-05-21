@@ -451,22 +451,22 @@ export class MeetingManager {
 
   /**
    * Delete an agenda item by ID from a meeting.
-   * Returns true if the item was found and removed.
+   * Returns true if the item was found and removed. Returns false if the
+   * item is the meeting's current agenda item — the chair must advance off
+   * it (Next Agenda Item) before it can be deleted.
    */
   deleteAgendaItem(meetingId: string, itemId: string): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
+
+    // Refuse to delete the current agenda item — discussion is in progress.
+    if (meeting.current.agendaItemId === itemId) return false;
 
     // Only agenda items — session headers are deleted via `deleteSession`.
     const index = meeting.agenda.findIndex((entry) => isAgendaItem(entry) && entry.id === itemId);
     if (index === -1) return false;
 
     meeting.agenda.splice(index, 1);
-
-    // If the deleted item was the current agenda item, clear the reference
-    if (meeting.current.agendaItemId === itemId) {
-      meeting.current.agendaItemId = undefined;
-    }
 
     this.markDirty(meetingId);
     return true;

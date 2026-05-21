@@ -501,15 +501,18 @@ describe('MeetingManager', () => {
       expect(manager.deleteAgendaItem('no-such-meeting', 'any-id')).toBe(false);
     });
 
-    it('clears currentAgendaItemId when the current item is deleted', () => {
+    it('refuses to delete the current agenda item', () => {
       const meeting = manager.create([testUser]);
       manager.addAgendaItem(meeting.id, 'First', [testUser]);
       manager.addAgendaItem(meeting.id, 'Second', [testUser]);
       manager.nextAgendaItem(meeting.id);
-      expect(meeting.current.agendaItemId).toBeDefined();
+      const currentId = meeting.current.agendaItemId;
+      expect(currentId).toBeDefined();
 
-      manager.deleteAgendaItem(meeting.id, meeting.current.agendaItemId!);
-      expect(meeting.current.agendaItemId).toBeUndefined();
+      const deleted = manager.deleteAgendaItem(meeting.id, currentId!);
+      expect(deleted).toBe(false);
+      expect(meeting.current.agendaItemId).toBe(currentId);
+      expect(meeting.agenda).toHaveLength(2);
     });
 
     it('preserves other items when deleting one', () => {
