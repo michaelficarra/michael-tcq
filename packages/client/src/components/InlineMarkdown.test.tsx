@@ -51,6 +51,31 @@ describe('InlineMarkdown', () => {
     expect(container.textContent).toContain('alert("xss")');
   });
 
+  it('renders the closing tag of an inline-position disallowed element (`<unknown>`)', () => {
+    // Bug repro: an inline `<unknown>foo</unknown>` was emitting just
+    // `<unknown>foo` — the closing tag silently vanished because parse5
+    // dropped it as a stray end-tag. With the pairing fix, both angle-
+    // bracket pairs survive as visible text.
+    const { container } = render(<InlineMarkdown>{'hello <unknown>x</unknown> world'}</InlineMarkdown>);
+    expect(container.querySelector('unknown')).toBeNull();
+    expect(container.textContent).toContain('<unknown>');
+    expect(container.textContent).toContain('</unknown>');
+    expect(container.textContent).toContain('x');
+  });
+
+  it('renders the closing tag when the opener was escaped for a disallowed attribute', () => {
+    // The tag name `u` is on the inline allowlist, but the opener fails
+    // on the disallowed `onclick` attribute. With pairing, the now-orphan
+    // `</u>` is also escaped to text — without it, the close would be
+    // dropped at render time and the user would see `<u onclick="x">foo`
+    // without its `</u>` partner.
+    const { container } = render(<InlineMarkdown>{'before <u onclick="x">foo</u> after'}</InlineMarkdown>);
+    expect(container.querySelector('u')).toBeNull();
+    expect(container.textContent).toContain('<u onclick="x">');
+    expect(container.textContent).toContain('</u>');
+    expect(container.textContent).toContain('foo');
+  });
+
   it('does not use dangerouslySetInnerHTML', () => {
     // The renderer must walk the AST and emit React elements; raw HTML
     // injection is the surface we deliberately removed.

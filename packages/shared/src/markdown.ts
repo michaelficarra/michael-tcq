@@ -353,6 +353,51 @@ function checkBlockHtml(value: string): HtmlCheck {
   return checkHtml(value, ALLOWED_BLOCK_HTML_TAGS, ALLOWED_BLOCK_HTML_ATTRS_BY_TAG);
 }
 
+// -- HTML-token classification ------------------------------------------
+
+type HtmlTokenClassification =
+  | { kind: 'open'; tag: string }
+  | { kind: 'close'; tag: string }
+  | { kind: 'void'; tag: string }
+  | { kind: 'other' };
+
+// Tags on either allowlist that have no end tag in HTML. Used so a bare
+// `<br>` / `<hr>` (no explicit `/>`) is classified as void rather than
+// expecting a matching close on the kept-opens stack. `img` isn't here
+// because it's rejected at the tag level by both allowlists.
+const VOID_HTML_TAGS: readonly string[] = ['br', 'hr'];
+
+// Matches a single HTML start, end, or self-closing tag token. Anchored so
+// it only matches when the entire input is one token (which is what mdast
+// emits as the `value` of an inline `html` node). The optional attribute
+// run is `(?:\s[^>]*?)?` — must begin with whitespace, lazily consumes up
+// to the closing `>`, leaving the optional self-closing `/` exposed.
+const HTML_TAG_TOKEN_REGEX = /^<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*?)?(\/?)>$/;
+
+/**
+ * Classify one mdast `html` node value as an open, close, void, or
+ * non-element fragment. mdast emits each inline tag as its own `html`
+ * node, so the value is always a single HTML token — `<foo>`, `</foo>`,
+ * `<foo/>`, or a comment / doctype / CDATA / processing instruction. The
+ * regex only matches the element-tag forms; everything else falls through
+ * to `other` and is handled by the existing `checkHtml` path (which
+ * already rejects non-element fragments, so they get escaped to text).
+ *
+ * This classification is what lets the sanitiser pair inline open/close
+ * tags so that a close survives iff its matching open did — see how
+ * `escapeNodes` uses the result.
+ */
+function classifyHtmlToken(value: string): HtmlTokenClassification {
+  const m = HTML_TAG_TOKEN_REGEX.exec(value);
+  if (!m) return { kind: 'other' };
+  const tag = m[2].toLowerCase();
+  if (m[1] === '/') return { kind: 'close', tag };
+  if (m[3] === '/' || (VOID_HTML_TAGS as readonly string[]).includes(tag)) {
+    return { kind: 'void', tag };
+  }
+  return { kind: 'open', tag };
+}
+
 // -- Public: validation --------------------------------------------------
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };
@@ -658,6 +703,10 @@ export function stripUnsupportedMarkdown(input: string): string {
  */
 function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): PhrasingContent[] {
   const out: PhrasingContent[] = [];
+  // Mirrors the kept-opens stack in `escapeNodes` — pairs inline
+  // `<foo>` … `</foo>` so a close survives iff its open did. See the
+  // long-form comment in `escapeNodes` for the rationale.
+  const openStack: string[] = [];
   for (const node of nodes) {
     if (node.type === 'image') {
       // Markdown image — escape the source so the reader sees the
@@ -668,11 +717,29 @@ function flattenToInline(nodes: ReadonlyArray<RootContent | PhrasingContent>): P
     if (node.type === 'html') {
       // For inline HTML: keep allow-listed tags verbatim (mdast emits
       // open/close as separate nodes; adjacent text carries the content).
-      // Disallowed HTML becomes a text node containing the original tag
-      // source so the markup appears as the author wrote it.
+      // Disallowed HTML — and orphan closes whose open we already
+      // escaped — become text nodes containing the original tag source so
+      // the markup appears as the author wrote it.
+      const token = classifyHtmlToken(node.value);
+      if (token.kind === 'close') {
+        // Mirrors `escapeNodes` — see the comment there for why we walk
+        // down the stack instead of only matching the top.
+        const matchIdx = openStack.lastIndexOf(token.tag);
+        if (matchIdx !== -1) {
+          openStack.length = matchIdx;
+          out.push(node);
+        } else {
+          out.push({ type: 'text', value: node.value });
+        }
+        continue;
+      }
       const check = checkInlineHtml(node.value);
-      if (check.ok) out.push(node);
-      else out.push({ type: 'text', value: node.value });
+      if (!check.ok) {
+        out.push({ type: 'text', value: node.value });
+        continue;
+      }
+      if (token.kind === 'open') openStack.push(token.tag);
+      out.push(node);
       continue;
     }
     if (!(INLINE_MDAST_TYPES as readonly string[]).includes(node.type)) {
@@ -726,6 +793,21 @@ function escapeNodes(
   block = false,
 ): Array<RootContent | BlockContent | PhrasingContent> {
   const out: Array<RootContent | BlockContent | PhrasingContent> = [];
+  // Stack of tag names whose opening tag we kept as an `html` node and
+  // which still need a matching close. Pairs inline `<foo>` … `</foo>`
+  // across siblings so that a close survives iff its open did. Without
+  // this, two bugs slip through:
+  //   1. parse5 silently drops stray end tags, so `checkHtml('</foo>')`
+  //      returns ok for any unmatched close — letting it through to the
+  //      render pipeline, where parse5 drops it again and the closing
+  //      angle brackets vanish from the rendered DOM.
+  //   2. A close whose individual name is allow-listed but whose open
+  //      was escaped (e.g. `<u onclick="x">…</u>`) would similarly
+  //      survive on its own and then be dropped at render time as an
+  //      orphan end tag.
+  // The stack is local to this sibling list; recursive calls into
+  // `children` get their own stack.
+  const openStack: string[] = [];
   for (const node of nodes) {
     if (node.type === 'image') {
       // Markdown image at any level — escape to literal source text.
@@ -733,12 +815,34 @@ function escapeNodes(
       continue;
     }
     if (node.type === 'html') {
-      const check = block ? checkBlockHtml(node.value) : checkInlineHtml(node.value);
-      if (check.ok) {
-        out.push(node);
-      } else {
-        out.push({ type: 'text', value: node.value });
+      const token = classifyHtmlToken(node.value);
+      if (token.kind === 'close') {
+        // Keep only when a matching open is somewhere on the stack —
+        // walking *down* through intermediate frames pops any opens
+        // whose end tag is optional in HTML (e.g. `<ul><li>foo</ul>`
+        // legitimately omits `</li>`, and the surviving `<ul>` is
+        // deeper down the stack than the unclosed `<li>`). If nothing
+        // matches, escape so the closing angle brackets show up in the
+        // rendered output rather than being dropped at render time.
+        const matchIdx = openStack.lastIndexOf(token.tag);
+        if (matchIdx !== -1) {
+          openStack.length = matchIdx;
+          out.push(node);
+        } else {
+          out.push({ type: 'text', value: node.value });
+        }
+        continue;
       }
+      const check = block ? checkBlockHtml(node.value) : checkInlineHtml(node.value);
+      if (!check.ok) {
+        out.push({ type: 'text', value: node.value });
+        continue;
+      }
+      // Only opens go on the stack; voids and other passing fragments
+      // (e.g. block HTML containing a complete element) don't need
+      // pairing.
+      if (token.kind === 'open') openStack.push(token.tag);
+      out.push(node);
       continue;
     }
     if (node.type === 'link' && !isAllowedUrl(node.url)) {

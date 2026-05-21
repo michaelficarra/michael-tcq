@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   validateInlineMarkdown,
   validateBlockMarkdown,
+  sanitiseInlineMarkdown,
+  sanitiseBlockMarkdown,
   stripUnsupportedMarkdown,
   stripUnsupportedBlockMarkdown,
   extractPlainText,
@@ -163,6 +165,87 @@ describe('stripUnsupportedMarkdown', () => {
     const out = stripUnsupportedMarkdown('![alt](x.png)');
     expect(out).toContain('alt');
     expect(out).toContain('x.png');
+  });
+
+  it('escapes the closing tag of a disallowed inline element so both angle-bracket pairs appear', () => {
+    // Bug: mdast emits inline `<unknown>` and `</unknown>` as separate
+    // html nodes. The closing tag would otherwise pass `checkHtml`
+    // (parse5 drops stray ends, so the for-loop sees nothing) and
+    // survive into the render pipeline, where parse5 drops it a second
+    // time — so the closing angle brackets vanish from the rendered DOM.
+    const out = stripUnsupportedMarkdown('hello <unknown>x</unknown> world');
+    expect(out).toMatch(/\\<unknown>/);
+    expect(out).toMatch(/\\<\/unknown>/);
+    expect(out).toContain('x');
+  });
+
+  it('escapes the closing tag when the matching opener was escaped for a disallowed attribute', () => {
+    // Even though `u` is on the inline allowlist, the opener fails the
+    // attribute check. With pairing, the orphan `</u>` is also escaped so
+    // the closing angle brackets show up rather than being dropped at
+    // render time as a stray end tag.
+    const out = stripUnsupportedMarkdown('<u onclick="x">foo</u>');
+    expect(out).toMatch(/\\<u onclick="x">/);
+    expect(out).toMatch(/\\<\/u>/);
+  });
+});
+
+describe('sanitiseInlineMarkdown — HTML closing-tag pairing', () => {
+  it('escapes the closing tag of a disallowed inline element so it appears as written', () => {
+    const out = sanitiseInlineMarkdown('hello <unknown>x</unknown> world');
+    expect(out).toMatch(/\\<unknown>/);
+    expect(out).toMatch(/\\<\/unknown>/);
+    expect(out).toContain('hello');
+    expect(out).toContain('x');
+    expect(out).toContain('world');
+  });
+
+  it('escapes the closing tag when the matching opener was escaped for a disallowed attribute', () => {
+    const out = sanitiseInlineMarkdown('<u onclick="x">foo</u>');
+    expect(out).toMatch(/\\<u onclick="x">/);
+    expect(out).toMatch(/\\<\/u>/);
+    expect(out).toContain('foo');
+  });
+
+  it('escapes a standalone orphan close tag', () => {
+    const out = sanitiseInlineMarkdown('hi </orphan> there');
+    expect(out).toMatch(/\\<\/orphan>/);
+  });
+
+  it('preserves an allowed open/close pair raw (no escape)', () => {
+    const out = sanitiseInlineMarkdown('hi <b>foo</b> there');
+    // Raw, unescaped — re-renders as a real <b> element.
+    expect(out).toMatch(/(?<!\\)<b>/);
+    expect(out).toMatch(/(?<!\\)<\/b>/);
+  });
+
+  it('escapes the first pair and preserves the second in a mixed run', () => {
+    const out = sanitiseInlineMarkdown('<u onclick="x">a</u> <b>b</b>');
+    expect(out).toMatch(/\\<u onclick="x">/);
+    expect(out).toMatch(/\\<\/u>/);
+    expect(out).toMatch(/(?<!\\)<b>/);
+    expect(out).toMatch(/(?<!\\)<\/b>/);
+  });
+});
+
+describe('sanitiseBlockMarkdown — HTML closing-tag pairing', () => {
+  it('escapes a disallowed inline tag pair within a block paragraph', () => {
+    const out = sanitiseBlockMarkdown('hello <unknown>x</unknown> world');
+    expect(out).toMatch(/\\<unknown>/);
+    expect(out).toMatch(/\\<\/unknown>/);
+  });
+
+  it('walks past optional-end-tag elements when pairing (`<ul><li>foo<li>bar</ul>`)', () => {
+    // `<li>` has an optional end tag in HTML — without walk-down pairing,
+    // the unclosed `<li>` would sit on the stack and the `</ul>` would
+    // fail to find its match and get escaped. The walk-down approach
+    // looks deeper in the stack so the legitimate `</ul>` survives.
+    const out = sanitiseBlockMarkdown('Some text <ul><li>foo<li>bar</ul> after.');
+    expect(out).toMatch(/(?<!\\)<ul>/);
+    expect(out).toMatch(/(?<!\\)<li>/);
+    expect(out).toMatch(/(?<!\\)<\/ul>/);
+    expect(out).toContain('foo');
+    expect(out).toContain('bar');
   });
 });
 
