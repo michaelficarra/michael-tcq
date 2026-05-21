@@ -108,17 +108,19 @@ export async function addAgendaItem(page: Page, name: string, presenters?: strin
     await page.getByLabel('Estimate', { exact: true }).fill(String(estimate));
   }
 
-  // Count items before adding by checking visible item text
   const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
-  const countBefore = await agendaPanel
-    .locator('li')
-    .count()
-    .catch(() => 0);
 
   await page.getByRole('button', { name: 'Create' }).click();
 
-  // Wait for the new item to appear in the list
-  await expect(agendaPanel.locator('li')).toHaveCount(countBefore + 1);
+  // Wait for the new item to appear in the list. The per-item "Edit {name}"
+  // button is a chair-only element (addAgendaItem is chair-only) whose
+  // accessible name is unique to this row, so it sidesteps two ambiguity
+  // pitfalls of a `li`-based check:
+  //   - The auto-inserted `<li aria-label="Overflow">` subheader appears
+  //     once a session's run exceeds capacity, throwing off `li` counts.
+  //   - `hasText: name` matches substrings (e.g. `'A'` matches `'Agenda'`
+  //     in surrounding chrome), so a count of 1 isn't guaranteed.
+  await expect(agendaPanel.getByRole('button', { name: `Edit ${name}`, exact: true })).toBeVisible();
 }
 
 /** Start the meeting (clicks Start Meeting on the Queue tab). */

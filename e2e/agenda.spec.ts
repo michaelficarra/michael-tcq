@@ -375,7 +375,12 @@ test.describe('Agenda tab', () => {
       await addAgendaItem(page, 'C', undefined, 10);
 
       const panel = page.getByRole('tabpanel', { name: 'Agenda' });
-      await expect(panel.getByText(/overflow/i)).toBeVisible();
+      // Three things now signal overflow: the session-header pill, the
+      // auto-inserted overflow subheader li, and the "(overflows Xm)"
+      // annotation on the first overflow row. A bare `getByText(/overflow/i)`
+      // matches all three (strict-mode violation), so we target the
+      // subheader's unique `aria-label="Overflow"`.
+      await expect(panel.getByLabel('Overflow', { exact: true })).toBeVisible();
       await expect(panel.getByText(/remaining/i)).not.toBeVisible();
     });
 

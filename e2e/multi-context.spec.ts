@@ -106,7 +106,13 @@ test.describe('broadcast convergence', () => {
     const url = new URL(page.url());
     const meetingId = decodeURIComponent(url.pathname.split('/meeting/')[1]);
 
-    const second = await openSecondContext(browser, meetingId);
+    // The second context joins as a different mock user so it's a pure
+    // viewer of the author's entry. If both contexts shared an identity,
+    // each would treat the freshly-added pending entry as their own and
+    // auto-open its inline editor — the viewer would never fall through
+    // to display mode, so the saved topic would only live in the input's
+    // `value` (which `getByText` doesn't match).
+    const second = await openSecondContext(browser, meetingId, { asUser: 'alice' });
     try {
       await goToQueueTab(second.page);
 
