@@ -686,7 +686,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             boundary clear. */}
         {isFirstOverflow && overflowAmount > 0 && (
           <span
-            className="ml-2 text-sm font-medium text-red-700 dark:text-red-400 align-middle tabular-nums"
+            className="ml-2 text-sm font-medium text-red-700 dark:text-red-400 align-middle tabular-nums select-none"
             aria-label={`Overflows by ${formatShortDuration(overflowAmount)}`}
           >
             (overflows {formatShortDuration(overflowAmount)})
