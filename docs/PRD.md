@@ -281,6 +281,7 @@ The user's own queue entries are visually distinguished with a coloured left bor
 - If the queue is empty when advancement occurs, the current speaker is cleared.
 - If a chair's view of the current speaker or current agenda item is out of date when the **Next Speaker** or **Next Agenda Item** action reaches the server (for example, another chair has just advanced), the action is rejected to prevent conflicts.
 - Both the **Next Speaker** and **Next Agenda Item** actions are debounced to ignore rapid repeated activations. After a change triggered by another user is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing accidental double-advancement.
+- The **Next Speaker** action additionally enters the same cooldown when the entry that was next-up is deleted out of the queue (for example, its owner removes it just as the chair is about to advance). This prevents the chair from accidentally advancing past the intended speaker to whoever shifts into first place. Reordering the queue or inserting a new entry ahead of the next-up one does not trigger the cooldown — only deletion of the next-up entry does.
 
 ### Queue Reordering
 
