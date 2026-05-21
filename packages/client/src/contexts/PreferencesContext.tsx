@@ -115,6 +115,13 @@ function persistNotificationPrefs(prefs: NotificationPrefs): void {
   }
 }
 
+/**
+ * Section identifiers used by `openPreferences` to scroll the modal to a
+ * particular section when it opens. Extend this union when new sections
+ * grow their own deep-link callers.
+ */
+export type PreferencesSection = 'canned';
+
 interface PreferencesContextValue {
   shortcutsEnabled: boolean;
   setShortcutsEnabled: (enabled: boolean) => void;
@@ -127,7 +134,12 @@ interface PreferencesContextValue {
   notificationPrefs: NotificationPrefs;
   setNotificationPrefs: (prefs: NotificationPrefs) => void;
   showPreferences: boolean;
-  openPreferences: () => void;
+  /** Section the modal should scroll into view on next open. Cleared by
+   *  the modal once it has consumed the value. */
+  focusSection: PreferencesSection | null;
+  /** Mark a section as consumed so subsequent renders don't re-scroll. */
+  clearFocusSection: () => void;
+  openPreferences: (focus?: PreferencesSection) => void;
   closePreferences: () => void;
   togglePreferences: () => void;
 }
@@ -140,6 +152,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [notificationsEnabled, setNotificationsEnabledState] = useState(getNotificationsEnabled);
   const [notificationPrefs, setNotificationPrefsState] = useState<NotificationPrefs>(getNotificationPrefs);
   const [showPreferences, setShowPreferences] = useState(false);
+  // Section the modal should scroll to on next open. Held in context so a
+  // caller (e.g. the canned-response dropdown) can deep-link into a specific
+  // section of the modal without coupling to its internals.
+  const [focusSection, setFocusSection] = useState<PreferencesSection | null>(null);
 
   const setShortcutsEnabled = useCallback((enabled: boolean) => {
     setShortcutsEnabledState(enabled);
@@ -187,9 +203,19 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', onChange);
   }, [theme]);
 
-  const openPreferences = useCallback(() => setShowPreferences(true), []);
-  const closePreferences = useCallback(() => setShowPreferences(false), []);
+  // Optional `focus` argument scrolls the modal to a named section on
+  // open. The modal calls `clearFocusSection` once it has handled the
+  // scroll so a re-render doesn't re-trigger the effect.
+  const openPreferences = useCallback((focus?: PreferencesSection) => {
+    if (focus !== undefined) setFocusSection(focus);
+    setShowPreferences(true);
+  }, []);
+  const closePreferences = useCallback(() => {
+    setShowPreferences(false);
+    setFocusSection(null);
+  }, []);
   const togglePreferences = useCallback(() => setShowPreferences((v) => !v), []);
+  const clearFocusSection = useCallback(() => setFocusSection(null), []);
 
   const value: PreferencesContextValue = {
     shortcutsEnabled,
@@ -201,6 +227,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     notificationPrefs,
     setNotificationPrefs,
     showPreferences,
+    focusSection,
+    clearFocusSection,
     openPreferences,
     closePreferences,
     togglePreferences,

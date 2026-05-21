@@ -61,13 +61,22 @@ interface QueuePanelProps {
   autoEditEntryId: string | null;
   /** Add a queue entry with placeholder text and trigger auto-edit. */
   onAddEntry: (type: import('@tcq/shared').QueueEntryType) => void;
+  /** Called when the user picks a canned response from the dropdown.
+   *  Adds a finished topic entry — no pending state, no auto-edit. */
+  onCannedResponse: (text: string) => void;
   /** Called when the auto-edit has been consumed by the entry component. */
   onAutoEditConsumed: () => void;
   /** Hide the panel when not the active tab (rendered but excluded from a11y tree). */
   hidden?: boolean;
 }
 
-export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hidden = false }: QueuePanelProps) {
+export function QueuePanel({
+  autoEditEntryId,
+  onAddEntry,
+  onCannedResponse,
+  onAutoEditConsumed,
+  hidden = false,
+}: QueuePanelProps) {
   const { meeting, user } = useMeetingState();
   const dispatch = useMeetingDispatch();
   const isChair = useIsChair();
@@ -560,7 +569,7 @@ export function QueuePanel({ autoEditEntryId, onAddEntry, onAutoEditConsumed, hi
       </section>
 
       {/* --- Speaker Entry Controls --- */}
-      <SpeakerControls onAddEntry={onAddEntry} />
+      <SpeakerControls onAddEntry={onAddEntry} onCannedResponse={onCannedResponse} />
 
       {/* --- Speaker Queue Section --- */}
       <section aria-labelledby="queue-heading">

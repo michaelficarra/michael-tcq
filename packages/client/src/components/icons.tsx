@@ -47,3 +47,21 @@ export function CirclePlusIcon({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Solid downward-pointing chevron used to mark a button as a dropdown
+ * trigger. Replaces the ▾ unicode character so the glyph renders
+ * identically across platforms (the unicode triangle varied in weight
+ * and vertical alignment depending on the OS/font fallback).
+ */
+export function ChevronDownIcon({ className = 'w-4 h-4' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.24 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}

@@ -5,6 +5,7 @@ import { QueuePanel } from './QueuePanel.js';
 import { AgendaPanel } from './AgendaPanel.js';
 import { PollReactions } from './PollReactions.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
@@ -32,7 +33,9 @@ function wrapWithProviders(
 ) {
   return (
     <TestMeetingProvider meeting={meeting} user={user}>
-      <SocketContext value={socket}>{ui}</SocketContext>
+      <PreferencesProvider>
+        <SocketContext value={socket}>{ui}</SocketContext>
+      </PreferencesProvider>
     </TestMeetingProvider>
   );
 }
@@ -43,7 +46,12 @@ describe('Presentation mode', () => {
       const meeting = makeMeeting();
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -59,7 +67,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -78,7 +91,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -104,7 +122,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -128,7 +151,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -150,7 +178,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -171,7 +204,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -191,7 +229,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );
@@ -217,7 +260,12 @@ describe('Presentation mode', () => {
       });
       renderInPresentationMode(
         wrapWithProviders(
-          <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />,
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />,
           meeting,
         ),
       );

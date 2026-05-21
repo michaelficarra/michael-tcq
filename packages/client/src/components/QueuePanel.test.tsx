@@ -11,6 +11,7 @@ import type {
 } from '@tcq/shared';
 import { QueuePanel } from './QueuePanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
@@ -65,9 +66,16 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
 function renderQueue(meeting: MeetingState, user: User | null = null, socket: TypedSocket | null = null) {
   return render(
     <TestMeetingProvider meeting={meeting} user={user}>
-      <SocketContext value={socket}>
-        <QueuePanel autoEditEntryId={null} onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
-      </SocketContext>
+      <PreferencesProvider>
+        <SocketContext value={socket}>
+          <QueuePanel
+            autoEditEntryId={null}
+            onAddEntry={() => {}}
+            onCannedResponse={() => {}}
+            onAutoEditConsumed={() => {}}
+          />
+        </SocketContext>
+      </PreferencesProvider>
     </TestMeetingProvider>,
   );
 }
@@ -663,9 +671,16 @@ describe('QueuePanel', () => {
     // For this test, we re-render with autoEditEntryId set.
     const { unmount } = render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
-        <SocketContext value={mockSocket}>
-          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
-        </SocketContext>
+        <PreferencesProvider>
+          <SocketContext value={mockSocket}>
+            <QueuePanel
+              autoEditEntryId="q1"
+              onAddEntry={() => {}}
+              onCannedResponse={() => {}}
+              onAutoEditConsumed={() => {}}
+            />
+          </SocketContext>
+        </PreferencesProvider>
       </TestMeetingProvider>,
     );
 
@@ -692,9 +707,16 @@ describe('QueuePanel', () => {
 
     render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
-        <SocketContext value={mockSocket}>
-          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
-        </SocketContext>
+        <PreferencesProvider>
+          <SocketContext value={mockSocket}>
+            <QueuePanel
+              autoEditEntryId="q1"
+              onAddEntry={() => {}}
+              onCannedResponse={() => {}}
+              onAutoEditConsumed={() => {}}
+            />
+          </SocketContext>
+        </PreferencesProvider>
       </TestMeetingProvider>,
     );
 
@@ -718,9 +740,16 @@ describe('QueuePanel', () => {
 
     render(
       <TestMeetingProvider meeting={meeting} user={chairUser}>
-        <SocketContext value={mockSocket}>
-          <QueuePanel autoEditEntryId="q1" onAddEntry={() => {}} onAutoEditConsumed={() => {}} />
-        </SocketContext>
+        <PreferencesProvider>
+          <SocketContext value={mockSocket}>
+            <QueuePanel
+              autoEditEntryId="q1"
+              onAddEntry={() => {}}
+              onCannedResponse={() => {}}
+              onAutoEditConsumed={() => {}}
+            />
+          </SocketContext>
+        </PreferencesProvider>
       </TestMeetingProvider>,
     );
 

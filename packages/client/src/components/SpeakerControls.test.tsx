@@ -1,9 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
+import { PreferencesProvider } from '../contexts/PreferencesContext.js';
+import { AuthProvider } from '../contexts/AuthContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
+import { __resetCannedResponsesCacheForTests } from '../hooks/useCannedResponses.js';
 
 const testUser: User = {
   ghid: 1,
@@ -16,16 +19,26 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 
-function renderControls(meeting: MeetingState, onAddEntry = vi.fn()) {
+function renderControls(meeting: MeetingState, onAddEntry = vi.fn(), onCannedResponse = vi.fn()) {
   return {
     onAddEntry,
+    onCannedResponse,
     ...render(
       <TestMeetingProvider meeting={meeting} user={testUser}>
-        <SpeakerControls onAddEntry={onAddEntry} />
+        <PreferencesProvider>
+          <SpeakerControls onAddEntry={onAddEntry} onCannedResponse={onCannedResponse} />
+        </PreferencesProvider>
       </TestMeetingProvider>,
     ),
   };
 }
+
+beforeEach(() => {
+  // Each test gets a clean canned-responses cache so a previous test's
+  // mutations don't leak into the next.
+  localStorage.clear();
+  __resetCannedResponsesCacheForTests();
+});
 
 describe('SpeakerControls', () => {
   it('renders New Topic, Clarifying Question, and Point of Order buttons', () => {
@@ -89,5 +102,105 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'New Topic' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+  });
+
+  it('renders the canned-responses trigger button alongside the entry-type buttons', () => {
+    renderControls(makeMeeting());
+    expect(screen.getByRole('button', { name: 'Canned responses' })).toBeInTheDocument();
+  });
+
+  it('disables the canned-responses button when queue is closed for non-chairs', () => {
+    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
+    renderControls(meeting);
+    expect(screen.getByRole('button', { name: 'Canned responses' })).toBeDisabled();
+  });
+});
+
+// ----- Canned responses dropdown -----
+//
+// These tests wrap the component in a real AuthProvider so `useCannedResponses`
+// can key by user.ghid. /api/me is stubbed so the provider resolves without
+// network. Each render awaits an act() tick so the AuthProvider's initial
+// fetch settles before the dropdown reads its (now-seeded) list.
+
+function stubMe(ghid: number, username = 'alice'): void {
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    if (String(url) === '/api/me') {
+      return {
+        ok: true,
+        json: async () => ({ ghid, ghUsername: username, name: username, organisation: '' }),
+      } as Response;
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+}
+
+async function renderControlsWithAuth(meeting: MeetingState, onAddEntry = vi.fn(), onCannedResponse = vi.fn()) {
+  const result = render(
+    <AuthProvider>
+      <TestMeetingProvider meeting={meeting} user={testUser}>
+        <PreferencesProvider>
+          <SpeakerControls onAddEntry={onAddEntry} onCannedResponse={onCannedResponse} />
+        </PreferencesProvider>
+      </TestMeetingProvider>
+    </AuthProvider>,
+  );
+  // Flush AuthProvider's initial /api/me fetch.
+  await act(async () => {});
+  return { onAddEntry, onCannedResponse, ...result };
+}
+
+describe('SpeakerControls — canned responses dropdown', () => {
+  it('opens the dropdown with the seeded default response on first click', async () => {
+    stubMe(1);
+    await renderControlsWithAuth(makeMeeting());
+    const trigger = screen.getByRole('button', { name: 'Canned responses' });
+
+    // Dropdown is closed initially.
+    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole('menu', { name: 'Canned responses' });
+    expect(menu).toBeInTheDocument();
+    // The default seed should be present.
+    expect(screen.getByRole('menuitem', { name: '👍 I support this. (EOM)' })).toBeInTheDocument();
+    // The "Edit…" entry always appears.
+    expect(screen.getByRole('menuitem', { name: /Edit canned responses/ })).toBeInTheDocument();
+  });
+
+  it('calls onCannedResponse with the selected text and closes the menu', async () => {
+    stubMe(1);
+    const { onCannedResponse } = await renderControlsWithAuth(makeMeeting());
+    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
+
+    fireEvent.click(screen.getByRole('menuitem', { name: '👍 I support this. (EOM)' }));
+
+    expect(onCannedResponse).toHaveBeenCalledWith('👍 I support this. (EOM)');
+    // Selecting closes the dropdown.
+    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
+  });
+
+  it('renders the empty-state message when the user has deleted every entry', async () => {
+    // Pre-seed an empty list so the hook doesn't add the default back.
+    localStorage.setItem('tcq:canned-responses:1', JSON.stringify([]));
+    stubMe(1);
+    await renderControlsWithAuth(makeMeeting());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
+
+    expect(screen.getByText(/No canned responses yet/)).toBeInTheDocument();
+    // The Edit entry is still available so the user can recover.
+    expect(screen.getByRole('menuitem', { name: /Edit canned responses/ })).toBeInTheDocument();
+  });
+
+  it('Escape closes the dropdown', async () => {
+    stubMe(1);
+    await renderControlsWithAuth(makeMeeting());
+    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
+    expect(screen.getByRole('menu', { name: 'Canned responses' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
   });
 });

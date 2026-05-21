@@ -1,0 +1,205 @@
+/**
+ * Tests for `useCannedResponses` — per-user localStorage-backed list of
+ * canned queue topics with a 5-item cap.
+ *
+ * Each test wraps the hook in an AuthProvider stub so `user.ghid` drives
+ * the storage key. The module-level cache is cleared between tests so a
+ * previous test's seed doesn't leak into the next.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { AuthProvider } from '../contexts/AuthContext.js';
+import {
+  __resetCannedResponsesCacheForTests,
+  CANNED_RESPONSES_MAX,
+  DEFAULT_CANNED_RESPONSES,
+  useCannedResponses,
+} from './useCannedResponses.js';
+
+/** Stub /api/me so AuthProvider resolves to the requested user. */
+function stubMe(ghid: number, username = 'alice'): void {
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    if (String(url) === '/api/me') {
+      return {
+        ok: true,
+        json: async () => ({ ghid, ghUsername: username, name: username, organisation: '' }),
+      } as Response;
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  }) as typeof fetch;
+}
+
+function wrapper({ children }: { children: ReactNode }) {
+  return <AuthProvider>{children}</AuthProvider>;
+}
+
+/** Render the hook and wait for AuthProvider to populate the user.
+ *  Returns the renderHook result. */
+async function renderUseCannedResponses() {
+  const r = renderHook(() => useCannedResponses(), { wrapper });
+  // Let the /api/me fetch resolve and AuthProvider commit.
+  await act(async () => {});
+  return r;
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  __resetCannedResponsesCacheForTests();
+});
+
+describe('useCannedResponses', () => {
+  it('seeds the default list on first read for a new user', async () => {
+    stubMe(42);
+    const { result } = await renderUseCannedResponses();
+    expect(result.current.responses).toHaveLength(DEFAULT_CANNED_RESPONSES.length);
+    expect(result.current.responses[0].text).toBe('👍 I support this. (EOM)');
+    // Default is persisted so a second mount sees the same ids.
+    const stored = JSON.parse(localStorage.getItem('tcq:canned-responses:42') ?? '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].text).toBe('👍 I support this. (EOM)');
+  });
+
+  it('does not re-seed when storage already has a (possibly empty) list', async () => {
+    localStorage.setItem('tcq:canned-responses:42', JSON.stringify([]));
+    stubMe(42);
+    const { result } = await renderUseCannedResponses();
+    // The user explicitly emptied the list — don't put the default back.
+    expect(result.current.responses).toEqual([]);
+  });
+
+  it('returns an empty list when no user is signed in', () => {
+    // No /api/me stub → AuthProvider keeps user as null
+    const { result } = renderHook(() => useCannedResponses(), { wrapper });
+    expect(result.current.responses).toEqual([]);
+    // Mutations are no-ops without a user, so they don't crash.
+    expect(result.current.add('hi')).toBeNull();
+    result.current.update('x', 'y');
+    result.current.remove('x');
+    result.current.reorder('a', 'b');
+    expect(result.current.responses).toEqual([]);
+  });
+
+  it('add appends a new entry and persists', async () => {
+    stubMe(7);
+    const { result } = await renderUseCannedResponses();
+    const initialLen = result.current.responses.length;
+
+    let newId: string | null = null;
+    await act(async () => {
+      newId = result.current.add('Thanks');
+    });
+
+    expect(newId).not.toBeNull();
+    expect(result.current.responses).toHaveLength(initialLen + 1);
+    expect(result.current.responses[initialLen].text).toBe('Thanks');
+    const stored = JSON.parse(localStorage.getItem('tcq:canned-responses:7') ?? '[]');
+    expect(stored).toHaveLength(initialLen + 1);
+  });
+
+  it('add returns null and is a no-op at the cap', async () => {
+    // Seed exactly MAX entries
+    const full = Array.from({ length: CANNED_RESPONSES_MAX }, (_, i) => ({ id: `id-${i}`, text: `t-${i}` }));
+    localStorage.setItem('tcq:canned-responses:9', JSON.stringify(full));
+    stubMe(9);
+    const { result } = await renderUseCannedResponses();
+    expect(result.current.responses).toHaveLength(CANNED_RESPONSES_MAX);
+
+    let added: string | null = null;
+    await act(async () => {
+      added = result.current.add('overflow');
+    });
+    expect(added).toBeNull();
+    expect(result.current.responses).toHaveLength(CANNED_RESPONSES_MAX);
+  });
+
+  it('update trims text and ignores empty edits', async () => {
+    localStorage.setItem('tcq:canned-responses:5', JSON.stringify([{ id: 'a', text: 'hi' }]));
+    stubMe(5);
+    const { result } = await renderUseCannedResponses();
+
+    await act(async () => {
+      result.current.update('a', '  edited  ');
+    });
+    expect(result.current.responses[0].text).toBe('edited');
+
+    // Empty/whitespace updates are ignored (row reverts on blur in UI).
+    await act(async () => {
+      result.current.update('a', '   ');
+    });
+    expect(result.current.responses[0].text).toBe('edited');
+
+    // Unknown id is also ignored.
+    await act(async () => {
+      result.current.update('does-not-exist', 'nope');
+    });
+    expect(result.current.responses).toEqual([{ id: 'a', text: 'edited' }]);
+  });
+
+  it('remove deletes by id and persists', async () => {
+    localStorage.setItem(
+      'tcq:canned-responses:11',
+      JSON.stringify([
+        { id: 'a', text: 'A' },
+        { id: 'b', text: 'B' },
+      ]),
+    );
+    stubMe(11);
+    const { result } = await renderUseCannedResponses();
+    expect(result.current.responses).toHaveLength(2);
+
+    await act(async () => {
+      result.current.remove('a');
+    });
+    expect(result.current.responses).toEqual([{ id: 'b', text: 'B' }]);
+    expect(JSON.parse(localStorage.getItem('tcq:canned-responses:11') ?? '[]')).toEqual([{ id: 'b', text: 'B' }]);
+  });
+
+  it('reorder moves an entry by id and persists', async () => {
+    localStorage.setItem(
+      'tcq:canned-responses:13',
+      JSON.stringify([
+        { id: 'a', text: 'A' },
+        { id: 'b', text: 'B' },
+        { id: 'c', text: 'C' },
+      ]),
+    );
+    stubMe(13);
+    const { result } = await renderUseCannedResponses();
+
+    // Move 'a' onto 'c' — expect [B, C, A]
+    await act(async () => {
+      result.current.reorder('a', 'c');
+    });
+    expect(result.current.responses.map((r) => r.id)).toEqual(['b', 'c', 'a']);
+
+    // No-op cases.
+    await act(async () => {
+      result.current.reorder('a', 'a');
+    });
+    await act(async () => {
+      result.current.reorder('unknown', 'b');
+    });
+    expect(result.current.responses.map((r) => r.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('caps the read at MAX even if storage has more', async () => {
+    const overflow = Array.from({ length: CANNED_RESPONSES_MAX + 3 }, (_, i) => ({
+      id: `id-${i}`,
+      text: `t-${i}`,
+    }));
+    localStorage.setItem('tcq:canned-responses:21', JSON.stringify(overflow));
+    stubMe(21);
+    const { result } = await renderUseCannedResponses();
+    expect(result.current.responses).toHaveLength(CANNED_RESPONSES_MAX);
+  });
+
+  it('ignores garbled storage rather than crashing', async () => {
+    localStorage.setItem('tcq:canned-responses:99', '{not json');
+    stubMe(99);
+    const { result } = await renderUseCannedResponses();
+    // Garbled storage → empty list (caller may seed by adding entries).
+    expect(result.current.responses).toEqual([]);
+  });
+});

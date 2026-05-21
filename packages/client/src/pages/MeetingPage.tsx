@@ -178,6 +178,26 @@ function MeetingPageInner() {
     [socket, meeting, isChair],
   );
 
+  /**
+   * Add a canned topic to the queue immediately, skipping the pending
+   * initial-edit state. The topic text is passed verbatim — these are
+   * pre-composed entries (typically EOM acknowledgements) that the user
+   * doesn't need to edit. No auto-edit listener is armed, so the entry
+   * lands finished and the focus stays where the user left it.
+   */
+  const addCannedTopic = useCallback(
+    (topic: string) => {
+      if (!socket || !meeting) return;
+      // Mirror the New Topic gate — non-chairs can't bypass a closed queue.
+      if (meeting.queue.closed && !isChair) return;
+      const trimmed = topic.trim();
+      if (!trimmed) return;
+      setActiveTab('queue');
+      socket.emit('queue:add', { type: 'topic', topic: trimmed, pending: false });
+    },
+    [socket, meeting, isChair],
+  );
+
   // --- Keyboard shortcuts ---
 
   /** Advance to the next speaker (chair only). */
@@ -325,6 +345,7 @@ function MeetingPageInner() {
             hidden={activeTab !== 'queue'}
             autoEditEntryId={presentationMode ? null : autoEditEntryId}
             onAddEntry={addQueueEntry}
+            onCannedResponse={addCannedTopic}
             onAutoEditConsumed={handleAutoEditConsumed}
           />
           <LogPanel hidden={activeTab !== 'log'} />

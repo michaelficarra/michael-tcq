@@ -1,0 +1,220 @@
+/**
+ * Per-user canned responses — short, pre-written queue topics the user can
+ * fire into the queue with a single click. Persisted to localStorage,
+ * keyed by `user.ghid` so each authenticated identity has its own list.
+ *
+ * The list has a hard cap of 5 entries. On first read for a given user
+ * (no key in storage), the hook seeds the list with a single default
+ * entry, so a new user immediately has a usable option in the dropdown
+ * without having to open the editor first.
+ *
+ * Internally backed by a module-scope store keyed by storage-key, with
+ * a tiny pub-sub so `useSyncExternalStore` can drive React updates.
+ * This avoids per-instance load effects and gives stable snapshots
+ * across multiple consumers (the dropdown and the editor mounted
+ * simultaneously see the same array reference).
+ */
+
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useAuth } from '../contexts/AuthContext.js';
+
+export interface CannedResponse {
+  id: string;
+  text: string;
+}
+
+/** Maximum number of canned responses a user may save. */
+export const CANNED_RESPONSES_MAX = 5;
+
+/** Default seed used the first time a user opens the dropdown. */
+export const DEFAULT_CANNED_RESPONSES: ReadonlyArray<Pick<CannedResponse, 'text'>> = [
+  { text: '👍 I support this. (EOM)' },
+];
+
+const STORAGE_KEY_PREFIX = 'tcq:canned-responses:';
+
+function storageKey(ghid: number | null): string | null {
+  return ghid == null ? null : `${STORAGE_KEY_PREFIX}${ghid}`;
+}
+
+/** Browser-side ID generator. crypto.randomUUID is widely supported in all
+ *  target browsers; the fallback is a non-cryptographic random string used
+ *  only if the API is unavailable (e.g. very old browsers or insecure
+ *  contexts where randomUUID is unexposed). */
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `cr-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+function seedDefaults(): CannedResponse[] {
+  return DEFAULT_CANNED_RESPONSES.map((d) => ({ id: newId(), text: d.text }));
+}
+
+/** Read and parse the stored list. Returns null when nothing is stored,
+ *  so callers can distinguish "never seeded" from "user emptied the list". */
+function readFromStorage(key: string): CannedResponse[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Defensive filter: ignore anything that doesn't look like a CannedResponse.
+    // A garbled storage value shouldn't crash the dropdown.
+    return parsed
+      .filter(
+        (x): x is CannedResponse =>
+          x != null && typeof x === 'object' && typeof x.id === 'string' && typeof x.text === 'string',
+      )
+      .slice(0, CANNED_RESPONSES_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function writeToStorage(key: string, value: CannedResponse[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Silently fail if localStorage is unavailable. Same pattern used by
+    // PreferencesContext.
+  }
+}
+
+// Module-level cache: storage-key → list. Holding the array here keeps
+// useSyncExternalStore's snapshot stable across renders until a mutation
+// replaces the reference.
+const cache = new Map<string, CannedResponse[]>();
+const listeners = new Set<() => void>();
+// Stable empty array so the "no user signed in" snapshot stays referentially
+// equal across renders.
+const EMPTY: CannedResponse[] = Object.freeze([]) as unknown as CannedResponse[];
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
+/** Return the cached list for a key, loading (and seeding if needed) on
+ *  first access. Always returns the same array reference until a mutation
+ *  replaces it. */
+function getOrLoad(key: string): CannedResponse[] {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const stored = readFromStorage(key);
+  if (stored === null) {
+    const seeded = seedDefaults();
+    writeToStorage(key, seeded);
+    cache.set(key, seeded);
+    return seeded;
+  }
+  cache.set(key, stored);
+  return stored;
+}
+
+function setAndPersist(key: string, next: CannedResponse[]): void {
+  cache.set(key, next);
+  writeToStorage(key, next);
+  notify();
+}
+
+/** Exposed for tests: drop all in-memory cache so the next read re-loads
+ *  from localStorage. Not used in production code. */
+export function __resetCannedResponsesCacheForTests(): void {
+  cache.clear();
+}
+
+export interface UseCannedResponsesResult {
+  /** The current list. Empty array when no user is signed in or the user
+   *  has explicitly deleted every entry. */
+  responses: CannedResponse[];
+  /** Add a new entry at the end. No-op when already at the cap. Returns
+   *  the new entry's id, or null if the cap was hit / no user signed in. */
+  add: (text?: string) => string | null;
+  /** Update an entry's text. Trims and ignores empty values — empty edits
+   *  do not persist, so the row reverts. */
+  update: (id: string, text: string) => void;
+  /** Remove an entry by id. */
+  remove: (id: string) => void;
+  /** Reorder by id pair (active dragged onto over). Compatible with
+   *  @dnd-kit's `onDragEnd`. No-op when ids are equal or unknown. */
+  reorder: (activeId: string, overId: string) => void;
+  /** Hard cap so the UI can disable the Add button. */
+  max: number;
+}
+
+const subscribe = (callback: () => void): (() => void) => {
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
+  };
+};
+
+/**
+ * Hook for reading and mutating the current user's canned responses.
+ *
+ * Returns an empty list when no user is signed in (the dropdown still
+ * renders, but mutation is a no-op until a user is present).
+ */
+export function useCannedResponses(): UseCannedResponsesResult {
+  const { user } = useAuth();
+  const ghid = user?.ghid ?? null;
+  const key = storageKey(ghid);
+
+  // Snapshot getter is recomputed when key changes (new user) so React
+  // resubscribes with a getter pointing at the new cache slot.
+  const getSnapshot = useCallback((): CannedResponse[] => {
+    if (key == null) return EMPTY;
+    return getOrLoad(key);
+  }, [key]);
+
+  const responses = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  return useMemo<UseCannedResponsesResult>(
+    () => ({
+      responses,
+      add(text: string = '') {
+        if (key == null) return null;
+        const current = getOrLoad(key);
+        if (current.length >= CANNED_RESPONSES_MAX) return null;
+        const entry: CannedResponse = { id: newId(), text };
+        setAndPersist(key, [...current, entry]);
+        return entry.id;
+      },
+      update(id, text) {
+        if (key == null) return;
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const current = getOrLoad(key);
+        if (!current.some((r) => r.id === id)) return;
+        setAndPersist(
+          key,
+          current.map((r) => (r.id === id ? { ...r, text: trimmed } : r)),
+        );
+      },
+      remove(id) {
+        if (key == null) return;
+        const current = getOrLoad(key);
+        if (!current.some((r) => r.id === id)) return;
+        setAndPersist(
+          key,
+          current.filter((r) => r.id !== id),
+        );
+      },
+      reorder(activeId, overId) {
+        if (key == null) return;
+        if (activeId === overId) return;
+        const current = getOrLoad(key);
+        const fromIndex = current.findIndex((r) => r.id === activeId);
+        const toIndex = current.findIndex((r) => r.id === overId);
+        if (fromIndex === -1 || toIndex === -1) return;
+        const next = current.slice();
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        setAndPersist(key, next);
+      },
+      max: CANNED_RESPONSES_MAX,
+    }),
+    [responses, key],
+  );
+}

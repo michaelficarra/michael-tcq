@@ -32,8 +32,10 @@ function App() {
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>
+        {/* PreferencesModal sits inside AuthProvider because the Canned
+            Responses section reads/writes per-user (keyed by user.ghid). */}
+        <PreferencesModal />
       </AuthProvider>
-      <PreferencesModal />
     </PreferencesProvider>
   );
 }

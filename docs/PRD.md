@@ -264,6 +264,14 @@ If the author's connection drops before they save (e.g. they close the tab), the
 
 The bouncing-dots animation respects the viewer's reduced-motion preference: when reduced motion is requested, the dots are shown as static, faintly visible markers instead of animating.
 
+### Canned Responses
+
+Beside the entry-type buttons sits a "Canned responses" button — a memo emoji (📝) with a downward-pointing triangle indicating it opens a dropdown. The dropdown lists the user's saved canned queue topics (each truncated with ellipsis to fit, with the full text on hover) followed by an **Edit canned responses…** entry. Clicking a canned response immediately adds a new **New Topic** entry to the queue with the chosen text as its topic, skipping the composing state entirely — the entry appears as a finished topic on every viewer's screen the moment the server processes it, with no typing indicator and no inline editor on the author's side. Like the **New Topic** button, the canned-response button is disabled for non-chairs when the queue is closed; the dropdown itself can still be opened (in any state) to reach **Edit canned responses…**, but selecting an entry is blocked while disabled.
+
+Each user has their own list of canned responses, persisted to the browser's local storage keyed by GitHub user ID, so two accounts sharing a browser do not see each other's list. A user with no stored list (the first time they open the dropdown) is automatically seeded with a single default entry: "👍 I support this. (EOM)". A user who has explicitly emptied their list is not re-seeded; the dropdown shows only the **Edit canned responses…** entry.
+
+The editing interface is a section of the Preferences modal titled **Canned responses**. It lists each saved entry as a row containing a drag handle, an inline text input, and a delete button (✕). Edits commit on blur or Enter; pressing Escape inside an input reverts that row without closing the modal. Entries can be reordered by dragging. The **Add canned response** button below the list inserts a new empty row and focuses its input; if the user blurs the input without typing anything, the empty row is removed. There is a hard cap of five canned responses per user — the **Add** button is disabled once the cap is reached. Empty edits do not persist; a row whose text is cleared and then blurred reverts to its previous value.
+
 ### Queue Display
 
 Each queue entry shows:

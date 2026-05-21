@@ -1,15 +1,34 @@
 /**
- * Preferences modal — currently exposes the keyboard-shortcuts toggle and
- * a light/dark/system theme selector. Reached from the hamburger menu or
- * via the `,` keyboard shortcut.
+ * Preferences modal — exposes the keyboard-shortcuts toggle, notification
+ * settings, the canned-responses editor, and a light/dark/system theme
+ * selector. Reached from the hamburger menu, the canned-response
+ * dropdown's "Edit…" entry, or via the `,` keyboard shortcut.
  *
  * Persists changes to localStorage immediately (no Save button). Modal
  * positioning matches KeyboardShortcutsDialog so the nav bar stays visible.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { CSS } from '@dnd-kit/utilities';
 import { usePreferences, type Theme, type NotificationPrefs } from '../contexts/PreferencesContext.js';
 import { notificationsSupported } from '../lib/notifications.js';
+import { useCannedResponses, type CannedResponse } from '../hooks/useCannedResponses.js';
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -28,6 +47,14 @@ const NOTIFICATION_OPTIONS: { key: keyof NotificationPrefs; label: string }[] = 
   { key: 'onAgendaItemOverrun', label: 'When the current agenda item exceeds its time estimate' },
 ];
 
+// Stable references so useSensor's internal useMemo doesn't invalidate every render.
+const POINTER_SENSOR_OPTIONS = {
+  activationConstraint: { distance: 5 },
+};
+const KEYBOARD_SENSOR_OPTIONS = {
+  coordinateGetter: sortableKeyboardCoordinates,
+};
+
 export function PreferencesModal() {
   const {
     showPreferences,
@@ -40,9 +67,14 @@ export function PreferencesModal() {
     setNotificationsEnabled,
     notificationPrefs,
     setNotificationPrefs,
+    focusSection,
+    clearFocusSection,
   } = usePreferences();
 
   const supported = notificationsSupported();
+
+  // Section refs so we can scroll a deep-linked section into view on open.
+  const cannedSectionRef = useRef<HTMLElement | null>(null);
 
   // Dismiss on Escape while open.
   useEffect(() => {
@@ -53,6 +85,17 @@ export function PreferencesModal() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [showPreferences, closePreferences]);
+
+  // When opened with a focusSection (e.g. from the canned-response
+  // dropdown), scroll that section into view once and then clear the
+  // flag so a later re-render doesn't re-scroll.
+  useEffect(() => {
+    if (!showPreferences || focusSection == null) return;
+    if (focusSection === 'canned') {
+      cannedSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    clearFocusSection();
+  }, [showPreferences, focusSection, clearFocusSection]);
 
   if (!showPreferences) return null;
 
@@ -66,7 +109,7 @@ export function PreferencesModal() {
       aria-modal="true"
     >
       <div
-        className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-md w-full mx-4"
+        className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-md w-full mx-4 max-h-[calc(100vh-6rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -129,6 +172,8 @@ export function PreferencesModal() {
           </div>
         </section>
 
+        <CannedResponsesSection sectionRef={cannedSectionRef} />
+
         <section>
           <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
             <span className="font-medium">Colour scheme</span>
@@ -149,5 +194,177 @@ export function PreferencesModal() {
         </section>
       </div>
     </div>
+  );
+}
+
+// ----- Canned responses editor -----
+
+interface CannedResponsesSectionProps {
+  sectionRef: React.RefObject<HTMLElement | null>;
+}
+
+function CannedResponsesSection({ sectionRef }: CannedResponsesSectionProps) {
+  const { responses, add, update, remove, reorder, max } = useCannedResponses();
+  const atCap = responses.length >= max;
+  // When the user adds a new row, focus its input so they can type
+  // immediately. Tracked here rather than inside the row component so
+  // the focus survives the re-render that adding a row triggers.
+  const [autoFocusId, setAutoFocusId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorder(String(active.id), String(over.id));
+  }
+
+  function handleAdd() {
+    // Seed an empty row and focus it. The row's commit handler removes
+    // the entry if the user blurs without typing anything, so an
+    // abandoned add doesn't leave junk in the list.
+    const newId = add('');
+    if (newId) setAutoFocusId(newId);
+  }
+
+  return (
+    <section ref={sectionRef} className="mb-4" aria-labelledby="canned-responses-heading">
+      <h3 id="canned-responses-heading" className="text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
+        Canned responses
+      </h3>
+      <p className="text-xs text-stone-500 dark:text-stone-500 mb-2">
+        Up to {max} pre-written queue topics you can post with one click.
+      </p>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={responses.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+          <ul className="flex flex-col gap-1" aria-label="Canned responses">
+            {responses.map((r) => (
+              <SortableCannedRow
+                key={r.id}
+                response={r}
+                autoFocus={r.id === autoFocusId}
+                onAutoFocusConsumed={() => setAutoFocusId(null)}
+                onCommit={(text) => {
+                  // Empty commit removes the row — typical for a freshly
+                  // added entry the user backed out of.
+                  if (text.trim() === '') remove(r.id);
+                  else update(r.id, text);
+                }}
+                onDelete={() => remove(r.id)}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+      <button
+        type="button"
+        onClick={handleAdd}
+        disabled={atCap}
+        className={`mt-2 border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-xs font-medium
+                    text-stone-600 dark:text-stone-400 transition-colors
+                    ${atCap ? 'opacity-50 cursor-not-allowed' : 'hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer'}`}
+      >
+        Add canned response
+      </button>
+    </section>
+  );
+}
+
+interface SortableCannedRowProps {
+  response: CannedResponse;
+  autoFocus: boolean;
+  onAutoFocusConsumed: () => void;
+  onCommit: (text: string) => void;
+  onDelete: () => void;
+}
+
+function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit, onDelete }: SortableCannedRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: response.id });
+  const [draft, setDraft] = useState(response.text);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keep the input in sync when the persisted value changes underneath
+  // (e.g. another tab updates it). Avoid clobbering an in-progress edit
+  // by only re-syncing while the input isn't focused.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(response.text);
+  }, [response.text]);
+
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+      onAutoFocusConsumed();
+    }
+  }, [autoFocus, onAutoFocusConsumed]);
+
+  function handleBlur() {
+    if (draft === response.text) return;
+    onCommit(draft);
+  }
+
+  function handleKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      inputRef.current?.blur();
+    } else if (e.key === 'Escape') {
+      // Stop propagation so the modal's document-level listener doesn't
+      // close the dialog when the user only wants to revert this row.
+      e.preventDefault();
+      e.stopPropagation();
+      setDraft(response.text);
+      inputRef.current?.blur();
+    }
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-1 bg-white dark:bg-stone-900 rounded px-1 py-0.5"
+    >
+      <span
+        className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 cursor-ns-resize select-none text-sm leading-none px-1"
+        aria-label="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        ⠿
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        aria-label="Canned response text"
+        placeholder="Canned response text"
+        className="flex-1 min-w-0 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm
+                   bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200
+                   focus:outline-none focus:ring-1 focus:ring-teal-500"
+      />
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label="Delete canned response"
+        className="text-stone-400 hover:text-red-600 dark:text-stone-500 dark:hover:text-red-400 cursor-pointer px-1 text-sm"
+      >
+        ✕
+      </button>
+    </li>
   );
 }
