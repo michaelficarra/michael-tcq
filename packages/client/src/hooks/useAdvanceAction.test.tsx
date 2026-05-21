@@ -274,9 +274,10 @@ describe('useAdvanceAction', () => {
     expect(result.current.disabled).toBe(false);
   });
 
-  it('enters cooldown when a higher-priority entry is inserted at the front of the queue', () => {
-    // E.g. a point-of-order jumps to the front while the chair is reaching
-    // for the Next Speaker button.
+  it('does not enter cooldown when a new entry is inserted ahead of the next-up entry', () => {
+    // A point-of-order jumping to the front shifts the next-up entry, but
+    // the original entry is still in the queue — not a deletion — so the
+    // button stays usable.
     const socket = makeSocket();
     const stateRef = {
       current: {
@@ -296,7 +297,57 @@ describe('useAdvanceAction', () => {
     rerender();
     act(() => vi.advanceTimersByTime(0));
 
-    expect(result.current.disabled).toBe(true);
+    expect(result.current.disabled).toBe(false);
+  });
+
+  it('does not enter cooldown when the queue gains its first entry', () => {
+    // Loading into (or watching) a meeting whose queue fills up from empty
+    // must not disable the button — there was no next-up entry to delete.
+    const socket = makeSocket();
+    const stateRef = {
+      current: {
+        meeting: makeMeeting({ speakerId: 'entry-current', queueIds: [] }),
+        user: alice,
+      },
+    };
+
+    const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
+      wrapper: makeMutableWrapper(stateRef, socket),
+    });
+
+    stateRef.current = {
+      meeting: makeMeeting({ speakerId: 'entry-current', queueIds: ['entry-1'] }),
+      user: alice,
+    };
+    rerender();
+    act(() => vi.advanceTimersByTime(0));
+
+    expect(result.current.disabled).toBe(false);
+  });
+
+  it('does not enter cooldown when the next-up entry is reordered but stays in the queue', () => {
+    // A reorder that pushes a different entry to the front is not a
+    // deletion — the original next-up entry is still queued.
+    const socket = makeSocket();
+    const stateRef = {
+      current: {
+        meeting: makeMeeting({ speakerId: 'entry-current', queueIds: ['entry-a', 'entry-b'] }),
+        user: alice,
+      },
+    };
+
+    const { result, rerender } = renderHook(() => useAdvanceAction('queue:next'), {
+      wrapper: makeMutableWrapper(stateRef, socket),
+    });
+
+    stateRef.current = {
+      meeting: makeMeeting({ speakerId: 'entry-current', queueIds: ['entry-b', 'entry-a'] }),
+      user: alice,
+    };
+    rerender();
+    act(() => vi.advanceTimersByTime(0));
+
+    expect(result.current.disabled).toBe(false);
   });
 
   it('does not enter cooldown when only later queue entries change', () => {
