@@ -158,6 +158,26 @@ test.describe('Entering the Queue', () => {
       await viewerCtx.close();
     }
   });
+
+  test("advancing past a pending entry closes the author's stale editor", async ({ page }) => {
+    // The chair pops the head entry while the author is still composing.
+    // The entry vanishes from the queue (it becomes the current speaker),
+    // and the inline editor — which was tied to that row — must go with
+    // it. Without this, Save/Cancel from the stale editor would fire
+    // against a deleted entry id and surface a "Queue entry not found"
+    // error to the author.
+    await page.getByRole('button', { name: 'New Topic' }).click();
+    const input = page.getByLabel('Topic description');
+    await expect(input).toBeVisible();
+
+    // The author (also the chair in this single-user test) clicks Next
+    // Speaker, which pops their own pending entry off the queue.
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+
+    // Editor is gone; the popped author is now the current speaker.
+    await expect(input).not.toBeVisible();
+    await expect(page.getByText('The queue is empty.')).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
