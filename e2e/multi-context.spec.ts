@@ -366,8 +366,14 @@ test.describe('prologue conflict banner', () => {
       await expect(overwrite).not.toBeVisible();
       await expect(page.getByText(/Another chair has updated the prologue/i)).toBeVisible();
 
-      // Dismissing the banner via the × clears it.
-      await page.getByLabel('Dismiss conflict warning').click();
+      // Dismissing the toast via the × clears it. Scope the dismiss control to
+      // the warning toast (which carries the conflict text) so it can't collide
+      // with any other role="status" region on the page.
+      await page
+        .getByRole('status')
+        .filter({ hasText: /Another chair has updated/i })
+        .getByLabel('Dismiss notification')
+        .click();
       await expect(page.getByText(/Another chair has updated the prologue/i)).not.toBeVisible();
     } finally {
       await second.context.close();
