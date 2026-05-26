@@ -160,12 +160,7 @@ export function PollSetup({ onCancel, onStarted }: PollSetupProps) {
 
       {/* Selection mode */}
       <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400 mb-3 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={multiSelect}
-          onChange={(e) => setMultiSelect(e.target.checked)}
-          className="accent-teal-600"
-        />
+        <input type="checkbox" checked={multiSelect} onChange={(e) => setMultiSelect(e.target.checked)} />
         Allow selecting multiple options
       </label>
 

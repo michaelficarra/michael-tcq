@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Declare support for both schemes so the first paint (before the bundled
+         CSS loads) themes the canvas correctly for system-default users. The CSS
+         `color-scheme` rules in index.css, keyed off the `.dark` class, are the
+         authoritative source once the stylesheet is parsed. -->
+    <meta name="color-scheme" content="light dark" />
     <title>TCQ</title>
   </head>
   <body>

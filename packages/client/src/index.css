@@ -3,6 +3,27 @@
 /* Class-based dark mode — the PreferencesContext toggles `.dark` on <html>. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Reflect the resolved theme to the browser via `color-scheme`, so UA-rendered
+ * surfaces (native form controls, scrollbars, the canvas/background) match the
+ * active theme. `.dark` lives on <html>, so it outranks `:root` and pins the
+ * scheme exactly for pinned-light, pinned-dark, and `system` alike.
+ *
+ * `accent-color` brand-tints native controls (checkboxes, radios, range,
+ * progress) — teal-500 reads better on dark surfaces than teal-600. Scrollbars
+ * are intentionally left to `color-scheme`: setting `scrollbar-color` would
+ * flicker on WebKit and is ignored by default on macOS overlay scrollbars.
+ */
+:root {
+  color-scheme: light;
+  accent-color: var(--color-teal-600);
+}
+
+.dark {
+  color-scheme: dark;
+  accent-color: var(--color-teal-500);
+}
+
 html {
   overflow-x: hidden;
 }
