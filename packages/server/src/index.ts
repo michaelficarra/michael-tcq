@@ -26,6 +26,7 @@ import { createMeetingRoutes } from './routes.js';
 import { createAuthRoutes } from './auth.js';
 import { requireAuth } from './requireAuth.js';
 import { mockAuth, isOAuthConfigured } from './mockAuth.js';
+import { securityHeaders } from './securityHeaders.js';
 import { registerSocketHandlers } from './socket.js';
 import { versionHandler } from './versionRoute.js';
 import { httpLogger } from './httpLogger.js';
@@ -142,6 +143,10 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // --- Express middleware ---
+
+// Send security headers (e.g. Referrer-Policy, to avoid leaking meeting links)
+// on every response. Mounted first so it covers auth, API, and static assets.
+app.use(securityHeaders);
 
 app.use(express.json());
 app.use(sessionMiddleware);
