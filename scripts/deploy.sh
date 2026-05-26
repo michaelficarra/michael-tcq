@@ -544,11 +544,13 @@ ensure_firewall_rules() {
 #
 #   1. Writes /etc/systemd/system/tcq.service      — runs the TCQ container
 #   2. Writes /etc/systemd/system/caddy.service    — runs Caddy in front
-#   3. Writes /etc/caddy/Caddyfile                  — domain → 127.0.0.1:3000
-#   4. Writes /etc/tcq/env                          — server env vars
-#   5. Writes /etc/systemd/system/tcq-redeploy.service — receives `docker
+#   3. Writes /etc/systemd/system/tcq-firewall.service — opens 80/443 on the
+#      COS host firewall each boot (the VPC rule alone isn't enough)
+#   4. Writes /etc/caddy/Caddyfile                  — domain → 127.0.0.1:3000
+#   5. Writes /etc/tcq/env                          — server env vars
+#   6. Writes /etc/systemd/system/tcq-redeploy.service — receives `docker
 #      pull && systemctl restart tcq` from the deploy script via SSH
-#   6. Enables and starts both units on boot
+#   7. Enables and starts the units on boot
 #
 # `Restart=always` on each service handles crash recovery; both units
 # come back automatically on COS auto-update reboots.
@@ -618,6 +620,30 @@ write_files:
     [Install]
     WantedBy=multi-user.target
 
+# COS ships a locked-down host firewall (iptables INPUT defaults to deny,
+# permitting only SSH/ICMP/established) on top of the VPC firewall rule. The
+# VPC rule alone isn't enough — without this the host drops inbound 80/443 and
+# Caddy can never complete the ACME challenge. Re-applied on every boot because
+# runtime iptables rules don't survive COS auto-update reboots.
+- path: /etc/systemd/system/tcq-firewall.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Open host firewall for HTTP/HTTPS (COS defaults to deny)
+    After=network-online.target
+    Wants=network-online.target
+    Before=caddy.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    # -C checks for an existing rule so re-runs within a boot stay idempotent.
+    ExecStart=/bin/sh -c 'iptables -C INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp -m multiport --dports 80,443 -j ACCEPT'
+
+    [Install]
+    WantedBy=multi-user.target
+
 - path: /etc/caddy/Caddyfile
   permissions: 0644
   owner: root
@@ -645,6 +671,7 @@ $([ -n "${GITHUB_CALLBACK_URL:-}" ] && echo "    GITHUB_CALLBACK_URL=${GITHUB_CA
 runcmd:
 - mkdir -p /var/lib/tcq /var/lib/caddy/data /var/lib/caddy/config
 - systemctl daemon-reload
+- systemctl enable --now tcq-firewall.service
 - systemctl enable --now tcq.service
 - systemctl enable --now caddy.service
 EOF
