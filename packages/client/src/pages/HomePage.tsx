@@ -116,17 +116,17 @@ export function HomePage() {
   return (
     <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
       <nav
-        className="shrink-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 shadow-md"
+        className="scrollbar-hide shrink-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 overflow-x-auto shadow-md"
         aria-label="Main navigation"
       >
         {/* Branding */}
-        <span className="flex items-center py-3">
+        <span className="shrink-0 flex items-center py-3">
           <Logo />
         </span>
 
         {/* Tab toggles. Rendered as <a> so middle/modifier-click open in a new
             tab; left-click is intercepted to drive the SPA tab state. */}
-        <div className="flex items-stretch gap-4" role="tablist" aria-label="Home views">
+        <div className="flex shrink-0 items-stretch gap-4" role="tablist" aria-label="Home views">
           <HomeTabLink tab="join" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Join Meeting" />
           {isAdmin && <HomeTabLink tab="admin" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Admin" />}
           <HomeTabLink tab="help" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Help" />
@@ -136,7 +136,7 @@ export function HomePage() {
         <div className="flex-1" />
 
         {/* User menu */}
-        <div className="flex items-stretch">
+        <div className="shrink-0 flex items-stretch">
           <UserMenu />
         </div>
       </nav>
