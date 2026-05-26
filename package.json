@@ -14,6 +14,7 @@
     "pretest": "npm run build -w @tcq/shared",
     "test": "npm run test -w packages/server -w packages/client",
     "test:e2e": "npx playwright test",
+    "screenshots": "node scripts/regenerate-screenshots.mjs",
     "ci": "concurrently -g -n format,typecheck,lint,build -c cyan,blue,magenta,yellow \"npm run format:check\" \"npm run typecheck\" \"npm run lint\" \"npm run build\" && concurrently -g -n test,test:e2e -c green,red \"npm test\" \"npm run test:e2e\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -25,6 +26,7 @@
     "@playwright/test": "^1.59.1",
     "concurrently": "^9.1.0",
     "eslint-config-prettier": "^10.1.8",
+    "oxipng-bin": "^1.0.0",
     "prettier": "^3.8.3"
   }
 }

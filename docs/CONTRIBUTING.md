@@ -73,6 +73,7 @@ e2e/        — Playwright end-to-end tests
 | `npm run format:check` | Check formatting without making changes                |
 | `npm test`             | Run all unit and integration tests                     |
 | `npm run test:e2e`     | Run Playwright end-to-end tests                        |
+| `npm run screenshots`  | Regenerate the README screenshots                      |
 | `npm run ci`           | Run all CI checks locally                              |
 
 ### Per-workspace scripts
@@ -169,6 +170,22 @@ npm run test:e2e -- --headed
 # Open the Playwright Inspector for step-by-step debugging
 npm run test:e2e -- --debug
 ```
+
+## Regenerating README Screenshots
+
+The README's "Screenshots" section embeds images from `docs/screenshots/`. When a UI change shifts what those screenshots show, regenerate them with:
+
+```sh
+npm run screenshots
+```
+
+The master script (`scripts/regenerate-screenshots.mjs`) spawns an isolated server + client on ports 3002 / 5175, runs each per-screenshot Playwright script in `scripts/screenshots/`, and finishes with a lossless `oxipng` pass. Pass `--filter=<name>` to regenerate a single shot while iterating, or `--dry-run` to validate seeding + rendering without writing PNGs (this is what CI runs in the `screenshots-dry-run` job). Run an individual script standalone against `npm run dev`:
+
+```sh
+node scripts/screenshots/queue-chair.mjs
+```
+
+See [`scripts/screenshots/README.md`](../scripts/screenshots/README.md) for the full reference, including how to add a new screenshot.
 
 ## SVG Assets
 

@@ -61,3 +61,21 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+  # Catches drift between the screenshot harness (REST + Socket emit
+  # shapes, selector-driven UI rendering) and the rest of the codebase
+  # without producing new committable PNGs. The harness spawns its own
+  # isolated server on ports 3002 / 5175 and exits non-zero if any
+  # per-screenshot script fails to reach the screenshotting step.
+  screenshots-dry-run:
+    name: Screenshots (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run screenshots -- --dry-run

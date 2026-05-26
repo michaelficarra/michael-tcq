@@ -41,9 +41,17 @@ export function useMeetingLog(meetingId: string | undefined): UseMeetingLogResul
 
   const fetchLog = useCallback(async () => {
     if (!meetingId) return;
+    // Snapshot the cursor at fetch start so we can detect overlapping
+    // fetches that started from the same point. In React StrictMode the
+    // mount effect runs twice and would otherwise produce two concurrent
+    // `cursor=null` fetches whose results would both `setEntries(prev
+    // => [...prev, ...newEntries])` — appending the same entries twice.
+    // After awaiting the response we check the cursor again: if another
+    // call has already advanced it, our payload overlaps and we drop it.
+    const cursorAtStart = cursorRef.current;
     const url = new URL(`/api/meetings/${meetingId}/log`, window.location.origin);
-    if (cursorRef.current !== null) {
-      url.searchParams.set('since', cursorRef.current);
+    if (cursorAtStart !== null) {
+      url.searchParams.set('since', cursorAtStart);
     }
     const headers: Record<string, string> = {};
     if (etagRef.current !== null) {
@@ -60,6 +68,9 @@ export function useMeetingLog(meetingId: string | undefined): UseMeetingLogResul
     // 304: client is up to date; nothing to do.
     if (res.status === 304) return;
     if (!res.ok) return;
+    // Overlapping fetch — another caller already processed at least this
+    // range. Discard our payload so we don't duplicate.
+    if (cursorRef.current !== cursorAtStart) return;
     const newEntries = (await res.json()) as LogEntry[];
     if (newEntries.length > 0) {
       setEntries((prev) => [...prev, ...newEntries]);

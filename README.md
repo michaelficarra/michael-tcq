@@ -67,38 +67,60 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 ## Screenshots
 
-![Home page](docs/screenshots/home-page.png)
-Join or create a meeting from the home page.
+<figure>
+<figcaption>Join or create a meeting from the home page.</figcaption>
+<img src="docs/screenshots/home-page.png" alt="Home page">
+</figure>
 
-![Queue tab](docs/screenshots/queue-participant.png)
-The speaker queue with priority-ordered entries from a particpant's perspective.
+<figure>
+<figcaption>The speaker queue with priority-ordered entries from a participant's perspective.</figcaption>
+<img src="docs/screenshots/queue-participant.png" alt="Queue tab">
+</figure>
 
-![Queue tab with chair controls](docs/screenshots/queue-chair.png)
-The speaker queue with chair controls.
+<figure>
+<figcaption>The speaker queue with chair controls.</figcaption>
+<img src="docs/screenshots/queue-chair.png" alt="Queue tab with chair controls">
+</figure>
 
-![Dark mode](docs/screenshots/dark-mode.png)
-Dark mode follows the system colour scheme by default, and can be overridden in the Preferences modal.
+<figure>
+<figcaption>Dark mode follows the system colour scheme by default, and can be overridden in the Preferences modal.</figcaption>
+<img src="docs/screenshots/dark-mode.png" alt="Dark mode">
+</figure>
 
-![Agenda tab](docs/screenshots/agenda.png)
-The agenda tab with chairs, numbered items, and drag-to-reorder.
+<figure>
+<figcaption>The agenda tab with chairs, numbered items, and drag-to-reorder.</figcaption>
+<img src="docs/screenshots/agenda.png" alt="Agenda tab">
+</figure>
 
-![Agenda with sessions](docs/screenshots/sessions.png)
-Sessions group a contiguous run of agenda items by capacity. Each session header shows capacity, used, and remaining (or overflow when the run exceeds its budget).
+<figure>
+<figcaption>Sessions group a contiguous run of agenda items by capacity. Each session header shows capacity, used, and remaining (or overflow when the run exceeds its budget).</figcaption>
+<img src="docs/screenshots/sessions.png" alt="Agenda with sessions">
+</figure>
 
-![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png)
-Press `?` to view all keyboard shortcuts.
+<figure>
+<figcaption>Press <code>?</code> to view all keyboard shortcuts.</figcaption>
+<img src="docs/screenshots/keyboard-shortcuts.png" alt="Keyboard shortcuts">
+</figure>
 
-![Create poll](docs/screenshots/create-poll.png)
-Configuring a poll with customisable emoji and label options.
+<figure>
+<figcaption>Configuring a poll with customisable emoji and label options.</figcaption>
+<img src="docs/screenshots/create-poll.png" alt="Create poll">
+</figure>
 
-![Active poll](docs/screenshots/active-poll.png)
-An active poll showing reaction buttons with counts.
+<figure>
+<figcaption>An active poll showing reaction buttons with counts.</figcaption>
+<img src="docs/screenshots/active-poll.png" alt="Active poll">
+</figure>
 
-![Meeting log](docs/screenshots/meeting-log.png)
-The log tab showing a timeline of meeting events with speaker topics and durations.
+<figure>
+<figcaption>The log tab showing a timeline of meeting events with speaker topics and durations.</figcaption>
+<img src="docs/screenshots/meeting-log.png" alt="Meeting log">
+</figure>
 
-![Help tab](docs/screenshots/help.png)
-Built-in help page explaining the tool for participants and chairs.
+<figure>
+<figcaption>Built-in help page explaining the tool for participants and chairs.</figcaption>
+<img src="docs/screenshots/help.png" alt="Help tab">
+</figure>
 
 ## Quick Start
 
