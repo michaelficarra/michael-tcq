@@ -22,7 +22,12 @@ export interface MeetingContextState {
    */
   activeConnections: number;
 
-  /** Error message from the server (e.g. "Meeting not found"). */
+  /**
+   * Terminal load error — set when the server reports an error before any
+   * meeting state has arrived (e.g. "Meeting not found" on a bad join), so
+   * the meeting page can show a full-page fallback. In-meeting, non-fatal
+   * errors are surfaced as transient toasts instead (see useSocketConnection).
+   */
   error: string | null;
 
   /**
@@ -75,9 +80,9 @@ export type MeetingAction =
 export function meetingReducer(state: MeetingContextState, action: MeetingAction): MeetingContextState {
   switch (action.type) {
     case 'state':
-      // Full state replacement from the server — clears any previous error
-      // and re-seeds the version cursor from the bootstrap snapshot. Used
-      // for initial join, automatic reconnect, and `state:resync` replies.
+      // Full state replacement from the server — clears any terminal load
+      // error and re-seeds the version cursor from the bootstrap snapshot.
+      // Used for initial join, automatic reconnect, and `state:resync` replies.
       return {
         ...state,
         meeting: action.meeting,

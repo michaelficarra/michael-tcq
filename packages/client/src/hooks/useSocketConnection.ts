@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import type { TypedSocket } from '../contexts/SocketContext.js';
 import { useMeetingDispatch, type MeetingAction } from '../contexts/MeetingContext.js';
+import { useToast } from '../contexts/ToastContext.js';
 
 /**
  * Discriminated-action types that mirror the server's delta event names.
@@ -46,6 +47,7 @@ const DELTA_EVENT_TYPES = [
  */
 export function useSocketConnection(meetingId: string, userGhid: number | null): TypedSocket | null {
   const dispatch = useMeetingDispatch();
+  const { showToast } = useToast();
   const socketRef = useRef<TypedSocket | null>(null);
   // The version cursor lives in a ref rather than React state so the
   // socket listeners can both read it and *write* it synchronously. If
@@ -146,10 +148,18 @@ export function useSocketConnection(meetingId: string, userGhid: number | null):
       dispatch({ type: 'setServerRevision', revision });
     });
 
-    // Server-side validation errors (e.g. "Meeting not found",
-    // "Only chairs can..." etc.)
+    // Server-side errors split by whether a meeting has loaded yet:
+    //  - Before any bootstrap `state` (cursor still null): a terminal join
+    //    failure like "Meeting not found". Dispatch to context so the page
+    //    shows its full-page error fallback rather than a toast that vanishes.
+    //  - After the meeting is loaded: a non-fatal validation error (e.g. "The
+    //    queue is closed", "Only chairs can…"). Surface it as a transient toast.
     socket.on('error', (message) => {
-      dispatch({ type: 'setError', error: message });
+      if (lastSeenVersionRef.current === null) {
+        dispatch({ type: 'setError', error: message });
+      } else {
+        showToast({ message, variant: 'error' });
+      }
     });
 
     return () => {
@@ -158,7 +168,7 @@ export function useSocketConnection(meetingId: string, userGhid: number | null):
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
-  }, [meetingId, dispatch, userGhid]);
+  }, [meetingId, dispatch, showToast, userGhid]);
 
   // eslint-disable-next-line react-hooks/refs -- Ref is synchronised by the effect above; reading it here is safe.
   return socketRef.current;

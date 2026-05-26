@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { MeetingState, User } from '@tcq/shared';
 import { MeetingPage } from './MeetingPage.js';
 import { PreferencesProvider } from '../contexts/PreferencesContext.js';
+import { ToastProvider } from '../contexts/ToastContext.js';
 
 // -- Mocks --
 
@@ -55,11 +56,13 @@ function renderMeetingPage(hash = '') {
   window.location.hash = hash;
   return render(
     <PreferencesProvider>
-      <MemoryRouter initialEntries={[`/meeting/test${hash}`]}>
-        <Routes>
-          <Route path="/meeting/:id" element={<MeetingPage />} />
-        </Routes>
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={[`/meeting/test${hash}`]}>
+          <Routes>
+            <Route path="/meeting/:id" element={<MeetingPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
     </PreferencesProvider>,
   );
 }

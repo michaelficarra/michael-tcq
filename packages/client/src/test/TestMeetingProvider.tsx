@@ -6,6 +6,7 @@
 import type { ReactNode } from 'react';
 import type { MeetingState, User } from '@tcq/shared';
 import { MeetingStateContext, MeetingDispatchContext, type MeetingContextState } from '../contexts/MeetingContext.js';
+import { ToastProvider } from '../contexts/ToastContext.js';
 
 interface TestMeetingProviderProps {
   meeting: MeetingState | null;
@@ -36,9 +37,13 @@ export function TestMeetingProvider({
     serverRevision: null,
   };
 
+  // ToastProvider is included so components that raise toasts (e.g. AgendaPanel's
+  // edit-conflict warning) work under test without each spec wiring it up.
   return (
     <MeetingStateContext value={state}>
-      <MeetingDispatchContext value={() => {}}>{children}</MeetingDispatchContext>
+      <MeetingDispatchContext value={() => {}}>
+        <ToastProvider>{children}</ToastProvider>
+      </MeetingDispatchContext>
     </MeetingStateContext>
   );
 }

@@ -279,6 +279,88 @@ abbr {
     border: 0;
     padding: 0;
   }
+
+  /* Toasts are popovers too — neutralise the same UA box so the bottom-right
+     anchor (set unlayered below) and the Tailwind chrome (border, padding) on
+     the element win. */
+  .tcq-toast {
+    inset: auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* The stale-version banner is a `popover="manual"` too. Clear the UA box so
+     the Tailwind `fixed top-0 left-0 right-0` full-width top bar wins instead
+     of the UA's `inset: 0; margin: auto` centring. */
+  .tcq-stale-banner {
+    inset: auto;
+    margin: 0;
+    border: 0;
+    padding: 0;
+  }
+}
+
+/*
+ * Toast notifications — transient in-app messages (server errors, failed
+ * actions, edit conflicts) promoted to the top layer via `popover="manual"`
+ * (see ToastRegion). Cosmetic chrome (colour, border, padding, shadow) rides
+ * on Tailwind utilities; this block owns positioning and the entry/exit
+ * animation into/out of the top layer — same `@starting-style` for entry +
+ * `allow-discrete` for a layered exit as `.tcq-dialog`.
+ *
+ * Anchored bottom-right; each toast is translated up by `--toast-offset` (set
+ * inline from JS-measured heights) to stack the queue.
+ */
+.tcq-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+
+  /* Closed / exit state — the :popover-open rules transition back to this. */
+  opacity: 0;
+  translate: 0 0.5rem;
+  transition:
+    opacity 0.18s ease-out,
+    translate 0.18s ease-out;
+}
+
+/* allow-discrete lets display/overlay (discrete properties) animate so the
+   toast stays painted and layered during its exit, rather than vanishing
+   instantly. Guarded with @supports — where it's unsupported the toast simply
+   pops out, which is harmless. */
+@supports (transition-behavior: allow-discrete) {
+  .tcq-toast {
+    transition:
+      opacity 0.18s ease-out,
+      translate 0.18s ease-out,
+      display 0.18s allow-discrete,
+      overlay 0.18s allow-discrete;
+    transition-behavior: allow-discrete;
+  }
+}
+
+.tcq-toast:popover-open {
+  opacity: 1;
+  translate: 0 calc(-1 * var(--toast-offset, 0px));
+
+  /* Where the toast animates *from* the first time it's shown — slides up and
+     fades in from just below its resting spot. */
+  @starting-style {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}
+
+/* Respect reduced-motion: keep the stack offset (it's layout, not motion) but
+   drop the slide and collapse the fade to near-instant. */
+@media (prefers-reduced-motion: reduce) {
+  .tcq-toast,
+  .tcq-toast:popover-open {
+    translate: 0 calc(-1 * var(--toast-offset, 0px));
+  }
+  .tcq-toast {
+    transition-duration: 0.01s;
+  }
 }
 
 /*

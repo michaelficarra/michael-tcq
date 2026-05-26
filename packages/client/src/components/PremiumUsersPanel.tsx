@@ -20,14 +20,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PremiumUsersResponse } from '@tcq/shared';
+import { useToast } from '../contexts/ToastContext.js';
 import { UserBadge } from './UserBadge.js';
 import { UserCombobox } from './UserCombobox.js';
 import { CircleXIcon } from './icons.js';
 
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
+  const { showToast } = useToast();
   const [usernames, setUsernames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   // Monotonic generation counter for response ordering. Bumped on every
   // mutation (add / remove); GET responses that resolve with an older
   // generation than the latest mutation are discarded — they would
@@ -77,7 +78,6 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
     const optimistic = [...usernames, canonical].sort();
     generationRef.current++;
     setUsernames(optimistic);
-    setError(null);
     try {
       const res = await fetch('/api/admin/premium-users', {
         method: 'POST',
@@ -94,11 +94,11 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // Roll back the optimistic add and surface the server message.
         setUsernames(usernames);
         const body = await res.json().catch(() => ({}));
-        setError(typeof body.error === 'string' ? body.error : 'Failed to add premium user');
+        showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to add premium user' });
       }
     } catch {
       setUsernames(usernames);
-      setError('Failed to add premium user');
+      showToast({ message: 'Failed to add premium user' });
     }
   }
 
@@ -107,20 +107,19 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
     const previous = usernames;
     generationRef.current++;
     setUsernames(usernames.filter((u) => u !== username));
-    setError(null);
     try {
       const res = await fetch(`/api/admin/premium-users/${encodeURIComponent(username)}`, { method: 'DELETE' });
       if (!res.ok) {
         setUsernames(previous);
         const body = await res.json().catch(() => ({}));
-        setError(typeof body.error === 'string' ? body.error : 'Failed to remove premium user');
+        showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to remove premium user' });
       } else {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
         setUsernames(body.usernames);
       }
     } catch {
       setUsernames(previous);
-      setError('Failed to remove premium user');
+      showToast({ message: 'Failed to remove premium user' });
     }
   }
 
@@ -140,12 +139,6 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
           ariaLabel="Add premium user"
           inputClassName="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
-
-        {error && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
 
         {usernames.length === 0 ? (
           <p className="text-sm text-stone-600 dark:text-stone-300 italic">No premium users yet.</p>

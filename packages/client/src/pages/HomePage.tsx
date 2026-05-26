@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
+import { useToast } from '../contexts/ToastContext.js';
 import { AdminPanel } from '../components/AdminPanel.js';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.js';
 import { PremiumUsersPanel } from '../components/PremiumUsersPanel.js';
@@ -248,12 +249,11 @@ function AdminSection() {
 
 function JoinMeetingCard() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [meetingId, setMeetingId] = useState('');
-  const [error, setError] = useState('');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
 
     const trimmed = meetingId.trim();
     if (!trimmed) return;
@@ -261,7 +261,7 @@ function JoinMeetingCard() {
     // Check the meeting exists before navigating
     const res = await fetch(`/api/meetings/${encodeURIComponent(trimmed)}`);
     if (!res.ok) {
-      setError('Meeting not found');
+      showToast({ message: 'Meeting not found' });
       return;
     }
 
@@ -288,13 +288,6 @@ function JoinMeetingCard() {
                      focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
         />
 
-        {/* Error message */}
-        {error && (
-          <p className="text-red-700 dark:text-red-400 text-sm mb-2" role="alert">
-            {error}
-          </p>
-        )}
-
         <button
           type="submit"
           className="mt-2 bg-teal-700 text-white px-4 py-2 rounded text-sm font-medium
@@ -313,13 +306,12 @@ function JoinMeetingCard() {
 function NewMeetingCard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [error, setError] = useState('');
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
 
   /** Create a new meeting with the current user as the only chair. */
   async function handleCreate() {
     if (!user) return;
-    setError('');
     setLoading(true);
 
     try {
@@ -331,7 +323,7 @@ function NewMeetingCard() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Failed to create meeting' }));
-        setError(body.error ?? 'Failed to create meeting');
+        showToast({ message: body.error ?? 'Failed to create meeting' });
         return;
       }
 
@@ -340,7 +332,7 @@ function NewMeetingCard() {
       // co-chairs — the Queue is empty and uninteresting for a fresh meeting.
       navigate(`/meeting/${meeting.id}#agenda`);
     } catch {
-      setError('Failed to create meeting');
+      showToast({ message: 'Failed to create meeting' });
     } finally {
       setLoading(false);
     }
@@ -353,13 +345,6 @@ function NewMeetingCard() {
       <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
         You will be the initial chair. Additional chairs can be added from the Agenda tab after the meeting is created.
       </p>
-
-      {/* Error message */}
-      {error && (
-        <p className="text-red-700 dark:text-red-400 text-sm mb-2" role="alert">
-          {error}
-        </p>
-      )}
 
       <button
         onClick={handleCreate}

@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { PreferencesProvider } from './contexts/PreferencesContext.js';
+import { ToastProvider } from './contexts/ToastContext.js';
 import { PreferencesModal } from './components/PreferencesModal.js';
 import { LoginPage } from './pages/LoginPage.js';
 
@@ -29,12 +30,18 @@ function App() {
   return (
     <PreferencesProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-        {/* PreferencesModal sits inside AuthProvider because the Saved
-            Topics section reads/writes per-user (keyed by user.ghid). */}
-        <PreferencesModal />
+        {/* ToastProvider wraps the router so any surface — home page, meeting
+            page, and the socket layer inside MeetingProvider — can raise
+            toasts. Toasts render in the top layer, so its position in the tree
+            doesn't affect where they appear. */}
+        <ToastProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+          {/* PreferencesModal sits inside AuthProvider because the Saved
+              Topics section reads/writes per-user (keyed by user.ghid). */}
+          <PreferencesModal />
+        </ToastProvider>
       </AuthProvider>
     </PreferencesProvider>
   );

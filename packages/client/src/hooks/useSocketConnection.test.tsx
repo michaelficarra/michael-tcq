@@ -28,6 +28,7 @@ import { act, renderHook } from '@testing-library/react';
 import { io } from 'socket.io-client';
 import { createMockSocket, type MockSocketHarness } from '../test/mockSocket.js';
 import { MeetingProvider, useMeetingState } from '../contexts/MeetingContext.js';
+import { ToastProvider } from '../contexts/ToastContext.js';
 import { useSocketConnection } from './useSocketConnection.js';
 import { makeMeeting } from '../test/makeMeeting.js';
 
@@ -81,7 +82,11 @@ function renderHookInProvider(initialProps: HookProps = { meetingId: 'test-meeti
       return { socket, state };
     },
     {
-      wrapper: ({ children }: { children: ReactNode }) => <MeetingProvider>{children}</MeetingProvider>,
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ToastProvider>
+          <MeetingProvider>{children}</MeetingProvider>
+        </ToastProvider>
+      ),
       initialProps,
     },
   );

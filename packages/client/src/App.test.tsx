@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.js';
 import { PreferencesProvider } from './contexts/PreferencesContext.js';
+import { ToastProvider } from './contexts/ToastContext.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { HomePage } from './pages/HomePage.js';
 
@@ -54,11 +55,13 @@ function renderHomePage() {
 
   return render(
     <PreferencesProvider>
-      <MemoryRouter>
-        <AuthProvider>
-          <HomePage />
-        </AuthProvider>
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter>
+          <AuthProvider>
+            <HomePage />
+          </AuthProvider>
+        </MemoryRouter>
+      </ToastProvider>
     </PreferencesProvider>,
   );
 }

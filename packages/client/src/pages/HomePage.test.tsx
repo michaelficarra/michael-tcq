@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { User } from '@tcq/shared';
 import { HomePage } from './HomePage.js';
 import { PreferencesProvider } from '../contexts/PreferencesContext.js';
+import { ToastProvider } from '../contexts/ToastContext.js';
 
 // -- Mocks --
 
@@ -37,9 +38,11 @@ function renderHomePage(hash = '') {
   window.location.hash = hash;
   return render(
     <PreferencesProvider>
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter>
+          <HomePage />
+        </MemoryRouter>
+      </ToastProvider>
     </PreferencesProvider>,
   );
 }

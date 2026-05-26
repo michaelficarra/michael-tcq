@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { AgendaPanel } from './AgendaPanel.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
@@ -923,7 +923,7 @@ describe('AgendaPanel', () => {
       expect(screen.getByText('to be deleted')).toBeInTheDocument();
     });
 
-    it('Save with the conflict banner up opens an overwrite confirmation', () => {
+    it('Save with the conflict toast up opens an overwrite confirmation', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       const meeting = makeChairMeeting({ prologue: 'original' });
@@ -951,7 +951,7 @@ describe('AgendaPanel', () => {
           </SocketContext>
         </TestMeetingProvider>,
       );
-      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText(/another chair has updated the prologue/i)).toBeInTheDocument();
 
       // Click Save — this should open the overwrite dialogue, not emit yet.
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -1033,13 +1033,13 @@ describe('AgendaPanel', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('shows a sticky conflict banner when the value changes mid-edit', () => {
+    it('shows a sticky conflict toast when the value changes mid-edit', () => {
       const meeting = makeChairMeeting({ prologue: 'original' });
       const { rerender } = renderAgenda(meeting, chairUser);
 
       // Open the editor on the populated section.
       fireEvent.click(screen.getByRole('button', { name: /edit prologue/i }));
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText(/another chair has updated the prologue/i)).not.toBeInTheDocument();
 
       // Simulate another chair's update arriving — rerender with new state.
       const updated = makeChairMeeting({ prologue: 'updated by someone else' });
@@ -1051,11 +1051,10 @@ describe('AgendaPanel', () => {
         </TestMeetingProvider>,
       );
 
-      const banner = screen.getByRole('alert');
-      expect(banner).toHaveTextContent(/another chair has updated the prologue/i);
+      expect(screen.getByText(/another chair has updated the prologue/i)).toBeInTheDocument();
 
-      // The banner is sticky: a further update doesn't dismiss it and doesn't
-      // re-fire any toast — it just stays.
+      // The toast is sticky: a further update doesn't dismiss it and doesn't
+      // raise a second one — exactly one stays.
       const updatedAgain = makeChairMeeting({ prologue: 'another remote change' });
       rerender(
         <TestMeetingProvider meeting={updatedAgain} user={chairUser}>
@@ -1064,11 +1063,15 @@ describe('AgendaPanel', () => {
           </SocketContext>
         </TestMeetingProvider>,
       );
-      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getAllByText(/another chair has updated the prologue/i)).toHaveLength(1);
 
-      // The dismiss button clears the banner without exiting the editor.
-      fireEvent.click(screen.getByRole('button', { name: /dismiss conflict warning/i }));
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      // Closing the toast clears the conflict without exiting the editor.
+      // (The close button hides the popover via popovertargetaction in a real
+      // browser; jsdom doesn't process invokers, so drive hidePopover directly
+      // — it fires the same `toggle` the close button would.)
+      const toast = screen.getByRole('status');
+      act(() => toast.hidePopover());
+      expect(screen.queryByText(/another chair has updated the prologue/i)).not.toBeInTheDocument();
       expect(screen.getByRole('textbox', { name: /agenda prologue/i })).toBeInTheDocument();
     });
   });

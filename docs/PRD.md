@@ -221,13 +221,13 @@ Clicking the dashed placeholder (or the chair-only "edit" control on a populated
 Two destructive / overwriting actions are gated behind a confirmation dialogue:
 
 - **Deleting a populated section** — clicking the chair-only "delete" control opens a "Delete prologue/epilogue?" dialogue. The section is only cleared once the chair confirms.
-- **Knowingly overwriting another chair's changes** — when the conflict banner (described below) is showing, clicking Save opens an "Overwrite prologue/epilogue?" dialogue before the chair's draft is committed. Without the conflict banner, Save submits directly.
+- **Knowingly overwriting another chair's changes** — when the conflict warning (described below) is active, clicking Save opens an "Overwrite prologue/epilogue?" dialogue before the chair's draft is committed. Without an active conflict, Save submits directly.
 
 Saving with an empty textarea still clears the section directly (no confirmation), since the chair is acting on their own draft rather than on another chair's saved content. The two flows differ in scope: the "delete" control acts on the saved content; emptying the editor acts on the chair's own working draft.
 
 #### Concurrent Edits
 
-If another chair updates the same section while the editor is open, a sticky warning banner appears above the textarea ("Another chair has updated the [prologue/epilogue] while you were editing. Saving will overwrite their changes."). The banner does **not** auto-dismiss — chairs can finish their thought and read the warning afterwards. It clears when the chair dismisses it explicitly (×), cancels the edit, or saves. Clicking Save while the banner is showing opens the overwrite confirmation dialogue described above.
+If another chair updates the same section while the editor is open, a sticky warning toast appears (see [In-app notifications](#in-app-notifications)) reading "Another chair has updated the [prologue/epilogue] while you were editing. Saving will overwrite their changes." Unlike transient toasts, this one does **not** auto-dismiss — chairs can finish their thought and read the warning afterwards. It clears when the chair dismisses it, cancels the edit, or saves. Clicking Save while the warning is active opens the overwrite confirmation dialogue described above.
 
 #### Rendering
 
@@ -516,10 +516,16 @@ A small connection status indicator is displayed in the bottom-right corner of t
 
 If the deployed server version changes while a participant is in a meeting — for example after a redeploy — a banner appears at the top of the meeting page reading "A new version of TCQ is available. Reloading in N seconds&hellip;" with a countdown and an immediate "Reload now" button. The page reloads automatically after the countdown. The short grace period lets participants copy anything they were typing before the reload discards in-progress input. The check is scoped to the meeting page (the only surface that pins the participant to a specific server via a long-lived WebSocket); other pages reload naturally on next interaction.
 
+## In-app notifications
+
+Transient, in-app messages — server-reported errors, failed actions, and edit conflicts — surface as **toasts**: small dismissible cards stacked in the bottom-right corner, above all page content. Each toast has an explicit close (×) button. Most toasts are **transient** and auto-dismiss after a few seconds (e.g. "The queue is closed", "Failed to create meeting", a rejected action from the server); the edit-conflict warning is the exception — it is **persistent** and stays until the chair dismisses it, cancels, or saves. Toasts entering and leaving animate (a slide-and-fade), respecting `prefers-reduced-motion`.
+
+This is distinct from the browser-native **Notifications** described above (which fire at the OS level, even when the tab is in the background) and from the bottom-left connection-status indicator.
+
 ## Error Handling
 
-- Fatal errors (e.g. "Meeting not found") are shown as a full-page error with a link back to the home page.
-- Non-fatal errors (e.g. "Only chairs can...") are shown as a dismissible red banner at the top of the meeting page.
+- Fatal errors (e.g. "Meeting not found" when a meeting fails to load) are shown as a full-page error with a link back to the home page.
+- Non-fatal errors (e.g. "Only chairs can...", "The queue is closed") are shown as transient, dismissible toasts (see [In-app notifications](#in-app-notifications)).
 
 ## Persistence
 

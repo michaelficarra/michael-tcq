@@ -45,6 +45,7 @@ import type { AgendaItem, Session } from '@tcq/shared';
 import { formatShortDuration, isAgendaItem, isSession, normaliseGithubUsername, userKey } from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
+import { useToast } from '../contexts/ToastContext.js';
 import { computeContainment } from '../lib/containment.js';
 import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
@@ -1154,15 +1155,17 @@ interface EditableMarkdownSectionProps {
  *     "Delete prologue?" dialogue; the delete only fires after
  *     confirmation.
  *   - **Overwrite**: if another chair changed the section while the
- *     editor was open (signalled by the conflict banner), pressing Save
- *     opens an "Overwrite their changes?" dialogue. Without the
- *     conflict banner, Save submits directly.
+ *     editor was open (signalled by the conflict toast), pressing Save
+ *     opens an "Overwrite their changes?" dialogue. Without an active
+ *     conflict, Save submits directly.
  *
- * Concurrent edits surface a sticky conflict banner: if the value
- * arriving via socket changes while the editor is open, we show a
- * warning above the textarea that does NOT auto-dismiss — chairs can
- * finish their thought, read the warning, and then decide to
- * Save/Cancel/dismiss.
+ * Concurrent edits surface a persistent warning toast: if the value
+ * arriving via socket changes while the editor is open, we raise a
+ * non-auto-dismissing toast — chairs can finish their thought, read the
+ * warning, and then decide to Save/Cancel/dismiss. The local `conflict`
+ * flag is what actually gates Save (an active conflict turns Save into an
+ * overwrite confirmation); the toast is just its presentation, kept in
+ * sync below.
  */
 function EditableMarkdownSection({
   kind,
@@ -1172,21 +1175,24 @@ function EditableMarkdownSection({
   ariaLabel,
   onSave,
 }: EditableMarkdownSectionProps) {
+  const { showToast, dismissToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [conflict, setConflict] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [overwriteConfirm, setOverwriteConfirm] = useState(false);
+  // Id of the live conflict toast, so we can dismiss it when the conflict
+  // resolves (save / cancel / unmount).
+  const conflictToastRef = useRef<string | null>(null);
   // Snapshot of the value at the moment editing started. A change in
   // the incoming `value` prop while the editor is open means another
   // chair just modified the same section.
   const baselineRef = useRef<string | undefined>(undefined);
 
-  // Detect concurrent edits while the textarea is open. The banner is
-  // sticky: once shown, it stays until the user dismisses, cancels, or
+  // Detect concurrent edits while the textarea is open. The conflict is
+  // sticky: once flagged, it stays until the user dismisses, cancels, or
   // saves — but we update the baseline so a *further* remote change
-  // doesn't re-flash the banner (its presence already conveys the
-  // condition).
+  // doesn't re-flash it (its presence already conveys the condition).
   useEffect(() => {
     if (!editing) return;
     if (value !== baselineRef.current) {
@@ -1194,6 +1200,38 @@ function EditableMarkdownSection({
       baselineRef.current = value;
     }
   }, [editing, value]);
+
+  // Mirror the `conflict` flag onto a persistent warning toast. Raised when the
+  // conflict appears, dismissed when it clears. A manual close of the toast
+  // clears `conflict` too (via onDismiss) — same as dismissing the old inline
+  // banner, so a subsequent Save no longer warns.
+  useEffect(() => {
+    if (conflict && conflictToastRef.current === null) {
+      conflictToastRef.current = showToast({
+        message: `Another chair has updated the ${kind} while you were editing. Saving will overwrite their changes.`,
+        variant: 'warning',
+        durationMs: null,
+        onDismiss: () => {
+          conflictToastRef.current = null;
+          setConflict(false);
+        },
+      });
+    } else if (!conflict && conflictToastRef.current !== null) {
+      const id = conflictToastRef.current;
+      conflictToastRef.current = null;
+      dismissToast(id);
+    }
+  }, [conflict, kind, showToast, dismissToast]);
+
+  // Tidy up if the section unmounts while the conflict toast is still up.
+  useEffect(() => {
+    return () => {
+      if (conflictToastRef.current !== null) {
+        dismissToast(conflictToastRef.current);
+        conflictToastRef.current = null;
+      }
+    };
+  }, [dismissToast]);
 
   function startEditing() {
     setDraft(value ?? '');
@@ -1223,9 +1261,9 @@ function EditableMarkdownSection({
 
   function handleSaveClick(e?: FormEvent) {
     e?.preventDefault();
-    // If the conflict banner is showing, the chair is about to
-    // knowingly overwrite another chair's changes — confirm first.
-    // Without a conflict signal, Save commits directly.
+    // If a conflict is active, the chair is about to knowingly overwrite
+    // another chair's changes — confirm first. Without a conflict signal,
+    // Save commits directly.
     if (conflict) {
       setOverwriteConfirm(true);
       return;
@@ -1250,24 +1288,6 @@ function EditableMarkdownSection({
     if (!isChair) return null;
     return (
       <section aria-label={ariaLabel} className="mb-4 presentation-hidden">
-        {conflict && (
-          <div
-            role="alert"
-            className="mb-2 flex items-start gap-2 rounded border border-amber-400 dark:border-amber-500/60 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
-          >
-            <span className="flex-1">
-              Another chair has updated the {kind} while you were editing. Saving will overwrite their changes.
-            </span>
-            <button
-              type="button"
-              onClick={() => setConflict(false)}
-              aria-label="Dismiss conflict warning"
-              className="shrink-0 text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer leading-none"
-            >
-              ×
-            </button>
-          </div>
-        )}
         <form onSubmit={handleSaveClick} className="flex flex-col gap-2">
           <textarea
             value={draft}

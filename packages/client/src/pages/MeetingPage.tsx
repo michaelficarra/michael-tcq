@@ -2,9 +2,10 @@
  * Meeting page — the main view when a user has joined a meeting.
  *
  * Connects to the server via Socket.IO, receives meeting state, and
- * renders the nav bar with Agenda/Queue tab panels. Shows error
- * messages from the server (e.g. "Meeting not found"). Registers
- * keyboard shortcuts for common actions.
+ * renders the nav bar with Agenda/Queue tab panels. A join failure (no
+ * meeting ever loads, e.g. "Meeting not found") shows a full-page error;
+ * non-fatal in-meeting errors surface as transient toasts via useToast.
+ * Registers keyboard shortcuts for common actions.
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -13,6 +14,7 @@ import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
+import { useToast } from '../contexts/ToastContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { useStaleVersionCheck } from '../hooks/useStaleVersionCheck.js';
 import { useKeyboardShortcuts, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
@@ -75,6 +77,7 @@ function MeetingPageInner() {
   const [presentationMode, setPresentationMode] = useState(false);
   const { meeting, connected, activeConnections, error, serverRevision } = useMeetingState();
   const dispatch = useMeetingDispatch();
+  const { showToast } = useToast();
   const { user } = useAuth();
   const socket = useSocketConnection(meetingId ?? '', user?.ghid ?? null);
   // Watches for a Cloud Run revision change vs the revision this WebSocket
@@ -188,8 +191,8 @@ function MeetingPageInner() {
    * The dropdown already disables saved topics whose priority isn't currently
    * addable, so the guards below normally only matter on a network-delay race
    * (state changed between render and click). When they fire — or the server
-   * rejects the add — we surface the reason in the error banner and don't
-   * enqueue anything.
+   * rejects the add — we surface the reason in a toast and don't enqueue
+   * anything.
    */
   const addSavedTopic = useCallback(
     (topic: string, type: import('@tcq/shared').QueueEntryType) => {
@@ -198,22 +201,22 @@ function MeetingPageInner() {
       if (!trimmed) return;
       // A reply needs a live topic to attach to.
       if (type === 'reply' && !meeting.current.topic) {
-        dispatch({ type: 'setError', error: 'No topic is currently active - you can not reply' });
+        showToast({ message: 'No topic is currently active - you can not reply' });
         return;
       }
       // A closed queue blocks everything but a Point of Order for non-chairs.
       if (meeting.queue.closed && !isChair && type !== 'point-of-order') {
-        dispatch({ type: 'setError', error: 'The queue is closed' });
+        showToast({ message: 'The queue is closed' });
         return;
       }
       setActiveTab('queue');
       // Replies carry the precondition the server checks against the live topic.
       const currentTopicSpeakerId = type === 'reply' ? (meeting.current.topic?.speakerId ?? null) : undefined;
       socket.emit('queue:add', { type, topic: trimmed, pending: false, currentTopicSpeakerId }, (response) => {
-        if (!response.ok) dispatch({ type: 'setError', error: response.error ?? 'Failed to add to the queue' });
+        if (!response.ok) showToast({ message: response.error ?? 'Failed to add to the queue' });
       });
     },
-    [socket, meeting, isChair, dispatch],
+    [socket, meeting, isChair, showToast],
   );
 
   // --- Keyboard shortcuts ---
@@ -327,29 +330,7 @@ function MeetingPageInner() {
         className={`h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}
       >
         {/* Navigation and controls are hidden in presentation mode */}
-        {!presentationMode && (
-          <>
-            <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
-
-            {/* Dismissible error banner for non-fatal errors */}
-            {error && (
-              <div
-                className="shrink-0 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-2 text-sm text-red-700 dark:text-red-300
-                           flex items-center justify-between"
-                role="alert"
-              >
-                <span>{error}</span>
-                <button
-                  onClick={() => dispatch({ type: 'setError', error: '' })}
-                  className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 ml-4 cursor-pointer"
-                  aria-label="Dismiss error"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </>
-        )}
+        {!presentationMode && <NavBar activeTab={activeTab} onTabChange={setActiveTab} />}
 
         {/*
           All four tab panels are always rendered; the inactive ones carry the

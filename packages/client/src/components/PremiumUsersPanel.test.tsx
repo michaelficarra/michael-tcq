@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PremiumUsersPanel } from './PremiumUsersPanel.js';
+import { ToastProvider } from '../contexts/ToastContext.js';
 
 // We mock `fetch` rather than spinning up a real server — same approach as
 // AdminPanel.test.tsx. Tests focus on the optimistic update / rollback
@@ -29,7 +30,11 @@ function mockMutationResponse(usernames: string[], ok = true, error?: string) {
 }
 
 function renderPanel() {
-  return render(<PremiumUsersPanel refreshTick={0} />);
+  return render(
+    <ToastProvider>
+      <PremiumUsersPanel refreshTick={0} />
+    </ToastProvider>,
+  );
 }
 
 describe('PremiumUsersPanel', () => {
