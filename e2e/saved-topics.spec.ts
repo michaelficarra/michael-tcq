@@ -6,6 +6,9 @@
  * - Clicking a saved topic adds a finished topic to the queue immediately,
  *   skipping the pending/initial-edit state.
  * - The editor in Preferences supports add / edit / delete.
+ * - Each saved topic has a configurable priority; a saved topic whose
+ *   priority isn't currently addable (e.g. a Reply with no active topic) is
+ *   disabled in the dropdown, and becomes usable once it is addable.
  * - Per-user isolation: switching to a different mock user shows a fresh
  *   default list, not the previous user's customisations.
  */
@@ -97,6 +100,53 @@ test.describe('Saved topics', () => {
     const menu2 = page.getByRole('menu', { name: 'Saved topics' });
     await expect(menu2.getByRole('menuitem', { name: 'Strongly agree.' })).toBeVisible();
     await expect(menu2.getByRole('menuitem', { name: '👍 LGTM. (EOM)' })).toHaveCount(0);
+  });
+
+  test('a Reply-priority saved topic is disabled until a topic is active, then enqueues', async ({ page }) => {
+    await setupStartedMeeting(page);
+    await goToQueueTab(page);
+
+    // Give the seeded default the Reply priority via the editor.
+    await page.getByRole('button', { name: 'Saved topics' }).click();
+    await page.getByRole('menuitem', { name: /Edit saved topics/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Preferences' });
+    const firstRow = dialog.getByRole('list', { name: 'Saved topics' }).getByRole('listitem').nth(0);
+    // The priority <select> exposes types by value ('topic', 'reply', …).
+    await firstRow.getByLabel('Saved topic priority').selectOption('reply');
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+
+    // With no active topic, the reply-priority entry is disabled.
+    await page.getByRole('button', { name: 'Saved topics' }).click();
+    const menu = page.getByRole('menu', { name: 'Saved topics' });
+    const item = menu.getByRole('menuitem', { name: '👍 I support this. (EOM)' });
+    await expect(item).toBeDisabled();
+    await expect(item).toHaveAttribute('title', 'No active topic to reply to');
+    await page.keyboard.press('Escape');
+
+    // Make a topic active: add a New Topic and advance to it. (Inlined rather
+    // than using the addQueueEntry helper, whose substring "Save" match also
+    // matches the "Saved topics" button.)
+    await page
+      .getByRole('group', { name: 'Queue entry types' })
+      .getByRole('button', { name: 'New Topic', exact: true })
+      .click();
+    await page.getByLabel('Topic description').fill('Discuss the agenda');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Next Speaker' }).click();
+    await expect(page.getByRole('button', { name: 'Discuss Current Topic' })).toBeVisible();
+
+    // Now the reply-priority entry is usable and enqueues immediately.
+    await page.getByRole('button', { name: 'Saved topics' }).click();
+    const item2 = page
+      .getByRole('menu', { name: 'Saved topics' })
+      .getByRole('menuitem', { name: '👍 I support this. (EOM)' });
+    await expect(item2).toBeEnabled();
+    await item2.click();
+
+    // It lands as a finished entry (no editor) and shows in the queue.
+    await expect(page.getByText('👍 I support this. (EOM)')).toBeVisible();
+    await expect(page.getByLabel('Topic description')).toHaveCount(0);
   });
 
   test('per-user lists are isolated', async ({ page }) => {

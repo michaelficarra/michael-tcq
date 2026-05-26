@@ -61,9 +61,10 @@ interface QueuePanelProps {
   autoEditEntryId: string | null;
   /** Add a queue entry with placeholder text and trigger auto-edit. */
   onAddEntry: (type: import('@tcq/shared').QueueEntryType) => void;
-  /** Called when the user picks a saved topic from the dropdown.
-   *  Adds a finished topic entry — no pending state, no auto-edit. */
-  onSavedTopic: (text: string) => void;
+  /** Called when the user picks a saved topic from the dropdown. Adds a
+   *  finished entry at the saved topic's priority — no pending state, no
+   *  auto-edit. */
+  onSavedTopic: (text: string, type: import('@tcq/shared').QueueEntryType) => void;
   /** Called when the auto-edit has been consumed by the entry component. */
   onAutoEditConsumed: () => void;
   /** Hide the panel when not the active tab (rendered but excluded from a11y tree). */

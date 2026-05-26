@@ -26,6 +26,8 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
+import type { QueueEntryType } from '@tcq/shared';
+import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_EMOJI } from '@tcq/shared';
 import { usePreferences, type Theme, type NotificationPrefs } from '../contexts/PreferencesContext.js';
 import { notificationsSupported } from '../lib/notifications.js';
 import { useSavedTopics, type SavedTopic } from '../hooks/useSavedTopics.js';
@@ -204,7 +206,7 @@ interface SavedTopicsSectionProps {
 }
 
 function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
-  const { topics, add, update, remove, reorder, max } = useSavedTopics();
+  const { topics, add, update, setType, remove, reorder, max } = useSavedTopics();
   const atCap = topics.length >= max;
   // When the user adds a new row, focus its input so they can type
   // immediately. Tracked here rather than inside the row component so
@@ -236,7 +238,8 @@ function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
         Saved topics
       </h3>
       <p className="text-xs text-stone-500 dark:text-stone-500 mb-2">
-        Up to {max} pre-written queue topics you can post with one click.
+        Pre-written queue topics you can post with one click. The dropdown beside each sets the priority it
+        joins the queue as.
       </p>
       <DndContext
         sensors={sensors}
@@ -258,6 +261,7 @@ function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
                   if (text.trim() === '') remove(r.id);
                   else update(r.id, text);
                 }}
+                onTypeChange={(type) => setType(r.id, type)}
                 onDelete={() => remove(r.id)}
               />
             ))}
@@ -283,6 +287,7 @@ interface SortableSavedTopicRowProps {
   autoFocus: boolean;
   onAutoFocusConsumed: () => void;
   onCommit: (text: string) => void;
+  onTypeChange: (type: QueueEntryType) => void;
   onDelete: () => void;
 }
 
@@ -291,6 +296,7 @@ function SortableSavedTopicRow({
   autoFocus,
   onAutoFocusConsumed,
   onCommit,
+  onTypeChange,
   onDelete,
 }: SortableSavedTopicRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic.id });
@@ -363,6 +369,24 @@ function SortableSavedTopicRow({
                    bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200
                    focus:outline-none focus:ring-1 focus:ring-teal-500"
       />
+      {/* Priority selector. Shows the entry-type emoji only to stay compact;
+          the human label rides along as each option's accessible name/title. */}
+      <select
+        value={topic.type}
+        onChange={(e) => onTypeChange(e.target.value as QueueEntryType)}
+        aria-label="Saved topic priority"
+        title={QUEUE_ENTRY_LABELS[topic.type]}
+        className="shrink-0 border border-stone-300 dark:border-stone-600 rounded px-1 py-0.5 text-sm
+                   bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200
+                   focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+      >
+        {/* Reversed so the dropdown reads New Topic → … → Point of Order. */}
+        {[...QUEUE_ENTRY_TYPES].reverse().map((type) => (
+          <option key={type} value={type} aria-label={QUEUE_ENTRY_LABELS[type]} title={QUEUE_ENTRY_LABELS[type]}>
+            {QUEUE_ENTRY_EMOJI[type]}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={onDelete}

@@ -179,23 +179,41 @@ function MeetingPageInner() {
   );
 
   /**
-   * Add a saved topic to the queue immediately, skipping the pending
-   * initial-edit state. The topic text is passed verbatim — these are
-   * pre-composed entries (typically EOM acknowledgements) that the user
-   * doesn't need to edit. No auto-edit listener is armed, so the entry
+   * Add a saved topic to the queue immediately at its configured priority,
+   * skipping the pending initial-edit state. The topic text is passed verbatim
+   * — these are pre-composed entries (typically EOM acknowledgements) that the
+   * user doesn't need to edit. No auto-edit listener is armed, so the entry
    * lands finished and the focus stays where the user left it.
+   *
+   * The dropdown already disables saved topics whose priority isn't currently
+   * addable, so the guards below normally only matter on a network-delay race
+   * (state changed between render and click). When they fire — or the server
+   * rejects the add — we surface the reason in the error banner and don't
+   * enqueue anything.
    */
   const addSavedTopic = useCallback(
-    (topic: string) => {
+    (topic: string, type: import('@tcq/shared').QueueEntryType) => {
       if (!socket || !meeting) return;
-      // Mirror the New Topic gate — non-chairs can't bypass a closed queue.
-      if (meeting.queue.closed && !isChair) return;
       const trimmed = topic.trim();
       if (!trimmed) return;
+      // A reply needs a live topic to attach to.
+      if (type === 'reply' && !meeting.current.topic) {
+        dispatch({ type: 'setError', error: 'No topic is currently active - you can not reply' });
+        return;
+      }
+      // A closed queue blocks everything but a Point of Order for non-chairs.
+      if (meeting.queue.closed && !isChair && type !== 'point-of-order') {
+        dispatch({ type: 'setError', error: 'The queue is closed' });
+        return;
+      }
       setActiveTab('queue');
-      socket.emit('queue:add', { type: 'topic', topic: trimmed, pending: false });
+      // Replies carry the precondition the server checks against the live topic.
+      const currentTopicSpeakerId = type === 'reply' ? (meeting.current.topic?.speakerId ?? null) : undefined;
+      socket.emit('queue:add', { type, topic: trimmed, pending: false, currentTopicSpeakerId }, (response) => {
+        if (!response.ok) dispatch({ type: 'setError', error: response.error ?? 'Failed to add to the queue' });
+      });
     },
-    [socket, meeting, isChair],
+    [socket, meeting, isChair, dispatch],
   );
 
   // --- Keyboard shortcuts ---

@@ -109,10 +109,12 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'Saved topics' })).toBeInTheDocument();
   });
 
-  it('disables the saved-topics button when queue is closed for non-chairs', () => {
+  it('keeps the saved-topics button enabled when queue is closed (per-item gating handles it)', () => {
     const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
     renderControls(meeting);
-    expect(screen.getByRole('button', { name: 'Saved topics' })).toBeDisabled();
+    // The button only opens the menu; Point of Order saved topics and the
+    // Edit link must stay reachable even when the queue is closed.
+    expect(screen.getByRole('button', { name: 'Saved topics' })).toBeEnabled();
   });
 });
 
@@ -176,9 +178,64 @@ describe('SpeakerControls — saved topics dropdown', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: '👍 I support this. (EOM)' }));
 
-    expect(onSavedTopic).toHaveBeenCalledWith('👍 I support this. (EOM)');
+    // The seeded default carries the New Topic priority.
+    expect(onSavedTopic).toHaveBeenCalledWith('👍 I support this. (EOM)', 'topic');
     // Selecting closes the dropdown.
     expect(screen.queryByRole('menu', { name: 'Saved topics' })).not.toBeInTheDocument();
+  });
+
+  it('disables a Reply-typed saved topic when there is no active topic', async () => {
+    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]));
+    stubMe(1);
+    const { onSavedTopic } = await renderControlsWithAuth(makeMeeting());
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
+
+    const item = screen.getByRole('menuitem', { name: /Good point/ });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute('title', 'No active topic to reply to');
+
+    // Clicking the disabled item does nothing.
+    fireEvent.click(item);
+    expect(onSavedTopic).not.toHaveBeenCalled();
+  });
+
+  it('enables a Reply-typed saved topic when a topic is active', async () => {
+    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]));
+    stubMe(1);
+    const meeting = makeMeeting({
+      users: { alice: testUser },
+      current: {
+        topicSpeakers: [],
+        topic: { speakerId: 'ct-1', userId: 'alice', topic: 'Active topic', startTime: '2026-01-01T00:00:00.000Z' },
+      },
+    });
+    const { onSavedTopic } = await renderControlsWithAuth(meeting);
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
+
+    const item = screen.getByRole('menuitem', { name: /Good point/ });
+    expect(item).toBeEnabled();
+    fireEvent.click(item);
+    expect(onSavedTopic).toHaveBeenCalledWith('Good point', 'reply');
+  });
+
+  it('when the queue is closed for a non-chair, disables non-Point-of-Order saved topics', async () => {
+    localStorage.setItem(
+      'tcq:saved-topics:1',
+      JSON.stringify([
+        { id: 't', text: 'A new topic', type: 'topic' },
+        { id: 'p', text: 'Out of order!', type: 'point-of-order' },
+      ]),
+    );
+    stubMe(1);
+    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
+    await renderControlsWithAuth(meeting);
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
+
+    const topicItem = screen.getByRole('menuitem', { name: /A new topic/ });
+    expect(topicItem).toBeDisabled();
+    expect(topicItem).toHaveAttribute('title', 'The queue is closed');
+    // Point of Order bypasses the closed-queue gate.
+    expect(screen.getByRole('menuitem', { name: /Out of order!/ })).toBeEnabled();
   });
 
   it('renders the empty-state message when the user has deleted every entry', async () => {

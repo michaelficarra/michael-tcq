@@ -134,7 +134,7 @@ describe('useSavedTopics', () => {
     await act(async () => {
       result.current.update('does-not-exist', 'nope');
     });
-    expect(result.current.topics).toEqual([{ id: 'a', text: 'edited' }]);
+    expect(result.current.topics).toEqual([{ id: 'a', text: 'edited', type: 'topic' }]);
   });
 
   it('remove deletes by id and persists', async () => {
@@ -152,8 +152,10 @@ describe('useSavedTopics', () => {
     await act(async () => {
       result.current.remove('a');
     });
-    expect(result.current.topics).toEqual([{ id: 'b', text: 'B' }]);
-    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:11') ?? '[]')).toEqual([{ id: 'b', text: 'B' }]);
+    expect(result.current.topics).toEqual([{ id: 'b', text: 'B', type: 'topic' }]);
+    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:11') ?? '[]')).toEqual([
+      { id: 'b', text: 'B', type: 'topic' },
+    ]);
   });
 
   it('reorder moves an entry by id and persists', async () => {
@@ -201,5 +203,66 @@ describe('useSavedTopics', () => {
     const { result } = await renderUseSavedTopics();
     // Garbled storage → empty list (caller may seed by adding entries).
     expect(result.current.topics).toEqual([]);
+  });
+
+  it('seeds the default entry with the New Topic priority', async () => {
+    stubMe(42);
+    const { result } = await renderUseSavedTopics();
+    expect(result.current.topics[0].type).toBe('topic');
+  });
+
+  it('add defaults to topic and stores an explicit type', async () => {
+    localStorage.setItem('tcq:saved-topics:7', JSON.stringify([]));
+    stubMe(7);
+    const { result } = await renderUseSavedTopics();
+
+    await act(async () => {
+      result.current.add('default-priority');
+      result.current.add('a reply', 'reply');
+    });
+
+    expect(result.current.topics[0]).toMatchObject({ text: 'default-priority', type: 'topic' });
+    expect(result.current.topics[1]).toMatchObject({ text: 'a reply', type: 'reply' });
+    // Persisted with the type intact.
+    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:7') ?? '[]');
+    expect(stored.map((t: { type: string }) => t.type)).toEqual(['topic', 'reply']);
+  });
+
+  it('coerces a missing or invalid stored type to topic', async () => {
+    localStorage.setItem(
+      'tcq:saved-topics:31',
+      JSON.stringify([
+        { id: 'a', text: 'legacy, no type' },
+        { id: 'b', text: 'bogus type', type: 'not-a-real-type' },
+        { id: 'c', text: 'valid', type: 'point-of-order' },
+      ]),
+    );
+    stubMe(31);
+    const { result } = await renderUseSavedTopics();
+    expect(result.current.topics).toEqual([
+      { id: 'a', text: 'legacy, no type', type: 'topic' },
+      { id: 'b', text: 'bogus type', type: 'topic' },
+      { id: 'c', text: 'valid', type: 'point-of-order' },
+    ]);
+  });
+
+  it('setType updates a topic priority and persists; unknown ids are ignored', async () => {
+    localStorage.setItem('tcq:saved-topics:33', JSON.stringify([{ id: 'a', text: 'A', type: 'topic' }]));
+    stubMe(33);
+    const { result } = await renderUseSavedTopics();
+
+    await act(async () => {
+      result.current.setType('a', 'question');
+    });
+    expect(result.current.topics[0].type).toBe('question');
+    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:33') ?? '[]')).toEqual([
+      { id: 'a', text: 'A', type: 'question' },
+    ]);
+
+    // Unknown id is a no-op.
+    await act(async () => {
+      result.current.setType('does-not-exist', 'reply');
+    });
+    expect(result.current.topics[0].type).toBe('question');
   });
 });

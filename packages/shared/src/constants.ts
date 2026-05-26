@@ -15,6 +15,26 @@ export const QUEUE_ENTRY_LABELS: Record<QueueEntryType, string> = {
   topic: 'New Topic',
 };
 
+/**
+ * Decorative emoji for each queue entry type, chosen to read clearly on
+ * neutral surfaces (the saved-topics dropdown and the priority selector in
+ * Preferences, in both light and dark mode). Shared so those surfaces and the
+ * entry-type buttons stay in sync. Distinct from the ♻️ glyph on the
+ * saved-topics button itself, which is a meta control rather than an entry
+ * type.
+ *
+ * Note: `question` uses the filled red ❓ rather than the outline white ❔ —
+ * the white glyph vanishes on a light background. The coloured (green)
+ * "Clarifying Question" entry-type button overrides this back to ❔, which
+ * reads better on its dark-green fill (see ENTRY_TYPES in SpeakerControls).
+ */
+export const QUEUE_ENTRY_EMOJI: Record<QueueEntryType, string> = {
+  'point-of-order': '🚨',
+  question: '❓',
+  reply: '↩️',
+  topic: '💬',
+};
+
 /** Maps each queue entry type to its numeric priority (lower number = higher priority). */
 export const QUEUE_ENTRY_PRIORITY: Record<QueueEntryType, number> = {
   'point-of-order': 0,

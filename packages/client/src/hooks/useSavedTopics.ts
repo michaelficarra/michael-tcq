@@ -16,15 +16,27 @@
  */
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import type { QueueEntryType } from '@tcq/shared';
+import { QueueEntryTypeSchema } from '@tcq/shared';
 import { useAuth } from '../contexts/AuthContext.js';
 
 export interface SavedTopic {
   id: string;
   text: string;
+  /**
+   * Queue-entry priority this saved topic posts as. Defaults to 'topic'
+   * (New Topic) for new and legacy-without-type entries. Used both as the
+   * `queue:add` type and to gate the dropdown (e.g. a 'reply' is disabled
+   * when there's no active topic).
+   */
+  type: QueueEntryType;
 }
 
 /** Maximum number of saved topics a user may save. */
 export const SAVED_TOPICS_MAX = 5;
+
+/** Default priority for a saved topic that has none stored (new or legacy). */
+const DEFAULT_SAVED_TOPIC_TYPE: QueueEntryType = 'topic';
 
 /** Default seed used the first time a user opens the dropdown. */
 export const DEFAULT_SAVED_TOPICS: ReadonlyArray<Pick<SavedTopic, 'text'>> = [{ text: '👍 I support this. (EOM)' }];
@@ -47,7 +59,14 @@ function newId(): string {
 }
 
 function seedDefaults(): SavedTopic[] {
-  return DEFAULT_SAVED_TOPICS.map((d) => ({ id: newId(), text: d.text }));
+  return DEFAULT_SAVED_TOPICS.map((d) => ({ id: newId(), text: d.text, type: DEFAULT_SAVED_TOPIC_TYPE }));
+}
+
+/** Coerce a possibly-missing/invalid stored type to a valid QueueEntryType,
+ *  defaulting to 'topic'. Keeps stale local data from corrupting the list. */
+function coerceType(value: unknown): QueueEntryType {
+  const parsed = QueueEntryTypeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SAVED_TOPIC_TYPE;
 }
 
 /** Read and parse the stored list. Returns null when nothing is stored,
@@ -58,13 +77,15 @@ function readFromStorage(key: string): SavedTopic[] | null {
     if (raw === null) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // Defensive filter: ignore anything that doesn't look like a SavedTopic.
-    // A garbled storage value shouldn't crash the dropdown.
+    // Defensive filter: ignore anything that doesn't look like a SavedTopic,
+    // then coerce a missing/invalid `type` to the default so a garbled or
+    // legacy storage value doesn't crash the dropdown.
     return parsed
       .filter(
-        (x): x is SavedTopic =>
+        (x): x is { id: string; text: string; type?: unknown } =>
           x != null && typeof x === 'object' && typeof x.id === 'string' && typeof x.text === 'string',
       )
+      .map((x) => ({ id: x.id, text: x.text, type: coerceType(x.type) }))
       .slice(0, SAVED_TOPICS_MAX);
   } catch {
     return [];
@@ -127,11 +148,14 @@ export interface UseSavedTopicsResult {
    *  has explicitly deleted every entry. */
   topics: SavedTopic[];
   /** Add a new entry at the end. No-op when already at the cap. Returns
-   *  the new entry's id, or null if the cap was hit / no user signed in. */
-  add: (text?: string) => string | null;
+   *  the new entry's id, or null if the cap was hit / no user signed in.
+   *  `type` defaults to 'topic' (New Topic). */
+  add: (text?: string, type?: QueueEntryType) => string | null;
   /** Update an entry's text. Trims and ignores empty values — empty edits
    *  do not persist, so the row reverts. */
   update: (id: string, text: string) => void;
+  /** Set an entry's queue-entry priority (type). No-op for unknown ids. */
+  setType: (id: string, type: QueueEntryType) => void;
   /** Remove an entry by id. */
   remove: (id: string) => void;
   /** Reorder by id pair (active dragged onto over). Compatible with
@@ -171,11 +195,11 @@ export function useSavedTopics(): UseSavedTopicsResult {
   return useMemo<UseSavedTopicsResult>(
     () => ({
       topics,
-      add(text: string = '') {
+      add(text: string = '', type: QueueEntryType = DEFAULT_SAVED_TOPIC_TYPE) {
         if (key == null) return null;
         const current = getOrLoad(key);
         if (current.length >= SAVED_TOPICS_MAX) return null;
-        const entry: SavedTopic = { id: newId(), text };
+        const entry: SavedTopic = { id: newId(), text, type };
         setAndPersist(key, [...current, entry]);
         return entry.id;
       },
@@ -188,6 +212,15 @@ export function useSavedTopics(): UseSavedTopicsResult {
         setAndPersist(
           key,
           current.map((r) => (r.id === id ? { ...r, text: trimmed } : r)),
+        );
+      },
+      setType(id, type) {
+        if (key == null) return;
+        const current = getOrLoad(key);
+        if (!current.some((r) => r.id === id)) return;
+        setAndPersist(
+          key,
+          current.map((r) => (r.id === id ? { ...r, type } : r)),
         );
       },
       remove(id) {
