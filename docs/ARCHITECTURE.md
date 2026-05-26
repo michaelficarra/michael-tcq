@@ -109,6 +109,12 @@ The application has a simple visual design: text, badges, buttons, and lists. Ta
 - **Component libraries (MUI, Chakra, Mantine)** — Bring opinionated visual design and large bundle sizes. The app's UI is simple enough that these would add more friction than value.
 - **CSS Modules / vanilla CSS** — Viable, but Tailwind's utility classes are faster to work with for a small team and produce more consistent output.
 
+### Modals: native `<dialog>` via `useNativeDialog`
+
+Every modal (preferences, keyboard-shortcuts, the agenda-advance conclusion, poll setup, the active poll, and admin delete-confirm) is a native modal `<dialog>` opened with `showModal()`, so focus trapping, focus restoration, top-layer stacking, and Esc/back-gesture dismissal come from the platform rather than hand-rolled handlers. The shared `hooks/useNativeDialog` hook owns the lifecycle: it mirrors a React `open` boolean onto `showModal()`/`close()`, bridges platform-driven closes back to an `onClose` callback, enables light dismiss via `closedby="any"` (with a coordinate-based outside-click fallback for browsers without it, e.g. Safari), and supports a non-dismissable mode (`closedby="none"` + Escape-keydown suppression) for the server-driven active-poll modal.
+
+Two subtleties the hook handles: it tracks the `<dialog>` node as state (set by a callback ref) so its listeners attach even when the element mounts later than the hook first runs (e.g. a dialog inside a panel that renders nothing until data loads); and it **gates the dialog's contents** behind a `renderContents` flag that stays true through the exit transition but is otherwise false — a dismissed modal contributes no form controls to the DOM, which keeps its labels/text from colliding with unrelated test queries (Playwright's `getByLabel`/`getByText` match hidden elements). The `.tcq-dialog` class in `index.css` supplies the `::backdrop` tint and the `@starting-style`/`allow-discrete` entry-and-exit animation.
+
 ### State Management: React Context + useReducer
 
 The server is the single source of truth for meeting state. The client receives the full state on connection and state patches on updates. A single `MeetingContext` with a reducer that applies server messages is sufficient.

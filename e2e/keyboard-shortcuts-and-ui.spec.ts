@@ -79,6 +79,31 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  // The dialog is now a native modal <dialog>: the platform provides focus
+  // trapping, focus restoration, and light dismiss.
+
+  test('opening the shortcuts dialog focuses the close button, not the toggle', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press('?');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // showModal() honours the close button's autofocus rather than landing on
+    // the first focusable element (the enable/disable toggle).
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'Disable' })).not.toBeFocused();
+  });
+
+  test('clicking outside the shortcuts dialog dismisses it', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press('?');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    await page.mouse.click(8, 300);
+    await expect(dialog).not.toBeVisible();
+  });
+
   test('pressing "1" switches to Agenda tab', async ({ page }) => {
     await createMeeting(page);
     // Meeting creation lands on the Agenda tab, so switch away first.

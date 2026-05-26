@@ -81,6 +81,10 @@ export async function runScreenshot(name, options, scenario) {
   const browser = await chromium.launch();
   const context = await browser.newContext({
     viewport: options.viewport ?? { width: 800, height: 800 },
+    // Emulate prefers-reduced-motion so entry/exit animations (e.g. the modal
+    // <dialog> fade/scale) settle instantly — otherwise a shot can land
+    // mid-animation, capturing a half-faded dialog with no backdrop.
+    reducedMotion: 'reduce',
   });
   try {
     if (options.theme) {

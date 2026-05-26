@@ -404,6 +404,27 @@ test.describe('Agenda tab', () => {
   });
 
   test.describe('Conclusions', () => {
+    // The confirmation is a native modal <dialog>: it focus-traps, autofocuses
+    // the conclusion textarea, and is dismissable by Esc / click-outside.
+    test('the advance-confirmation dialog autofocuses the textarea and dismisses on Esc', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+      await addAgendaItem(page, 'First Item', 'admin');
+      await addAgendaItem(page, 'Second Item', 'admin');
+      await startMeeting(page);
+
+      await page.getByRole('button', { name: /^(Next Agenda Item|Conclude meeting)$/ }).click();
+      const dialog = page.getByRole('dialog', { name: /confirm agenda advancement/i });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByLabel(/conclusion/i)).toBeFocused();
+
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+      // Dismissing does not advance — the first item is still current.
+      const queuePanel = page.getByRole('tabpanel', { name: 'Queue' });
+      await expect(queuePanel.getByRole('region', { name: 'Agenda Item' })).toContainText('First Item');
+    });
+
     test('chair can record a conclusion when advancing past an agenda item, and it shows in the log and agenda', async ({
       page,
     }) => {

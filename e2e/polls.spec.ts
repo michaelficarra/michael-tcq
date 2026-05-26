@@ -113,6 +113,22 @@ test.describe('Poll Configuration', () => {
     // The active poll dialog should appear
     await expect(page.getByRole('dialog', { name: 'Active poll' })).toBeVisible();
   });
+
+  test('the active poll modal is non-dismissable (Esc and outside-click do nothing)', async ({ page }) => {
+    await page.getByRole('button', { name: 'Create Poll' }).click();
+    const setupDialog = page.getByRole('dialog', { name: 'Create poll' });
+    await setupDialog.getByRole('button', { name: 'Start Poll' }).click();
+
+    const activePoll = page.getByRole('dialog', { name: 'Active poll' });
+    await expect(activePoll).toBeVisible();
+
+    // Unlike the other modals, this one closes only when the server clears the
+    // poll — close requests are refused and there is no light dismiss.
+    await page.keyboard.press('Escape');
+    await expect(activePoll).toBeVisible();
+    await page.mouse.click(8, 300);
+    await expect(activePoll).toBeVisible();
+  });
 });
 
 test.describe('Reactions', () => {

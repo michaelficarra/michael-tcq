@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { RelativeTime } from '../lib/RelativeTime.js';
+import { useNativeDialog, dialogAutoFocus } from '../hooks/useNativeDialog.js';
 
 interface MeetingInfo {
   id: string;
@@ -22,6 +23,18 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
   const [meetings, setMeetings] = useState<MeetingInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Native modal <dialog> lifecycle for the delete-confirmation dialog.
+  const { dialogRef: deleteDialogRef, renderContents: showDeleteContents } = useNativeDialog(
+    deleteConfirm !== null,
+    () => setDeleteConfirm(null),
+  );
+  // The contents linger through the close animation, but `deleteConfirm` is
+  // nulled on close — retain the last id (store-info-from-previous-render
+  // state) so the message doesn't blank out mid-fade.
+  const [retainedDeleteId, setRetainedDeleteId] = useState<string | null>(null);
+  if (deleteConfirm !== null && deleteConfirm !== retainedDeleteId) setRetainedDeleteId(deleteConfirm);
+  const deleteId = deleteConfirm ?? retainedDeleteId;
 
   /** Fetch the list of meetings from the admin endpoint. */
   const fetchMeetings = useCallback(async () => {
@@ -170,23 +183,20 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
       )}
 
       {/* Delete confirmation modal */}
-      {deleteConfirm && (
-        <div
-          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
-          onClick={() => setDeleteConfirm(null)}
-          role="dialog"
-          aria-label="Confirm deletion"
-          aria-modal="true"
-        >
-          <div
-            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-sm w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <dialog
+        ref={deleteDialogRef}
+        aria-label="Confirm deletion"
+        className="tcq-dialog w-[min(24rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+                   border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
+                   shadow-lg dark:shadow-stone-950/50"
+      >
+        {showDeleteContents && deleteId && (
+          <>
             <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Delete Meeting</h3>
             <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
-              Are you sure you want to delete meeting <strong>{deleteConfirm}</strong>? This will disconnect all
-              participants and hide it from their meeting lists. You can restore it from this panel until the meeting
-              eventually ages out via the standard retention policy.
+              Are you sure you want to delete meeting <strong>{deleteId}</strong>? This will disconnect all participants
+              and hide it from their meeting lists. You can restore it from this panel until the meeting eventually ages
+              out via the standard retention policy.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -197,8 +207,8 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                 Cancel
               </button>
               <button
-                onClick={() => handleDelete(deleteConfirm)}
-                autoFocus
+                onClick={() => handleDelete(deleteId)}
+                ref={dialogAutoFocus}
                 className="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium
                            hover:bg-red-700 transition-colors cursor-pointer
                            focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-stone-900"
@@ -206,9 +216,9 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
                 Delete
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </dialog>
     </div>
   );
 }

@@ -232,6 +232,25 @@ test.describe('Admin soft-delete and restore', () => {
   // .env.test's ADMIN_USERNAMES) and creates a fresh meeting so the
   // delete/restore cycle is independent from anything else on the list.
 
+  // The delete confirmation is a native modal <dialog>: Esc dismisses it
+  // (a close request) without deleting anything.
+  test('pressing Escape dismisses the delete confirmation without deleting', async ({ page }) => {
+    const id = await createMeeting(page);
+
+    await waitForHomePage(page);
+    await page.getByRole('tab', { name: 'Admin' }).click();
+    const row = page.getByRole('row').filter({ hasText: id });
+    await row.getByRole('button', { name: 'Delete' }).click();
+    const dialog = page.getByRole('dialog', { name: /confirm deletion/i });
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    // The meeting is untouched — its ID link is still live (not soft-deleted).
+    await expect(row.getByRole('link', { name: id })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Delete' })).toBeVisible();
+  });
+
   test('clicking Delete soft-deletes the meeting: row stays struck-through with a Restore action', async ({ page }) => {
     const id = await createMeeting(page);
 

@@ -266,7 +266,9 @@ function MeetingPageInner() {
         category: 'General',
       },
       { key: ',', description: 'Toggle preferences dialogue', action: () => togglePreferences(), category: 'General' },
-      { key: 'Escape', description: 'Close dialog', action: () => setShowShortcuts(false), alwaysActive: true },
+      // Esc is handled natively by each modal <dialog> (and the
+      // useKeyboardShortcuts `dialog[open]` guard lets the platform own the
+      // key), so no explicit Escape shortcut is needed to close dialogs.
     ],
     [addQueueEntry, advanceNextSpeaker, togglePresentationMode, togglePreferences],
   );
@@ -279,8 +281,8 @@ function MeetingPageInner() {
     setShortcutsEnabled(!shortcutsEnabled);
   }
 
-  // Filter Escape from the displayed list, and hide chair shortcuts for non-chairs
-  const displayedShortcuts = shortcuts.filter((s) => s.key !== 'Escape' && (isChair || !s.chairOnly));
+  // Hide chair-only shortcuts for non-chairs.
+  const displayedShortcuts = shortcuts.filter((s) => isChair || !s.chairOnly);
 
   // Error state — show error message with a link back to the home page
   if (error && !meeting) {
@@ -381,15 +383,15 @@ function MeetingPageInner() {
         */}
         {versionStale && <StaleVersionBanner />}
 
-        {/* Keyboard shortcuts dialog */}
-        {showShortcuts && (
-          <KeyboardShortcutsDialog
-            shortcuts={displayedShortcuts}
-            enabled={shortcutsEnabled}
-            onToggleEnabled={handleToggleShortcuts}
-            onClose={() => setShowShortcuts(false)}
-          />
-        )}
+        {/* Keyboard shortcuts dialog — always mounted; `open` drives the
+            native <dialog> via showModal()/close(). */}
+        <KeyboardShortcutsDialog
+          open={showShortcuts}
+          shortcuts={displayedShortcuts}
+          enabled={shortcutsEnabled}
+          onToggleEnabled={handleToggleShortcuts}
+          onClose={() => setShowShortcuts(false)}
+        />
       </div>
     </SocketContext>
   );

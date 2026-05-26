@@ -251,8 +251,12 @@ describe('AdminPanel', () => {
     // Click Cancel
     fireEvent.click(screen.getByText('Cancel'));
 
-    // Dialog should be gone, meeting still in list
-    expect(screen.queryByText(/are you sure/i)).not.toBeInTheDocument();
-    expect(screen.getByText('bright-pine-lake')).toBeInTheDocument();
+    // The native <dialog> is now closed (display:none → out of the a11y
+    // tree). Its contents linger in the DOM through the exit animation, so
+    // assert via the dialog role rather than its text — and target the row's
+    // link for the "still in list" check (the lingering dialog also names the
+    // meeting in a <strong>).
+    expect(screen.queryByRole('dialog', { name: /confirm deletion/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'bright-pine-lake' })).toBeInTheDocument();
   });
 });

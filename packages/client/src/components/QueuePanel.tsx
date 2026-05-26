@@ -41,6 +41,7 @@ import {
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
+import { useNativeDialog } from '../hooks/useNativeDialog.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
@@ -176,6 +177,22 @@ export function QueuePanel({
   // dialog is opened (see the Next Agenda Item button's onClick), so
   // revisits show what was previously saved.
   const [conclusionDraft, setConclusionDraft] = useState('');
+
+  // Native modal <dialog> lifecycle for the three modals this panel renders
+  // (showModal/close sync, focus trap, Esc / light dismiss, exit animation,
+  // content-gating). The active-poll modal is non-dismissable — it closes only
+  // when the server clears `meeting.poll`.
+  const { dialogRef: advanceDialogRef, renderContents: showAdvanceContents } = useNativeDialog(showAdvanceConfirm, () =>
+    setShowAdvanceConfirm(false),
+  );
+  const { dialogRef: pollSetupDialogRef, renderContents: showPollSetupContents } = useNativeDialog(showPollSetup, () =>
+    setShowPollSetup(false),
+  );
+  const { dialogRef: activePollDialogRef, renderContents: showActivePollContents } = useNativeDialog(
+    Boolean(meeting?.poll),
+    () => {},
+    { dismissable: false },
+  );
 
   // Advancement actions with debounce + cooldown protection
   const { fire: handleNextAgendaItem } = useAdvanceAction('meeting:nextAgendaItem');
@@ -698,22 +715,18 @@ export function QueuePanel({
         )}
       </section>
 
-      {/* Advance agenda item confirmation modal — always shown so the chair
-          has somewhere to record the outgoing item's conclusion. The
-          queue-clearing warning only renders when there are entries to
-          clear; the conclusion textarea always renders. */}
-      {showAdvanceConfirm && (
-        <div
-          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
-          onClick={() => setShowAdvanceConfirm(false)}
-          role="dialog"
-          aria-label="Confirm agenda advancement"
-          aria-modal="true"
-        >
-          <div
-            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* Advance agenda item confirmation modal — gives the chair somewhere to
+          record the outgoing item's conclusion. The queue-clearing warning
+          only renders when there are entries to clear. */}
+      <dialog
+        ref={advanceDialogRef}
+        aria-label="Confirm agenda advancement"
+        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+                   border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
+                   shadow-lg dark:shadow-stone-950/50"
+      >
+        {showAdvanceContents && (
+          <>
             <h3 className="text-lg font-semibold text-stone-800 dark:text-stone-200 mb-2">Next Agenda Item</h3>
             <label
               htmlFor="agenda-conclusion"
@@ -766,43 +779,36 @@ export function QueuePanel({
                 Advance
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </dialog>
 
       {/* Poll setup modal — chair only (lazy-loaded to keep emoji-mart out of the main bundle) */}
-      {showPollSetup && (
-        <div
-          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
-          onClick={() => setShowPollSetup(false)}
-          role="dialog"
-          aria-label="Create poll"
-          aria-modal="true"
-        >
-          <div
-            className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
-              <PollSetup onCancel={() => setShowPollSetup(false)} onStarted={() => setShowPollSetup(false)} />
-            </Suspense>
-          </div>
-        </div>
-      )}
+      <dialog
+        ref={pollSetupDialogRef}
+        aria-label="Create poll"
+        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+                   border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-left
+                   shadow-lg dark:shadow-stone-950/50"
+      >
+        {showPollSetupContents && (
+          <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
+            <PollSetup onCancel={() => setShowPollSetup(false)} onStarted={() => setShowPollSetup(false)} />
+          </Suspense>
+        )}
+      </dialog>
 
-      {/* Active poll modal — non-dismissable, visible to all */}
-      {meeting.poll && (
-        <div
-          className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
-          role="dialog"
-          aria-label="Active poll"
-          aria-modal="true"
-        >
-          <div className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 mx-4 p-6 w-fit max-w-[80vw]">
-            <PollReactions />
-          </div>
-        </div>
-      )}
+      {/* Active poll modal — non-dismissable (no closedby/Esc), visible to all;
+          closes only when the server clears the poll. */}
+      <dialog
+        ref={activePollDialogRef}
+        aria-label="Active poll"
+        className="tcq-dialog w-fit max-w-[80vw] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+                   border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
+                   shadow-lg dark:shadow-stone-950/50"
+      >
+        {showActivePollContents && <PollReactions />}
+      </dialog>
     </div>
   );
 }

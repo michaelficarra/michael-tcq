@@ -39,6 +39,7 @@ import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_EMOJI } from '@tcq/s
 import { usePreferences, type Theme, type NotificationPrefs } from '../contexts/PreferencesContext.js';
 import { notificationsSupported } from '../lib/notifications.js';
 import { useSavedTopics, type SavedTopic } from '../hooks/useSavedTopics.js';
+import { useNativeDialog } from '../hooks/useNativeDialog.js';
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -83,97 +84,12 @@ export function PreferencesModal() {
 
   const supported = notificationsSupported();
 
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  // Native modal <dialog> lifecycle (showModal/close sync, focus trap, Esc /
+  // light dismiss, exit animation, content-gating) lives in the shared hook.
+  const { dialogRef, renderContents } = useNativeDialog(showPreferences, closePreferences);
+
   // Section refs so we can scroll a deep-linked section into view on open.
   const savedTopicsSectionRef = useRef<HTMLElement | null>(null);
-
-  // The <dialog> element is always mounted (so showModal() has a stable
-  // target), but its *contents* are rendered only while open or animating
-  // closed — see `isClosing`. A dismissed modal must contribute no form
-  // controls to the DOM: Playwright's getByLabel/getByText match hidden
-  // elements, so leaving the controls mounted would let them collide with
-  // unrelated label/text queries across the suite.
-  //
-  // `isClosing` is adjusted during render (React's "store info from previous
-  // renders" pattern) rather than in an effect, so the contents stay mounted
-  // on the very render that hides the modal — otherwise they'd unmount before
-  // the exit transition could play.
-  const [isClosing, setIsClosing] = useState(false);
-  const [wasOpen, setWasOpen] = useState(showPreferences);
-  if (wasOpen !== showPreferences) {
-    setWasOpen(showPreferences);
-    setIsClosing(!showPreferences);
-  }
-  const renderContents = showPreferences || isClosing;
-
-  // Mirror the React open/close state onto the native dialog. showModal()
-  // puts the dialog in the top layer (focus trap, Esc/back-gesture handling,
-  // ::backdrop); close() runs the exit animation via the CSS transition.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (showPreferences && !dialog.open) dialog.showModal();
-    else if (!showPreferences && dialog.open) dialog.close();
-  }, [showPreferences]);
-
-  // Once the exit transition finishes, drop the contents from the DOM. The
-  // timeout is a safety net for environments where no `transitionend` fires
-  // (e.g. transitions disabled), so the contents can't get stuck mounted.
-  useEffect(() => {
-    if (!isClosing) return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      setIsClosing(false);
-    };
-    const onTransitionEnd = (e: TransitionEvent) => {
-      if (e.target === dialog) finish();
-    };
-    dialog.addEventListener('transitionend', onTransitionEnd);
-    const timer = window.setTimeout(finish, 300);
-    return () => {
-      dialog.removeEventListener('transitionend', onTransitionEnd);
-      window.clearTimeout(timer);
-    };
-  }, [isClosing]);
-
-  // Set up the dialog once it's mounted: enable declarative light-dismiss,
-  // mirror platform-driven closes back into React, and register the
-  // outside-click fallback for browsers without `closedby` (e.g. Safari).
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    // `closedby="any"` = light dismiss + close requests. Set imperatively
-    // because React's typings don't yet know the attribute.
-    dialog.setAttribute('closedby', 'any');
-
-    // Esc, the Android back gesture, light dismiss, and our fallback all
-    // surface as a `close` event — funnel them back into the source of truth.
-    const onClose = () => closePreferences();
-    dialog.addEventListener('close', onClose);
-
-    // Fallback light dismiss for browsers lacking `closedby`: a click whose
-    // coordinates fall on the backdrop (outside the dialog's content box, and
-    // with the dialog itself as the target) closes it.
-    const supportsClosedBy = 'closedBy' in HTMLDialogElement.prototype;
-    const onClick = (e: MouseEvent) => {
-      if (e.target !== dialog) return;
-      const r = dialog.getBoundingClientRect();
-      const inside =
-        r.top <= e.clientY && e.clientY <= r.top + r.height && r.left <= e.clientX && e.clientX <= r.left + r.width;
-      if (!inside) dialog.close();
-    };
-    if (!supportsClosedBy) dialog.addEventListener('click', onClick);
-
-    return () => {
-      dialog.removeEventListener('close', onClose);
-      if (!supportsClosedBy) dialog.removeEventListener('click', onClick);
-    };
-  }, [closePreferences]);
 
   // When opened with a focusSection (e.g. from the saved-topics
   // dropdown), scroll that section into view once and then clear the
@@ -203,7 +119,7 @@ export function PreferencesModal() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">Preferences</h2>
             <button
-              onClick={() => dialogRef.current?.close()}
+              onClick={closePreferences}
               className="text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
               aria-label="Close"
             >

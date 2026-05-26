@@ -106,6 +106,8 @@ The meeting view has four tabs:
 
 The active tab is indicated with a teal underline. A top navigation bar shows the TCQ logo and branding, the tab toggles, and the user menu (user badge and a hamburger menu button in OAuth mode, or a clickable user badge with user-switcher form alongside the hamburger menu in mock auth mode). The hamburger menu opens a dropdown with Preferences, Report an issue, and Log out entries; the Report an issue entry opens the project's GitHub repository in a new tab. Clicking anywhere outside the dropdown dismisses it. The Help tab is also available on the home page.
 
+The application's dialogs (preferences, the keyboard-shortcuts reference, the agenda-advance confirmation, poll setup, and admin delete-confirmation) are modal: while one is open keyboard focus is trapped inside it, and it can be dismissed by pressing Esc, clicking outside it, the platform back gesture, or its own close/cancel control, with focus returning to whatever opened it. The sole exception is the active-poll modal (see Polls), which is intentionally non-dismissable.
+
 The active tab is reflected in the URL as a hash fragment (`#queue`, `#agenda`, `#log`, `#help`). Switching tabs pushes a new browser-history entry, so the back button returns to the previously viewed tab rather than leaving the meeting. The browser back/forward buttons update the active tab in place without pushing further entries. An empty or unrecognised hash resolves to the Queue tab.
 
 Any link that points to a destination outside the application — whether it appears in a user-generated markdown field (agenda item names, queue topics, conclusions, session names, poll topics) or in the application chrome itself (e.g. the hamburger menu's Report an issue entry) — opens in a new tab/window and displays a small northeast-facing arrow indicator next to the link text so users can tell, before clicking, that the link leaves TCQ.
@@ -366,7 +368,7 @@ Chairs can add, remove, and edit options before starting the poll. Each option's
 
 ### Reactions
 
-During an active poll, all participants see a modal with the poll topic (if provided), a count-up timer showing how long the poll has been open, and a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). In single-select mode, selecting a new option automatically deselects the previous one. Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted.
+During an active poll, all participants see a modal with the poll topic (if provided), a count-up timer showing how long the poll has been open, and a panel of buttons — one for each option — showing the emoji, label, and reaction count. Clicking a button toggles the user's reaction (adds if not present, removes if already selected). In single-select mode, selecting a new option automatically deselects the previous one. Each button shows how many participants have selected it. Hovering over a button shows the names of the participants who reacted. The user's own selected reactions are visually highlighted. This modal is **non-dismissable** — participants cannot close it with Esc or by clicking outside; it disappears for everyone only when the chair stops the poll.
 
 ### Results
 
