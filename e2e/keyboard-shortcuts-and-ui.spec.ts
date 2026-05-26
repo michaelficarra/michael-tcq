@@ -158,7 +158,7 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(page.getByLabel('Topic description')).toBeVisible();
     // Saving the reply commits it. Inspect the new entry's type badge.
     await page.getByLabel('Topic description').fill('My reply');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const queue = page.getByRole('list', { name: 'Queued speakers' });
     await expect(queue.getByRole('listitem').first()).toContainText('Reply');
   });
@@ -171,7 +171,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     await page.locator('body').press('c');
     await page.getByLabel('Topic description').fill('Why?');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const queue = page.getByRole('list', { name: 'Queued speakers' });
     await expect(queue.getByRole('listitem').first()).toContainText('Clarifying Question');
   });
@@ -196,7 +196,7 @@ test.describe('Keyboard Shortcuts', () => {
     await page.locator('body').press('p');
     await expect(page.getByLabel('Topic description')).toBeVisible();
     await page.getByLabel('Topic description').fill('We are off-topic');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const queue = page.getByRole('list', { name: 'Queued speakers' });
     await expect(queue.getByRole('listitem').first()).toContainText('Point of Order');
   });

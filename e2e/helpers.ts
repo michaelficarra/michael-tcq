@@ -172,7 +172,7 @@ export async function addQueueEntry(
     // The entry opens in edit mode — type the topic and save
     const input = page.getByLabel('Topic description');
     await input.fill(topic);
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
   }
 }
 

@@ -110,7 +110,7 @@ test.describe('Entering the Queue', () => {
     const input = page.getByLabel('Topic description');
     // Clear the pre-filled default text and submit; behaves like cancel.
     await input.fill('');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     await expect(page.getByText('The queue is empty.')).toBeVisible();
   });
@@ -120,7 +120,7 @@ test.describe('Entering the Queue', () => {
 
     const input = page.getByLabel('Topic description');
     await input.fill('My custom topic');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     // Entry should now be in display mode with the custom text and no
     // lingering typing-indicator.
@@ -151,7 +151,7 @@ test.describe('Entering the Queue', () => {
       // Author finalises with a custom topic. The viewer's indicator goes
       // away and the topic text appears.
       await page.getByLabel('Topic description').fill('Resolved topic');
-      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(viewerIndicator).toHaveCount(0);
       await expect(viewerPage.getByText('Resolved topic')).toBeVisible();
     } finally {
@@ -299,7 +299,7 @@ test.describe('Queue Editing', () => {
 
     // Change the topic and save
     await input.fill('Updated topic');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     // Verify the updated text
     await expect(item).toContainText('Updated topic');

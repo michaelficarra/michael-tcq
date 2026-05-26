@@ -24,7 +24,7 @@ test.describe('Agenda prologue and epilogue', () => {
     await expect(textarea).toBeFocused();
     await textarea.fill('# Welcome\n\n- bullet one\n- bullet two');
 
-    await agendaPanel.getByRole('button', { name: 'Save' }).click();
+    await agendaPanel.getByRole('button', { name: 'Save', exact: true }).click();
 
     // The rendered content shows up via BlockMarkdown — heading + list items
     // become real DOM nodes.
@@ -52,7 +52,7 @@ test.describe('Agenda prologue and epilogue', () => {
 
     await agendaPanel.getByRole('button', { name: /add an agenda prologue/i }).click();
     await agendaPanel.getByRole('textbox', { name: /agenda prologue/i }).fill('keep me around');
-    await agendaPanel.getByRole('button', { name: 'Save' }).click();
+    await agendaPanel.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(agendaPanel.getByText('keep me around')).toBeVisible();
 
     await agendaPanel.getByRole('button', { name: /delete prologue/i }).click();
@@ -89,7 +89,7 @@ test.describe('Agenda prologue and epilogue', () => {
     // As chair, populate the prologue.
     await agendaPanel.getByRole('button', { name: /add an agenda prologue/i }).click();
     await agendaPanel.getByRole('textbox', { name: /agenda prologue/i }).fill('visible to all participants');
-    await agendaPanel.getByRole('button', { name: 'Save' }).click();
+    await agendaPanel.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(agendaPanel.getByText('visible to all participants')).toBeVisible();
 
     // Switch to a non-chair identity. The same agenda tab is still rendered.
@@ -113,14 +113,14 @@ test.describe('Agenda prologue and epilogue', () => {
     // Populate the prologue first.
     await agendaPanel.getByRole('button', { name: /add an agenda prologue/i }).click();
     await agendaPanel.getByRole('textbox', { name: /agenda prologue/i }).fill('placeholder text');
-    await agendaPanel.getByRole('button', { name: 'Save' }).click();
+    await agendaPanel.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(agendaPanel.getByText('placeholder text')).toBeVisible();
 
     // Edit, then empty + save — same effect as clicking delete.
     await agendaPanel.getByRole('button', { name: /edit prologue/i }).click();
     const textarea = agendaPanel.getByRole('textbox', { name: /agenda prologue/i });
     await textarea.fill('');
-    await agendaPanel.getByRole('button', { name: 'Save' }).click();
+    await agendaPanel.getByRole('button', { name: 'Save', exact: true }).click();
 
     await expect(agendaPanel.getByRole('button', { name: /add an agenda prologue/i })).toBeVisible();
     await expect(agendaPanel.getByText('placeholder text')).toHaveCount(0);

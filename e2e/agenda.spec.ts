@@ -182,7 +182,7 @@ test.describe('Agenda tab', () => {
       await expect(page.getByLabel('Agenda item name')).toHaveValue('Editable item');
 
       // Save and cancel buttons
-      await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
     });
 
@@ -196,7 +196,7 @@ test.describe('Agenda tab', () => {
       const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
       await page.getByRole('button', { name: 'Edit Original name' }).click();
       await page.getByLabel('Agenda item name').fill('Updated name');
-      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
 
       // The updated name should appear
       await expect(agendaPanel.getByText('Updated name')).toBeVisible();
@@ -574,7 +574,7 @@ test.describe('Agenda tab', () => {
       await page.getByRole('button', { name: 'Edit session Morning' }).click();
       await page.getByLabel('Session name').fill('Afternoon');
       await page.getByLabel('Session capacity in minutes').fill('90');
-      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
 
       // Name updates, capacity updates.
       await expect(agendaPanel.locator('li', { hasText: 'Afternoon' })).toContainText('capacity 1h30m');

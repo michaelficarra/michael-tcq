@@ -329,7 +329,7 @@ test.describe('prologue conflict banner', () => {
     const placeholder = page.getByRole('button', { name: 'Add an agenda prologue' });
     await placeholder.click();
     await page.getByRole('textbox', { name: 'Agenda prologue' }).fill('Original');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Original')).toBeVisible();
 
     // Open a second chair context. The default mock user "admin" is the
@@ -351,13 +351,13 @@ test.describe('prologue conflict banner', () => {
       await goToAgendaTab(second.page);
       await second.page.getByRole('button', { name: 'Edit prologue' }).click();
       await second.page.getByRole('textbox', { name: 'Agenda prologue' }).fill("Bob's overwrite");
-      await second.page.getByRole('button', { name: 'Save' }).click();
+      await second.page.getByRole('button', { name: 'Save', exact: true }).click();
 
       // Chair A's editor is still open; the conflict banner appears.
       await expect(page.getByText(/Another chair has updated the prologue/i)).toBeVisible();
 
       // Saving while the banner is showing opens the overwrite confirmation.
-      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
       const overwrite = page.getByRole('dialog', { name: /Overwrite Prologue/i });
       await expect(overwrite).toBeVisible();
 
