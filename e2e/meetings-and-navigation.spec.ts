@@ -282,6 +282,41 @@ test.describe('Navigation', () => {
     await expect(page.getByText('No agenda items yet.')).toBeVisible();
   });
 
+  test('the active-tab underline slides to align with the selected tab', async ({ page }) => {
+    await createMeeting(page);
+
+    const tablist = page.getByRole('tablist', { name: 'Meeting views' });
+    // The sliding underline is the decorative aria-hidden element inside the tablist.
+    const indicator = tablist.locator('[aria-hidden="true"]');
+
+    // Polls until the underline has settled aligned to the named tab — i.e. its x and
+    // width match the tab's (within a px or two). This both waits out the slide animation
+    // and ignores the underline's 0-width initial state, then returns the settled left x.
+    const settledUnderTab = async (tabName: string): Promise<number> => {
+      let x = NaN;
+      await expect
+        .poll(async () => {
+          const tab = await page.getByRole('tab', { name: tabName }).boundingBox();
+          const ind = await indicator.boundingBox();
+          if (!tab || !ind) return false;
+          x = ind.x;
+          return Math.abs(ind.x - tab.x) <= 2 && Math.abs(ind.width - tab.width) <= 2;
+        })
+        .toBe(true);
+      return x;
+    };
+
+    // Initially the underline sits under the default-active Agenda tab.
+    const agendaX = await settledUnderTab('Agenda');
+
+    // Switching to Help moves the underline rightward to sit under the Help tab.
+    await goToHelpTab(page);
+    const helpX = await settledUnderTab('Help');
+
+    // It actually moved (slid) rightward, rather than staying put.
+    expect(helpX).toBeGreaterThan(agendaX);
+  });
+
   test('top navigation bar shows the TCQ logo linking to home, tabs, and user menu', async ({ page }) => {
     await createMeeting(page);
 

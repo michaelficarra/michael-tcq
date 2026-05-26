@@ -88,6 +88,16 @@ describe('HomePage tab–hash sync', () => {
     });
   });
 
+  describe('sliding underline', () => {
+    it('renders the active-tab underline as a decorative, aria-hidden element', () => {
+      renderHomePage();
+      // The underline is purely visual; aria-selected on the tabs is the real cue, so the
+      // indicator must be hidden from assistive tech.
+      const tablist = screen.getByRole('tablist', { name: 'Home views' });
+      expect(tablist.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
+    });
+  });
+
   describe('tab change updates hash', () => {
     it('updates the hash when the Help tab is clicked', () => {
       renderHomePage();

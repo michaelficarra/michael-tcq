@@ -1,13 +1,14 @@
 /**
  * Top navigation bar shown on the meeting page.
  *
- * Layout: "TCQ" branding on the left, Agenda/Queue/Help tab toggles,
+ * Layout: "TCQ" branding on the left, Agenda/Queue/Log/Help tab toggles,
  * and the user menu (Log out or dev user-switcher) on the right.
  */
 
 import { Link } from 'react-router-dom';
 import { UserMenu } from './UserMenu.js';
 import { Logo } from './Logo.js';
+import { useSlidingTabUnderline } from '../hooks/useSlidingTabUnderline.js';
 
 export type Tab = 'agenda' | 'queue' | 'log' | 'help';
 
@@ -22,11 +23,14 @@ function TabButton({
   activeTab,
   onTabChange,
   label,
+  onSpanRef,
 }: {
   tab: Tab;
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   label: string;
+  // Registers the inner <span> so NavBar can measure it to position the sliding underline.
+  onSpanRef?: (el: HTMLElement | null) => void;
 }) {
   const isActive = activeTab === tab;
   // Rendered as an <a> (rather than a <button>) so middle-click and modifier-
@@ -53,10 +57,16 @@ function TabButton({
         onTabChange(tab);
       }}
     >
+      {/*
+        The active tab's teal underline is drawn by the single sliding indicator in NavBar
+        (so it can animate between tabs), not by this border. All tabs keep a transparent
+        border-b-2 to reserve the space and to host the faint hover hint on inactive tabs.
+      */}
       <span
+        ref={onSpanRef}
         className={`pb-1 border-b-2 transition-colors ${
           isActive
-            ? 'border-teal-500'
+            ? 'border-transparent'
             : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
         }`}
       >
@@ -67,6 +77,8 @@ function TabButton({
 }
 
 export function NavBar({ activeTab, onTabChange }: NavBarProps) {
+  const { tablistRef, registerTab, indicator } = useSlidingTabUnderline(activeTab);
+
   return (
     <nav
       className="scrollbar-hide shrink-0 z-50 flex items-stretch gap-3 sm:gap-6 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 sm:px-6 overflow-x-auto shadow-md"
@@ -77,12 +89,25 @@ export function NavBar({ activeTab, onTabChange }: NavBarProps) {
         <Logo hideTextOnSmallScreens />
       </Link>
 
-      {/* Tab toggles — active tab has a teal underline */}
-      <div className="flex shrink-0 items-stretch gap-4" role="tablist" aria-label="Meeting views">
-        <TabButton tab="agenda" activeTab={activeTab} onTabChange={onTabChange} label="Agenda" />
-        <TabButton tab="queue" activeTab={activeTab} onTabChange={onTabChange} label="Queue" />
-        <TabButton tab="log" activeTab={activeTab} onTabChange={onTabChange} label="Log" />
-        <TabButton tab="help" activeTab={activeTab} onTabChange={onTabChange} label="Help" />
+      {/* Tab toggles — active tab has a teal underline that slides between tabs */}
+      <div
+        ref={tablistRef}
+        className="relative flex shrink-0 items-stretch gap-4"
+        role="tablist"
+        aria-label="Meeting views"
+      >
+        {(['agenda', 'queue', 'log', 'help'] as const).map((tab) => (
+          <TabButton
+            key={tab}
+            tab={tab}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+            onSpanRef={registerTab(tab)}
+          />
+        ))}
+        {/* Decorative sliding underline tracking the active tab. */}
+        {indicator}
       </div>
 
       {/* Spacer */}

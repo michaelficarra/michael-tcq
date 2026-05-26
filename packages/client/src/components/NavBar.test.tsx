@@ -95,4 +95,13 @@ describe('NavBar', () => {
     renderNav(<NavBar activeTab="queue" onTabChange={() => {}} />);
     expect(screen.getByRole('tablist', { name: 'Meeting views' })).toBeInTheDocument();
   });
+
+  it('renders the sliding underline as a decorative, aria-hidden element', () => {
+    renderNav(<NavBar activeTab="queue" onTabChange={() => {}} />);
+    // The underline is purely visual; aria-selected on the tabs is the real cue, so the
+    // indicator must be hidden from assistive tech.
+    const tablist = screen.getByRole('tablist', { name: 'Meeting views' });
+    const indicator = tablist.querySelector('[aria-hidden="true"]');
+    expect(indicator).toBeInTheDocument();
+  });
 });

@@ -17,6 +17,7 @@ import { HelpPanel } from '../components/HelpPanel.js';
 import { Logo } from '../components/Logo.js';
 import { MyMeetingsPanel } from '../components/MyMeetingsPanel.js';
 import { UserMenu } from '../components/UserMenu.js';
+import { useSlidingTabUnderline } from '../hooks/useSlidingTabUnderline.js';
 
 type HomeTab = 'join' | 'admin' | 'help';
 const HOME_TABS: readonly HomeTab[] = ['join', 'admin', 'help'];
@@ -31,11 +32,14 @@ function HomeTabLink({
   visibleTab,
   setActiveTab,
   label,
+  onSpanRef,
 }: {
   tab: HomeTab;
   visibleTab: HomeTab;
   setActiveTab: (tab: HomeTab) => void;
   label: string;
+  // Registers the inner <span> so the nav can measure it for the sliding underline.
+  onSpanRef?: (el: HTMLElement | null) => void;
 }) {
   const isActive = visibleTab === tab;
   return (
@@ -56,10 +60,16 @@ function HomeTabLink({
         setActiveTab(tab);
       }}
     >
+      {/*
+        The active tab's teal underline is drawn by the single sliding indicator in the nav
+        (so it can animate between tabs), not by this border. All tabs keep a transparent
+        border-b-2 to reserve the space and to host the faint hover hint on inactive tabs.
+      */}
       <span
+        ref={onSpanRef}
         className={`pb-1 border-b-2 transition-colors ${
           isActive
-            ? 'border-teal-500'
+            ? 'border-transparent'
             : 'border-transparent group-hover:border-stone-300 dark:group-hover:border-stone-600'
         }`}
       >
@@ -83,6 +93,11 @@ export function HomePage() {
   // they fall back to Join without us needing a state-sync effect (which would
   // trip `react-hooks/set-state-in-effect`).
   const visibleTab = activeTab === 'admin' && !isAdmin ? 'join' : activeTab;
+
+  // Sliding teal underline that tracks the visible tab. The Admin tab is
+  // conditionally rendered, so the hook's ResizeObserver repositions the
+  // underline when it appears/disappears and shifts the other tabs.
+  const { tablistRef, registerTab, indicator } = useSlidingTabUnderline(visibleTab);
 
   // Sync the *visible* tab to the URL fragment, but only when activeTab
   // actually changes — not on initial mount. Mounting at a hashless `/`
@@ -125,11 +140,39 @@ export function HomePage() {
         </span>
 
         {/* Tab toggles. Rendered as <a> so middle/modifier-click open in a new
-            tab; left-click is intercepted to drive the SPA tab state. */}
-        <div className="flex shrink-0 items-stretch gap-4" role="tablist" aria-label="Home views">
-          <HomeTabLink tab="join" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Join Meeting" />
-          {isAdmin && <HomeTabLink tab="admin" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Admin" />}
-          <HomeTabLink tab="help" visibleTab={visibleTab} setActiveTab={setActiveTab} label="Help" />
+            tab; left-click is intercepted to drive the SPA tab state. The active
+            tab has a teal underline that slides between tabs. */}
+        <div
+          ref={tablistRef}
+          className="relative flex shrink-0 items-stretch gap-4"
+          role="tablist"
+          aria-label="Home views"
+        >
+          <HomeTabLink
+            tab="join"
+            visibleTab={visibleTab}
+            setActiveTab={setActiveTab}
+            label="Join Meeting"
+            onSpanRef={registerTab('join')}
+          />
+          {isAdmin && (
+            <HomeTabLink
+              tab="admin"
+              visibleTab={visibleTab}
+              setActiveTab={setActiveTab}
+              label="Admin"
+              onSpanRef={registerTab('admin')}
+            />
+          )}
+          <HomeTabLink
+            tab="help"
+            visibleTab={visibleTab}
+            setActiveTab={setActiveTab}
+            label="Help"
+            onSpanRef={registerTab('help')}
+          />
+          {/* Decorative sliding underline tracking the active tab. */}
+          {indicator}
         </div>
 
         {/* Spacer */}
