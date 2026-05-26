@@ -320,7 +320,7 @@ test.describe('Agenda tab', () => {
 
       // 90 minutes — should display compact hour+minute format
       await addAgendaItem(page, 'Long item', undefined, 90);
-      await expect(page.getByText('1h30m', { exact: true })).toBeVisible();
+      await expect(page.getByText('1h 30m', { exact: true })).toBeVisible();
     });
   });
 
@@ -337,10 +337,10 @@ test.describe('Agenda tab', () => {
 
       const panel = page.getByRole('tabpanel', { name: 'Agenda' });
       await expect(panel.getByText('Morning block')).toBeVisible();
-      // Capacity 1h30m, no items yet — remaining equals capacity.
+      // Capacity 1h 30m, no items yet — remaining equals capacity.
       await expect(panel.getByText(/remaining/i)).toBeVisible();
-      // 1h30m appears in the capacity label and the remaining label.
-      await expect(panel.getByText('1h30m').first()).toBeVisible();
+      // 1h 30m appears in the capacity label and the remaining label.
+      await expect(panel.getByText('1h 30m').first()).toBeVisible();
     });
 
     test('updates used and remaining live as items are added below', async ({ page }) => {
@@ -598,7 +598,7 @@ test.describe('Agenda tab', () => {
       await page.getByRole('button', { name: 'Save', exact: true }).click();
 
       // Name updates, capacity updates.
-      await expect(agendaPanel.locator('li', { hasText: 'Afternoon' })).toContainText('capacity 1h30m');
+      await expect(agendaPanel.locator('li', { hasText: 'Afternoon' })).toContainText('capacity 1h 30m');
       await expect(agendaPanel.getByText('Morning')).not.toBeVisible();
     });
   });

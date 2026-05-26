@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { formatDuration } from '@tcq/shared';
 import { RelativeTime } from '../lib/RelativeTime.js';
 
 interface ProcessInfo {
@@ -323,14 +324,23 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
 }
 
-/** Render uptime as "Xd Yh Zm" / "Yh Zm" / "Zm Ws" depending on magnitude. */
+/**
+ * Render uptime as "Xd Yh Zm" / "Yh Zm" / "Zm Ws" depending on magnitude,
+ * via the shared `Intl.DurationFormat` helper. Zero-valued units are omitted
+ * by the formatter (e.g. "2d 15m" rather than "2d 0h 15m").
+ */
 function formatUptime(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86_400);
   const hours = Math.floor((totalSeconds % 86_400) / 3_600);
   const minutes = Math.floor((totalSeconds % 3_600) / 60);
   const seconds = totalSeconds % 60;
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  const parts =
+    days > 0
+      ? { days, hours, minutes }
+      : hours > 0
+        ? { hours, minutes }
+        : minutes > 0
+          ? { minutes, seconds }
+          : { seconds };
+  return formatDuration(parts, 'narrow');
 }

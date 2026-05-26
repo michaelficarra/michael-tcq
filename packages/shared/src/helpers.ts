@@ -1,3 +1,6 @@
+// Pull in the ES2025 Intl type slice for `Intl.DurationFormat` (used below)
+// without changing the emit target. Types only — no runtime polyfill.
+/// <reference lib="es2025.intl" />
 import type { AgendaEntry, AgendaItem, Session, UserKey } from './types.js';
 
 /**
@@ -47,19 +50,63 @@ export function isAgendaItem(entry: AgendaEntry): entry is AgendaItem {
   return entry.kind === 'item';
 }
 
+export type DurationStyle = 'long' | 'short' | 'narrow';
+export type DurationParts = { days?: number; hours?: number; minutes?: number; seconds?: number };
+
+const DURATION_UNITS = ['days', 'hours', 'minutes', 'seconds'] as const;
+
+// Hand-written fallback labels, used only when Intl.DurationFormat is unavailable
+// (pre-2025 browsers) or for the all-zero case the native API can't render. Keeps
+// us free of any polyfill dependency. `glue` joins a number to its unit label;
+// `sep` joins the unit segments together.
+const DURATION_FALLBACK = {
+  narrow: { sep: ' ', glue: '', d: 'd', h: 'h', m: 'm', s: 's' },
+  short: { sep: ', ', glue: ' ', d: 'day', h: 'hr', m: 'min', s: 'sec' },
+  long: { sep: ', ', glue: ' ', d: 'day', h: 'hour', m: 'minute', s: 'second' },
+} as const;
+
+/**
+ * Format a balanced duration as a localised, auto-pluralised string via
+ * `Intl.DurationFormat`, with a hand-written fallback when it's unavailable.
+ *
+ * Callers pass a pre-balanced parts object (zero-valued units are omitted by the
+ * native API). Locale is left to the runtime default to honour the viewer's locale.
+ *
+ * Examples (en): `{minutes:45}, 'narrow' → "45m"`, `{hours:1,minutes:30}, 'narrow' → "1h 30m"`,
+ * `{hours:1,minutes:5}, 'short' → "1 hr, 5 min"`.
+ */
+export function formatDuration(parts: DurationParts, style: DurationStyle): string {
+  const present = DURATION_UNITS.filter((u) => parts[u] !== undefined);
+  const nonzero = present.filter((u) => parts[u] !== 0);
+
+  // Native path. Skipped for an all-zero duration because Intl.DurationFormat
+  // returns "" for it (and throws on a fully empty parts object).
+  if (typeof Intl.DurationFormat !== 'undefined' && nonzero.length > 0) {
+    return new Intl.DurationFormat(undefined, { style }).format(parts);
+  }
+
+  // Manual fallback. For the all-zero case, emit "0<smallest requested unit>".
+  const f = DURATION_FALLBACK[style];
+  const units = nonzero.length > 0 ? nonzero : [present[present.length - 1] ?? 'seconds'];
+  return units
+    .map((u) => {
+      const n = parts[u] ?? 0;
+      const key = u[0] as 'd' | 'h' | 'm' | 's';
+      const label = style === 'long' ? `${f[key]}${n === 1 ? '' : 's'}` : f[key];
+      return `${n}${f.glue}${label}`;
+    })
+    .join(f.sep);
+}
+
 /**
  * Format a duration in minutes as a short human-friendly string.
  *
- * Examples: `0 → "0m"`, `45 → "45m"`, `60 → "1h"`, `120 → "2h"`, `315 → "5h15m"`.
- * Zero parts are dropped. Negative values are rendered with a leading `-`
- * (this is a safety net — callers should normally pass non-negative values).
+ * Examples: `0 → "0m"`, `45 → "45m"`, `60 → "1h"`, `120 → "2h"`, `90 → "1h 30m"`.
+ * Callers pass non-negative values.
  */
 export function formatShortDuration(minutes: number): string {
-  if (minutes === 0) return '0m';
-  const negative = minutes < 0;
-  const abs = Math.abs(minutes);
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  const body = h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h${m}m`;
-  return negative ? `-${body}` : body;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const parts = h === 0 ? { minutes: m } : m === 0 ? { hours: h } : { hours: h, minutes: m };
+  return formatDuration(parts, 'narrow');
 }

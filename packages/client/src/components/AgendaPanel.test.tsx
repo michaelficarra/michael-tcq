@@ -658,8 +658,8 @@ describe('AgendaPanel', () => {
       // "Morning" session header present (rendered in upper case by Tailwind
       // but the text node itself preserves the original casing).
       expect(screen.getByText('Morning')).toBeInTheDocument();
-      // Capacity 1h30m, used 45m, remaining 45m.
-      expect(screen.getByText('1h30m')).toBeInTheDocument();
+      // Capacity 1h 30m, used 45m, remaining 45m.
+      expect(screen.getByText('1h 30m')).toBeInTheDocument();
       // Two "45m" elements: one for used, one for remaining.
       expect(screen.getAllByText('45m').length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText(/remaining/i)).toBeInTheDocument();

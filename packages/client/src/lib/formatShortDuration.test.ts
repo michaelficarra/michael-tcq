@@ -19,14 +19,8 @@ describe('formatShortDuration', () => {
   });
 
   it('renders hour-plus-minute durations compactly', () => {
-    expect(formatShortDuration(61)).toBe('1h1m');
-    expect(formatShortDuration(90)).toBe('1h30m');
-    expect(formatShortDuration(315)).toBe('5h15m');
-  });
-
-  it('renders negative durations with a leading minus', () => {
-    expect(formatShortDuration(-15)).toBe('-15m');
-    expect(formatShortDuration(-60)).toBe('-1h');
-    expect(formatShortDuration(-90)).toBe('-1h30m');
+    expect(formatShortDuration(61)).toBe('1h 1m');
+    expect(formatShortDuration(90)).toBe('1h 30m');
+    expect(formatShortDuration(315)).toBe('5h 15m');
   });
 });

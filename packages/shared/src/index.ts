@@ -110,9 +110,11 @@ export {
   asUserKey,
   isSession,
   isAgendaItem,
+  formatDuration,
   formatShortDuration,
   normaliseGithubUsername,
 } from './helpers.js';
+export type { DurationStyle, DurationParts } from './helpers.js';
 export { applyDelta } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
 export { DEV_USERS } from './devUsers.js';

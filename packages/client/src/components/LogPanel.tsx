@@ -9,7 +9,7 @@
 
 import { useMemo } from 'react';
 import type { LogEntry, MeetingState, TopicSpeaker, User } from '@tcq/shared';
-import { QUEUE_ENTRY_LABELS } from '@tcq/shared';
+import { QUEUE_ENTRY_LABELS, formatDuration as formatDurationParts } from '@tcq/shared';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { useMeetingLog } from '../hooks/useMeetingLog.js';
 import { UserBadge } from './UserBadge.js';
@@ -18,16 +18,19 @@ import { RelativeTime as SharedRelativeTime } from '../lib/RelativeTime.js';
 
 // -- Time formatting helpers --
 
-/** Format a duration in ms as a human-readable string (e.g. "12 min", "1 hr 5 min"). */
+/**
+ * Format a duration in ms as a human-readable string (e.g. "45 sec", "12 min",
+ * "1 hr, 5 min"). Sub-minute durations show seconds; from a minute up, seconds
+ * are dropped. Delegates display to the shared `Intl.DurationFormat` helper.
+ */
 function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) return formatDurationParts({ seconds: totalSeconds }, 'short');
   const minutes = Math.floor(totalSeconds / 60);
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${minutes} min`;
-  if (remainingMinutes === 0) return `${hours} hr`;
-  return `${hours} hr ${remainingMinutes} min`;
+  const parts = hours === 0 ? { minutes } : remainingMinutes === 0 ? { hours } : { hours, minutes: remainingMinutes };
+  return formatDurationParts(parts, 'short');
 }
 
 // -- Relative time component --
@@ -487,7 +490,7 @@ function serialiseLog(meeting: MeetingState, log: LogEntry[]): string {
     lines.push('| Speaker | Time |');
     lines.push('| --- | --- |');
     for (const [id, total] of sorted) {
-      const dur = total > 0 ? formatDuration(total) : '0s';
+      const dur = formatDuration(total);
       lines.push(`| ${userName(users, id)} | ${dur} |`);
     }
     lines.push('');

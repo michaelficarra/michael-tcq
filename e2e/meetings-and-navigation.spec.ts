@@ -105,13 +105,13 @@ test.describe('Meeting Flow', () => {
   test('completing an agenda item replaces its estimate with the actual elapsed duration', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
-    // Seed an obviously-wrong estimate on the first item (99 min → "1h39m")
+    // Seed an obviously-wrong estimate on the first item (99 min → "1h 39m")
     // so we can verify it was overwritten rather than merely left alone.
     await addAgendaItem(page, 'Item One', 'admin', 99);
     await addAgendaItem(page, 'Item Two', 'admin');
 
     const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
-    await expect(agendaPanel.getByText('1h39m', { exact: true })).toBeVisible();
+    await expect(agendaPanel.getByText('1h 39m', { exact: true })).toBeVisible();
 
     await startMeeting(page);
 
@@ -123,7 +123,7 @@ test.describe('Meeting Flow', () => {
     await goToAgendaTab(page);
     // Real elapsed time is milliseconds → Math.ceil rounds up to 1 minute.
     await expect(agendaPanel.getByText('1m', { exact: true })).toBeVisible();
-    await expect(agendaPanel.getByText('1h39m', { exact: true })).not.toBeVisible();
+    await expect(agendaPanel.getByText('1h 39m', { exact: true })).not.toBeVisible();
   });
 
   test('"Next Agenda Item" button becomes "Conclude meeting" on the last item', async ({ page }) => {

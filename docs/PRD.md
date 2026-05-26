@@ -190,7 +190,7 @@ A **session** is a named time block that visually groups a contiguous run of age
 - **Edit** — Chairs can edit a session's name and capacity inline.
 - **Delete** — Removing a session does **not** delete the agenda items that were visually contained within it; only the session header is removed.
 - **Reorder** — Sessions can be dragged up and down to rearrange them. Unlike agenda items, a session has no drag handle — its entire header row is the drag target. Moving a session does not move the agenda items that were contained within it; containment is recomputed from the session's new position.
-- **Display** — A session renders as a distinct header row in the agenda list (bold, uppercase, with dividers). It shows three values formatted in a compact duration format (e.g. `45m`, `2h`, `5h15m`):
+- **Display** — A session renders as a distinct header row in the agenda list (bold, uppercase, with dividers). It shows three values formatted as a localised, compact duration (e.g. `45m`, `2h`, `5h 15m`):
   - **capacity** — the session's duration
   - **used** — the sum of durations of the agenda items that fit within its capacity (items without a duration count as 0m)
   - **remaining** — capacity − used, when the full run fits, OR
