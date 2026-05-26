@@ -1,6 +1,6 @@
 # TCQ — A Structured Meeting Queue
 
-TCQ is a real-time web application for managing structured discussions during agenda-driven meetings. It provides a shared queue where participants can line up to speak, organised by topic type and priority, while chairs control the flow of the meeting.
+TCQ is a real-time web application for managing structured discussions during agenda-driven meetings. Among other things, TCQ solves the common problems caused by first-come-first-served participations systems (such as hand raising) wherein some participants have something to add to the current topic of dicussion and some participants want to begin a new topic. It does this by providing a shared queue where participants can indicate how they plan to participate, while chairs control the flow of the meeting.
 
 ## Improvements Over the Original TCQ
 
