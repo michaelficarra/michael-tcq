@@ -128,6 +128,25 @@ export function PreferencesModal() {
           </div>
 
           <section className="mb-4">
+            <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
+              <span className="font-medium">Colour scheme</span>
+              <select
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as Theme)}
+                className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm
+                         bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 cursor-pointer
+                         focus:outline-none focus:ring-1 focus:ring-teal-500"
+              >
+                {THEME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+
+          <section className="mb-4">
             <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 cursor-pointer">
               Keyboard shortcuts
               <input
@@ -177,25 +196,6 @@ export function PreferencesModal() {
           </section>
 
           <SavedTopicsSection sectionRef={savedTopicsSectionRef} />
-
-          <section>
-            <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
-              <span className="font-medium">Colour scheme</span>
-              <select
-                value={theme}
-                onChange={(e) => setTheme(e.target.value as Theme)}
-                className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm
-                         bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 cursor-pointer
-                         focus:outline-none focus:ring-1 focus:ring-teal-500"
-              >
-                {THEME_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
         </>
       )}
     </dialog>
@@ -236,7 +236,7 @@ function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
   }
 
   return (
-    <section ref={sectionRef} className="mb-4" aria-labelledby="saved-topics-heading">
+    <section ref={sectionRef} aria-labelledby="saved-topics-heading">
       <h3 id="saved-topics-heading" className="text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
         Saved topics
       </h3>
