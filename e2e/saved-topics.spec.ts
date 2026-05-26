@@ -177,3 +177,49 @@ test.describe('Saved topics', () => {
     await expect(menu.getByRole('menuitem', { name: 'Alice-only response' })).toHaveCount(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Native popover dismissal
+//
+// The dropdown is a `popover="auto"` element, so outside-click and Esc
+// dismissal come from the platform (not driveable in jsdom). The re-click case
+// guards against the auto-popover race where the trigger's light dismiss closes
+// the menu and the same click would reopen it.
+// ---------------------------------------------------------------------------
+
+test.describe('Saved topics — popover dismissal', () => {
+  test('re-clicking the trigger closes the dropdown (does not reopen it)', async ({ page }) => {
+    await setupStartedMeeting(page);
+    await goToQueueTab(page);
+    const trigger = page.getByRole('button', { name: 'Saved topics' });
+    const menu = page.getByRole('menu', { name: 'Saved topics' });
+
+    await trigger.click();
+    await expect(menu).toBeVisible();
+
+    await trigger.click();
+    await expect(menu).toHaveCount(0);
+  });
+
+  test('Escape dismisses the dropdown', async ({ page }) => {
+    await setupStartedMeeting(page);
+    await goToQueueTab(page);
+    await page.getByRole('button', { name: 'Saved topics' }).click();
+    const menu = page.getByRole('menu', { name: 'Saved topics' });
+    await expect(menu).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+  });
+
+  test('clicking outside dismisses the dropdown', async ({ page }) => {
+    await setupStartedMeeting(page);
+    await goToQueueTab(page);
+    await page.getByRole('button', { name: 'Saved topics' }).click();
+    const menu = page.getByRole('menu', { name: 'Saved topics' });
+    await expect(menu).toBeVisible();
+
+    await page.mouse.click(8, 400);
+    await expect(menu).toHaveCount(0);
+  });
+});

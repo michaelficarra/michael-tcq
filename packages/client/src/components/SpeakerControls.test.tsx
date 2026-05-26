@@ -251,13 +251,8 @@ describe('SpeakerControls — saved topics dropdown', () => {
     expect(screen.getByRole('menuitem', { name: /Edit saved topics/ })).toBeInTheDocument();
   });
 
-  it('Escape closes the dropdown', async () => {
-    stubMe(1);
-    await renderControlsWithAuth(makeMeeting());
-    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
-    expect(screen.getByRole('menu', { name: 'Saved topics' })).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('menu', { name: 'Saved topics' })).not.toBeInTheDocument();
-  });
+  // Esc and outside-click dismissal now come from the native `popover="auto"`
+  // element, which jsdom doesn't implement — that coverage lives in the
+  // Playwright e2e suite (saved-topics.spec.ts) where a real browser drives
+  // the platform light dismiss.
 });

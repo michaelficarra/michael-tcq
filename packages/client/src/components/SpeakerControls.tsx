@@ -19,13 +19,13 @@
  * (e.g. a Reply with no active topic) are disabled in the dropdown.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useRef, useState } from 'react';
 import type { QueueEntryType, MeetingState } from '@tcq/shared';
 import { QUEUE_ENTRY_EMOJI } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { ChevronDownIcon } from './icons.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
+import { usePopover } from '../hooks/usePopover.js';
 import { useSavedTopics, type SavedTopic } from '../hooks/useSavedTopics.js';
 
 /** Configuration for each entry type button. The decorative emoji defaults to
@@ -158,14 +158,20 @@ function SavedTopicButton({ onSelect, typeBlock }: SavedTopicButtonProps) {
   const { topics } = useSavedTopics();
   const { openPreferences } = usePreferences();
   const [open, setOpen] = useState(false);
-  // Anchor coordinates and width are measured on toggle so the portaled
-  // dropdown can position itself flush with the button. Same approach the
-  // HamburgerMenu uses to escape parents that clip or cap z-index.
+  // Anchor coordinates and width are measured on toggle so the top-layer
+  // dropdown can position itself flush with the button — CSS anchor
+  // positioning isn't yet in Firefox/Safari.
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const { popoverRef, triggerProps, consumeTriggerClick } = usePopover(open, () => setOpen(false));
 
   function toggleMenu() {
+    // If this click is the tail of the gesture that just light-dismissed the
+    // open menu, leave it closed rather than reopen it.
+    if (consumeTriggerClick()) {
+      setOpen(false);
+      return;
+    }
     if (open) {
       setOpen(false);
       return;
@@ -175,32 +181,6 @@ function SavedTopicButton({ onSelect, typeBlock }: SavedTopicButtonProps) {
     setPos({ top: rect.bottom + 6, left: rect.left });
     setOpen(true);
   }
-
-  // Dismiss on Escape anywhere in the document.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
-
-  // Dismiss on pointerdown outside the button or the portaled dropdown.
-  // pointerdown (not click) so the same gesture both closes the menu and
-  // reaches the underlying element.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (buttonRef.current?.contains(target)) return;
-      if (dropdownRef.current?.contains(target)) return;
-      setOpen(false);
-    }
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
 
   function handleSelect(topic: SavedTopic) {
     setOpen(false);
@@ -218,6 +198,7 @@ function SavedTopicButton({ onSelect, typeBlock }: SavedTopicButtonProps) {
         ref={buttonRef}
         type="button"
         onClick={toggleMenu}
+        {...triggerProps}
         aria-label="Saved topics"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -236,68 +217,68 @@ function SavedTopicButton({ onSelect, typeBlock }: SavedTopicButtonProps) {
         </span>
         <ChevronDownIcon className="w-5 h-5" />
       </button>
-      {open &&
-        pos &&
-        createPortal(
-          <div
-            ref={dropdownRef}
-            role="menu"
-            aria-label="Saved topics"
-            className="fixed z-[70] min-w-48 max-w-64 rounded border border-stone-200 dark:border-stone-700
-                       bg-white dark:bg-stone-800 shadow-lg py-1"
-            style={{ top: pos.top, left: pos.left }}
-          >
-            {topics.length === 0 ? (
-              <p className="px-3 py-1.5 text-xs italic text-stone-500 dark:text-stone-400">No saved topics yet.</p>
-            ) : (
-              topics.map((r) => {
-                // A saved topic can't be used if its priority isn't currently
-                // addable (e.g. a Reply with no active topic, or anything but a
-                // Point of Order while the queue is closed). Disable it and
-                // explain why, so the runtime guard in the parent is only ever
-                // hit on a network-delay race.
-                const { disabled: itemDisabled, reason } = typeBlock(r.type);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    role="menuitem"
-                    aria-disabled={itemDisabled}
-                    disabled={itemDisabled}
-                    title={itemDisabled && reason ? reason : r.text}
-                    onClick={() => handleSelect(r)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+      {open && pos && (
+        // Native popover: top-layer (no portal needed to escape the entry-row
+        // clipping / z-index) plus platform light dismiss and Esc.
+        <div
+          ref={popoverRef}
+          popover="auto"
+          role="menu"
+          aria-label="Saved topics"
+          className="tcq-popover fixed min-w-48 max-w-64 rounded border border-stone-200 dark:border-stone-700
+                     bg-white dark:bg-stone-800 shadow-lg py-1"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          {topics.length === 0 ? (
+            <p className="px-3 py-1.5 text-xs italic text-stone-500 dark:text-stone-400">No saved topics yet.</p>
+          ) : (
+            topics.map((r) => {
+              // A saved topic can't be used if its priority isn't currently
+              // addable (e.g. a Reply with no active topic, or anything but a
+              // Point of Order while the queue is closed). Disable it and
+              // explain why, so the runtime guard in the parent is only ever
+              // hit on a network-delay race.
+              const { disabled: itemDisabled, reason } = typeBlock(r.type);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="menuitem"
+                  aria-disabled={itemDisabled}
+                  disabled={itemDisabled}
+                  title={itemDisabled && reason ? reason : r.text}
+                  onClick={() => handleSelect(r)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
                                transition-colors
                                ${
                                  itemDisabled
                                    ? 'opacity-50 cursor-not-allowed'
                                    : 'hover:bg-stone-100 dark:hover:bg-stone-700 cursor-pointer'
                                }`}
-                  >
-                    {/* Leading priority emoji so the type is visible at a glance. */}
-                    <span aria-hidden="true" className="shrink-0">
-                      {QUEUE_ENTRY_EMOJI[r.type]}
-                    </span>
-                    <span className="min-w-0 flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">
-                      {r.text}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-            <div role="separator" className="my-1 border-t border-stone-200 dark:border-stone-700" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleEdit}
-              className="block w-full text-left px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400
+                >
+                  {/* Leading priority emoji so the type is visible at a glance. */}
+                  <span aria-hidden="true" className="shrink-0">
+                    {QUEUE_ENTRY_EMOJI[r.type]}
+                  </span>
+                  <span className="min-w-0 flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">
+                    {r.text}
+                  </span>
+                </button>
+              );
+            })
+          )}
+          <div role="separator" className="my-1 border-t border-stone-200 dark:border-stone-700" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleEdit}
+            className="block w-full text-left px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400
                          hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors cursor-pointer italic"
-            >
-              Edit saved topics&hellip;
-            </button>
-          </div>,
-          document.body,
-        )}
+          >
+            Edit saved topics&hellip;
+          </button>
+        </div>
+      )}
     </>
   );
 }

@@ -499,3 +499,47 @@ test.describe('My Meetings activity display', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hamburger menu — native popover dismissal
+//
+// The menu is a `popover="auto"` element; outside-click and Esc dismissal come
+// from the platform (these can't be exercised in jsdom, so they live here).
+// The re-click case guards against the auto-popover race where the trigger's
+// light dismiss closes the menu and the same click would reopen it.
+// ---------------------------------------------------------------------------
+
+test.describe('Hamburger menu (popover)', () => {
+  test('re-clicking the trigger closes the menu (does not reopen it)', async ({ page }) => {
+    await waitForHomePage(page);
+    const trigger = page.getByRole('button', { name: 'Open menu' });
+    const logOut = page.getByRole('menuitem', { name: 'Log out' });
+
+    await trigger.click();
+    await expect(logOut).toBeVisible();
+
+    await trigger.click();
+    await expect(logOut).toHaveCount(0);
+  });
+
+  test('Escape dismisses the menu', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const logOut = page.getByRole('menuitem', { name: 'Log out' });
+    await expect(logOut).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(logOut).toHaveCount(0);
+  });
+
+  test('clicking outside dismisses the menu', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const logOut = page.getByRole('menuitem', { name: 'Log out' });
+    await expect(logOut).toBeVisible();
+
+    // Click an empty region away from both the trigger and the menu.
+    await page.mouse.click(8, 300);
+    await expect(logOut).toHaveCount(0);
+  });
+});

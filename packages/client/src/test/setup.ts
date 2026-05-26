@@ -41,6 +41,39 @@ if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
   };
 }
 
+// jsdom (29.x) ships only a *partial* Popover API: showPopover() exists but
+// never flips the UA `[popover]:not(:popover-open) { display: none }` off, so
+// popover contents stay invisible to getByRole/getComputedStyle and tests
+// can't see them. UserMenu, SpeakerControls (via usePopover) and the
+// UserCombobox suggestion list now drive native `popover` elements, so replace
+// the broken methods outright with stubs that toggle inline display (which
+// beats the UA rule) and fire the `toggle` event (with the `newState` field
+// usePopover reads). Components gate rendering on their own React `open` state,
+// so this is enough for unit tests to exercise the wiring; real light-dismiss
+// / Esc / top-layer behaviour is covered by the Playwright e2e suite.
+{
+  const fireToggle = (el: HTMLElement, newState: 'open' | 'closed') => {
+    const ev = new Event('toggle') as Event & { newState: string; oldState: string };
+    ev.newState = newState;
+    ev.oldState = newState === 'open' ? 'closed' : 'open';
+    el.dispatchEvent(ev);
+  };
+  HTMLElement.prototype.showPopover = function showPopover(this: HTMLElement) {
+    this.style.display = 'block';
+    fireToggle(this, 'open');
+  };
+  HTMLElement.prototype.hidePopover = function hidePopover(this: HTMLElement) {
+    this.style.display = 'none';
+    fireToggle(this, 'closed');
+  };
+  HTMLElement.prototype.togglePopover = function togglePopover(this: HTMLElement, force?: boolean) {
+    const next = typeof force === 'boolean' ? force : this.style.display === 'none';
+    if (next) this.showPopover();
+    else this.hidePopover();
+    return next;
+  };
+}
+
 // jsdom doesn't implement Element.scrollIntoView; the AgendaPanel's
 // "scroll-active-item-into-view-on-tab-show" effect calls it on mount.
 // Provide a default no-op so unrelated tests don't crash; tests that want

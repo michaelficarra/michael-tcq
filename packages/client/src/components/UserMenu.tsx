@@ -5,10 +5,10 @@
  * Used in both the NavBar (meeting page) and the HomePage header.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
+import { usePopover } from '../hooks/usePopover.js';
 import { UserBadge } from './UserBadge.js';
 import { UserCombobox } from './UserCombobox.js';
 
@@ -35,8 +35,10 @@ export function UserMenu() {
 
 /**
  * Renders a hamburger icon button that opens a small dropdown anchored
- * beneath it. The dropdown currently holds a single Log Out link. Clicking
- * outside the dropdown or pressing Escape dismisses it.
+ * beneath it. The dropdown currently holds a single Log Out link. The dropdown
+ * is a native `popover="auto"`, so outside-click and Esc dismissal come from
+ * the platform; we measure its `top`/`right` in JS since CSS anchor positioning
+ * isn't yet in Firefox/Safari.
  */
 function HamburgerMenu() {
   const { openPreferences } = usePreferences();
@@ -44,26 +46,21 @@ function HamburgerMenu() {
   // 🍔 emoji for local hacking, a conventional three-line SVG for real users.
   const { mockAuth } = useAuth();
   const [open, setOpen] = useState(false);
-  // The nav has `overflow-x-auto` (which clips descendants) and `sticky + z-50`
-  // (which creates a stacking context that caps descendant z-indices). Render
-  // the dropdown into a portal on <body> with measured fixed coordinates so it
-  // escapes both.
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   // Inner icon ref — the button stretches to the full nav height so we anchor
   // the dropdown to the emoji's bottom rather than the button's to keep the
   // dropdown close to the visible icon.
   const iconRef = useRef<HTMLSpanElement | null>(null);
-  // Menu item refs — since the dropdown is portaled to <body>, natural tab
-  // order skips past it. We route Tab from the button through the items
-  // manually so Preferences → Report an issue → Log out → button forms a cycle.
-  const prefsItemRef = useRef<HTMLButtonElement | null>(null);
-  const reportItemRef = useRef<HTMLAnchorElement | null>(null);
-  const logoutItemRef = useRef<HTMLAnchorElement | null>(null);
-  // Dropdown container ref for outside-click detection.
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const { popoverRef, triggerProps, consumeTriggerClick } = usePopover(open, () => setOpen(false));
 
   function toggleMenu() {
+    // If this click is the tail of the gesture that just light-dismissed the
+    // open menu, leave it closed rather than reopen it.
+    if (consumeTriggerClick()) {
+      setOpen(false);
+      return;
+    }
     if (open) {
       setOpen(false);
       return;
@@ -75,47 +72,13 @@ function HamburgerMenu() {
     setOpen(true);
   }
 
-  // Dismiss the menu when the user presses Escape anywhere in the document.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
-
-  // Dismiss on pointerdown anywhere outside the button or dropdown. Using
-  // pointerdown (rather than a blocking overlay) lets the same gesture both
-  // close the menu and reach the underlying element — e.g. clicking a tab
-  // switches tabs and dismisses the menu in one click.
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (buttonRef.current?.contains(target)) return;
-      if (dropdownRef.current?.contains(target)) return;
-      setOpen(false);
-    }
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
-
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
         onClick={toggleMenu}
-        onKeyDown={(e) => {
-          // When the menu is open, Tab should route into the dropdown (which
-          // lives in a body-level portal and is otherwise skipped).
-          if (open && e.key === 'Tab' && !e.shiftKey) {
-            e.preventDefault();
-            prefsItemRef.current?.focus();
-          }
-        }}
+        {...triggerProps}
         aria-label="Open menu"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -157,77 +120,52 @@ function HamburgerMenu() {
           </span>
         )}
       </button>
-      {open &&
-        pos &&
-        createPortal(
-          <div
-            ref={dropdownRef}
-            role="menu"
-            className="fixed z-[70] min-w-32 rounded border border-stone-200 dark:border-stone-700
-                       bg-white dark:bg-stone-800 shadow-lg py-1"
-            style={{ top: pos.top, right: pos.right }}
+      {open && pos && (
+        // Native popover: top-layer (escapes the navbar's `overflow-x-auto`
+        // clipping and `z-index` cap with no portal) plus platform light
+        // dismiss / Esc. Rendered inline so natural tab order flows from the
+        // button into the items — no manual Tab routing needed.
+        <div
+          ref={popoverRef}
+          popover="auto"
+          role="menu"
+          className="tcq-popover fixed min-w-32 rounded border border-stone-200 dark:border-stone-700
+                     bg-white dark:bg-stone-800 shadow-lg py-1"
+          style={{ top: pos.top, right: pos.right }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              openPreferences();
+            }}
+            className="block w-full text-left px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                       hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors cursor-pointer"
           >
-            <button
-              ref={prefsItemRef}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                openPreferences();
-              }}
-              onKeyDown={(e) => {
-                // Tab → Report an issue (next item); Shift+Tab → trigger button.
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  if (e.shiftKey) buttonRef.current?.focus();
-                  else reportItemRef.current?.focus();
-                }
-              }}
-              className="block w-full text-left px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
-                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors cursor-pointer"
-            >
-              Preferences
-            </button>
-            <a
-              ref={reportItemRef}
-              href="https://github.com/michaelficarra/michael-tcq"
-              target="_blank"
-              rel="noopener noreferrer"
-              role="menuitem"
-              onKeyDown={(e) => {
-                // Tab → Log Out; Shift+Tab → Preferences.
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  if (e.shiftKey) prefsItemRef.current?.focus();
-                  else logoutItemRef.current?.focus();
-                }
-              }}
-              // `external-link` appends the NE arrow indicator — see index.css.
-              className="external-link block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
-                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
-            >
-              Report an issue
-            </a>
-            <a
-              ref={logoutItemRef}
-              href="/auth/logout"
-              role="menuitem"
-              onKeyDown={(e) => {
-                // Tab → cycle back to trigger button; Shift+Tab → Report an issue.
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  if (e.shiftKey) reportItemRef.current?.focus();
-                  else buttonRef.current?.focus();
-                }
-              }}
-              className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
-                         hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
-            >
-              Log out
-            </a>
-          </div>,
-          document.body,
-        )}
+            Preferences
+          </button>
+          <a
+            href="https://github.com/michaelficarra/michael-tcq"
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            // `external-link` appends the NE arrow indicator — see index.css.
+            className="external-link block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                       hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+          >
+            Report an issue
+          </a>
+          <a
+            href="/auth/logout"
+            role="menuitem"
+            className="block px-3 py-1.5 text-sm text-stone-700 dark:text-stone-200
+                       hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+          >
+            Log out
+          </a>
+        </div>
+      )}
     </>
   );
 }

@@ -32,7 +32,6 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { normaliseGithubUsername } from '@tcq/shared';
 import { FALLBACK_AVATAR } from './UserBadge.js';
 import { CircleXIcon } from './icons.js';
@@ -486,11 +485,12 @@ interface SuggestionListProps {
   onPick: (user: DirectoryUser) => void;
   onHover: (index: number) => void;
   /**
-   * The element the dropdown should anchor beneath. Used to compute fixed
-   * coordinates so the dropdown can escape ancestor `overflow:hidden` /
-   * `overflow:auto` clipping and stacking-context z-index caps (the navbar
-   * is `sticky z-50` with `overflow-x-auto`, both of which clip a plain
-   * absolutely-positioned descendant).
+   * The element the dropdown should anchor beneath. Used to compute the fixed
+   * coordinates the dropdown is positioned at; the list itself is a top-layer
+   * `popover`, so it already escapes ancestor `overflow` clipping and
+   * stacking-context z-index caps (the navbar is `sticky z-50` with
+   * `overflow-x-auto`, both of which clip a plain absolutely-positioned
+   * descendant).
    */
   anchorRef: React.RefObject<HTMLElement | null>;
 }
@@ -635,18 +635,31 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
     listElementRef.current = node;
     observerRef.current?.disconnect();
     observerRef.current = null;
-    // ResizeObserver is unavailable in jsdom and very old browsers; the
-    // measurement still re-runs whenever results.length changes (which
-    // covers the common "more results just arrived" path), so falling
-    // back to no observer is graceful.
-    if (node && typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        // Always read from the ref so observer callbacks fired after a
-        // dependency change still call the latest measure closure.
-        measureRef.current();
-      });
-      observer.observe(node);
-      observerRef.current = observer;
+    if (node) {
+      // Promote to the top layer via the Popover API instead of portaling to
+      // <body>: same escape from ancestor `overflow`/`z-index` clipping, but
+      // the list stays in the DOM next to its input (so `aria-controls` and
+      // focus order are natural). `manual` because the combobox fully owns
+      // open/close — light dismiss would fight typing in the input, which is
+      // outside the list. React unmounting the node hides it automatically.
+      try {
+        node.showPopover();
+      } catch {
+        /* unsupported / already shown */
+      }
+      // ResizeObserver is unavailable in jsdom and very old browsers; the
+      // measurement still re-runs whenever results.length changes (which
+      // covers the common "more results just arrived" path), so falling
+      // back to no observer is graceful.
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => {
+          // Always read from the ref so observer callbacks fired after a
+          // dependency change still call the latest measure closure.
+          measureRef.current();
+        });
+        observer.observe(node);
+        observerRef.current = observer;
+      }
     }
   }, []);
 
@@ -662,11 +675,12 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
 
   if (!pos) return null;
 
-  return createPortal(
+  return (
     <ul
       id={id}
       ref={setListNode}
       role="listbox"
+      popover="manual"
       style={{
         position: 'fixed',
         top: pos.top,
@@ -682,7 +696,7 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
         maxWidth: pos.maxWidth,
         maxHeight: pos.maxHeight,
       }}
-      className="z-[80] overflow-auto
+      className="tcq-popover overflow-auto
                  bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl shadow-lg py-1"
     >
       {results.map((user, i) => (
@@ -748,7 +762,6 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
           )}
         </li>
       ))}
-    </ul>,
-    document.body,
+    </ul>
   );
 }

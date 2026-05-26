@@ -83,32 +83,10 @@ describe('UserMenu (logout hamburger dropdown)', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('pressing Escape dismisses the dropdown', () => {
-    renderWithPrefs(<UserMenu />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
-  });
-
-  it('pointerdown outside the dropdown dismisses it', () => {
-    renderWithPrefs(
-      <div>
-        <button>other</button>
-        <UserMenu />
-      </div>,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    expect(screen.getByRole('menuitem', { name: 'Log out' })).toBeInTheDocument();
-
-    // Simulate a pointerdown on another element in the document. The menu
-    // should dismiss without blocking the underlying target.
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'other' }));
-
-    expect(screen.queryByRole('menuitem', { name: 'Log out' })).not.toBeInTheDocument();
-  });
+  // Esc and outside-click dismissal now come from the native `popover="auto"`
+  // element, which jsdom doesn't implement — that coverage lives in the
+  // Playwright e2e suite (auth-and-home.spec.ts) where a real browser drives
+  // the platform light dismiss.
 
   it('shows Preferences, Report an issue, and Log out in order when the hamburger is opened', () => {
     renderWithPrefs(<UserMenu />);

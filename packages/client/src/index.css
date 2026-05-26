@@ -263,6 +263,25 @@ abbr {
 }
 
 /*
+ * Dropdown menus / listboxes promoted to the top layer via the Popover API
+ * (the hamburger menu, the saved-topics dropdown, the username-combobox
+ * suggestion list). The UA stylesheet boxes a `[popover]` with
+ * `inset: 0; margin: auto; border: solid; padding: 0.25em`, which fights the
+ * JS-measured `top`/`left` we set inline and the Tailwind chrome on the same
+ * element. Neutralise it here. In `@layer base` so the per-element Tailwind
+ * utilities (`py-1`, `border`, the measured insets) still win, while this
+ * still beats the unlayered UA rule (author origin outranks the UA origin).
+ */
+@layer base {
+  .tcq-popover {
+    inset: auto;
+    margin: 0;
+    border: 0;
+    padding: 0;
+  }
+}
+
+/*
  * External-link indicator — appends a tiny northeast-facing arrow to any
  * <a> tagged with `.external-link` (currently: user-generated markdown
  * links rendered by <InlineMarkdown>, and the "Report an issue" entry in
