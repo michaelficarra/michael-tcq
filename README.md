@@ -122,6 +122,12 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 <img src="docs/screenshots/help.png" alt="Help tab">
 </figure>
 
+## Tech Stack
+
+TCQ is written in TypeScript throughout (strict mode), organised as three npm workspaces. The client is a React 19 single-page app built with Vite, styled with Tailwind CSS, and uses React Router for navigation. The server runs on Node.js with Express 5 and pushes real-time updates over Socket.IO (using MessagePack encoding), backed by express-session for login state. A shared workspace holds the Zod schemas and the unified/remark/rehype markdown pipeline that both ends rely on. Authentication is via GitHub OAuth, with a mock-auth mode for local development, and persistent state lives in Google Cloud Firestore. Tests run under Vitest (unit and integration) and Playwright (end-to-end), with ESLint and Prettier enforcing style and SVGO and oxipng optimising image assets.
+
+In production, TCQ runs as Docker containers on a Google Compute Engine VM (Container-Optimized OS), with Caddy in front of it for automatic Let's Encrypt HTTPS and systemd keeping the processes alive. Container images are served from Artifact Registry.
+
 ## Quick Start
 
 See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for local development setup.
