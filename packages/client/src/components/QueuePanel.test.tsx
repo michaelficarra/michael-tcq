@@ -71,7 +71,7 @@ function renderQueue(meeting: MeetingState, user: User | null = null, socket: Ty
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />
         </SocketContext>
@@ -676,7 +676,7 @@ describe('QueuePanel', () => {
             <QueuePanel
               autoEditEntryId="q1"
               onAddEntry={() => {}}
-              onCannedResponse={() => {}}
+              onSavedTopic={() => {}}
               onAutoEditConsumed={() => {}}
             />
           </SocketContext>
@@ -712,7 +712,7 @@ describe('QueuePanel', () => {
             <QueuePanel
               autoEditEntryId="q1"
               onAddEntry={() => {}}
-              onCannedResponse={() => {}}
+              onSavedTopic={() => {}}
               onAutoEditConsumed={() => {}}
             />
           </SocketContext>
@@ -745,7 +745,7 @@ describe('QueuePanel', () => {
             <QueuePanel
               autoEditEntryId="q1"
               onAddEntry={() => {}}
-              onCannedResponse={() => {}}
+              onSavedTopic={() => {}}
               onAutoEditConsumed={() => {}}
             />
           </SocketContext>

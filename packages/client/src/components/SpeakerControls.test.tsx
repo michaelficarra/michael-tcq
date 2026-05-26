@@ -6,7 +6,7 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 import { AuthProvider } from '../contexts/AuthContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
-import { __resetCannedResponsesCacheForTests } from '../hooks/useCannedResponses.js';
+import { __resetSavedTopicsCacheForTests } from '../hooks/useSavedTopics.js';
 
 const testUser: User = {
   ghid: 1,
@@ -19,14 +19,14 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
   return buildMeeting(overrides);
 }
 
-function renderControls(meeting: MeetingState, onAddEntry = vi.fn(), onCannedResponse = vi.fn()) {
+function renderControls(meeting: MeetingState, onAddEntry = vi.fn(), onSavedTopic = vi.fn()) {
   return {
     onAddEntry,
-    onCannedResponse,
+    onSavedTopic,
     ...render(
       <TestMeetingProvider meeting={meeting} user={testUser}>
         <PreferencesProvider>
-          <SpeakerControls onAddEntry={onAddEntry} onCannedResponse={onCannedResponse} />
+          <SpeakerControls onAddEntry={onAddEntry} onSavedTopic={onSavedTopic} />
         </PreferencesProvider>
       </TestMeetingProvider>,
     ),
@@ -34,10 +34,10 @@ function renderControls(meeting: MeetingState, onAddEntry = vi.fn(), onCannedRes
 }
 
 beforeEach(() => {
-  // Each test gets a clean canned-responses cache so a previous test's
+  // Each test gets a clean saved-topics cache so a previous test's
   // mutations don't leak into the next.
   localStorage.clear();
-  __resetCannedResponsesCacheForTests();
+  __resetSavedTopicsCacheForTests();
 });
 
 describe('SpeakerControls', () => {
@@ -104,21 +104,21 @@ describe('SpeakerControls', () => {
     expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
   });
 
-  it('renders the canned-responses trigger button alongside the entry-type buttons', () => {
+  it('renders the saved-topics trigger button alongside the entry-type buttons', () => {
     renderControls(makeMeeting());
-    expect(screen.getByRole('button', { name: 'Canned responses' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Saved topics' })).toBeInTheDocument();
   });
 
-  it('disables the canned-responses button when queue is closed for non-chairs', () => {
+  it('disables the saved-topics button when queue is closed for non-chairs', () => {
     const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
     renderControls(meeting);
-    expect(screen.getByRole('button', { name: 'Canned responses' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saved topics' })).toBeDisabled();
   });
 });
 
-// ----- Canned responses dropdown -----
+// ----- Saved topics dropdown -----
 //
-// These tests wrap the component in a real AuthProvider so `useCannedResponses`
+// These tests wrap the component in a real AuthProvider so `useSavedTopics`
 // can key by user.ghid. /api/me is stubbed so the provider resolves without
 // network. Each render awaits an act() tick so the AuthProvider's initial
 // fetch settles before the dropdown reads its (now-seeded) list.
@@ -135,72 +135,72 @@ function stubMe(ghid: number, username = 'alice'): void {
   }) as typeof fetch;
 }
 
-async function renderControlsWithAuth(meeting: MeetingState, onAddEntry = vi.fn(), onCannedResponse = vi.fn()) {
+async function renderControlsWithAuth(meeting: MeetingState, onAddEntry = vi.fn(), onSavedTopic = vi.fn()) {
   const result = render(
     <AuthProvider>
       <TestMeetingProvider meeting={meeting} user={testUser}>
         <PreferencesProvider>
-          <SpeakerControls onAddEntry={onAddEntry} onCannedResponse={onCannedResponse} />
+          <SpeakerControls onAddEntry={onAddEntry} onSavedTopic={onSavedTopic} />
         </PreferencesProvider>
       </TestMeetingProvider>
     </AuthProvider>,
   );
   // Flush AuthProvider's initial /api/me fetch.
   await act(async () => {});
-  return { onAddEntry, onCannedResponse, ...result };
+  return { onAddEntry, onSavedTopic, ...result };
 }
 
-describe('SpeakerControls — canned responses dropdown', () => {
-  it('opens the dropdown with the seeded default response on first click', async () => {
+describe('SpeakerControls — saved topics dropdown', () => {
+  it('opens the dropdown with the seeded default topic on first click', async () => {
     stubMe(1);
     await renderControlsWithAuth(makeMeeting());
-    const trigger = screen.getByRole('button', { name: 'Canned responses' });
+    const trigger = screen.getByRole('button', { name: 'Saved topics' });
 
     // Dropdown is closed initially.
-    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'Saved topics' })).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
 
-    const menu = screen.getByRole('menu', { name: 'Canned responses' });
+    const menu = screen.getByRole('menu', { name: 'Saved topics' });
     expect(menu).toBeInTheDocument();
     // The default seed should be present.
     expect(screen.getByRole('menuitem', { name: '👍 I support this. (EOM)' })).toBeInTheDocument();
     // The "Edit…" entry always appears.
-    expect(screen.getByRole('menuitem', { name: /Edit canned responses/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Edit saved topics/ })).toBeInTheDocument();
   });
 
-  it('calls onCannedResponse with the selected text and closes the menu', async () => {
+  it('calls onSavedTopic with the selected text and closes the menu', async () => {
     stubMe(1);
-    const { onCannedResponse } = await renderControlsWithAuth(makeMeeting());
-    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
+    const { onSavedTopic } = await renderControlsWithAuth(makeMeeting());
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
 
     fireEvent.click(screen.getByRole('menuitem', { name: '👍 I support this. (EOM)' }));
 
-    expect(onCannedResponse).toHaveBeenCalledWith('👍 I support this. (EOM)');
+    expect(onSavedTopic).toHaveBeenCalledWith('👍 I support this. (EOM)');
     // Selecting closes the dropdown.
-    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'Saved topics' })).not.toBeInTheDocument();
   });
 
   it('renders the empty-state message when the user has deleted every entry', async () => {
     // Pre-seed an empty list so the hook doesn't add the default back.
-    localStorage.setItem('tcq:canned-responses:1', JSON.stringify([]));
+    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([]));
     stubMe(1);
     await renderControlsWithAuth(makeMeeting());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
 
-    expect(screen.getByText(/No canned responses yet/)).toBeInTheDocument();
+    expect(screen.getByText(/No saved topics yet/)).toBeInTheDocument();
     // The Edit entry is still available so the user can recover.
-    expect(screen.getByRole('menuitem', { name: /Edit canned responses/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Edit saved topics/ })).toBeInTheDocument();
   });
 
   it('Escape closes the dropdown', async () => {
     stubMe(1);
     await renderControlsWithAuth(makeMeeting());
-    fireEvent.click(screen.getByRole('button', { name: 'Canned responses' }));
-    expect(screen.getByRole('menu', { name: 'Canned responses' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
+    expect(screen.getByRole('menu', { name: 'Saved topics' })).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('menu', { name: 'Canned responses' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'Saved topics' })).not.toBeInTheDocument();
   });
 });

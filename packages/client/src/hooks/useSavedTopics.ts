@@ -1,5 +1,5 @@
 /**
- * Per-user canned responses — short, pre-written queue topics the user can
+ * Per-user saved topics — short, pre-written queue topics the user can
  * fire into the queue with a single click. Persisted to localStorage,
  * keyed by `user.ghid` so each authenticated identity has its own list.
  *
@@ -18,20 +18,18 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 
-export interface CannedResponse {
+export interface SavedTopic {
   id: string;
   text: string;
 }
 
-/** Maximum number of canned responses a user may save. */
-export const CANNED_RESPONSES_MAX = 5;
+/** Maximum number of saved topics a user may save. */
+export const SAVED_TOPICS_MAX = 5;
 
 /** Default seed used the first time a user opens the dropdown. */
-export const DEFAULT_CANNED_RESPONSES: ReadonlyArray<Pick<CannedResponse, 'text'>> = [
-  { text: '👍 I support this. (EOM)' },
-];
+export const DEFAULT_SAVED_TOPICS: ReadonlyArray<Pick<SavedTopic, 'text'>> = [{ text: '👍 I support this. (EOM)' }];
 
-const STORAGE_KEY_PREFIX = 'tcq:canned-responses:';
+const STORAGE_KEY_PREFIX = 'tcq:saved-topics:';
 
 function storageKey(ghid: number | null): string | null {
   return ghid == null ? null : `${STORAGE_KEY_PREFIX}${ghid}`;
@@ -45,35 +43,35 @@ function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return `cr-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return `st-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
 
-function seedDefaults(): CannedResponse[] {
-  return DEFAULT_CANNED_RESPONSES.map((d) => ({ id: newId(), text: d.text }));
+function seedDefaults(): SavedTopic[] {
+  return DEFAULT_SAVED_TOPICS.map((d) => ({ id: newId(), text: d.text }));
 }
 
 /** Read and parse the stored list. Returns null when nothing is stored,
  *  so callers can distinguish "never seeded" from "user emptied the list". */
-function readFromStorage(key: string): CannedResponse[] | null {
+function readFromStorage(key: string): SavedTopic[] | null {
   try {
     const raw = localStorage.getItem(key);
     if (raw === null) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // Defensive filter: ignore anything that doesn't look like a CannedResponse.
+    // Defensive filter: ignore anything that doesn't look like a SavedTopic.
     // A garbled storage value shouldn't crash the dropdown.
     return parsed
       .filter(
-        (x): x is CannedResponse =>
+        (x): x is SavedTopic =>
           x != null && typeof x === 'object' && typeof x.id === 'string' && typeof x.text === 'string',
       )
-      .slice(0, CANNED_RESPONSES_MAX);
+      .slice(0, SAVED_TOPICS_MAX);
   } catch {
     return [];
   }
 }
 
-function writeToStorage(key: string, value: CannedResponse[]): void {
+function writeToStorage(key: string, value: SavedTopic[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -85,11 +83,11 @@ function writeToStorage(key: string, value: CannedResponse[]): void {
 // Module-level cache: storage-key → list. Holding the array here keeps
 // useSyncExternalStore's snapshot stable across renders until a mutation
 // replaces the reference.
-const cache = new Map<string, CannedResponse[]>();
+const cache = new Map<string, SavedTopic[]>();
 const listeners = new Set<() => void>();
 // Stable empty array so the "no user signed in" snapshot stays referentially
 // equal across renders.
-const EMPTY: CannedResponse[] = Object.freeze([]) as unknown as CannedResponse[];
+const EMPTY: SavedTopic[] = Object.freeze([]) as unknown as SavedTopic[];
 
 function notify(): void {
   for (const listener of listeners) listener();
@@ -98,7 +96,7 @@ function notify(): void {
 /** Return the cached list for a key, loading (and seeding if needed) on
  *  first access. Always returns the same array reference until a mutation
  *  replaces it. */
-function getOrLoad(key: string): CannedResponse[] {
+function getOrLoad(key: string): SavedTopic[] {
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
   const stored = readFromStorage(key);
@@ -112,7 +110,7 @@ function getOrLoad(key: string): CannedResponse[] {
   return stored;
 }
 
-function setAndPersist(key: string, next: CannedResponse[]): void {
+function setAndPersist(key: string, next: SavedTopic[]): void {
   cache.set(key, next);
   writeToStorage(key, next);
   notify();
@@ -120,14 +118,14 @@ function setAndPersist(key: string, next: CannedResponse[]): void {
 
 /** Exposed for tests: drop all in-memory cache so the next read re-loads
  *  from localStorage. Not used in production code. */
-export function __resetCannedResponsesCacheForTests(): void {
+export function __resetSavedTopicsCacheForTests(): void {
   cache.clear();
 }
 
-export interface UseCannedResponsesResult {
+export interface UseSavedTopicsResult {
   /** The current list. Empty array when no user is signed in or the user
    *  has explicitly deleted every entry. */
-  responses: CannedResponse[];
+  topics: SavedTopic[];
   /** Add a new entry at the end. No-op when already at the cap. Returns
    *  the new entry's id, or null if the cap was hit / no user signed in. */
   add: (text?: string) => string | null;
@@ -151,33 +149,33 @@ const subscribe = (callback: () => void): (() => void) => {
 };
 
 /**
- * Hook for reading and mutating the current user's canned responses.
+ * Hook for reading and mutating the current user's saved topics.
  *
  * Returns an empty list when no user is signed in (the dropdown still
  * renders, but mutation is a no-op until a user is present).
  */
-export function useCannedResponses(): UseCannedResponsesResult {
+export function useSavedTopics(): UseSavedTopicsResult {
   const { user } = useAuth();
   const ghid = user?.ghid ?? null;
   const key = storageKey(ghid);
 
   // Snapshot getter is recomputed when key changes (new user) so React
   // resubscribes with a getter pointing at the new cache slot.
-  const getSnapshot = useCallback((): CannedResponse[] => {
+  const getSnapshot = useCallback((): SavedTopic[] => {
     if (key == null) return EMPTY;
     return getOrLoad(key);
   }, [key]);
 
-  const responses = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const topics = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  return useMemo<UseCannedResponsesResult>(
+  return useMemo<UseSavedTopicsResult>(
     () => ({
-      responses,
+      topics,
       add(text: string = '') {
         if (key == null) return null;
         const current = getOrLoad(key);
-        if (current.length >= CANNED_RESPONSES_MAX) return null;
-        const entry: CannedResponse = { id: newId(), text };
+        if (current.length >= SAVED_TOPICS_MAX) return null;
+        const entry: SavedTopic = { id: newId(), text };
         setAndPersist(key, [...current, entry]);
         return entry.id;
       },
@@ -213,8 +211,8 @@ export function useCannedResponses(): UseCannedResponsesResult {
         next.splice(toIndex, 0, moved);
         setAndPersist(key, next);
       },
-      max: CANNED_RESPONSES_MAX,
+      max: SAVED_TOPICS_MAX,
     }),
-    [responses, key],
+    [topics, key],
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Preferences modal — exposes the keyboard-shortcuts toggle, notification
- * settings, the canned-responses editor, and a light/dark/system theme
- * selector. Reached from the hamburger menu, the canned-response
+ * settings, the saved-topics editor, and a light/dark/system theme
+ * selector. Reached from the hamburger menu, the saved-topics
  * dropdown's "Edit…" entry, or via the `,` keyboard shortcut.
  *
  * Persists changes to localStorage immediately (no Save button). Modal
@@ -28,7 +28,7 @@ import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifi
 import { CSS } from '@dnd-kit/utilities';
 import { usePreferences, type Theme, type NotificationPrefs } from '../contexts/PreferencesContext.js';
 import { notificationsSupported } from '../lib/notifications.js';
-import { useCannedResponses, type CannedResponse } from '../hooks/useCannedResponses.js';
+import { useSavedTopics, type SavedTopic } from '../hooks/useSavedTopics.js';
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -74,7 +74,7 @@ export function PreferencesModal() {
   const supported = notificationsSupported();
 
   // Section refs so we can scroll a deep-linked section into view on open.
-  const cannedSectionRef = useRef<HTMLElement | null>(null);
+  const savedTopicsSectionRef = useRef<HTMLElement | null>(null);
 
   // Dismiss on Escape while open.
   useEffect(() => {
@@ -86,13 +86,13 @@ export function PreferencesModal() {
     return () => document.removeEventListener('keydown', onKey);
   }, [showPreferences, closePreferences]);
 
-  // When opened with a focusSection (e.g. from the canned-response
+  // When opened with a focusSection (e.g. from the saved-topics
   // dropdown), scroll that section into view once and then clear the
   // flag so a later re-render doesn't re-scroll.
   useEffect(() => {
     if (!showPreferences || focusSection == null) return;
-    if (focusSection === 'canned') {
-      cannedSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (focusSection === 'saved-topics') {
+      savedTopicsSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     clearFocusSection();
   }, [showPreferences, focusSection, clearFocusSection]);
@@ -172,7 +172,7 @@ export function PreferencesModal() {
           </div>
         </section>
 
-        <CannedResponsesSection sectionRef={cannedSectionRef} />
+        <SavedTopicsSection sectionRef={savedTopicsSectionRef} />
 
         <section>
           <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
@@ -197,15 +197,15 @@ export function PreferencesModal() {
   );
 }
 
-// ----- Canned responses editor -----
+// ----- Saved topics editor -----
 
-interface CannedResponsesSectionProps {
+interface SavedTopicsSectionProps {
   sectionRef: React.RefObject<HTMLElement | null>;
 }
 
-function CannedResponsesSection({ sectionRef }: CannedResponsesSectionProps) {
-  const { responses, add, update, remove, reorder, max } = useCannedResponses();
-  const atCap = responses.length >= max;
+function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
+  const { topics, add, update, remove, reorder, max } = useSavedTopics();
+  const atCap = topics.length >= max;
   // When the user adds a new row, focus its input so they can type
   // immediately. Tracked here rather than inside the row component so
   // the focus survives the re-render that adding a row triggers.
@@ -231,9 +231,9 @@ function CannedResponsesSection({ sectionRef }: CannedResponsesSectionProps) {
   }
 
   return (
-    <section ref={sectionRef} className="mb-4" aria-labelledby="canned-responses-heading">
-      <h3 id="canned-responses-heading" className="text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
-        Canned responses
+    <section ref={sectionRef} className="mb-4" aria-labelledby="saved-topics-heading">
+      <h3 id="saved-topics-heading" className="text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
+        Saved topics
       </h3>
       <p className="text-xs text-stone-500 dark:text-stone-500 mb-2">
         Up to {max} pre-written queue topics you can post with one click.
@@ -244,12 +244,12 @@ function CannedResponsesSection({ sectionRef }: CannedResponsesSectionProps) {
         modifiers={[restrictToVerticalAxis, restrictToParentElement]}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={responses.map((r) => r.id)} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-1" aria-label="Canned responses">
-            {responses.map((r) => (
-              <SortableCannedRow
+        <SortableContext items={topics.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+          <ul className="flex flex-col gap-1" aria-label="Saved topics">
+            {topics.map((r) => (
+              <SortableSavedTopicRow
                 key={r.id}
-                response={r}
+                topic={r}
                 autoFocus={r.id === autoFocusId}
                 onAutoFocusConsumed={() => setAutoFocusId(null)}
                 onCommit={(text) => {
@@ -272,31 +272,37 @@ function CannedResponsesSection({ sectionRef }: CannedResponsesSectionProps) {
                     text-stone-600 dark:text-stone-400 transition-colors
                     ${atCap ? 'opacity-50 cursor-not-allowed' : 'hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer'}`}
       >
-        Add canned response
+        Add saved topic
       </button>
     </section>
   );
 }
 
-interface SortableCannedRowProps {
-  response: CannedResponse;
+interface SortableSavedTopicRowProps {
+  topic: SavedTopic;
   autoFocus: boolean;
   onAutoFocusConsumed: () => void;
   onCommit: (text: string) => void;
   onDelete: () => void;
 }
 
-function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit, onDelete }: SortableCannedRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: response.id });
-  const [draft, setDraft] = useState(response.text);
+function SortableSavedTopicRow({
+  topic,
+  autoFocus,
+  onAutoFocusConsumed,
+  onCommit,
+  onDelete,
+}: SortableSavedTopicRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic.id });
+  const [draft, setDraft] = useState(topic.text);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Keep the input in sync when the persisted value changes underneath
   // (e.g. another tab updates it). Avoid clobbering an in-progress edit
   // by only re-syncing while the input isn't focused.
   useEffect(() => {
-    if (document.activeElement !== inputRef.current) setDraft(response.text);
-  }, [response.text]);
+    if (document.activeElement !== inputRef.current) setDraft(topic.text);
+  }, [topic.text]);
 
   useEffect(() => {
     if (autoFocus) {
@@ -306,7 +312,7 @@ function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit,
   }, [autoFocus, onAutoFocusConsumed]);
 
   function handleBlur() {
-    if (draft === response.text) return;
+    if (draft === topic.text) return;
     onCommit(draft);
   }
 
@@ -319,7 +325,7 @@ function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit,
       // close the dialog when the user only wants to revert this row.
       e.preventDefault();
       e.stopPropagation();
-      setDraft(response.text);
+      setDraft(topic.text);
       inputRef.current?.blur();
     }
   }
@@ -351,8 +357,8 @@ function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit,
         onChange={(e) => setDraft(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        aria-label="Canned response text"
-        placeholder="Canned response text"
+        aria-label="Saved topic text"
+        placeholder="Saved topic text"
         className="flex-1 min-w-0 border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm
                    bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200
                    focus:outline-none focus:ring-1 focus:ring-teal-500"
@@ -360,7 +366,7 @@ function SortableCannedRow({ response, autoFocus, onAutoFocusConsumed, onCommit,
       <button
         type="button"
         onClick={onDelete}
-        aria-label="Delete canned response"
+        aria-label="Delete saved topic"
         className="text-stone-400 hover:text-red-600 dark:text-stone-500 dark:hover:text-red-400 cursor-pointer px-1 text-sm"
       >
         ✕

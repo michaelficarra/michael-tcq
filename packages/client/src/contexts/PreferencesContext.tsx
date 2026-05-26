@@ -120,7 +120,7 @@ function persistNotificationPrefs(prefs: NotificationPrefs): void {
  * particular section when it opens. Extend this union when new sections
  * grow their own deep-link callers.
  */
-export type PreferencesSection = 'canned';
+export type PreferencesSection = 'saved-topics';
 
 interface PreferencesContextValue {
   shortcutsEnabled: boolean;
@@ -153,7 +153,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [notificationPrefs, setNotificationPrefsState] = useState<NotificationPrefs>(getNotificationPrefs);
   const [showPreferences, setShowPreferences] = useState(false);
   // Section the modal should scroll to on next open. Held in context so a
-  // caller (e.g. the canned-response dropdown) can deep-link into a specific
+  // caller (e.g. the saved-topics dropdown) can deep-link into a specific
   // section of the modal without coupling to its internals.
   const [focusSection, setFocusSection] = useState<PreferencesSection | null>(null);
 

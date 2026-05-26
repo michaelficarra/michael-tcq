@@ -12,8 +12,8 @@
  * - Clarifying Question (green)
  * - Point of Order (red)
  *
- * A fifth button to the right opens the user's canned responses dropdown
- * (see useCannedResponses). Clicking a canned response immediately adds
+ * A fifth button to the right opens the user's saved topics dropdown
+ * (see useSavedTopics). Clicking a saved topic immediately adds
  * a finished topic entry to the queue, skipping the pending/initial-edit
  * state.
  */
@@ -24,12 +24,14 @@ import type { QueueEntryType } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { ChevronDownIcon } from './icons.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
-import { useCannedResponses } from '../hooks/useCannedResponses.js';
+import { useSavedTopics } from '../hooks/useSavedTopics.js';
 
 /** Configuration for each entry type button. */
 const ENTRY_TYPES: {
   type: QueueEntryType;
   label: string;
+  /** Decorative emoji shown before the label (aria-hidden). */
+  emoji: string;
   /** Tailwind classes for the button background. */
   bgClass: string;
   /** Whether this type requires a current topic to be visible. */
@@ -38,24 +40,30 @@ const ENTRY_TYPES: {
   {
     type: 'topic',
     label: 'New Topic',
+    emoji: '💬',
     bgClass: 'bg-blue-700 enabled:hover:bg-blue-800',
     requiresTopic: false,
   },
   {
     type: 'reply',
     label: 'Discuss Current Topic',
+    emoji: '↩️',
     bgClass: 'bg-cyan-700 enabled:hover:bg-cyan-800',
     requiresTopic: true,
   },
   {
     type: 'question',
+    // White question mark (not the red ❓) so it stays legible on the green button.
     label: 'Clarifying Question',
+    emoji: '❔',
     bgClass: 'bg-green-700 enabled:hover:bg-green-800',
     requiresTopic: false,
   },
   {
     type: 'point-of-order',
     label: 'Point of Order',
+    // Rotating alarm light — signals an urgent procedural interruption.
+    emoji: '🚨',
     bgClass: 'bg-rose-700 enabled:hover:bg-rose-800',
     requiresTopic: false,
   },
@@ -64,20 +72,20 @@ const ENTRY_TYPES: {
 interface SpeakerControlsProps {
   /** Called to add an entry to the queue (in the pending initial-edit state). */
   onAddEntry: (type: QueueEntryType) => void;
-  /** Called when the user selects one of their saved canned responses. The
+  /** Called when the user selects one of their saved topics. The
    *  parent emits a finished topic add (no pending state, no auto-edit). */
-  onCannedResponse: (text: string) => void;
+  onSavedTopic: (text: string) => void;
 }
 
-export function SpeakerControls({ onAddEntry, onCannedResponse }: SpeakerControlsProps) {
+export function SpeakerControls({ onAddEntry, onSavedTopic }: SpeakerControlsProps) {
   const { meeting } = useMeetingState();
   const isChair = useIsChair();
 
   if (!meeting) return null;
 
-  // The canned-response button mirrors the New Topic gate (closed queue
+  // The saved-topics button mirrors the New Topic gate (closed queue
   // disables both for non-chairs). Compute once and pass through.
-  const cannedDisabled = meeting.queue.closed && !isChair;
+  const savedTopicsDisabled = meeting.queue.closed && !isChair;
 
   return (
     <div>
@@ -96,32 +104,38 @@ export function SpeakerControls({ onAddEntry, onCannedResponse }: SpeakerControl
               key={config.type}
               onClick={() => onAddEntry(config.type)}
               disabled={disabled}
-              className={`text-white text-sm font-medium px-3 py-1.5 rounded
+              className={`inline-flex items-center gap-1.5 text-white text-sm font-medium pl-2.5 pr-3 py-1.5 rounded
                          transition-colors
                          focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-stone-900 focus:ring-blue-500
                          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                          ${config.bgClass}`}
             >
+              {/* Oversized emoji: enlarged glyph, but leading-5 caps the line
+                  box at the label's height so the button doesn't grow taller —
+                  the glyph just overflows into the existing vertical padding. */}
+              <span aria-hidden="true" className="text-[1.375rem] leading-5">
+                {config.emoji}
+              </span>
               {config.label}
             </button>
           );
         })}
-        <CannedResponseButton disabled={cannedDisabled} onSelect={onCannedResponse} />
+        <SavedTopicButton disabled={savedTopicsDisabled} onSelect={onSavedTopic} />
       </div>
     </div>
   );
 }
 
-/** The smiley-and-triangle button that opens the canned-responses dropdown.
+/** The recycle-and-chevron button that opens the saved-topics dropdown.
  *  Lives in the same file so it can sit naturally inside the entry-types
  *  flex row and share the closed-queue gate logic with the other buttons. */
-interface CannedResponseButtonProps {
+interface SavedTopicButtonProps {
   disabled: boolean;
   onSelect: (text: string) => void;
 }
 
-function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps) {
-  const { responses } = useCannedResponses();
+function SavedTopicButton({ disabled, onSelect }: SavedTopicButtonProps) {
+  const { topics } = useSavedTopics();
   const { openPreferences } = usePreferences();
   const [open, setOpen] = useState(false);
   // Anchor coordinates and width are measured on toggle so the portaled
@@ -175,7 +189,7 @@ function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps)
 
   function handleEdit() {
     setOpen(false);
-    openPreferences('canned');
+    openPreferences('saved-topics');
   }
 
   return (
@@ -185,7 +199,7 @@ function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps)
         type="button"
         onClick={toggleMenu}
         disabled={disabled}
-        aria-label="Canned responses"
+        aria-label="Saved topics"
         aria-haspopup="menu"
         aria-expanded={open}
         // Match the height/padding of the other entry buttons so the row
@@ -202,8 +216,9 @@ function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps)
                         : 'cursor-pointer enabled:hover:bg-stone-100 dark:enabled:hover:bg-stone-700'
                     }`}
       >
-        <span aria-hidden="true" className="text-xl leading-none">
-          📝
+        {/* Matches the enlarged queue-button emoji (see note there). */}
+        <span aria-hidden="true" className="text-[1.375rem] leading-5">
+          ♻️
         </span>
         <ChevronDownIcon className="w-5 h-5" />
       </button>
@@ -213,15 +228,15 @@ function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps)
           <div
             ref={dropdownRef}
             role="menu"
-            aria-label="Canned responses"
+            aria-label="Saved topics"
             className="fixed z-[70] min-w-48 max-w-64 rounded border border-stone-200 dark:border-stone-700
                        bg-white dark:bg-stone-800 shadow-lg py-1"
             style={{ top: pos.top, left: pos.left }}
           >
-            {responses.length === 0 ? (
-              <p className="px-3 py-1.5 text-xs italic text-stone-500 dark:text-stone-400">No canned responses yet.</p>
+            {topics.length === 0 ? (
+              <p className="px-3 py-1.5 text-xs italic text-stone-500 dark:text-stone-400">No saved topics yet.</p>
             ) : (
-              responses.map((r) => (
+              topics.map((r) => (
                 <button
                   key={r.id}
                   type="button"
@@ -244,7 +259,7 @@ function CannedResponseButton({ disabled, onSelect }: CannedResponseButtonProps)
               className="block w-full text-left px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400
                          hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors cursor-pointer italic"
             >
-              Edit canned responses&hellip;
+              Edit saved topics&hellip;
             </button>
           </div>,
           document.body,

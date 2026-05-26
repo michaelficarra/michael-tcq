@@ -49,7 +49,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -70,7 +70,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -94,7 +94,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -125,7 +125,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -154,7 +154,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -181,7 +181,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -207,7 +207,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -232,7 +232,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
@@ -263,7 +263,7 @@ describe('Presentation mode', () => {
           <QueuePanel
             autoEditEntryId={null}
             onAddEntry={() => {}}
-            onCannedResponse={() => {}}
+            onSavedTopic={() => {}}
             onAutoEditConsumed={() => {}}
           />,
           meeting,
