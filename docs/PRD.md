@@ -453,7 +453,7 @@ Pressing `?` opens a dialog listing all keyboard shortcuts. The dialog includes 
 
 ## Preferences
 
-The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut. Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
+The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut. It is a modal dialog: while it is open, keyboard focus is trapped inside it, and it can be dismissed by pressing `Escape`, clicking outside it, using the platform back gesture, or clicking its close (✕) button. On dismissal, focus returns to whatever was focused before it opened. Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
 
 - **Keyboard shortcuts** — enable or disable global keyboard shortcuts. Mirrors the toggle inside the `?` dialog; both locations read and write the same value.
 - **Notifications** — a top-level toggle plus four per-event toggles (see the Notifications section below).

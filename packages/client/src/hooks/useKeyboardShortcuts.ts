@@ -33,6 +33,13 @@ export interface Shortcut {
 export function useKeyboardShortcuts(shortcuts: Shortcut[], enabled: boolean) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // A native modal <dialog> (e.g. the Preferences modal) traps focus and
+      // owns keyboard interaction — most importantly, Esc is a platform close
+      // request. Bail out without preventing default so the dialog can handle
+      // its own keys; calling preventDefault here would cancel that close
+      // request and the modal could never be dismissed with Esc.
+      if (document.querySelector('dialog[open]')) return;
+
       // Don't trigger shortcuts when typing in form fields
       const target = e.target as HTMLElement;
       if (

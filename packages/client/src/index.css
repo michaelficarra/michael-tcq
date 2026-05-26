@@ -191,6 +191,78 @@ abbr {
 }
 
 /*
+ * Preferences modal — a native modal <dialog> (opened with showModal()).
+ * The box's cosmetic styling rides on Tailwind utility classes on the
+ * element; this block adds what those utilities can't express: the
+ * ::backdrop tint and the entry/exit animation into and out of the top
+ * layer (per the "animate to/from the top layer" pattern — @starting-style
+ * for entry, allow-discrete + overlay so the box stays rendered and layered
+ * during exit). Entry animation is Baseline; the `overlay` transition is a
+ * progressive enhancement (Chromium-only today) — where it's unsupported the
+ * exit simply isn't kept in the top layer, which is harmless for a centred
+ * modal that already sits on top.
+ */
+.tcq-dialog {
+  /* Re-centre: Tailwind's preflight resets `margin: 0` on every element,
+     which clobbers the UA `margin: auto` that centres a modal <dialog> in
+     the viewport. This unlayered rule wins over preflight's @layer base. */
+  margin: auto;
+
+  /* Closed / exit state — the [open] rules below transition back to this. */
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out,
+    display 0.18s allow-discrete,
+    overlay 0.18s allow-discrete;
+  /* After the shorthand so it isn't reset — lets display/overlay (discrete
+     properties) participate in the transition rather than flipping instantly. */
+  transition-behavior: allow-discrete;
+}
+
+.tcq-dialog[open] {
+  opacity: 1;
+  transform: scale(1);
+
+  /* Where the box animates *from* the first time it's shown. */
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.tcq-dialog::backdrop {
+  background-color: rgb(0 0 0 / 0);
+  transition:
+    background-color 0.18s ease-out,
+    display 0.18s allow-discrete,
+    overlay 0.18s allow-discrete;
+  transition-behavior: allow-discrete;
+}
+
+.tcq-dialog[open]::backdrop {
+  background-color: rgb(0 0 0 / 0.3);
+
+  @starting-style {
+    background-color: rgb(0 0 0 / 0);
+  }
+}
+
+/* Respect reduced-motion: drop the scale and collapse the duration to a
+   near-instant fade. */
+@media (prefers-reduced-motion: reduce) {
+  .tcq-dialog,
+  .tcq-dialog[open] {
+    transform: none;
+  }
+  .tcq-dialog,
+  .tcq-dialog::backdrop {
+    transition-duration: 0.01s;
+  }
+}
+
+/*
  * External-link indicator — appends a tiny northeast-facing arrow to any
  * <a> tagged with `.external-link` (currently: user-generated markdown
  * links rendered by <InlineMarkdown>, and the "Report an issue" entry in

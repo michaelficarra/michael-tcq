@@ -73,45 +73,57 @@ describe('PreferencesModal', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  it('Escape dismisses the modal', () => {
+  // The native dialog funnels every platform-driven dismissal (Esc, the
+  // Android back gesture, light dismiss) through a single `close` event,
+  // which the modal mirrors back into closePreferences. jsdom implements
+  // none of those platform behaviours, so here we assert the wiring around
+  // the `close` event; the real Esc / outside-click / focus-trap behaviour is
+  // exercised against a browser in e2e/preferences.spec.ts.
+  it('the dialog `close` event dismisses the modal', () => {
     renderWithModal();
     fireEvent.click(screen.getByText('open'));
-    expect(screen.getByRole('dialog', { name: 'Preferences' })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Preferences' });
 
     act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dialog.dispatchEvent(new Event('close'));
     });
 
     expect(screen.queryByRole('dialog', { name: 'Preferences' })).not.toBeInTheDocument();
   });
 
-  it('clicking the backdrop dismisses the modal', () => {
-    renderWithModal();
-    fireEvent.click(screen.getByText('open'));
-    const dialog = screen.getByRole('dialog', { name: 'Preferences' });
-
-    fireEvent.click(dialog);
-
-    expect(screen.queryByRole('dialog', { name: 'Preferences' })).not.toBeInTheDocument();
-  });
-
-  it('clicking inside the dialog box does not dismiss it', () => {
-    renderWithModal();
-    fireEvent.click(screen.getByText('open'));
-
-    // Click on the heading (inside the inner box) — propagation is stopped.
-    fireEvent.click(screen.getByRole('heading', { name: 'Preferences' }));
-
-    expect(screen.getByRole('dialog', { name: 'Preferences' })).toBeInTheDocument();
-  });
-
-  it('clicking the close X button dismisses the modal', () => {
+  it('the close X button dismisses the modal', () => {
     renderWithModal();
     fireEvent.click(screen.getByText('open'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(screen.queryByRole('dialog', { name: 'Preferences' })).not.toBeInTheDocument();
+  });
+
+  // The outside-click fallback (used when the browser lacks `closedby`, which
+  // is the case under jsdom) closes the dialog only when the click lands on
+  // the backdrop — i.e. the dialog element is the target and the pointer is
+  // outside its content box. jsdom reports a zero-sized getBoundingClientRect,
+  // so coordinates clearly off-origin count as "outside".
+  it('a backdrop click (outside the content box) dismisses the modal', () => {
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+    const dialog = screen.getByRole('dialog', { name: 'Preferences' });
+
+    fireEvent.click(dialog, { clientX: 9999, clientY: 9999 });
+
+    expect(screen.queryByRole('dialog', { name: 'Preferences' })).not.toBeInTheDocument();
+  });
+
+  it('clicking inside the dialog content does not dismiss it', () => {
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    // A click whose target is a child (the heading) is ignored by the
+    // outside-click fallback, so the modal stays open.
+    fireEvent.click(screen.getByRole('heading', { name: 'Preferences' }));
+
+    expect(screen.getByRole('dialog', { name: 'Preferences' })).toBeInTheDocument();
   });
 });
 

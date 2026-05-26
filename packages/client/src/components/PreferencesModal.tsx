@@ -4,8 +4,16 @@
  * selector. Reached from the hamburger menu, the saved-topics
  * dropdown's "Edit…" entry, or via the `,` keyboard shortcut.
  *
- * Persists changes to localStorage immediately (no Save button). Modal
- * positioning matches KeyboardShortcutsDialog so the nav bar stays visible.
+ * Persists changes to localStorage immediately (no Save button).
+ *
+ * Built on a native modal <dialog> opened with showModal(): focus trapping,
+ * focus restoration, Esc / Android-back dismissal, and top-layer stacking
+ * come for free from the platform. Light dismiss (click outside) is declared
+ * with `closedby="any"`, with a JS coordinate fallback for browsers that lack
+ * it (notably Safari). `showPreferences` from PreferencesContext stays the
+ * single source of truth: an effect mirrors it onto showModal()/close(), and
+ * the dialog's `close` event mirrors any platform-driven close back into it.
+ * The ::backdrop tint and entry/exit animation live in index.css.
  */
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -75,18 +83,97 @@ export function PreferencesModal() {
 
   const supported = notificationsSupported();
 
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   // Section refs so we can scroll a deep-linked section into view on open.
   const savedTopicsSectionRef = useRef<HTMLElement | null>(null);
 
-  // Dismiss on Escape while open.
+  // The <dialog> element is always mounted (so showModal() has a stable
+  // target), but its *contents* are rendered only while open or animating
+  // closed — see `isClosing`. A dismissed modal must contribute no form
+  // controls to the DOM: Playwright's getByLabel/getByText match hidden
+  // elements, so leaving the controls mounted would let them collide with
+  // unrelated label/text queries across the suite.
+  //
+  // `isClosing` is adjusted during render (React's "store info from previous
+  // renders" pattern) rather than in an effect, so the contents stay mounted
+  // on the very render that hides the modal — otherwise they'd unmount before
+  // the exit transition could play.
+  const [isClosing, setIsClosing] = useState(false);
+  const [wasOpen, setWasOpen] = useState(showPreferences);
+  if (wasOpen !== showPreferences) {
+    setWasOpen(showPreferences);
+    setIsClosing(!showPreferences);
+  }
+  const renderContents = showPreferences || isClosing;
+
+  // Mirror the React open/close state onto the native dialog. showModal()
+  // puts the dialog in the top layer (focus trap, Esc/back-gesture handling,
+  // ::backdrop); close() runs the exit animation via the CSS transition.
   useEffect(() => {
-    if (!showPreferences) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') closePreferences();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [showPreferences, closePreferences]);
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (showPreferences && !dialog.open) dialog.showModal();
+    else if (!showPreferences && dialog.open) dialog.close();
+  }, [showPreferences]);
+
+  // Once the exit transition finishes, drop the contents from the DOM. The
+  // timeout is a safety net for environments where no `transitionend` fires
+  // (e.g. transitions disabled), so the contents can't get stuck mounted.
+  useEffect(() => {
+    if (!isClosing) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      setIsClosing(false);
+    };
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.target === dialog) finish();
+    };
+    dialog.addEventListener('transitionend', onTransitionEnd);
+    const timer = window.setTimeout(finish, 300);
+    return () => {
+      dialog.removeEventListener('transitionend', onTransitionEnd);
+      window.clearTimeout(timer);
+    };
+  }, [isClosing]);
+
+  // Set up the dialog once it's mounted: enable declarative light-dismiss,
+  // mirror platform-driven closes back into React, and register the
+  // outside-click fallback for browsers without `closedby` (e.g. Safari).
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    // `closedby="any"` = light dismiss + close requests. Set imperatively
+    // because React's typings don't yet know the attribute.
+    dialog.setAttribute('closedby', 'any');
+
+    // Esc, the Android back gesture, light dismiss, and our fallback all
+    // surface as a `close` event — funnel them back into the source of truth.
+    const onClose = () => closePreferences();
+    dialog.addEventListener('close', onClose);
+
+    // Fallback light dismiss for browsers lacking `closedby`: a click whose
+    // coordinates fall on the backdrop (outside the dialog's content box, and
+    // with the dialog itself as the target) closes it.
+    const supportsClosedBy = 'closedBy' in HTMLDialogElement.prototype;
+    const onClick = (e: MouseEvent) => {
+      if (e.target !== dialog) return;
+      const r = dialog.getBoundingClientRect();
+      const inside =
+        r.top <= e.clientY && e.clientY <= r.top + r.height && r.left <= e.clientX && e.clientX <= r.left + r.width;
+      if (!inside) dialog.close();
+    };
+    if (!supportsClosedBy) dialog.addEventListener('click', onClick);
+
+    return () => {
+      dialog.removeEventListener('close', onClose);
+      if (!supportsClosedBy) dialog.removeEventListener('click', onClick);
+    };
+  }, [closePreferences]);
 
   // When opened with a focusSection (e.g. from the saved-topics
   // dropdown), scroll that section into view once and then clear the
@@ -99,103 +186,103 @@ export function PreferencesModal() {
     clearFocusSection();
   }, [showPreferences, focusSection, clearFocusSection]);
 
-  if (!showPreferences) return null;
-
+  // The dialog stays mounted even when closed so showModal() has an element
+  // to act on and the exit transition can play; a closed <dialog> is
+  // display:none, so it stays out of the layout and the a11y tree. Its
+  // contents render only while `renderContents` (open or animating closed).
   return (
-    // Backdrop — `top-[3rem]` keeps the nav bar uncovered.
-    <div
-      className="fixed inset-0 top-[3rem] bg-black/30 flex items-center justify-center z-40"
-      onClick={closePreferences}
-      role="dialog"
+    <dialog
+      ref={dialogRef}
       aria-label="Preferences"
-      aria-modal="true"
+      className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+                 border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
+                 shadow-lg dark:shadow-stone-950/50"
     >
-      <div
-        className="bg-white dark:bg-stone-900 rounded-lg shadow-lg dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-6 max-w-md w-full mx-4 max-h-[calc(100vh-6rem)] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">Preferences</h2>
-          <button
-            onClick={closePreferences}
-            className="text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        <section className="mb-4">
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 cursor-pointer">
-            Keyboard shortcuts
-            <input
-              type="checkbox"
-              checked={shortcutsEnabled}
-              onChange={(e) => setShortcutsEnabled(e.target.checked)}
-              className="cursor-pointer"
-            />
-          </label>
-        </section>
-
-        <section className="mb-4">
-          <label
-            className={`inline-flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 ${supported ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-          >
-            Notifications
-            <input
-              type="checkbox"
-              checked={notificationsEnabled}
-              onChange={(e) => setNotificationsEnabled(e.target.checked)}
-              disabled={!supported}
-              className={supported ? 'cursor-pointer' : 'cursor-not-allowed'}
-            />
-          </label>
-          {!supported && (
-            <p className="text-xs text-stone-500 dark:text-stone-500 mt-1">
-              Your browser doesn&rsquo;t support notifications.
-            </p>
-          )}
-          <div className="mt-2 ml-5 flex flex-col gap-1">
-            {NOTIFICATION_OPTIONS.map((option) => (
-              <label
-                key={option.key}
-                className={`inline-flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400 ${notificationsEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={notificationPrefs[option.key]}
-                  onChange={(e) => setNotificationPrefs({ ...notificationPrefs, [option.key]: e.target.checked })}
-                  disabled={!notificationsEnabled}
-                  className={notificationsEnabled ? 'cursor-pointer' : 'cursor-not-allowed'}
-                />
-                {option.label}
-              </label>
-            ))}
+      {renderContents && (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-200">Preferences</h2>
+            <button
+              onClick={() => dialogRef.current?.close()}
+              className="text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer text-lg"
+              aria-label="Close"
+            >
+              ✕
+            </button>
           </div>
-        </section>
 
-        <SavedTopicsSection sectionRef={savedTopicsSectionRef} />
+          <section className="mb-4">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 cursor-pointer">
+              Keyboard shortcuts
+              <input
+                type="checkbox"
+                checked={shortcutsEnabled}
+                onChange={(e) => setShortcutsEnabled(e.target.checked)}
+                className="cursor-pointer"
+              />
+            </label>
+          </section>
 
-        <section>
-          <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
-            <span className="font-medium">Colour scheme</span>
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as Theme)}
-              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm
+          <section className="mb-4">
+            <label
+              className={`inline-flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 ${supported ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+            >
+              Notifications
+              <input
+                type="checkbox"
+                checked={notificationsEnabled}
+                onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                disabled={!supported}
+                className={supported ? 'cursor-pointer' : 'cursor-not-allowed'}
+              />
+            </label>
+            {!supported && (
+              <p className="text-xs text-stone-500 dark:text-stone-500 mt-1">
+                Your browser doesn&rsquo;t support notifications.
+              </p>
+            )}
+            <div className="mt-2 ml-5 flex flex-col gap-1">
+              {NOTIFICATION_OPTIONS.map((option) => (
+                <label
+                  key={option.key}
+                  className={`inline-flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400 ${notificationsEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={notificationPrefs[option.key]}
+                    onChange={(e) => setNotificationPrefs({ ...notificationPrefs, [option.key]: e.target.checked })}
+                    disabled={!notificationsEnabled}
+                    className={notificationsEnabled ? 'cursor-pointer' : 'cursor-not-allowed'}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <SavedTopicsSection sectionRef={savedTopicsSectionRef} />
+
+          <section>
+            <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
+              <span className="font-medium">Colour scheme</span>
+              <select
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as Theme)}
+                className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm
                          bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 cursor-pointer
                          focus:outline-none focus:ring-1 focus:ring-teal-500"
-            >
-              {THEME_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-      </div>
-    </div>
+              >
+                {THEME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        </>
+      )}
+    </dialog>
   );
 }
 
@@ -238,8 +325,8 @@ function SavedTopicsSection({ sectionRef }: SavedTopicsSectionProps) {
         Saved topics
       </h3>
       <p className="text-xs text-stone-500 dark:text-stone-500 mb-2">
-        Pre-written queue topics you can post with one click. The dropdown beside each sets the priority it
-        joins the queue as.
+        Pre-written queue topics you can post with one click. The dropdown beside each sets the priority it joins the
+        queue as.
       </p>
       <DndContext
         sensors={sensors}

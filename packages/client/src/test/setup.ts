@@ -17,6 +17,30 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom (29.x) doesn't implement the modal-dialog methods at all — no
+// `showModal`, `show`, or `close` on HTMLDialogElement, and no `closedBy`.
+// PreferencesModal now drives a native <dialog> via these methods, so stub
+// minimal versions that just toggle the `open` attribute and fire the
+// `close`/`cancel` events. This is enough for component tests to exercise the
+// open/close wiring; real focus-trap, light-dismiss, and Esc behaviour are
+// covered by the Playwright e2e suite in a real browser. `closedBy` is left
+// undefined so the component registers its outside-click fallback (the path
+// jsdom can actually drive).
+if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
+  HTMLDialogElement.prototype.show = function show(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement, returnValue?: string) {
+    if (!this.open) return;
+    this.open = false;
+    if (returnValue !== undefined) this.returnValue = returnValue;
+    this.dispatchEvent(new Event('close'));
+  };
+}
+
 // jsdom doesn't implement Element.scrollIntoView; the AgendaPanel's
 // "scroll-active-item-into-view-on-tab-show" effect calls it on mount.
 // Provide a default no-op so unrelated tests don't crash; tests that want

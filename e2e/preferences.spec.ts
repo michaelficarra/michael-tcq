@@ -26,6 +26,97 @@ test.describe('Preferences modal', () => {
     await expect(page.getByRole('dialog', { name: 'Preferences' })).toBeVisible();
   });
 
+  // The dialog is a native modal <dialog>, so the platform provides Esc and
+  // back-gesture dismissal, light dismiss, focus trapping, and focus
+  // restoration. These tests pin those behaviours down in real browsers
+  // (jsdom can't simulate them, so the component tests only cover the wiring).
+
+  test('Escape dismisses the modal', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(prefs).not.toBeVisible();
+  });
+
+  test('the ✕ button dismisses the modal', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    await prefs.getByRole('button', { name: 'Close' }).click();
+    await expect(prefs).not.toBeVisible();
+  });
+
+  test('light dismiss: clicking the backdrop dismisses the modal', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    // Click the top-left backdrop region — well outside the centred content
+    // box. Handled by `closedby="any"` where supported, and by the JS
+    // outside-click fallback in Safari.
+    await page.mouse.click(8, 300);
+    await expect(prefs).not.toBeVisible();
+  });
+
+  test('clicking inside the content box does not dismiss the modal', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    await prefs.getByRole('heading', { name: 'Preferences' }).click();
+    await expect(prefs).toBeVisible();
+  });
+
+  test('focus is trapped inside the dialog and restored to the opener on close', async ({ page }) => {
+    await createMeeting(page);
+    // Give a known element focus so we can assert restoration lands back on it.
+    const queueTab = page.getByRole('tab', { name: 'Queue' });
+    await queueTab.focus();
+
+    await page.keyboard.press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    // showModal() moves focus into the dialog and traps it there; Tabbing a
+    // few times must never escape the dialog subtree.
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab');
+      expect(await prefs.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+    }
+
+    await page.keyboard.press('Escape');
+    await expect(prefs).not.toBeVisible();
+    // Native focus restoration returns focus to the element that opened it.
+    await expect(queueTab).toBeFocused();
+  });
+
+  test('Escape while editing a saved topic does not dismiss the modal', async ({ page }) => {
+    await createMeeting(page);
+    await page.locator('body').press(',');
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await expect(prefs).toBeVisible();
+
+    // Add a fresh saved topic and start editing it. The mock-auth user
+    // already has a seeded topic, so target the newly-appended row via
+    // .last() to avoid a strict-mode clash with the existing input.
+    await prefs.getByRole('button', { name: 'Add saved topic' }).click();
+    const input = prefs.getByLabel('Saved topic text').last();
+    await input.fill('A topic');
+
+    // Esc inside the row's text input is handled locally by the row (which
+    // calls preventDefault), so it must not reach the dialog as a close
+    // request — the modal stays open for continued editing.
+    await input.press('Escape');
+    await expect(prefs).toBeVisible();
+  });
+
   test('clicking outside the hamburger dropdown dismisses it', async ({ page }) => {
     await createMeeting(page);
     await page.getByLabel('Open menu').click();
@@ -69,8 +160,12 @@ test.describe('Preferences modal', () => {
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     await prefs.getByLabel('Keyboard shortcuts').check();
     await expect(prefs.getByLabel('Keyboard shortcuts')).toBeChecked();
-    // Close the preferences modal.
+    // Close the preferences modal. Wait for the close (and its exit
+    // animation) to fully commit: the native <dialog> stays mounted, so an
+    // un-named getByRole('dialog') below would transiently match the still-
+    // fading Preferences dialog alongside the shortcuts one.
     await page.locator('body').press('Escape');
+    await expect(prefs).not.toBeVisible();
 
     // Now `?` should open the keyboard shortcuts dialog, and the toggle
     // there should read "Disable" (i.e. shortcuts currently enabled).
