@@ -60,7 +60,7 @@ See [`scripts/screenshots/README.md`](scripts/screenshots/README.md) for how the
 
 Keep these up to date alongside code changes:
 
-- **`README.md`** — notable new features. Also update the **Tech Stack** section whenever a significant dependency changes — not just application dependencies (a swapped framework, real-time transport, validation library, test runner, etc.) but also infrastructure ones (host/VM, container OS, reverse proxy, TLS provider, datastore, registry, process manager, deploy tooling). Keep it terse and high-level; omit incidental libraries.
+- **`README.md`** — notable new features. Also update the **Tech Stack** section whenever a significant dependency changes — not just application dependencies (a swapped framework, real-time transport, validation library, test runner, etc.) but also infrastructure ones (host/VM, container OS, reverse proxy, TLS provider, datastore, registry, process manager, deploy tooling). Keep it terse and high-level; omit incidental libraries. The section annotates each dependency with its major version (e.g. "React 19", "Vite 8", "Caddy 2") — when a dependency crosses a major version boundary (in a `package.json`, the `Dockerfile`, or the deploy config), bump the number in the prose to match.
 - **`docs/PRD.md`** — any user-facing functionality change, described in enough detail to reproduce. Do not be overly prescriptive about incidental things like styling, size, or positioning.
 - **`docs/ARCHITECTURE.md`** — architectural changes.
 - **`docs/CONTRIBUTING.md`** — development process changes.
