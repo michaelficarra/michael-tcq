@@ -38,11 +38,27 @@
  * and the request silently degrades (returns `null`).
  */
 
-import type { MeetingState, User, UserKey } from '@tcq/shared';
+import type { MeetingState, User, UserKey, DirectorySuggestion } from '@tcq/shared';
 import { DEV_USERS, asUserKey } from '@tcq/shared';
 import type { SessionUser } from './session.js';
-import { isGitHubConfigured } from './auth/githubUser.js';
+import { isGitHubConfigured, GITHUB_PROVIDER_ID } from './auth/githubUser.js';
 import { warning, info, serialiseError } from './logger.js';
+
+/** Map an internal (GitHub-shaped) DirectoryUser to the provider-neutral
+ *  suggestion returned to callers. The numeric id becomes the accountId. */
+function toSuggestion(d: DirectoryUser): DirectorySuggestion {
+  return {
+    user: {
+      provider: GITHUB_PROVIDER_ID,
+      accountId: String(d.id),
+      handle: d.login,
+      name: d.name,
+      organisation: d.organisation,
+      avatarUrl: d.avatarUrl,
+    },
+    ...(d.badge ? { badge: d.badge } : {}),
+  };
+}
 
 /** Compact user record returned by autocomplete and stored in the caches. */
 export interface DirectoryUser {
@@ -607,6 +623,18 @@ export function searchUsersLocal(
   query: string,
   meeting: MeetingState | undefined,
   limit: number,
+): DirectorySuggestion[] {
+  return searchLocalRaw(session, query, meeting, limit).map(toSuggestion);
+}
+
+/** Internal tier-1+2 search returning the GitHub-shaped records used for
+ *  ranking/dedup. The public `searchUsersLocal` / `searchUsers` map these to
+ *  provider-neutral suggestions at the boundary. */
+function searchLocalRaw(
+  session: SessionUser,
+  query: string,
+  meeting: MeetingState | undefined,
+  limit: number,
 ): DirectoryUser[] {
   const tier1 = rankMatches(query, meetingUserCandidates(meeting), limit);
 
@@ -638,10 +666,10 @@ export async function searchUsers(
   query: string,
   meeting: MeetingState | undefined,
   limit: number = DEFAULT_AUTOCOMPLETE_LIMIT,
-): Promise<DirectoryUser[]> {
+): Promise<DirectorySuggestion[]> {
   // Mock-auth mode: no GitHub calls at all. Tier 3 is skipped entirely.
   if (!isGitHubConfigured()) {
-    return searchUsersLocal(session, query, meeting, limit);
+    return searchLocalRaw(session, query, meeting, limit).map(toSuggestion);
   }
 
   // Stale caches → kick off a refresh in the background, but answer this
@@ -654,17 +682,17 @@ export async function searchUsers(
     });
   }
 
-  const preTier3 = searchUsersLocal(session, query, meeting, limit);
+  const preTier3 = searchLocalRaw(session, query, meeting, limit);
 
   // Skip tier 3 if tiers 1+2 alone (after dedup) already fill the dropdown.
-  if (preTier3.length >= limit) return preTier3;
+  if (preTier3.length >= limit) return preTier3.map(toSuggestion);
 
   // Skip tier 3 for empty queries — `/search/users?q=` is rejected by
   // GitHub, and there's no useful "everyone" fallback to surface anyway.
-  if (query.trim().length === 0) return preTier3;
+  if (query.trim().length === 0) return preTier3.map(toSuggestion);
 
   const tier3 = await tier3Search(session, query, limit);
-  return mergeTiered([preTier3, tier3], limit);
+  return mergeTiered([preTier3, tier3], limit).map(toSuggestion);
 }
 
 /**
@@ -677,12 +705,12 @@ export function resolvePresenterFromDirectory(
   session: SessionUser,
   query: string,
   meeting: MeetingState | undefined,
-): DirectoryUser | null {
+): DirectorySuggestion | null {
   const trimmed = query.trim();
   if (trimmed.length === 0) return null;
   // Ask for two so we can distinguish "exactly one match" from "more than one".
-  const results = searchUsersLocal(session, trimmed, meeting, 2);
-  return results.length === 1 ? results[0] : null;
+  const results = searchLocalRaw(session, trimmed, meeting, 2);
+  return results.length === 1 ? toSuggestion(results[0]) : null;
 }
 
 /**

@@ -52,16 +52,17 @@ export function githubUser(fields: {
 }
 
 /**
- * Find a GitHub user already present in a meeting by their handle (login),
- * case-insensitively. This is how a typed-in GitHub username is resolved to
- * its full record (and numeric-id key) without a fresh API call — the key
- * can no longer be derived from the handle alone.
+ * Find a user already present in a meeting by their handle, case-insensitively.
+ * This is how a typed-in handle is resolved to its full record (and key)
+ * without a fresh API call — the key can't be derived from a handle alone.
+ * Provider-agnostic: matches any provider's handle (users without a handle,
+ * e.g. ORCID, simply never match).
  */
-export function findGitHubUserByHandle(meeting: MeetingState | undefined, handle: string): User | undefined {
+export function findUserByHandle(meeting: MeetingState | undefined, handle: string): User | undefined {
   if (!meeting) return undefined;
   const wanted = handle.toLowerCase();
   for (const u of Object.values(meeting.users)) {
-    if (u.provider === GITHUB_PROVIDER_ID && u.handle?.toLowerCase() === wanted) return u;
+    if (u.handle?.toLowerCase() === wanted) return u;
   }
   return undefined;
 }

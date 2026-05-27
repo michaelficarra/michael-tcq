@@ -32,22 +32,38 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from 'react';
-import { normaliseGithubUsername } from '@tcq/shared';
+import { normaliseGithubUsername, userKey } from '@tcq/shared';
+import type { DirectorySuggestion, User, UserSelection } from '@tcq/shared';
 import { FALLBACK_AVATAR } from './UserBadge.js';
 import { CircleXIcon } from './icons.js';
 
-interface DirectoryUser {
-  /** GitHub login — unique within the deduped results, so it doubles as the React key. */
-  login: string;
-  name: string;
-  /** GitHub `company` field if known. Empty string when unknown. */
-  organisation: string;
-  avatarUrl: string;
-  badge?: 'meeting' | 'org';
+/**
+ * A value the combobox can commit. Two shapes mirroring `UserSelection`
+ * but carrying the full `User` (rather than just an identity) when a
+ * suggestion was picked, so chips can render the avatar / display name
+ * without a second lookup:
+ *   - `{ user }`   — a concrete account picked from the directory dropdown.
+ *   - `{ handle }` — free text typed without picking a suggestion.
+ */
+export type SelectedUser = { user: User } | { handle: string };
+
+/**
+ * Reduce a committed `SelectedUser` to the provider-neutral `UserSelection`
+ * wire shape. A picked account contributes its `{ provider, accountId }`
+ * identity; free text contributes its `{ handle }`. The server re-resolves
+ * either form to a full profile, so we never send display fields.
+ */
+// This module's primary export is the UserCombobox component; the small
+// SelectedUser helper lives alongside it because it's tightly coupled to the
+// component's value contract. Fast-refresh's "components only" rule doesn't
+// apply to a pure helper.
+// eslint-disable-next-line react-refresh/only-export-components
+export function toUserSelection(sel: SelectedUser): UserSelection {
+  return 'user' in sel ? { provider: sel.user.provider, accountId: sel.user.accountId } : { handle: sel.handle };
 }
 
 interface AutocompleteResponse {
-  users: DirectoryUser[];
+  suggestions: DirectorySuggestion[];
 }
 
 const DEBOUNCE_MS = 250;
@@ -56,7 +72,7 @@ const DROPDOWN_LIMIT = 10;
 // Reuse one AbortController per consumer of fetchSuggestions — see hook.
 type SuggestionsState = {
   loading: boolean;
-  results: DirectoryUser[];
+  results: DirectorySuggestion[];
 };
 
 function useSuggestions(meetingId: string | undefined) {
@@ -81,12 +97,12 @@ function useSuggestions(meetingId: string | undefined) {
       const params = new URLSearchParams({ q: query, limit: String(DROPDOWN_LIMIT) });
       if (meetingId) params.set('meetingId', meetingId);
       fetch(`/api/users/autocomplete?${params}`)
-        .then((res) => (res.ok ? (res.json() as Promise<AutocompleteResponse>) : { users: [] }))
-        .catch(() => ({ users: [] as DirectoryUser[] }))
+        .then((res) => (res.ok ? (res.json() as Promise<AutocompleteResponse>) : { suggestions: [] }))
+        .catch(() => ({ suggestions: [] as DirectorySuggestion[] }))
         .then((body) => {
           // Drop stale responses — only the most recently fired request wins.
           if (myId !== requestIdRef.current) return;
-          setState({ loading: false, results: body.users });
+          setState({ loading: false, results: body.suggestions });
         });
     },
     [meetingId],
@@ -117,24 +133,24 @@ interface CommonProps {
 
 interface SingleProps extends CommonProps {
   mode: 'single';
-  /** Initial input value. */
+  /** Initial input text. Display-only — never a committed selection. */
   initialValue?: string;
   /**
    * Called when the user commits a value: presses Enter on the input or
-   * selects a suggestion. Receives the normalised username (raw text or
-   * suggestion login).
+   * selects a suggestion. A picked suggestion yields `{ user }`; free text
+   * yields `{ handle }`.
    */
-  onCommit: (username: string) => void;
+  onCommit: (selection: SelectedUser) => void;
   /** Called when the user presses Escape on the input. */
   onCancel?: () => void;
 }
 
 interface MultiProps extends CommonProps {
   mode: 'multi';
-  /** Current list of tokens. Controlled by the parent. */
-  values: string[];
-  /** Called when tokens change (added or removed). */
-  onChange: (next: string[]) => void;
+  /** Current list of committed selections. Controlled by the parent. */
+  values: SelectedUser[];
+  /** Called when the selection list changes (added or removed). */
+  onChange: (next: SelectedUser[]) => void;
 }
 
 export type UserComboboxProps = SingleProps | MultiProps;
@@ -142,6 +158,16 @@ export type UserComboboxProps = SingleProps | MultiProps;
 export function UserCombobox(props: UserComboboxProps) {
   if (props.mode === 'multi') return <MultiCombobox {...props} />;
   return <SingleCombobox {...props} />;
+}
+
+/**
+ * Identity key for a committed selection, used to dedupe chips. A picked
+ * account keys on its canonical `userKey` (`provider:accountId`); free
+ * text keys on its lowercased handle. The `user:` / `handle:` prefixes
+ * keep the two namespaces from colliding.
+ */
+function selectionKey(sel: SelectedUser): string {
+  return 'user' in sel ? `user:${userKey(sel.user)}` : `handle:${sel.handle.toLowerCase()}`;
 }
 
 // -- Single-select variant -----------------------------------------------
@@ -208,10 +234,19 @@ function SingleCombobox(props: SingleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, meetingId, hasUserEdited]);
 
-  function commit(raw: string) {
+  /** Commit a picked suggestion's full user. */
+  function commitUser(user: User) {
+    onCommit({ user });
+    setValue('');
+    suggestions.reset();
+    setOpen(false);
+  }
+
+  /** Commit free text as a bare handle (skips empty after normalisation). */
+  function commitText(raw: string) {
     const cleaned = normaliseGithubUsername(raw);
     if (!cleaned) return;
-    onCommit(cleaned);
+    onCommit({ handle: cleaned });
     setValue('');
     suggestions.reset();
     setOpen(false);
@@ -236,9 +271,9 @@ function SingleCombobox(props: SingleProps) {
       // one (highlighted >= 0). Otherwise commit whatever they've typed —
       // this is the free-text fallback for users without GitHub accounts.
       if (open && highlighted >= 0 && suggestions.results[highlighted]) {
-        commit(suggestions.results[highlighted].login);
+        commitUser(suggestions.results[highlighted].user);
       } else {
-        commit(value);
+        commitText(value);
       }
     } else if (e.key === 'Escape') {
       // Close the suggestion dropdown and bubble cancel to the parent in one
@@ -293,7 +328,7 @@ function SingleCombobox(props: SingleProps) {
           id={listboxId}
           results={suggestions.results}
           highlighted={highlighted}
-          onPick={(user) => commit(user.login)}
+          onPick={(suggestion) => commitUser(suggestion.user)}
           onHover={setHighlighted}
           anchorRef={anchorRef}
         />
@@ -330,24 +365,38 @@ function MultiCombobox(props: MultiProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, meetingId]);
 
-  // Filter the dropdown so already-tokenised users don't appear.
+  // Filter the dropdown so already-selected users don't reappear. A
+  // suggestion is "taken" if its account identity matches a committed
+  // `{user}` selection, or its handle matches a committed `{handle}`.
   const filteredResults = useMemo(() => {
-    const taken = new Set(values.map((v) => v.toLowerCase()));
-    return suggestions.results.filter((u) => !taken.has(u.login.toLowerCase()));
+    const taken = new Set(values.map(selectionKey));
+    return suggestions.results.filter((s) => !taken.has(`user:${userKey(s.user)}`));
   }, [suggestions.results, values]);
 
-  function commit(raw: string) {
-    const cleaned = normaliseGithubUsername(raw);
-    if (!cleaned) return;
-    if (values.some((v) => v.toLowerCase() === cleaned.toLowerCase())) {
+  /** Append a selection unless an equal one is already present. */
+  function add(sel: SelectedUser) {
+    const key = selectionKey(sel);
+    if (values.some((v) => selectionKey(v) === key)) {
       // Already in the list — clear the draft but don't add a duplicate.
       setDraft('');
       return;
     }
-    onChange([...values, cleaned]);
+    onChange([...values, sel]);
     setDraft('');
     suggestions.reset();
     setHighlighted(-1);
+  }
+
+  /** Commit a picked suggestion's full user as a chip. */
+  function commitUser(user: User) {
+    add({ user });
+  }
+
+  /** Commit free-text draft as a bare-handle chip (skips empty). */
+  function commitText(raw: string) {
+    const cleaned = normaliseGithubUsername(raw);
+    if (!cleaned) return;
+    add({ handle: cleaned });
   }
 
   function removeAt(index: number) {
@@ -369,9 +418,9 @@ function MultiCombobox(props: MultiProps) {
       // Only commit a suggestion if explicitly highlighted. Otherwise
       // commit the typed draft (free-text fallback).
       if (open && highlighted >= 0 && filteredResults[highlighted]) {
-        commit(filteredResults[highlighted].login);
+        commitUser(filteredResults[highlighted].user);
       } else {
-        commit(draft);
+        commitText(draft);
       }
     } else if (e.key === 'Backspace' && draft === '' && values.length > 0) {
       // Delete the last token when backspacing into an empty input.
@@ -388,47 +437,54 @@ function MultiCombobox(props: MultiProps) {
         className={`flex flex-wrap items-center gap-1 border border-stone-300 dark:border-stone-600 rounded
                     px-2 py-1 dark:bg-stone-700 focus-within:ring-2 focus-within:ring-teal-500 focus-within:border-teal-500`}
       >
-        {values.map((v, i) => (
-          <span
-            key={`${v}-${i}`}
-            // Pill background needs to contrast with the chip-input wrapper
-            // (`dark:bg-stone-700`) — stone-600 is only one step apart and
-            // disappears against it. stone-500 + stone-100 text gives a
-            // clear, accessible contrast in dark mode while staying within
-            // the stone palette used elsewhere in the app.
-            className="inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-500 rounded-full pl-0.5 pr-1 py-0.5 text-xs text-stone-700 dark:text-stone-100"
-          >
-            {/*
-              GitHub serves a public avatar at github.com/{login}.png for any
-              valid login. Free-text entries that aren't real GitHub users
-              degrade to the same generic silhouette UserBadge falls back to.
-            */}
-            <img
-              src={`https://github.com/${v}.png?size=32`}
-              alt=""
-              width={16}
-              height={16}
-              style={{ width: 16, height: 16, minWidth: 16, minHeight: 16 }}
-              className="rounded-full shrink-0"
-              onError={(e) => {
-                const img = e.target as HTMLImageElement;
-                if (!img.src.startsWith('data:')) img.src = FALLBACK_AVATAR;
-              }}
-            />
-            <span>{v}</span>
-            <button
-              type="button"
-              onClick={() => removeAt(i)}
-              aria-label={`Remove ${v}`}
-              // Match the chair pill remove button so the affordance reads
-              // identically across the agenda chair list and the presenter
-              // chip input.
-              className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+        {values.map((v, i) => {
+          // Chip label and avatar source depend on the selection shape. A
+          // picked `{user}` carries its own avatar (with the generic
+          // silhouette as the empty/error fallback) and prefers the handle
+          // for display, falling back to the display name then accountId. A
+          // free-text `{handle}` has no avatar — it shows the silhouette and
+          // the raw handle text. We never synthesise a GitHub avatar URL
+          // here: avatars come only from the directory's `User.avatarUrl`.
+          const isUser = 'user' in v;
+          const label = isUser ? (v.user.handle ?? v.user.name ?? v.user.accountId) : v.handle;
+          const avatarUrl = isUser && v.user.avatarUrl ? v.user.avatarUrl : FALLBACK_AVATAR;
+          return (
+            <span
+              key={`${selectionKey(v)}-${i}`}
+              // Pill background needs to contrast with the chip-input wrapper
+              // (`dark:bg-stone-700`) — stone-600 is only one step apart and
+              // disappears against it. stone-500 + stone-100 text gives a
+              // clear, accessible contrast in dark mode while staying within
+              // the stone palette used elsewhere in the app.
+              className="inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-500 rounded-full pl-0.5 pr-1 py-0.5 text-xs text-stone-700 dark:text-stone-100"
             >
-              <CircleXIcon className="w-3.5 h-3.5" />
-            </button>
-          </span>
-        ))}
+              <img
+                src={avatarUrl}
+                alt=""
+                width={16}
+                height={16}
+                style={{ width: 16, height: 16, minWidth: 16, minHeight: 16 }}
+                className="rounded-full shrink-0"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  if (!img.src.startsWith('data:')) img.src = FALLBACK_AVATAR;
+                }}
+              />
+              <span>{label}</span>
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                aria-label={`Remove ${label}`}
+                // Match the chair pill remove button so the affordance reads
+                // identically across the agenda chair list and the presenter
+                // chip input.
+                className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+              >
+                <CircleXIcon className="w-3.5 h-3.5" />
+              </button>
+            </span>
+          );
+        })}
         <input
           type="text"
           value={draft}
@@ -467,7 +523,7 @@ function MultiCombobox(props: MultiProps) {
           id={listboxId}
           results={filteredResults}
           highlighted={highlighted}
-          onPick={(user) => commit(user.login)}
+          onPick={(suggestion) => commitUser(suggestion.user)}
           onHover={setHighlighted}
           anchorRef={anchorRef}
         />
@@ -480,9 +536,9 @@ function MultiCombobox(props: MultiProps) {
 
 interface SuggestionListProps {
   id: string;
-  results: DirectoryUser[];
+  results: DirectorySuggestion[];
   highlighted: number;
-  onPick: (user: DirectoryUser) => void;
+  onPick: (suggestion: DirectorySuggestion) => void;
   onHover: (index: number) => void;
   /**
    * The element the dropdown should anchor beneath. Used to compute the fixed
@@ -699,69 +755,77 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
       className="tcq-popover overflow-auto
                  bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl shadow-lg py-1"
     >
-      {results.map((user, i) => (
-        <li
-          key={user.login}
-          id={`${id}-${i}`}
-          role="option"
-          aria-selected={i === highlighted}
-          // mousedown rather than click so the input's onBlur (which
-          // closes the dropdown) doesn't fire first and remove this <li>
-          // from the DOM before its click handler runs. Restricted to the
-          // primary button so right-clicks (context menu) and middle-clicks
-          // never commit a suggestion.
-          onMouseDown={(e) => {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            onPick(user);
-          }}
-          onMouseEnter={() => onHover(i)}
-          // Same orange palette as the current-agenda-item highlight in
-          // AgendaPanel so the "selected" affordance is consistent across
-          // the app, including the dimmed dark-mode variant. Text colour
-          // matches the standard dark-mode body pairing so rows don't
-          // inherit the browser default and lose contrast against the
-          // dark dropdown background.
-          className={`flex items-center gap-2 px-2 py-1 cursor-pointer text-sm text-stone-700 dark:text-stone-300 ${
-            i === highlighted ? 'bg-orange-100 dark:bg-orange-900/50' : ''
-          }`}
-        >
-          <img
-            src={user.avatarUrl}
-            alt=""
-            width={20}
-            height={20}
-            style={{ width: 20, height: 20, minWidth: 20, minHeight: 20 }}
-            className="rounded-full shrink-0"
-          />
-          <span>{user.login}</span>
-          {user.name && user.name !== user.login && (
-            <span className="text-stone-500 dark:text-stone-400">{user.name}</span>
-          )}
-          {user.organisation && (
-            // Organisation gets a fixed max-width and ellipsis so a long
-            // company string doesn't blow out the dropdown's natural
-            // width. Login and display name stay un-truncated — they're
-            // the load-bearing identifiers for matching the right user.
-            // The parens stay outside the truncation so the closing `)`
-            // is always visible.
-            <span className="text-stone-600 dark:text-stone-300 text-xs" title={user.organisation}>
-              (<span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>)
-            </span>
-          )}
-          {user.badge && (
-            <span
-              className={`ml-auto text-[10px] uppercase tracking-wide px-1 py-0.5 rounded shrink-0 ${
-                user.badge === 'meeting'
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                  : 'bg-stone-100 text-stone-600 dark:bg-stone-700 dark:text-stone-300'
-              }`}
-            >
-              {user.badge === 'meeting' ? 'in meeting' : 'org'}
-            </span>
-          )}
-        </li>
-      ))}
+      {results.map((suggestion, i) => {
+        const user = suggestion.user;
+        // Primary identifier shown on the row: the handle when the provider
+        // exposes one (GitHub), otherwise the opaque account id. Used both
+        // as the row label and for the "don't repeat the display name when
+        // it equals the identifier" check below.
+        const identifier = user.handle ?? user.accountId;
+        return (
+          <li
+            key={userKey(user)}
+            id={`${id}-${i}`}
+            role="option"
+            aria-selected={i === highlighted}
+            // mousedown rather than click so the input's onBlur (which
+            // closes the dropdown) doesn't fire first and remove this <li>
+            // from the DOM before its click handler runs. Restricted to the
+            // primary button so right-clicks (context menu) and middle-clicks
+            // never commit a suggestion.
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              onPick(suggestion);
+            }}
+            onMouseEnter={() => onHover(i)}
+            // Same orange palette as the current-agenda-item highlight in
+            // AgendaPanel so the "selected" affordance is consistent across
+            // the app, including the dimmed dark-mode variant. Text colour
+            // matches the standard dark-mode body pairing so rows don't
+            // inherit the browser default and lose contrast against the
+            // dark dropdown background.
+            className={`flex items-center gap-2 px-2 py-1 cursor-pointer text-sm text-stone-700 dark:text-stone-300 ${
+              i === highlighted ? 'bg-orange-100 dark:bg-orange-900/50' : ''
+            }`}
+          >
+            <img
+              src={user.avatarUrl || FALLBACK_AVATAR}
+              alt=""
+              width={20}
+              height={20}
+              style={{ width: 20, height: 20, minWidth: 20, minHeight: 20 }}
+              className="rounded-full shrink-0"
+            />
+            <span>{identifier}</span>
+            {user.name && user.name !== identifier && (
+              <span className="text-stone-500 dark:text-stone-400">{user.name}</span>
+            )}
+            {user.organisation && (
+              // Organisation gets a fixed max-width and ellipsis so a long
+              // company string doesn't blow out the dropdown's natural
+              // width. Login and display name stay un-truncated — they're
+              // the load-bearing identifiers for matching the right user.
+              // The parens stay outside the truncation so the closing `)`
+              // is always visible.
+              <span className="text-stone-600 dark:text-stone-300 text-xs" title={user.organisation}>
+                (<span className="inline-block max-w-[12rem] truncate align-bottom">{user.organisation}</span>)
+              </span>
+            )}
+            {suggestion.badge && (
+              <span
+                className={`ml-auto text-[10px] uppercase tracking-wide px-1 py-0.5 rounded shrink-0 ${
+                  suggestion.badge === 'meeting'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    : 'bg-stone-100 text-stone-600 dark:bg-stone-700 dark:text-stone-300'
+                }`}
+              >
+                {suggestion.badge === 'meeting' ? 'in meeting' : 'org'}
+              </span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

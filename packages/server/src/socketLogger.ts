@@ -12,9 +12,9 @@
  * grouped rather than sprinkled across the top level.
  */
 
-import type { MeetingState } from '@tcq/shared';
+import type { MeetingState, UserKey } from '@tcq/shared';
 import type { SessionUser } from './session.js';
-import { findGitHubUserByHandle } from './auth/githubUser.js';
+import { findUserByHandle } from './auth/githubUser.js';
 
 /** Look up an agenda entry (item or session header) by id. */
 function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
@@ -22,11 +22,28 @@ function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
   return meeting.agenda.find((e) => e.id === id);
 }
 
-/** Look up a user by GitHub username (case-insensitive), returning the stored User if known.
- *  Payload usernames are GitHub handles, so they resolve via the GitHub user key. */
+/** Look up a user by handle (case-insensitive), returning the stored User if known. */
 function lookupUser(meeting: MeetingState, username: unknown): unknown {
   if (typeof username !== 'string') return undefined;
-  return findGitHubUserByHandle(meeting, username);
+  return findUserByHandle(meeting, username);
+}
+
+/**
+ * Resolve a `UserSelection` (chair/presenter wire ref) to its stored User for
+ * readable logging — `{provider,accountId}` via the meeting's users map,
+ * `{handle}` via a handle scan. Falls back to the raw selection when unknown.
+ */
+function lookupSelection(meeting: MeetingState, sel: unknown): unknown {
+  if (sel && typeof sel === 'object') {
+    if ('handle' in sel && typeof sel.handle === 'string') {
+      return findUserByHandle(meeting, sel.handle) ?? sel;
+    }
+    if ('provider' in sel && 'accountId' in sel) {
+      const key = `${(sel as { provider: string }).provider}:${(sel as { accountId: string }).accountId}` as UserKey;
+      return meeting.users[key] ?? sel;
+    }
+  }
+  return sel;
 }
 
 /**
@@ -95,14 +112,14 @@ export function denormalisePayload(event: string, payload: unknown, meeting: Mee
     if (opt) p.optionId = opt;
   }
 
-  // meeting:updateChairs — usernames is an array of GitHub usernames.
-  if (event === 'meeting:updateChairs' && Array.isArray(p.usernames)) {
-    p.usernames = p.usernames.map((u) => lookupUser(meeting, u) ?? u);
+  // meeting:updateChairs — chairs is an array of UserSelections.
+  if (event === 'meeting:updateChairs' && Array.isArray(p.chairs)) {
+    p.chairs = p.chairs.map((sel) => lookupSelection(meeting, sel));
   }
 
-  // agenda:add / agenda:edit — presenterUsernames is an array of GitHub usernames.
-  if ((event === 'agenda:add' || event === 'agenda:edit') && Array.isArray(p.presenterUsernames)) {
-    p.presenterUsernames = p.presenterUsernames.map((u) => lookupUser(meeting, u) ?? u);
+  // agenda:add / agenda:edit — presenters is an array of UserSelections.
+  if ((event === 'agenda:add' || event === 'agenda:edit') && Array.isArray(p.presenters)) {
+    p.presenters = p.presenters.map((sel) => lookupSelection(meeting, sel));
   }
 
   return p;

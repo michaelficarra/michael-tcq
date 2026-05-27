@@ -57,6 +57,19 @@ export interface User {
  */
 export type UserKey = string & { readonly __brand: 'UserKey' };
 
+/**
+ * One result from the username-autocomplete directory: a provider-neutral
+ * `User` (carrying its own provider, accountId, handle, name, organisation,
+ * and avatar) plus an optional source badge for the dropdown. Returned by
+ * `GET /api/users/autocomplete`. The fuzzy matcher scores handle / name /
+ * organisation only — never the opaque `accountId`.
+ */
+export interface DirectorySuggestion {
+  user: User;
+  /** Source tier — lets the client render an "in this meeting" / "org" badge. */
+  badge?: 'meeting' | 'org';
+}
+
 export interface AgendaItem {
   kind: 'item';
   id: string;

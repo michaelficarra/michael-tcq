@@ -110,7 +110,7 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/meetings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: ['testuser'] }),
+        body: JSON.stringify({ chairs: [{ handle: 'testuser' }] }),
       });
 
       expect(res.status).toBe(201);
@@ -152,7 +152,7 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/meetings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: [' @testuser ', '@ alice'] }),
+        body: JSON.stringify({ chairs: [{ handle: ' @testuser ' }, { handle: '@ alice' }] }),
       });
 
       expect(res.status).toBe(201);
@@ -170,7 +170,7 @@ describe('Meeting REST routes', () => {
       const createRes = await fetch(`${baseUrl}/api/meetings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: ['testuser'] }),
+        body: JSON.stringify({ chairs: [{ handle: 'testuser' }] }),
       });
       const created = await createRes.json();
 
@@ -706,11 +706,11 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/users/autocomplete?q=mike&limit=5`);
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(Array.isArray(body.users)).toBe(true);
-      // Each result must score against the query in login, name, or
-      // organisation by exact / prefix / substring / subsequence.
-      for (const u of body.users) {
-        expect(scoresAgainstQuery('mike', u.login, u.name, u.organisation ?? '')).toBe(true);
+      expect(Array.isArray(body.suggestions)).toBe(true);
+      // Each suggestion's user must score against the query in handle, name,
+      // or organisation by exact / prefix / substring / subsequence.
+      for (const s of body.suggestions) {
+        expect(scoresAgainstQuery('mike', s.user.handle ?? '', s.user.name, s.user.organisation ?? '')).toBe(true);
       }
     });
 
@@ -719,7 +719,7 @@ describe('Meeting REST routes', () => {
       const res = await fetch(`${baseUrl}/api/users/autocomplete?q=&limit=999`);
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.users.length).toBeLessThanOrEqual(25);
+      expect(body.suggestions.length).toBeLessThanOrEqual(25);
     });
 
     it('still returns results when meetingId points to a missing meeting', async () => {

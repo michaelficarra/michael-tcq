@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PremiumUsersResponse } from '@tcq/shared';
 import { useToast } from '../contexts/ToastContext.js';
 import { UserBadge } from './UserBadge.js';
-import { UserCombobox } from './UserCombobox.js';
+import { UserCombobox, type SelectedUser } from './UserCombobox.js';
 import { CircleXIcon } from './icons.js';
 
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
@@ -134,7 +134,14 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
       <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-4 space-y-3">
         <UserCombobox
           mode="single"
-          onCommit={handleAdd}
+          onCommit={(sel: SelectedUser) => {
+            // Premium membership stays keyed on bare GitHub handles, so
+            // reduce the selection to a handle: a picked account uses its
+            // handle (falling back to accountId if the provider has none),
+            // free text uses the typed handle directly.
+            const handle = 'user' in sel ? (sel.user.handle ?? sel.user.accountId) : sel.handle;
+            handleAdd(handle);
+          }}
           placeholder="Add GitHub username"
           ariaLabel="Add premium user"
           inputClassName="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-teal-500"

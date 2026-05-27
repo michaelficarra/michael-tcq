@@ -87,12 +87,17 @@ describe('denormalisePayload', () => {
     });
   });
 
-  it('replaces meeting:updateChairs usernames with User objects', () => {
+  it('replaces meeting:updateChairs selections with User objects', () => {
     const meeting = makeMeeting();
-    const out = denormalisePayload('meeting:updateChairs', { usernames: ['alice', 'bob'] }, meeting) as {
-      usernames: unknown[];
-    };
-    expect(out.usernames).toEqual([githubUser({ id: 1, login: 'alice' }), githubUser({ id: 2, login: 'bob' })]);
+    // A mix of selection shapes: a `{handle}` resolved by handle scan and a
+    // `{provider,accountId}` resolved via the meeting's users map. Both
+    // denormalise to the stored User for readable logging.
+    const out = denormalisePayload(
+      'meeting:updateChairs',
+      { chairs: [{ handle: 'alice' }, { provider: 'github', accountId: '2' }] },
+      meeting,
+    ) as { chairs: unknown[] };
+    expect(out.chairs).toEqual([githubUser({ id: 1, login: 'alice' }), githubUser({ id: 2, login: 'bob' })]);
   });
 
   it('replaces queue:add currentTopicSpeakerId with the current topic', () => {

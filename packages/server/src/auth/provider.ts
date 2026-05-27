@@ -15,10 +15,9 @@
  * is an optional capability.
  */
 
-import type { User } from '@tcq/shared';
+import type { User, DirectorySuggestion } from '@tcq/shared';
 import type { MeetingState } from '@tcq/shared';
 import type { SessionUser } from '../session.js';
-import type { DirectoryUser } from '../githubDirectory.js';
 
 /** Result of a successful OAuth callback: the resolved user plus, optionally,
  *  a server-held access token for later calls on the user's behalf. */
@@ -40,18 +39,18 @@ export interface DirectoryCapability {
     query: string,
     meeting: MeetingState | undefined,
     limit: number,
-  ): Promise<DirectoryUser[]>;
+  ): Promise<DirectorySuggestion[]>;
   searchUsersLocal(
     session: SessionUser,
     query: string,
     meeting: MeetingState | undefined,
     limit: number,
-  ): DirectoryUser[];
+  ): DirectorySuggestion[];
   resolvePresenterFromDirectory(
     session: SessionUser,
     query: string,
     meeting: MeetingState | undefined,
-  ): DirectoryUser | null;
+  ): DirectorySuggestion | null;
   warmDirectory(session: SessionUser): Promise<void>;
 }
 
@@ -69,11 +68,20 @@ export interface AuthenticationProvider {
   exchangeCode(code: string, redirectUri: string): Promise<OAuthProfile | null>;
 
   /**
-   * Resolve a typed-in handle to a full User — used for chair/presenter
-   * entry. Returns null when the handle doesn't resolve to a real account.
-   * Async; see the provider implementation for any synchronous fast path.
+   * Resolve a typed-in handle to a full User — used for the free-text path
+   * of chair/presenter entry. Returns null when the handle doesn't resolve
+   * to a real account.
    */
   resolveByHandle(handle: string): Promise<User | null>;
+
+  /**
+   * Resolve a stable account id to a full, authoritative User — used to
+   * re-resolve a selection picked from the directory, so the server never
+   * trusts client-supplied display fields or avatar URLs. Returns null when
+   * the account no longer exists. Optional: a provider without stable-id
+   * lookup can omit it (such selections then can't be validated).
+   */
+  resolveByAccountId?(accountId: string): Promise<User | null>;
 
   /** Synthesise an avatar URL for a stored user, where the provider can derive one. */
   avatarUrl(user: Pick<User, 'handle' | 'accountId'>): string;

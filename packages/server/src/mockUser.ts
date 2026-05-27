@@ -14,7 +14,7 @@
  * raw login as the display name and an empty organisation.
  */
 
-import type { User } from '@tcq/shared';
+import type { User, DevUser } from '@tcq/shared';
 import { DEV_USERS } from '@tcq/shared';
 import { githubUser } from './auth/githubUser.js';
 
@@ -63,4 +63,24 @@ export function mockUserFromLogin(login: string): User {
     name: seed?.name,
     organisation: seed?.organisation,
   });
+}
+
+let seedById: Map<number, DevUser> | null = null;
+function getSeedById(): Map<number, DevUser> {
+  if (seedById) return seedById;
+  seedById = new Map();
+  for (const u of DEV_USERS) seedById.set(u.ghid, u);
+  return seedById;
+}
+
+/**
+ * Resolve a numeric GitHub id back to a mock `User` via the dev seed (the
+ * mock-mode analogue of `GET /user/{id}`). Returns null for an id that
+ * isn't a seed member — in mock mode the only resolvable accounts are seed
+ * members and those already present in a meeting (handled by the caller).
+ */
+export function mockUserFromId(accountId: string): User | null {
+  const seed = getSeedById().get(Number(accountId));
+  if (!seed) return null;
+  return githubUser({ id: seed.ghid, login: seed.login, name: seed.name, organisation: seed.organisation });
 }

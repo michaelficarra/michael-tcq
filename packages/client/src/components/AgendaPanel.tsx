@@ -41,8 +41,8 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
-import type { AgendaItem, Session } from '@tcq/shared';
-import { formatShortDuration, isAgendaItem, isSession, normaliseGithubUsername, userKey } from '@tcq/shared';
+import type { AgendaItem, Session, UserSelection } from '@tcq/shared';
+import { formatShortDuration, isAgendaItem, isSession, userKey } from '@tcq/shared';
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useToast } from '../contexts/ToastContext.js';
@@ -55,8 +55,17 @@ import { formatElapsed } from './CountUpTimer.js';
 import { BlockMarkdown } from './BlockMarkdown.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { UserBadge } from './UserBadge.js';
-import { UserCombobox } from './UserCombobox.js';
+import { UserCombobox, toUserSelection, type SelectedUser } from './UserCombobox.js';
 import { CirclePlusIcon, CircleXIcon } from './icons.js';
+
+/**
+ * Dedupe key for a `UserSelection` on the wire: a concrete account keys on
+ * `provider:accountId`; free text keys on its lowercased handle. The
+ * `user:` / `handle:` prefixes keep the two namespaces from colliding.
+ */
+function selectionWireKey(sel: UserSelection): string {
+  return 'handle' in sel ? `handle:${sel.handle.toLowerCase()}` : `user:${sel.provider}:${sel.accountId}`;
+}
 
 // Stable references so useSensor's internal useMemo doesn't invalidate every render.
 const POINTER_SENSOR_OPTIONS = {
@@ -491,7 +500,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   const socket = useSocket();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editPresenters, setEditPresenters] = useState<string[]>([]);
+  const [editPresenters, setEditPresenters] = useState<SelectedUser[]>([]);
   const [editDuration, setEditDuration] = useState('');
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -525,7 +534,16 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
     setEditName(item.name);
-    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.handle ?? k));
+    // Seed chips from the item's presenter keys. A key that resolves to a
+    // known user becomes a `{user}` chip (so the avatar renders during
+    // edit); an unresolved key (rare — a free-text presenter the directory
+    // never matched) degrades to a `{handle}` chip carrying the raw key.
+    setEditPresenters(
+      item.presenterIds.map((k): SelectedUser => {
+        const u = meeting?.users[k];
+        return u ? { user: u } : { handle: k };
+      }),
+    );
     setEditDuration(item.duration != null && item.duration > 0 ? String(item.duration) : '');
     setEditing(true);
   }
@@ -534,7 +552,6 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmedName = editName.trim();
-    const presenterUsernames = editPresenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
     if (!trimmedName) return;
 
     const durationMinutes = parseInt(editDuration, 10);
@@ -542,7 +559,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
     socket?.emit('agenda:edit', {
       id: item.id,
       name: trimmedName,
-      presenterUsernames,
+      presenters: editPresenters.map(toUserSelection),
       duration: durationMinutes > 0 ? durationMinutes : null,
     });
     setEditing(false);
@@ -991,23 +1008,40 @@ function ChairsSection() {
     return true;
   }
 
+  /**
+   * Rebuild the chair list as identity selections from the given chair
+   * keys. Every existing chair resolves to a known user (it's already in
+   * `meeting.users`), so each becomes a `{ provider, accountId }`
+   * selection. Keys with no resolved user are dropped — the server keys
+   * chairs by `userKey`, so an unresolvable id can't be a real chair.
+   */
+  function chairSelectionsFrom(chairIds: import('@tcq/shared').UserKey[]): UserSelection[] {
+    return chairIds.flatMap((id) => {
+      const u = meeting!.users[id];
+      return u ? [{ provider: u.provider, accountId: u.accountId }] : [];
+    });
+  }
+
   /** Remove a chair by emitting the updated list without them. */
   function handleRemove(chairId: string) {
-    const usernames = meeting!.chairIds.filter((id) => id !== chairId).map((id) => meeting!.users[id]?.handle ?? id);
-    socket?.emit('meeting:updateChairs', { usernames });
+    const chairs = chairSelectionsFrom(meeting!.chairIds.filter((id) => id !== chairId));
+    socket?.emit('meeting:updateChairs', { chairs });
     setRemoveConfirm(null);
   }
 
-  /** Add a new chair by username. */
-  function commitAdd(rawUsername: string) {
-    const username = normaliseGithubUsername(rawUsername);
-    if (!username) return;
-
-    const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.handle ?? id);
-    if (!usernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
-      usernames.push(username);
+  /** Add a new chair from a committed selection. */
+  function commitAdd(selection: SelectedUser) {
+    // Start from the existing chairs as identity selections, then append
+    // the new one. Dedupe by `UserSelection` identity so re-adding an
+    // existing chair (or one already present under a different display
+    // form) is a no-op.
+    const chairs = chairSelectionsFrom(meeting!.chairIds);
+    const added = toUserSelection(selection);
+    const addedKey = selectionWireKey(added);
+    if (!chairs.some((c) => selectionWireKey(c) === addedKey)) {
+      chairs.push(added);
     }
-    socket?.emit('meeting:updateChairs', { usernames });
+    socket?.emit('meeting:updateChairs', { chairs });
     setAdding(false);
   }
 

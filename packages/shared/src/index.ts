@@ -1,6 +1,7 @@
 export type {
   User,
   UserKey,
+  DirectorySuggestion,
   AgendaItem,
   Session,
   AgendaEntry,
@@ -48,6 +49,7 @@ export type {
   NextAgendaItemPayload,
   AdvanceResponse,
   CreateMeetingBody,
+  UserSelection,
   SwitchUserBody,
   ImportAgendaBody,
   PremiumUserBody,
@@ -91,6 +93,7 @@ export {
   NextSpeakerPayloadSchema,
   NextAgendaItemPayloadSchema,
   CreateMeetingBodySchema,
+  UserSelectionSchema,
   SwitchUserBodySchema,
   ImportAgendaBodySchema,
   PremiumUserBodySchema,

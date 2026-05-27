@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
-import type { PremiumUsersResponse, User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import type {
+  PremiumUsersResponse,
+  User,
+  DirectorySuggestion,
+  ClientToServerEvents,
+  ServerToClientEvents,
+} from '@tcq/shared';
 import {
   CreateMeetingBodySchema,
   ImportAgendaBodySchema,
@@ -10,16 +16,10 @@ import {
   placeholderUser,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
-import { fetchGitHubUser } from './auth/github.js';
-import { githubUser, GITHUB_PROVIDER_ID } from './auth/githubUser.js';
 import { isOAuthConfigured } from './mockAuth.js';
-import {
-  searchUsers,
-  resolvePresenterFromDirectory,
-  warmDirectoryForUser,
-  DEFAULT_AUTOCOMPLETE_LIMIT,
-  type DirectoryUser,
-} from './githubDirectory.js';
+import { providerById } from './auth/registry.js';
+import { resolveSelections } from './resolveUser.js';
+import { resolvePresenterFromDirectory, warmDirectoryForUser, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
@@ -108,13 +108,18 @@ export function createMeetingRoutes(
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 25) : DEFAULT_AUTOCOMPLETE_LIMIT;
 
     const meeting = meetingIdRaw ? meetingManager.get(meetingIdRaw) : undefined;
-    const users = await searchUsers(user, q, meeting, limit);
-    res.json({ users });
+    // Dispatch to the searcher's provider directory (enabled-agnostic so the
+    // GitHub seed directory still answers in mock-auth mode). A provider with
+    // no directory capability returns nothing.
+    const directory = providerById(user.provider)?.directory;
+    const suggestions = directory ? await directory.searchUsers(user, q, meeting, limit) : [];
+    res.json({ suggestions });
   });
 
-  // Create a new meeting. The request body should contain a `chairs` array
-  // of GitHub usernames. Each username is validated against the GitHub API
-  // when OAuth is configured; otherwise placeholder User objects are used.
+  // Create a new meeting. The body carries `chairs` as a list of
+  // `UserSelection`s (typically just the creator's own identity). Each is
+  // resolved through the provider — an account selection is re-resolved to an
+  // authoritative profile, a free-text handle via the provider's handle lookup.
   router.post('/meetings', async (req, res) => {
     const user = req.session.user;
     if (!user) {
@@ -127,37 +132,12 @@ export function createMeetingRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
       return;
     }
-    const chairUsernames = parsed.data.chairs;
 
-    // Resolve each username to a User object
-    const chairs: User[] = [];
-    for (const username of chairUsernames) {
-      // If this is the current user, use their full session profile
-      if (user.provider === GITHUB_PROVIDER_ID && user.handle?.toLowerCase() === username.toLowerCase()) {
-        chairs.push(user);
-        continue;
-      }
-
-      if (isOAuthConfigured()) {
-        // Validate against the GitHub API when OAuth is configured
-        const ghUser = await fetchGitHubUser(username);
-        if (!ghUser) {
-          res.status(400).json({ error: `GitHub user "${username}" not found` });
-          return;
-        }
-        chairs.push(ghUser);
-      } else {
-        // Without OAuth, create a mock user via the seed-aware helper:
-        // logins that match a TC39 seed entry pick up the real display
-        // name and company, others fall back to login-as-name. The login
-        // maps to a stable `github:<login>` key so the same chair maps to
-        // the same user across restarts and across meetings.
-        chairs.push(mockUserFromLogin(username));
-      }
-    }
+    // No meeting exists yet, so resolution falls to the acting user / provider.
+    const chairs = await resolveSelections(user, undefined, parsed.data.chairs);
 
     if (chairs.length === 0) {
-      res.status(400).json({ error: 'At least one valid chair username is required' });
+      res.status(400).json({ error: 'At least one valid chair is required' });
       return;
     }
 
@@ -394,7 +374,7 @@ export function createMeetingRoutes(
     // placeholder behaviour. Resolution is per-name, so the comma-split
     // presenters of a single cell can be a mix of resolved and placeholder
     // entries. Names appearing across multiple items are resolved once.
-    const resolved = new Map<string, DirectoryUser>();
+    const resolved = new Map<string, DirectorySuggestion>();
     const seenKeys = new Set<string>();
     for (const item of items) {
       for (const raw of item.presenters) {
@@ -412,9 +392,7 @@ export function createMeetingRoutes(
     for (const item of items) {
       const presenters: User[] = item.presenters.map((name) => {
         const hit = resolved.get(name.trim().toLowerCase());
-        return hit
-          ? githubUser({ id: hit.id, login: hit.login, name: hit.name, organisation: hit.organisation })
-          : placeholderUser(name);
+        return hit ? hit.user : placeholderUser(name);
       });
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }

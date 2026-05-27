@@ -8,10 +8,9 @@
  */
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { normaliseGithubUsername } from '@tcq/shared';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useMeetingState } from '../contexts/MeetingContext.js';
-import { UserCombobox } from './UserCombobox.js';
+import { UserCombobox, toUserSelection, type SelectedUser } from './UserCombobox.js';
 import { inputValidation } from '../lib/inputStyles.js';
 
 interface AgendaFormProps {
@@ -24,7 +23,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
   const { meeting } = useMeetingState();
 
   const [name, setName] = useState('');
-  const [presenters, setPresenters] = useState<string[]>([]);
+  const [presenters, setPresenters] = useState<SelectedUser[]>([]);
   const [estimate, setEstimate] = useState('');
 
   // Focus the name input when the form opens
@@ -37,7 +36,6 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
     e.preventDefault();
 
     const trimmedName = name.trim();
-    const presenterUsernames = presenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
     if (!trimmedName) return;
 
     // Parse estimate: empty string or non-positive = no estimate
@@ -46,7 +44,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
 
     socket?.emit('agenda:add', {
       name: trimmedName,
-      presenterUsernames,
+      presenters: presenters.map(toUserSelection),
       duration: durationValue,
     });
 

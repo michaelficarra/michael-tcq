@@ -10,7 +10,7 @@
 import type { User } from '@tcq/shared';
 import type { AuthenticationProvider, OAuthProfile } from './provider.js';
 import { GITHUB_PROVIDER_ID, isGitHubConfigured, githubAvatarUrl, githubUser } from './githubUser.js';
-import { mockUserFromLogin } from '../mockUser.js';
+import { mockUserFromLogin, mockUserFromId } from '../mockUser.js';
 import { warning } from '../logger.js';
 import {
   searchUsers,
@@ -29,7 +29,16 @@ const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? '';
  * doesn't exist.
  */
 export async function fetchGitHubUser(login: string): Promise<User | null> {
-  const res = await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+  return fetchGitHubUserFrom(`https://api.github.com/users/${encodeURIComponent(login)}`);
+}
+
+/** Fetch a GitHub user's profile by numeric id (`GET /user/{id}`). */
+async function fetchGitHubUserById(id: string): Promise<User | null> {
+  return fetchGitHubUserFrom(`https://api.github.com/user/${encodeURIComponent(id)}`);
+}
+
+async function fetchGitHubUserFrom(url: string): Promise<User | null> {
+  const res = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github+json',
       // Client credentials raise the rate limit from 60/hr to 5000/hr.
@@ -106,6 +115,12 @@ export const githubProvider: AuthenticationProvider = {
     // (null ⇒ "not found", surfaced as an error to the chair). In mock
     // mode, resolve via the seed-aware helper, which always succeeds.
     return isGitHubConfigured() ? fetchGitHubUser(handle) : mockUserFromLogin(handle);
+  },
+
+  async resolveByAccountId(accountId): Promise<User | null> {
+    // Re-resolve a directory-picked account by its numeric id. In mock mode
+    // there's no API, so map the id back to a seed member (null if unknown).
+    return isGitHubConfigured() ? fetchGitHubUserById(accountId) : mockUserFromId(accountId);
   },
 
   avatarUrl(user) {

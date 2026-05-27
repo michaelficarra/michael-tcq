@@ -13,7 +13,6 @@ import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
   userKey,
-  placeholderUser,
   AgendaAddPayloadSchema,
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
@@ -37,10 +36,8 @@ import {
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
-import { fetchGitHubUser } from './auth/github.js';
-import { findGitHubUserByHandle, GITHUB_PROVIDER_ID } from './auth/githubUser.js';
-import { isOAuthConfigured } from './mockAuth.js';
-import { mockUserFromLogin } from './mockUser.js';
+import { findUserByHandle } from './auth/githubUser.js';
+import { resolveSelections, resolveHandle, selectionIsSelf } from './resolveUser.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
@@ -64,65 +61,9 @@ function parsePayload<T>(
   return result.data;
 }
 
-/**
- * Resolve a presenter username to a User, synchronously when possible.
- * Source priority:
- *   1. The full record already in `meeting.users` (real display name and
- *      company picked up the first time the user was referenced).
- *   2. The acting session user (so a chair adding themselves contributes
- *      their full session profile).
- *   3. The mock-user helper (`mockUserFromLogin`) in mock-auth mode —
- *      picks up a real display name and company from the dev seed when
- *      the login matches a TC39 member, otherwise login-as-name.
- *
- * Returns `null` if none of the sync paths apply, signalling to the
- * caller that an OAuth-mode GitHub fetch is required to resolve this
- * presenter — see `resolvePresentersFor` for the orchestration.
- */
-function resolvePresenterSync(meeting: MeetingState | undefined, sessionUser: User, username: string): User | null {
-  // Chair/presenter entry is by GitHub handle. The key is `github:<id>`,
-  // which isn't derivable from the handle alone — so resolve via a handle
-  // scan of the meeting, the acting user, or the mock helper.
-  const known = findGitHubUserByHandle(meeting, username);
-  if (known) return known;
-  if (isGitHubHandle(sessionUser, username)) return sessionUser;
-  if (!isOAuthConfigured()) return mockUserFromLogin(username);
-  return null;
-}
-
-/** True when `user` is the GitHub account for the given typed-in handle. */
-function isGitHubHandle(user: User, handle: string): boolean {
-  return user.provider === GITHUB_PROVIDER_ID && user.handle?.toLowerCase() === handle.toLowerCase();
-}
-
-/**
- * Resolve a list of presenter usernames. Returns a `User[]` directly
- * when every entry resolves synchronously, otherwise a Promise that
- * fills in the holes with `fetchGitHubUser` lookups. The sync return
- * matters: `await` on a real Promise yields a microtask, which can let
- * a follow-up socket event overtake the in-flight handler — preserving
- * the sync return path keeps the per-handler ordering that callers and
- * tests rely on whenever no GitHub fetch is actually needed.
- */
-function resolvePresentersFor(
-  meeting: MeetingState | undefined,
-  sessionUser: User,
-  usernames: string[],
-): User[] | Promise<User[]> {
-  const sync: (User | null)[] = usernames.map((u) => resolvePresenterSync(meeting, sessionUser, u));
-  if (sync.every((u): u is User => u !== null)) return sync;
-  return Promise.all(
-    usernames.map(async (username, i) => {
-      const cached = sync[i];
-      if (cached) return cached;
-      const ghUser = await fetchGitHubUser(username);
-      // Preserve the typed login as a placeholder when GitHub returns
-      // 404 (e.g. typo'd handle in OAuth mode) so the chair can spot
-      // the mistake on the agenda item.
-      return ghUser ?? placeholderUser(username);
-    }),
-  );
-}
+// Presenter/chair selection resolution lives in `resolveUser.ts`
+// (`resolveSelections`), provider-neutrally. The handlers below feed it the
+// `UserSelection[]` from the wire.
 
 // -- Log helpers --
 
@@ -292,7 +233,7 @@ export function broadcastPremiumChange(
   premiumHandle: string,
 ): void {
   for (const meeting of meetingManager.listAll()) {
-    if (findGitHubUserByHandle(meeting, premiumHandle) !== undefined) {
+    if (findUserByHandle(meeting, premiumHandle) !== undefined) {
       emitFullState(io, meetingManager, meeting.id, appSettings);
     }
   }
@@ -564,48 +505,32 @@ export function registerSocketHandlers(
 
       const parsed = parsePayload(ChairsUpdatePayloadSchema, payload, socket);
       if (!parsed) return;
-      const { usernames } = parsed;
+      const selections = parsed.chairs;
 
       // Non-admin chairs: at least one chair required, cannot remove self
       if (!userIsAdmin) {
-        if (usernames.length === 0) {
+        if (selections.length === 0) {
           socket.emit('error', 'At least one chair is required');
           return;
         }
 
-        const selfIncluded = usernames.some((u: string) => isGitHubHandle(user, u));
+        const selfIncluded = selections.some((sel) => selectionIsSelf(user, sel));
         if (!selfIncluded) {
           socket.emit('error', 'You cannot remove yourself from the chair list');
           return;
         }
       }
 
-      // Resolve each username to a User object
+      // Resolve each selection to a User (provider-neutral).
       const meeting = meetingManager.get(joinedMeetingId);
-      const chairs: User[] = [];
-
-      for (const username of usernames) {
-        // Check if this user is already known in the meeting (by handle)
-        const known = findGitHubUserByHandle(meeting, username);
-
-        if (known) {
-          chairs.push(known);
-        } else if (isGitHubHandle(user, username)) {
-          chairs.push(user);
-        } else if (isOAuthConfigured()) {
-          // Validate against GitHub API when OAuth is configured
-          const ghUser = await fetchGitHubUser(username);
-          if (!ghUser) {
-            socket.emit('error', `GitHub user "${username}" not found`);
-            return;
-          }
-          chairs.push(ghUser);
-        } else {
-          // Mock auth mode — resolve via the seed-aware helper so the
-          // chair badge picks up a real display name and company when
-          // the login matches a TC39 seed entry.
-          chairs.push(mockUserFromLogin(username));
-        }
+      const resolvedChairs = resolveSelections(user, meeting, selections);
+      const chairs = resolvedChairs instanceof Promise ? await resolvedChairs : resolvedChairs;
+      // Non-admins must end up with at least one chair (the self-inclusion
+      // guard above already required it among the selections); admins may
+      // deliberately set an empty list.
+      if (!userIsAdmin && chairs.length === 0) {
+        socket.emit('error', 'At least one valid chair is required');
+        return;
       }
 
       meetingManager.updateChairs(joinedMeetingId, chairs);
@@ -630,13 +555,13 @@ export function registerSocketHandlers(
 
       const parsed = parsePayload(AgendaAddPayloadSchema, payload, socket);
       if (!parsed) return;
-      const { name, presenterUsernames } = parsed;
+      const { name, presenters: presenterSelections } = parsed;
 
       const meeting = meetingManager.get(joinedMeetingId);
-      const resolved = resolvePresentersFor(meeting, user, presenterUsernames);
+      const resolved = resolveSelections(user, meeting, presenterSelections);
       // Sync-when-possible: the await is only paid when at least one
-      // presenter required an OAuth-mode GitHub fetch, preserving the
-      // synchronous handler ordering everywhere else.
+      // presenter required a provider lookup, preserving the synchronous
+      // handler ordering everywhere else.
       const presenters = resolved instanceof Promise ? await resolved : resolved;
 
       // The schema already constrains duration to a positive integer; undefined = no estimate.
@@ -713,9 +638,9 @@ export function registerSocketHandlers(
 
       if (parsed.name !== undefined) updates.name = parsed.name;
 
-      if (parsed.presenterUsernames !== undefined) {
+      if (parsed.presenters !== undefined) {
         const meeting = meetingManager.get(joinedMeetingId);
-        const resolved = resolvePresentersFor(meeting, user, parsed.presenterUsernames);
+        const resolved = resolveSelections(user, meeting, parsed.presenters);
         updates.presenters = resolved instanceof Promise ? await resolved : resolved;
       }
 
@@ -918,7 +843,7 @@ export function registerSocketHandlers(
     // the agenda (which clears the topic) or advances onto a different topic
     // between the user clicking Reply and this handler running — we reject
     // rather than attach the reply to the wrong topic.
-    socket.on('queue:add', (payload, ack?) => {
+    socket.on('queue:add', async (payload, ack?) => {
       // ack is optional — older clients may emit without a callback.
       const respond = typeof ack === 'function' ? ack : () => {};
 
@@ -980,10 +905,11 @@ export function registerSocketHandlers(
           respond({ ok: false, error: 'Only chairs can add entries on behalf of others' });
           return;
         }
-        // Look up the user from known meeting participants (by handle) or
-        // create a placeholder.
+        // `asUsername` is a typed handle (parsed from a chair command), so
+        // resolve it via the free-text path: known participant → provider
+        // handle lookup → placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
-        entryUser = findGitHubUserByHandle(meeting, parsed.asUsername) ?? placeholderUser(parsed.asUsername);
+        entryUser = await resolveHandle(user, meeting, parsed.asUsername);
       }
 
       // Decide whether this is a "pending initial-edit" add or a finished

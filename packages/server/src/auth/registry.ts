@@ -18,9 +18,20 @@ export function enabledProviders(): AuthenticationProvider[] {
   return ALL_PROVIDERS.filter((p) => p.enabled);
 }
 
-/** Look up an enabled provider by id; undefined if unknown or disabled. */
+/** Look up an enabled provider by id; undefined if unknown or disabled.
+ *  Use this for the auth/login flow, where a provider must be configured. */
 export function getProvider(id: string): AuthenticationProvider | undefined {
   return ALL_PROVIDERS.find((p) => p.id === id && p.enabled);
+}
+
+/**
+ * Look up a provider by id regardless of whether it's "enabled". Used for
+ * capability access (directory, resolveByHandle/AccountId) — these work in
+ * mock-auth mode too (the GitHub provider serves seed data when no OAuth
+ * credentials are configured), where `getProvider` would return undefined.
+ */
+export function providerById(id: string): AuthenticationProvider | undefined {
+  return ALL_PROVIDERS.find((p) => p.id === id);
 }
 
 /**

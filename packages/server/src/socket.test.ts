@@ -363,7 +363,7 @@ describe('Socket.IO integration', () => {
 
       // Listen for the state update after adding
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], duration: 15 });
+      client.emit('agenda:add', { name: 'First item', presenters: [{ handle: 'testuser' }], duration: 15 });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
@@ -383,7 +383,7 @@ describe('Socket.IO integration', () => {
 
       // Client 2 waits for the broadcast (now a delta, not a full state)
       const state2Promise = waitForChange(client2, ctx.meetingManager, meeting.id);
-      client1.emit('agenda:add', { name: 'Broadcast test', presenterUsernames: ['testuser'] });
+      client1.emit('agenda:add', { name: 'Broadcast test', presenters: [{ handle: 'testuser' }] });
       const state2 = await state2Promise;
 
       expect(state2.agenda).toHaveLength(1);
@@ -401,7 +401,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'Presenter cleanup', presenterUsernames: [' @testuser ', '@ alice'] });
+      client.emit('agenda:add', {
+        name: 'Presenter cleanup',
+        presenters: [{ handle: ' @testuser ' }, { handle: '@ alice' }],
+      });
       const state = await statePromise;
 
       const first = asItem(state.agenda[0]);
@@ -428,7 +431,10 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'Joint', presenterUsernames: ['testuser', newPresenter.login] });
+      client.emit('agenda:add', {
+        name: 'Joint',
+        presenters: [{ handle: 'testuser' }, { handle: newPresenter.login }],
+      });
       const state = await statePromise;
 
       const item = asItem(state.agenda[0]);
@@ -446,7 +452,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'No presenter', presenterUsernames: [] });
+      client.emit('agenda:add', { name: 'No presenter', presenters: [] });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
@@ -465,7 +471,7 @@ describe('Socket.IO integration', () => {
 
       // Listen for error
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('agenda:add', { name: 'Should fail', presenterUsernames: ['testuser'] });
+      client.emit('agenda:add', { name: 'Should fail', presenters: [{ handle: 'testuser' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
@@ -495,7 +501,7 @@ describe('Socket.IO integration', () => {
         queue?: { closed: boolean };
         lastAdvancementBy?: string;
       }>(client, 'agenda:added');
-      client.emit('agenda:add', { name: 'Follow-up', presenterUsernames: ['testuser'] });
+      client.emit('agenda:add', { name: 'Follow-up', presenters: [{ handle: 'testuser' }] });
       const delta = await deltaPromise;
 
       expect(delta.entry.name).toBe('Follow-up');
@@ -1755,7 +1761,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', 'newchair'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'newchair' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(2);
@@ -1772,7 +1778,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: ['testuser'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
@@ -1785,7 +1791,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: [] });
+      client.emit('meeting:updateChairs', { chairs: [] });
       const error = await errorPromise;
 
       expect(error).toMatch(/at least one/i);
@@ -1798,7 +1804,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'someone-else' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/cannot remove yourself/i);
@@ -1815,7 +1821,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', 'knownuser'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'knownuser' }] });
       const state = await statePromise;
 
       const knownKey = state.chairIds.find((id) => state.users[id].handle === 'knownuser')!;
@@ -1841,7 +1847,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', newChair.login] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: newChair.login }] });
       const state = await statePromise;
 
       const newChairKey = state.chairIds.find((id) => state.users[id].handle === newChair.login)!;
@@ -1864,7 +1870,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['newchair'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'newchair' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(1);
@@ -1883,7 +1889,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'someone-else' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(1);
@@ -1902,7 +1908,7 @@ describe('Socket.IO integration', () => {
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: [] });
+      client.emit('meeting:updateChairs', { chairs: [] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(0);
@@ -2802,13 +2808,13 @@ describe('Socket.IO integration', () => {
       const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
 
       // First mutation lands normally — surrogate applies it.
-      driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'First', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForVersion(1);
       expect(surrogate.state?.agenda).toHaveLength(1);
 
       // Force the surrogate to silently drop the *next* delta.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Second', presenters: [{ handle: 'testuser' }] });
       // Wait until the drop has been recorded (events.length grows even
       // though no version is applied — the surrogate logs `[dropped]`).
       await surrogate.waitForNextEvent();
@@ -2818,7 +2824,7 @@ describe('Socket.IO integration', () => {
       // A subsequent mutation triggers gap detection — version is now
       // lastSeen+2, surrogate emits state:resync, server replies with
       // a fresh state and the surrogate re-seeds.
-      driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Third', presenters: [{ handle: 'testuser' }] });
       // Convergence: the resync replays the full state with version 3.
       await surrogate.waitForVersion(3);
 
@@ -2841,9 +2847,9 @@ describe('Socket.IO integration', () => {
 
       // Drop one and provoke a gap.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForVersion(2);
 
       expect(getSocketCounters().stateResyncs).toBeGreaterThanOrEqual(1);
@@ -2859,12 +2865,12 @@ describe('Socket.IO integration', () => {
 
       // Drop the next two deltas in a row, then make a third mutation.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
 
       // The third delta triggers gap detection (expected v2, got v3),
       // and the resync replays the full state with version 3 — both
@@ -2881,7 +2887,7 @@ describe('Socket.IO integration', () => {
       const driver = await joinMeeting(meeting.id);
       // Apply a mutation before the observer joins, so the post-join
       // state is non-trivially different from the initial empty meeting.
-      driver.emit('agenda:add', { name: 'Pre-join', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Pre-join', presenters: [{ handle: 'testuser' }] });
       // Wait for the server-side mutation to land (emit is async).
       await new Promise<void>((resolve) => {
         const check = () => {
@@ -2897,7 +2903,7 @@ describe('Socket.IO integration', () => {
 
       // Disconnect and apply more mutations while away.
       observer.disconnect();
-      driver.emit('agenda:add', { name: 'During disconnect', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'During disconnect', presenters: [{ handle: 'testuser' }] });
       await new Promise<void>((resolve) => {
         const check = () => {
           if ((ctx.meetingManager.get(meeting.id)?.agenda.length ?? 0) === 2) resolve();
@@ -2992,7 +2998,7 @@ describe('Socket.IO integration', () => {
 
       // --- agenda:added (chair-only) ---
       await runStep('agenda:added (item)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'First', presenters: [{ handle: 'testuser' }] });
       });
       itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
 
@@ -3004,7 +3010,7 @@ describe('Socket.IO integration', () => {
 
       // --- agenda:added (item, used later for reorder/delete) ---
       await runStep('agenda:added (item 2)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'Second', presenters: [{ handle: 'testuser' }] });
       });
       itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
 
@@ -3031,7 +3037,7 @@ describe('Socket.IO integration', () => {
       // --- chairs:updated (admin path is not exercised — non-admin
       // chair must keep themselves; the test user is the chair). ---
       await runStep('chairs:updated', driver, surrogate, meeting.id, () => {
-        driver.emit('meeting:updateChairs', { usernames: ['testuser', 'other'] });
+        driver.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'other' }] });
       });
 
       // --- agenda:advanced (start the meeting → first item is current) ---
@@ -3113,7 +3119,7 @@ describe('Socket.IO integration', () => {
       // Add a third item then delete it so we exercise the
       // `currentCleared: false` branch (deleting a non-current item).
       await runStep('agenda:added (item 3)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'Third', presenters: [{ handle: 'testuser' }] });
       });
       const thirdItemId = ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id;
       await runStep('agenda:deleted (item)', driver, surrogate, meeting.id, () => {
@@ -3199,8 +3205,8 @@ describe('Socket.IO integration', () => {
       const c = await joinWithSurrogate(meeting.id);
 
       // Drive a sequence of mutations of different types.
-      driver.emit('agenda:add', { name: 'Item 1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'Item 2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Item 1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'Item 2', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       driver.emit('queue:setClosed', { closed: false });
 
@@ -3230,7 +3236,7 @@ describe('Socket.IO integration', () => {
       // normally and never need a resync.
       a.surrogate.options.dropNext = true;
 
-      driver.emit('agenda:add', { name: 'Skipped on a', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Skipped on a', presenters: [{ handle: 'testuser' }] });
       // `a` records the drop; `b` records the apply.
       await Promise.all([a.surrogate.waitForNextEvent(), b.surrogate.waitForVersion(1)]);
       expect(b.surrogate.state?.agenda).toHaveLength(1);
@@ -3238,7 +3244,7 @@ describe('Socket.IO integration', () => {
 
       // Subsequent mutation: `a` detects a gap and resyncs; `b` applies
       // the delta normally. Both end up at version 2 and equivalent.
-      driver.emit('agenda:add', { name: 'Triggers a resync', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Triggers a resync', presenters: [{ handle: 'testuser' }] });
       await Promise.all([a.surrogate.waitForVersion(2), b.surrogate.waitForVersion(2)]);
 
       expect(a.surrogate.resyncRequestCount).toBe(1);
@@ -3259,8 +3265,8 @@ describe('Socket.IO integration', () => {
       const driver = await joinMeeting(meeting.id);
 
       // Apply some mutations before the late observer joins.
-      driver.emit('agenda:add', { name: 'Pre-join 1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'Pre-join 2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Pre-join 1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'Pre-join 2', presenters: [{ handle: 'testuser' }] });
       // Wait for the second mutation to land on the server before the
       // late observer joins, otherwise the bootstrap state would be
       // empty and any incoming delta would arrive in-flight.
@@ -3278,7 +3284,7 @@ describe('Socket.IO integration', () => {
 
       // After joining, a further mutation arrives as a delta and applies
       // on top of the bootstrapped state.
-      driver.emit('agenda:add', { name: 'Post-join', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Post-join', presenters: [{ handle: 'testuser' }] });
       await late.surrogate.waitForVersion(3);
       expect(late.surrogate.state?.agenda).toHaveLength(3);
 
@@ -3331,9 +3337,9 @@ describe('Socket.IO integration', () => {
       const a = await joinWithSurrogate(meeting.id);
 
       // Build up a 3-item agenda that the observer can apply normally.
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(3);
       const idB = ctx.meetingManager.get(meeting.id)!.agenda[1].id;
       const idC = ctx.meetingManager.get(meeting.id)!.agenda[2].id;
@@ -3387,8 +3393,10 @@ describe('Socket.IO integration', () => {
       // Two chair updates back-to-back, with the second strictly
       // larger so the wrong order would visibly diverge state.
       a.surrogate.reorderNext(2);
-      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second'] });
-      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second', 'third'] });
+      driver.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'second' }] });
+      driver.emit('meeting:updateChairs', {
+        chairs: [{ handle: 'testuser' }, { handle: 'second' }, { handle: 'third' }],
+      });
 
       await a.surrogate.waitForVersion(2);
       expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
@@ -3429,8 +3437,8 @@ describe('Socket.IO integration', () => {
 
       // Step 1: induce a resync via reorder.
       a.surrogate.reorderNext(2);
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(2);
       expect(a.surrogate.resyncRequestCount).toBe(1);
 
@@ -3439,7 +3447,7 @@ describe('Socket.IO integration', () => {
       // in a clean state — `lastSeenVersion` matches the server's, so
       // the next delta lands on `expected` rather than producing yet
       // another gap.
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(3);
       expect(a.surrogate.resyncRequestCount).toBe(1); // unchanged
       expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
@@ -3493,8 +3501,8 @@ describe('Socket.IO integration', () => {
       b.surrogate.reorderNext(4, [1, 3, 0, 2]);
       c.surrogate.reorderNext(4, [0, 2, 1, 3]);
 
-      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'I2', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       driver.emit('queue:setClosed', { closed: false });
 
@@ -3523,13 +3531,13 @@ describe('Socket.IO integration', () => {
       const meeting = ctx.meetingManager.create([owner]);
       const driver = await joinMeeting(meeting.id);
       // Create an initial agenda item the meeting can advance into.
-      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I1', presenters: [{ handle: 'testuser' }] });
 
       const a = await joinWithSurrogate(meeting.id);
       // Surrogate joined after the first add — bootstrap seeds at v1.
       // Reorder the next two deltas (a second add and an advance).
       a.surrogate.reorderNext(2);
-      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I2', presenters: [{ handle: 'testuser' }] });
       driver.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
 
       await a.surrogate.waitForVersion(3);
@@ -3679,7 +3687,7 @@ describe('Socket.IO integration', () => {
       const a = await joinWithSurrogate(meeting.id);
 
       a.surrogate.delayNext('agenda:added', 100);
-      driver.emit('agenda:add', { name: 'late but only one', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'late but only one', presenters: [{ handle: 'testuser' }] });
 
       // Synchronously after the emit, the surrogate hasn't processed
       // the broadcast yet — the delta is parked in the delay timer.
@@ -3704,7 +3712,7 @@ describe('Socket.IO integration', () => {
       // Hold the next agenda:added for long enough that the follow-up
       // mutation arrives first and forces a resync.
       a.surrogate.delayNext('agenda:added', 200);
-      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'held', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
 
       // The closed-changed delta is processed immediately and gaps
@@ -3738,10 +3746,10 @@ describe('Socket.IO integration', () => {
       // in version order — the partition holds them while they pile
       // up.
       a.surrogate.partition(150);
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: false });
 
       // Mid-partition: buffer is filling but nothing has been processed.
@@ -3771,7 +3779,7 @@ describe('Socket.IO integration', () => {
       // bumped to >= 2 by the resync, so v1 must be treated as a
       // late duplicate.
       a.surrogate.delayNext('agenda:added', 200);
-      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'held', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       await a.surrogate.waitForVersion(2);
 

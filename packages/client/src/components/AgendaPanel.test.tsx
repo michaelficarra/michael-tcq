@@ -585,8 +585,10 @@ describe('AgendaPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
       fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
 
+      // The remaining chair is re-emitted as its concrete account identity
+      // (provider + accountId), not a handle.
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice'],
+        chairs: [{ provider: 'github', accountId: 'alice' }],
       });
     });
 
@@ -628,26 +630,49 @@ describe('AgendaPanel', () => {
       fireEvent.change(input, { target: { value: 'newperson' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
+      // Existing chair re-emitted as identity; the typed-but-unpicked new
+      // chair commits as a bare handle (the server resolves it).
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice', 'newperson'],
+        chairs: [{ provider: 'github', accountId: 'alice' }, { handle: 'newperson' }],
       });
     });
 
-    it('does not add duplicate chair username', () => {
+    it('does not add a duplicate chair when re-picking an existing identity from suggestions', async () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
       const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
-      renderAgenda(meeting, chairUser, mockSocket);
 
-      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
-      const input = screen.getByLabelText(/new chair username/i);
-      fireEvent.change(input, { target: { value: 'Alice' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
+      // Stub autocomplete to return alice's account, so picking her commits
+      // a `{user}` whose identity matches the existing chair and dedupes.
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ suggestions: [{ user: chairUser }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ) as unknown as typeof fetch;
 
-      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice'],
-      });
+      try {
+        renderAgenda(meeting, chairUser, mockSocket);
+
+        fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+        const input = screen.getByLabelText(/new chair username/i);
+        fireEvent.change(input, { target: { value: 'alice' } });
+
+        // Wait for the suggestion to appear, then pick it.
+        const option = await screen.findByRole('option', { name: /alice/i });
+        fireEvent.mouseDown(option, { button: 0 });
+
+        // The picked identity already exists in the chair list, so the
+        // emitted list is unchanged (just alice's identity).
+        expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+          chairs: [{ provider: 'github', accountId: 'alice' }],
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     // Users may type or paste handles in GitHub-style `@name` form; the
@@ -666,7 +691,7 @@ describe('AgendaPanel', () => {
       fireEvent.keyDown(input, { key: 'Enter' });
 
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice', 'newperson'],
+        chairs: [{ provider: 'github', accountId: 'alice' }, { handle: 'newperson' }],
       });
     });
   });
@@ -701,7 +726,7 @@ describe('AgendaPanel', () => {
       expect(emit).toHaveBeenCalledWith('agenda:edit', {
         id: '1',
         name: 'Topic',
-        presenterUsernames: ['alice', 'bob', 'charlie'],
+        presenters: [{ handle: 'alice' }, { handle: 'bob' }, { handle: 'charlie' }],
         duration: null,
       });
     });

@@ -92,7 +92,8 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Test Item',
-      presenterUsernames: ['alice'],
+      // Free-text entry (no suggestion picked) commits as a bare handle.
+      presenters: [{ handle: 'alice' }],
       duration: 15,
     });
     expect(onSubmit).toHaveBeenCalled();
@@ -121,7 +122,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Item',
-      presenterUsernames: ['alice', 'bob', 'charlie'],
+      presenters: [{ handle: 'alice' }, { handle: 'bob' }, { handle: 'charlie' }],
       duration: undefined,
     });
   });
@@ -144,7 +145,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'No estimate',
-      presenterUsernames: ['alice'],
+      presenters: [{ handle: 'alice' }],
       duration: undefined,
     });
   });
@@ -166,7 +167,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Open floor',
-      presenterUsernames: [],
+      presenters: [],
       duration: undefined,
     });
     expect(onSubmit).toHaveBeenCalled();

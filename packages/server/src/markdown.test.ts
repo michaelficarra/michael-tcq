@@ -253,7 +253,7 @@ describe('Zod schema integration', () => {
   it('AgendaAddPayloadSchema accepts inline markdown in `name`', () => {
     const r = AgendaAddPayloadSchema.safeParse({
       name: '**Temporal** for [Stage 4](https://github.com/tc39/proposal-temporal)',
-      presenterUsernames: ['alice'],
+      presenters: [{ handle: 'alice' }],
     });
     expect(r.success).toBe(true);
   });
@@ -261,7 +261,7 @@ describe('Zod schema integration', () => {
   it('AgendaAddPayloadSchema rejects a heading in `name` with the validator reason', () => {
     const r = AgendaAddPayloadSchema.safeParse({
       name: '# heading',
-      presenterUsernames: ['alice'],
+      presenters: [{ handle: 'alice' }],
     });
     expect(r.success).toBe(false);
     if (!r.success) {
@@ -277,7 +277,7 @@ describe('Zod schema integration', () => {
     // value, which is much more informative than a save failure.
     const r = AgendaAddPayloadSchema.safeParse({
       name: '[click](javascript:alert(1))',
-      presenterUsernames: ['alice'],
+      presenters: [{ handle: 'alice' }],
     });
     expect(r.success).toBe(true);
     if (r.success) {

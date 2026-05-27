@@ -258,12 +258,32 @@ const clearableBlockMarkdownString = (field: string) =>
 const githubUsername = (msg = 'Username is required') =>
   z.string().transform(normaliseGithubUsername).pipe(z.string().min(1, msg));
 
+/**
+ * A user reference committed from a user selector (chair/presenter inputs).
+ * Two shapes:
+ *   - `{ provider, accountId }` — a concrete account picked from the
+ *     provider directory. Identity only: the server re-resolves it to a
+ *     full profile (via the provider), so we never trust client-supplied
+ *     display fields or avatar URLs.
+ *   - `{ handle }` — free text the user typed without picking a suggestion.
+ *     The server resolves it via the searcher's provider's handle lookup
+ *     (GitHub today), falling back to an unverified placeholder.
+ */
+export const UserSelectionSchema = z.union([
+  z.object({
+    provider: z.string().min(1).max(64),
+    accountId: z.string().min(1).max(256),
+  }),
+  z.object({ handle: githubUsername() }),
+]);
+export type UserSelection = z.infer<typeof UserSelectionSchema>;
+
 // -- Payloads for client-to-server events --
 
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
   name: markdownString('Agenda item name'),
-  presenterUsernames: z.array(githubUsername()),
+  presenters: z.array(UserSelectionSchema),
   /** Estimated duration in minutes; omit or 0 for no estimate. */
   duration: z.number().int().positive().optional(),
 });
@@ -295,7 +315,7 @@ export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: optionalMarkdownString('Agenda item name'),
   // Omitted = unchanged; an empty array explicitly clears the presenter list.
-  presenterUsernames: z.array(githubUsername()).optional(),
+  presenters: z.array(UserSelectionSchema).optional(),
   duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
@@ -445,7 +465,7 @@ export type PollReactPayload = z.infer<typeof PollReactPayloadSchema>;
  * least one chair must remain (except when an admin performs the update).
  */
 export const ChairsUpdatePayloadSchema = z.object({
-  usernames: z.array(githubUsername()),
+  chairs: z.array(UserSelectionSchema),
 });
 export type ChairsUpdatePayload = z.infer<typeof ChairsUpdatePayloadSchema>;
 
@@ -491,7 +511,7 @@ export interface AdvanceResponse {
 
 /** POST /api/meetings — create a new meeting. */
 export const CreateMeetingBodySchema = z.object({
-  chairs: z.array(githubUsername()).min(1, 'At least one chair username is required'),
+  chairs: z.array(UserSelectionSchema).min(1, 'At least one chair is required'),
 });
 export type CreateMeetingBody = z.infer<typeof CreateMeetingBodySchema>;
 

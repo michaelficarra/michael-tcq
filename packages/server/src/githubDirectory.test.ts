@@ -287,7 +287,7 @@ describe('githubDirectory', () => {
       const meeting = makeMeeting([githubUser({ id: 1, login: 'admin', name: 'Admin' })]);
       const results = await searchUsers(session, 'adm', meeting, 5);
       expect(results).toHaveLength(1);
-      expect(results[0].avatarUrl).toBe('https://github.com/admin.png?size=80');
+      expect(results[0].user.avatarUrl).toBe('https://github.com/admin.png?size=80');
     });
 
     it('enriches tier-2 entries with display name and company from the GraphQL query', async () => {
@@ -306,14 +306,14 @@ describe('githubDirectory', () => {
 
       // Match by display name (which is *not* a substring of the login).
       const byName = await searchUsers(session, 'Anderson', undefined, 5);
-      expect(byName.map((r) => r.login)).toEqual(['alice']);
-      expect(byName[0].name).toBe('Alice Anderson');
-      expect(byName[0].organisation).toBe('Acme');
+      expect(byName.map((s) => s.user.handle)).toEqual(['alice']);
+      expect(byName[0].user.name).toBe('Alice Anderson');
+      expect(byName[0].user.organisation).toBe('Acme');
 
       // Match by company.
       const byCompany = await searchUsers(session, 'Bumble', undefined, 5);
-      expect(byCompany.map((r) => r.login)).toEqual(['allison']);
-      expect(byCompany[0].organisation).toBe('Bumble');
+      expect(byCompany.map((s) => s.user.handle)).toEqual(['allison']);
+      expect(byCompany[0].user.organisation).toBe('Bumble');
     });
 
     it('returns meeting users (tier 1) before org members (tier 2)', async () => {
@@ -326,7 +326,7 @@ describe('githubDirectory', () => {
       // The meeting copy of alice (badge 'meeting') wins over the org copy
       // (badge 'org') because tier 1 takes precedence (deduped by login).
       // Allison should still appear from tier 2.
-      expect(results.map((r) => r.login)).toEqual(['alice', 'allison']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'allison']);
       expect(results[0].badge).toBe('meeting');
       expect(results[1].badge).toBe('org');
     });
@@ -385,7 +385,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'al', undefined, 3);
       // tier 2: alice (100), allison (101) → 2 hits, less than limit 3.
       // tier 3 returns alice (dup) + allen → only allen survives dedup.
-      expect(results.map((r) => r.login)).toEqual(['alice', 'allison', 'allen']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'allison', 'allen']);
     });
 
     it('skips tier 3 when tiers 1+2 already meet the limit', async () => {
@@ -402,7 +402,7 @@ describe('githubDirectory', () => {
       });
 
       const results = await searchUsers(session, 'al', undefined, 1);
-      expect(results.map((r) => r.login)).toEqual(['alice']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice']);
       expect(searchCalled).toBe(false);
     });
 
@@ -447,11 +447,11 @@ describe('githubDirectory', () => {
 
       // Uppercase query against lowercase storage.
       const upperToLower = await searchUsers(session, 'BOB', undefined, 5);
-      expect(upperToLower.map((r) => r.login)).toEqual(['bob-jones']);
+      expect(upperToLower.map((s) => s.user.handle)).toEqual(['bob-jones']);
 
       // Lowercase query against mixed-case storage.
       const lowerToMixed = await searchUsers(session, 'alice', undefined, 5);
-      expect(lowerToMixed.map((r) => r.login)).toEqual(['AliceSmith']);
+      expect(lowerToMixed.map((s) => s.user.handle)).toEqual(['AliceSmith']);
     });
 
     it('matches a space-separated query against a camel-case login', async () => {
@@ -474,15 +474,15 @@ describe('githubDirectory', () => {
       // Title-cased query with an internal space — the form a user is
       // most likely to type when they know the display name.
       const titled = await searchUsers(session, 'Samina Husein', undefined, 5);
-      expect(titled.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(titled.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
 
       // Lowercase + space — both axes of normalisation working together.
       const lower = await searchUsers(session, 'samina husein', undefined, 5);
-      expect(lower.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(lower.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
 
       // Regression guard: the no-space form must keep working.
       const collapsed = await searchUsers(session, 'saminahusein', undefined, 5);
-      expect(collapsed.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(collapsed.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
     });
 
     it('matches across diacritics in either direction', async () => {
@@ -509,15 +509,15 @@ describe('githubDirectory', () => {
 
       // Stored name has accents; typed query has none.
       const ascii = await searchUsers(session, 'Jose Perez', undefined, 5);
-      expect(ascii.map((r) => r.login)).toEqual(['joseperez']);
+      expect(ascii.map((s) => s.user.handle)).toEqual(['joseperez']);
 
       // Typed query has accent; stored name does not.
       const accented = await searchUsers(session, 'Jürgen', undefined, 5);
-      expect(accented.map((r) => r.login)).toEqual(['jurgenschmidt']);
+      expect(accented.map((s) => s.user.handle)).toEqual(['jurgenschmidt']);
 
       // Both sides accented (round-trip).
       const both = await searchUsers(session, 'José', undefined, 5);
-      expect(both.map((r) => r.login)).toEqual(['joseperez']);
+      expect(both.map((s) => s.user.handle)).toEqual(['joseperez']);
     });
 
     it('ranks prefix matches above fuzzy (subsequence) matches within a tier', async () => {
@@ -544,7 +544,7 @@ describe('githubDirectory', () => {
       });
 
       const results = await searchUsers(session, 'al', undefined, 5);
-      expect(results.map((r) => r.login)).toEqual(['alice', 'kallai']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'kallai']);
     });
 
     it('ranks any prefix match above any non-prefix match across fields', async () => {
@@ -578,7 +578,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'ali', undefined, 5);
       // alibaba (login prefix, weight 3) > aline (name prefix, weight 2) >
       // xalix (login subsequence — different class entirely).
-      expect(results.map((r) => r.login)).toEqual(['alibaba', 'aline', 'xalix']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alibaba', 'aline', 'xalix']);
     });
 
     it('matches against the GitHub `company` field on cached org members', async () => {
@@ -593,7 +593,7 @@ describe('githubDirectory', () => {
       // 'acme' isn't in any login or display name in the seed; the only
       // way it surfaces a result is via the company field on alice.
       const results = await searchUsers(session, 'acme', undefined, 5);
-      expect(results.map((r) => r.login)).toContain('alice');
+      expect(results.map((s) => s.user.handle)).toContain('alice');
     });
 
     it('excludes unresolved presenter placeholders (empty avatarUrl) from results', async () => {
@@ -626,7 +626,9 @@ describe('githubDirectory', () => {
       // Query 'alice' — the placeholder must be filtered out so the real
       // tier-2 alice (badge 'org') is what comes back.
       const aliceResults = await searchUsers(session, 'alice', meeting, 5);
-      expect(aliceResults.map((r) => ({ login: r.login, badge: r.badge }))).toEqual([{ login: 'alice', badge: 'org' }]);
+      expect(aliceResults.map((r) => ({ login: r.user.handle, badge: r.badge }))).toEqual([
+        { login: 'alice', badge: 'org' },
+      ]);
 
       // Query 'unknown' — the placeholder is the only thing that would
       // match; with the filter, no result.
@@ -635,7 +637,7 @@ describe('githubDirectory', () => {
 
       // Resolved meeting users still come through normally.
       const bobResults = await searchUsers(session, 'bob', meeting, 5);
-      expect(bobResults.map((r) => r.login)).toEqual(['bob']);
+      expect(bobResults.map((s) => s.user.handle)).toEqual(['bob']);
     });
 
     it('skips the empty-query tier-3 call (GitHub rejects q=)', async () => {
@@ -654,7 +656,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, '', undefined, 100);
       // All cached org members come back; no upstream search.
       expect(searchCalled).toBe(false);
-      expect(results.map((r) => r.login).sort()).toEqual(['alice', 'allison', 'wendy']);
+      expect(results.map((s) => s.user.handle).sort()).toEqual(['alice', 'allison', 'wendy']);
     });
   });
 
@@ -677,7 +679,7 @@ describe('githubDirectory', () => {
       // org — just assert each result actually scores against the query.
       expect(results.length).toBeGreaterThan(0);
       for (const r of results) {
-        expect(matchesQuery('mike', r.login, r.name, r.organisation)).toBe(true);
+        expect(matchesQuery('mike', r.user.handle ?? '', r.user.name, r.user.organisation)).toBe(true);
       }
     });
   });
@@ -724,7 +726,7 @@ describe('githubDirectory', () => {
       const meeting = makeMeeting([githubUser({ id: 3, login: 'bob', name: 'Bob Smith' })]);
       const hit = resolvePresenterFromDirectory(session, 'Bob Smith', meeting);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('bob');
+      expect(hit?.user.handle).toBe('bob');
       expect(hit?.badge).toBe('meeting');
     });
 
@@ -737,7 +739,7 @@ describe('githubDirectory', () => {
       // but not the full display name.
       const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', undefined);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('alice');
+      expect(hit?.user.handle).toBe('alice');
       expect(hit?.badge).toBe('org');
     });
 
@@ -773,7 +775,7 @@ describe('githubDirectory', () => {
       const meeting = makeMeeting([githubUser({ id: 2, login: 'alice', name: 'Alice Anderson' })]);
       const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', meeting);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('alice');
+      expect(hit?.user.handle).toBe('alice');
       // Tier 1 wins on overlap.
       expect(hit?.badge).toBe('meeting');
     });
@@ -802,7 +804,7 @@ describe('githubDirectory', () => {
 
         expect(fetchMock).not.toHaveBeenCalled();
         expect(hit).not.toBeNull();
-        expect(hit?.login).toBe('littledan');
+        expect(hit?.user.handle).toBe('littledan');
       });
 
       it('returns null when DEV_USERS produces multiple matches', async () => {

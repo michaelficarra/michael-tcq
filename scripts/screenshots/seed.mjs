@@ -58,12 +58,16 @@ export async function switchUserCookie(serverUrl, username) {
   return cookies.map((c) => c.split(';')[0]).join('; ');
 }
 
-/** Create a meeting with the given chairs and return its id. */
+/**
+ * Create a meeting with the given chairs and return its id. `chairs` is an
+ * array of bare GitHub handles; each is wrapped in a provider-neutral
+ * `{ handle }` UserSelection (resolved server-side) for the wire.
+ */
 export async function createMeeting(serverUrl, { chairs }) {
   const res = await fetch(`${serverUrl}/api/meetings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chairs }),
+    body: JSON.stringify({ chairs: chairs.map((handle) => ({ handle })) }),
   });
   if (!res.ok) {
     throw new Error(`createMeeting: ${res.status} ${await res.text()}`);
@@ -319,7 +323,9 @@ export async function populate(serverUrl, spec) {
     for (const item of spec.agenda) {
       const payload = {
         name: item.name,
-        presenterUsernames: item.presenters,
+        // `item.presenters` is an array of bare GitHub handles; wrap each in
+        // a provider-neutral `{ handle }` UserSelection for the wire.
+        presenters: (item.presenters ?? []).map((handle) => ({ handle })),
       };
       if (item.duration != null) payload.duration = item.duration;
       const after = await chairSocket.emitAndWait('agenda:add', payload, 'agenda:added');

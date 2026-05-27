@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
 import { usePopover } from '../hooks/usePopover.js';
 import { UserBadge } from './UserBadge.js';
-import { UserCombobox } from './UserCombobox.js';
+import { UserCombobox, type SelectedUser } from './UserCombobox.js';
 
 export function UserMenu() {
   const { user, mockAuth, switchUser } = useAuth();
@@ -185,7 +185,11 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  async function handleCommit(username: string) {
+  async function handleCommit(sel: SelectedUser) {
+    // The dev switcher routes through the mock-auth handle lookup, so
+    // reduce the selection to a handle: a picked account uses its handle
+    // (falling back to accountId), free text uses the typed handle.
+    const username = 'user' in sel ? (sel.user.handle ?? sel.user.accountId) : sel.handle;
     if (!username || switching) return;
     setSwitching(true);
     await switchUser(username);

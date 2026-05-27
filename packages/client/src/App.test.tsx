@@ -191,7 +191,7 @@ describe('HomePage', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: ['alice'] }),
+        body: JSON.stringify({ chairs: [{ provider: 'github', accountId: 'alice' }] }),
       });
       expect(mockNavigate).toHaveBeenCalledWith('/meeting/calm-wave-fox#agenda');
     });
