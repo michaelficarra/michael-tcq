@@ -46,8 +46,13 @@ import { warning, info, serialiseError } from './logger.js';
 
 /** Compact user record returned by autocomplete and stored in the caches. */
 export interface DirectoryUser {
-  /** GitHub login. Doubles as the dedup/identity key (lowercased) within the
-   *  directory and as the value the client submits for chair/presenter entry. */
+  /** Numeric GitHub user id — the identity used to build the `github:<id>`
+   *  key when a suggestion is picked or an import binds to this user. Carried
+   *  through every tier but deliberately NOT matched against by the fuzzy
+   *  search (only login/name/organisation are scored). */
+  id: number;
+  /** GitHub login. The value the client submits for chair/presenter entry,
+   *  and the secondary dedup key. */
   login: string;
   name: string;
   /**
@@ -343,6 +348,7 @@ async function refreshOrgMembers(session: SessionUser, org: string): Promise<voi
     for (const m of basic) {
       const e = enriched.get(m.login.toLowerCase());
       members.set(m.login.toLowerCase(), {
+        id: m.id,
         login: m.login,
         // `||` (not `??`) so a whitespace-only `name` from GitHub also
         // falls through to the login — same defensive shape used by
@@ -525,19 +531,15 @@ function meetingUserCandidates(meeting: MeetingState | undefined): DirectoryUser
   const out: DirectoryUser[] = [];
   for (const user of Object.values(meeting.users) as User[]) {
     // Only GitHub accounts are autocomplete candidates here (chair/presenter
-    // entry is by GitHub handle); skip users from other providers.
-    if (user.provider !== 'github') continue;
-    // Skip unresolved presenter placeholders. These are written into
-    // meeting.users by agenda import when a free-text presenter name
-    // doesn't bind to a real GitHub user (see resolvePresenterFromDirectory),
-    // and they exist solely so the agenda item can render the name. They
-    // have no real identity to autocomplete onto, and including them here
-    // would also let them shadow real tier-2 matches via the login dedup
-    // in mergeTiered when the agenda is re-imported. A placeholder is the
-    // only kind of resolved GitHub user with an empty `avatarUrl`.
-    if (user.avatarUrl === '') continue;
+    // entry is by GitHub handle); skip users from other providers — which
+    // also excludes unresolved free-text presenter placeholders, since those
+    // carry the `placeholder` provider and so have no real identity to
+    // autocomplete onto.
+    if (user.provider !== 'github' || !user.handle) continue;
     out.push({
-      login: user.handle ?? user.accountId,
+      // accountId is the numeric GitHub id as a string.
+      id: Number(user.accountId),
+      login: user.handle,
       name: user.name,
       // Meeting-state User objects carry the company string from when the
       // user was first resolved against GitHub — preserve it so the search
@@ -578,9 +580,10 @@ async function tier3Search(session: SessionUser, query: string, limit: number): 
   const url = `https://api.github.com/search/users?q=${encodeURIComponent(`${query} in:login`)}&per_page=${limit}&page=1`;
   const res = await githubFetchAs(session, url);
   if (!res || !res.ok) return [];
-  const data = (await res.json()) as { items?: Array<{ login: string; avatar_url: string }> };
+  const data = (await res.json()) as { items?: Array<{ id: number; login: string; avatar_url: string }> };
   if (!data.items) return [];
   return data.items.map((item) => ({
+    id: item.id,
     login: item.login,
     // Search results don't include display name or company; degrade to
     // login for the name and leave organisation blank.
@@ -613,6 +616,7 @@ export function searchUsersLocal(
   const tier2Candidates = isGitHubConfigured()
     ? orgMemberCandidates(session.accountId)
     : DEV_USERS.map<DirectoryUser>((u) => ({
+        id: u.ghid,
         login: u.login,
         name: u.name,
         organisation: u.organisation ?? '',
@@ -682,19 +686,21 @@ export function resolvePresenterFromDirectory(
 }
 
 /**
- * Concatenate tiers in order, dedupe by lowercase login (first tier wins),
- * truncate to `limit`. Login is the identity key throughout the directory,
- * so the same person appearing in multiple tiers (meeting + org + global
- * search) collapses to one row, with the earliest (most locally-known)
- * tier's record winning.
+ * Concatenate tiers in order, dedupe by numeric id AND by lowercase login
+ * (first tier wins), truncate to `limit`. The login fallback matters when a
+ * meeting-state record and an org-cache record for the same person carry
+ * differing ids — the dropdown should still show one row, with tier 1's
+ * (most locally-known) record winning.
  */
 function mergeTiered(tiers: DirectoryUser[][], limit: number): DirectoryUser[] {
+  const seenId = new Set<number>();
   const seenLogin = new Set<string>();
   const out: DirectoryUser[] = [];
   for (const tier of tiers) {
     for (const user of tier) {
       const lLogin = user.login.toLowerCase();
-      if (seenLogin.has(lLogin)) continue;
+      if (seenId.has(user.id) || seenLogin.has(lLogin)) continue;
+      seenId.add(user.id);
       seenLogin.add(lLogin);
       out.push(user);
       if (out.length >= limit) return out;

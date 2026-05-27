@@ -7,11 +7,11 @@ import {
   PremiumUserBodySchema,
   SwitchUserBodySchema,
   userKey,
-  migrateKey,
+  placeholderUser,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { fetchGitHubUser } from './auth/github.js';
-import { githubUserKey, githubUser, githubPlaceholderUser } from './auth/githubUser.js';
+import { githubUser, GITHUB_PROVIDER_ID } from './auth/githubUser.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import {
   searchUsers,
@@ -133,7 +133,7 @@ export function createMeetingRoutes(
     const chairs: User[] = [];
     for (const username of chairUsernames) {
       // If this is the current user, use their full session profile
-      if (githubUserKey(username) === userKey(user)) {
+      if (user.provider === GITHUB_PROVIDER_ID && user.handle?.toLowerCase() === username.toLowerCase()) {
         chairs.push(user);
         continue;
       }
@@ -413,8 +413,8 @@ export function createMeetingRoutes(
       const presenters: User[] = item.presenters.map((name) => {
         const hit = resolved.get(name.trim().toLowerCase());
         return hit
-          ? githubUser({ login: hit.login, name: hit.name, organisation: hit.organisation })
-          : githubPlaceholderUser(name);
+          ? githubUser({ id: hit.id, login: hit.login, name: hit.name, organisation: hit.organisation })
+          : placeholderUser(name);
       });
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }
@@ -628,10 +628,9 @@ export function createMeetingRoutes(
     }
     const canonical = parsed.data.username;
     const removed = await appSettings.removePremiumUsername(canonical);
-    // `broadcastPremiumChange` matches against meeting users by their full
-    // `${provider}:${accountId}` key, so prefix the bare username (the add
-    // path already broadcasts the key returned by `addPremiumUsername`).
-    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, migrateKey(canonical));
+    // `broadcastPremiumChange` matches meeting users by handle (the premium
+    // list is GitHub handles), so the bare canonical handle is what to pass.
+    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, canonical);
     const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
     res.json({ ok: true, ...response });
   });

@@ -40,7 +40,7 @@ export async function fetchGitHubUser(login: string): Promise<User | null> {
   });
   if (!res.ok) return null;
   const data = await res.json();
-  return githubUser({ login: data.login, name: data.name, organisation: data.company });
+  return githubUser({ id: data.id, login: data.login, name: data.name, organisation: data.company });
 }
 
 export const githubProvider: AuthenticationProvider = {
@@ -92,7 +92,12 @@ export const githubProvider: AuthenticationProvider = {
       return null;
     }
     const userData = await userRes.json();
-    const user = githubUser({ login: userData.login, name: userData.name, organisation: userData.company });
+    const user = githubUser({
+      id: userData.id,
+      login: userData.login,
+      name: userData.name,
+      organisation: userData.company,
+    });
     return { user, accessToken };
   },
 

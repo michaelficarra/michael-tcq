@@ -25,14 +25,6 @@ import { UserBadge } from './UserBadge.js';
 import { UserCombobox } from './UserCombobox.js';
 import { CircleXIcon } from './icons.js';
 
-// The premium list is GitHub-only: admins enter GitHub usernames, and the
-// server stores them as `github:` keys. Strip that prefix so this panel
-// works in bare handles — what the add/remove endpoints expect on the wire.
-const GITHUB_KEY_PREFIX = 'github:';
-function premiumHandle(key: string): string {
-  return key.startsWith(GITHUB_KEY_PREFIX) ? key.slice(GITHUB_KEY_PREFIX.length) : key;
-}
-
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
   const { showToast } = useToast();
   const [usernames, setUsernames] = useState<string[]>([]);
@@ -58,7 +50,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // mutation's response is authoritative and has already updated
         // state.
         if (myGen !== generationRef.current) return;
-        setUsernames(body.usernames.map(premiumHandle));
+        setUsernames(body.usernames);
       }
     } catch {
       // Silently swallow — same posture as AdminPanel. The next tick
@@ -97,7 +89,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // Replace with the canonical list — this lets server-side
         // canonicalisation (case, whitespace) take effect immediately
         // rather than waiting for the next poll.
-        setUsernames(body.usernames.map(premiumHandle));
+        setUsernames(body.usernames);
       } else {
         // Roll back the optimistic add and surface the server message.
         setUsernames(usernames);
@@ -123,7 +115,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to remove premium user' });
       } else {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
-        setUsernames(body.usernames.map(premiumHandle));
+        setUsernames(body.usernames);
       }
     } catch {
       setUsernames(previous);

@@ -8,7 +8,8 @@ import {
   setFetchForTesting,
   resetDirectoryForTesting,
 } from './githubDirectory.js';
-import { githubUser, githubPlaceholderUser } from './auth/githubUser.js';
+import { placeholderUser } from '@tcq/shared';
+import { githubUser } from './auth/githubUser.js';
 import type { SessionUser } from './session.js';
 
 /**
@@ -34,7 +35,7 @@ function makeSession(overrides: Partial<SessionUser> = {}): SessionUser {
  * Minimal MeetingState fixture. We only consume `users` from the meeting
  * inside the directory module, so the rest can be left as defaults. Each
  * entry is a full `User` keyed by its canonical `${provider}:${accountId}`
- * key — pass `githubUser(...)` / `githubPlaceholderUser(...)` builders.
+ * key — pass `githubUser(...)` / `placeholderUser(...)` builders.
  */
 function makeMeeting(users: User[]): MeetingState {
   return {
@@ -283,7 +284,7 @@ describe('githubDirectory', () => {
 
       // A mock-auth meeting user — the avatar URL is the synthesised
       // github.com/{login}.png form carried on the stored User record.
-      const meeting = makeMeeting([githubUser({ login: 'admin', name: 'Admin' })]);
+      const meeting = makeMeeting([githubUser({ id: 1, login: 'admin', name: 'Admin' })]);
       const results = await searchUsers(session, 'adm', meeting, 5);
       expect(results).toHaveLength(1);
       expect(results[0].avatarUrl).toBe('https://github.com/admin.png?size=80');
@@ -319,7 +320,7 @@ describe('githubDirectory', () => {
       const session = makeSession();
       await seedCacheFor(session);
 
-      const meeting = makeMeeting([githubUser({ login: 'alice', name: 'Alice In Meeting' })]);
+      const meeting = makeMeeting([githubUser({ id: 2, login: 'alice', name: 'Alice In Meeting' })]);
       const results = await searchUsers(session, 'al', meeting, 5);
 
       // The meeting copy of alice (badge 'meeting') wins over the org copy
@@ -617,9 +618,9 @@ describe('githubDirectory', () => {
       //   - 'unknown person': an unresolved placeholder with no real
       //     counterpart in any tier — should simply not appear at all.
       const meeting = makeMeeting([
-        githubUser({ login: 'bob', name: 'Bob Smith' }),
-        githubPlaceholderUser('alice anderson'),
-        githubPlaceholderUser('unknown person'),
+        githubUser({ id: 3, login: 'bob', name: 'Bob Smith' }),
+        placeholderUser('alice anderson'),
+        placeholderUser('unknown person'),
       ]);
 
       // Query 'alice' — the placeholder must be filtered out so the real
@@ -720,7 +721,7 @@ describe('githubDirectory', () => {
       await seedOAuthCache(session);
       forbidTier3();
 
-      const meeting = makeMeeting([githubUser({ login: 'bob', name: 'Bob Smith' })]);
+      const meeting = makeMeeting([githubUser({ id: 3, login: 'bob', name: 'Bob Smith' })]);
       const hit = resolvePresenterFromDirectory(session, 'Bob Smith', meeting);
       expect(hit).not.toBeNull();
       expect(hit?.login).toBe('bob');
@@ -769,7 +770,7 @@ describe('githubDirectory', () => {
       // resolver still sees exactly one match — and it should resolve.
       // We use a query precise enough that allison (the other org member
       // matching "al") doesn't match.
-      const meeting = makeMeeting([githubUser({ login: 'alice', name: 'Alice Anderson' })]);
+      const meeting = makeMeeting([githubUser({ id: 2, login: 'alice', name: 'Alice Anderson' })]);
       const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', meeting);
       expect(hit).not.toBeNull();
       expect(hit?.login).toBe('alice');

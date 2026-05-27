@@ -19,6 +19,7 @@ import { DEV_USERS } from '@tcq/shared';
 import { githubUser } from './auth/githubUser.js';
 
 interface SeedEntry {
+  ghid: number;
   name: string;
   organisation: string;
 }
@@ -29,6 +30,7 @@ function getSeedByLogin(): Map<string, SeedEntry> {
   seedByLogin = new Map();
   for (const u of DEV_USERS) {
     seedByLogin.set(u.login.toLowerCase(), {
+      ghid: u.ghid,
       name: u.name,
       organisation: u.organisation ?? '',
     });
@@ -36,10 +38,29 @@ function getSeedByLogin(): Map<string, SeedEntry> {
   return seedByLogin;
 }
 
+/**
+ * Stable numeric id for a mock user. A seeded TC39 login uses that member's
+ * real GitHub id (so mock and OAuth agree); any other login gets a
+ * deterministic hash so the same login resolves to the same `github:<id>`
+ * key across requests and restarts.
+ */
+function deterministicGhid(login: string): number {
+  let hash = 0;
+  for (const ch of login) {
+    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 export function mockUserFromLogin(login: string): User {
   const seed = getSeedByLogin().get(login.toLowerCase());
   // `githubUser` produces the canonical GitHub `User` shape (provider,
-  // accountId = lowercased login, synthesised avatar) and applies the
+  // accountId = numeric id, synthesised avatar) and applies the
   // name-falls-back-to-login rule.
-  return githubUser({ login, name: seed?.name, organisation: seed?.organisation });
+  return githubUser({
+    id: seed?.ghid ?? deterministicGhid(login),
+    login,
+    name: seed?.name,
+    organisation: seed?.organisation,
+  });
 }

@@ -35,10 +35,38 @@ export function asUserKey(s: string): UserKey {
  * suffixed with the provider so the same display name from two different
  * providers is distinguishable. Examples: `@alice · github`,
  * `0000-0002-1825-0097 · orcid`.
+ *
+ * Note for GitHub: `accountId` is the numeric GitHub user id, so the label
+ * deliberately shows the `@handle` (login), not the id.
  */
 export function userLabel(user: Pick<User, 'provider' | 'accountId' | 'handle'>): string {
   const identifier = user.handle ? `@${user.handle}` : user.accountId;
   return `${identifier} · ${user.provider}`;
+}
+
+/**
+ * Provider id for an unverified, free-text presenter — a name a chair typed
+ * (or an agenda import produced) that didn't resolve to a real account. It
+ * is not a real authentication provider; it exists so such entries get a
+ * stable, collision-free `UserKey` (`placeholder:<lowercased-name>`) that
+ * can't clash with a real provider's account id (e.g. a numeric GitHub id).
+ */
+export const PLACEHOLDER_PROVIDER = 'placeholder';
+
+/**
+ * Build a placeholder `User` for an unresolved free-text presenter name.
+ * Keyed distinctly per name; carries no avatar. The directory skips these
+ * because their provider isn't a real one.
+ */
+export function placeholderUser(name: string): User {
+  return {
+    provider: PLACEHOLDER_PROVIDER,
+    accountId: name.toLowerCase(),
+    handle: name,
+    name,
+    organisation: '',
+    avatarUrl: '',
+  };
 }
 
 /**

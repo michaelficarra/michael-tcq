@@ -13,11 +13,15 @@ import type { RequestHandler } from 'express';
 import type { User } from '@tcq/shared';
 import { toSessionUser } from './session.js';
 import { isAnyProviderConfigured } from './auth/registry.js';
-import { githubUser } from './auth/githubUser.js';
+import { mockUserFromLogin } from './mockUser.js';
 
-// The mock user is a GitHub account (`github:admin`) so dev keys match the
-// shape real GitHub auth and the migration produce.
-export const MOCK_USER: User = githubUser({ login: 'admin', name: 'Admin' });
+// The default mock user is `admin`. It MUST resolve to the same key as
+// `mockUserFromLogin('admin')` (what the dev user-switcher produces), so that
+// switching to `admin` keeps the chair permissions of the `admin` who created
+// a meeting — otherwise the auto-injected admin and the switched admin would
+// be two different accounts. We reuse that resolver for the id, overriding
+// only the display name ('Admin' rather than the login-derived 'admin').
+export const MOCK_USER: User = { ...mockUserFromLogin('admin'), name: 'Admin' };
 
 /**
  * Returns true if any authentication provider is configured. When true,

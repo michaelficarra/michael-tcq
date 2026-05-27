@@ -109,6 +109,8 @@ export {
   userKey,
   asUserKey,
   userLabel,
+  placeholderUser,
+  PLACEHOLDER_PROVIDER,
   isSession,
   isAgendaItem,
   formatDuration,
@@ -118,14 +120,12 @@ export {
 export type { DurationStyle, DurationParts } from './helpers.js';
 export {
   upgradeUser,
-  migrateKey,
+  buildKeyRemap,
   isLegacyUser,
   isLegacyKey,
   isLegacyMeeting,
   upgradeMeeting,
   upgradeLog,
-  isLegacyAppSettings,
-  upgradeAppSettings,
 } from './migrate.js';
 export type { LegacyUser } from './migrate.js';
 export { applyDelta } from './applyDelta.js';

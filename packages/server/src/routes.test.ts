@@ -5,6 +5,7 @@ import type { User } from '@tcq/shared';
 import { asUserKey, userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
 import { githubUser } from './auth/githubUser.js';
+import { mockUserFromLogin } from './mockUser.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
@@ -22,7 +23,7 @@ function emptyAppSettings(): AppSettingsManager {
  * Helper: make a request to the Express app without starting a real HTTP server.
  * Uses the built-in fetch against a dynamically assigned port.
  */
-const TEST_USER: User = githubUser({ login: 'testuser', name: 'Test User', organisation: '' });
+const TEST_USER: User = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: '' });
 
 /**
  * Mirror of the directory's match check (case-insensitive exact / prefix
@@ -117,7 +118,9 @@ describe('Meeting REST routes', () => {
       const body = await res.json();
       expect(body.id).toMatch(/^[a-z]+(-[a-z]+)+$/);
       expect(body.chairIds).toHaveLength(1);
-      expect(body.chairIds[0]).toBe('github:testuser');
+      // The lone chair `testuser` matches the session user, so the stored
+      // key is the session user's numeric-id key.
+      expect(body.chairIds[0]).toBe(userKey(TEST_USER));
       expect(body.agenda).toEqual([]);
       expect(body.queue.orderedIds).toEqual([]);
     });
@@ -154,7 +157,10 @@ describe('Meeting REST routes', () => {
 
       expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body.chairIds).toEqual(['github:testuser', 'github:alice']);
+      // `testuser` resolves to the session user; `alice` (not the session
+      // user, mock-auth mode) resolves via the seed-aware mock helper to a
+      // numeric-id key.
+      expect(body.chairIds).toEqual([userKey(TEST_USER), userKey(mockUserFromLogin('alice'))]);
     });
   });
 
@@ -236,7 +242,7 @@ describe('Meeting REST routes', () => {
     it('returns meetings where the caller appears only in meeting.users (e.g. as a presenter)', async () => {
       // A different user is the chair; the caller is added separately to
       // `users` to model "named on an agenda item" without ever joining.
-      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
+      const other: User = githubUser({ id: 2, login: 'other', name: 'Other', organisation: '' });
       const meeting = manager.create([other]);
       meeting.users[userKey(TEST_USER)] = TEST_USER;
 
@@ -249,7 +255,7 @@ describe('Meeting REST routes', () => {
       // Caller is not in `users` (so not a chair/presenter/queued user) but
       // is recorded as having joined via socket. Guarantees the
       // participantIds branch of the filter is exercised.
-      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
+      const other: User = githubUser({ id: 2, login: 'other', name: 'Other', organisation: '' });
       const meeting = manager.create([other]);
       meeting.participantIds.push(userKey(TEST_USER));
 
@@ -259,7 +265,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('excludes meetings where the caller is unrelated', async () => {
-      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
+      const other: User = githubUser({ id: 2, login: 'other', name: 'Other', organisation: '' });
       manager.create([other]);
 
       const res = await fetch(`${baseUrl}/api/my-meetings`);
@@ -326,7 +332,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns the empty array and an empty-cursor ETag for a meeting with no log entries', async () => {
-      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
+      const meeting = manager.create([githubUser({ id: 10, login: 'a', name: 'A', organisation: '' })]);
       const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`);
       expect(res.status).toBe(200);
       expect(res.headers.get('ETag')).toBe('""');
@@ -336,7 +342,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns all entries on a fresh fetch and exposes the latest id as the ETag', async () => {
-      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
+      const meeting = manager.create([githubUser({ id: 10, login: 'a', name: 'A', organisation: '' })]);
       const e1 = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -360,7 +366,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns 304 when If-None-Match matches the current ETag', async () => {
-      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
+      const meeting = manager.create([githubUser({ id: 10, login: 'a', name: 'A', organisation: '' })]);
       const entry = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -374,7 +380,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns only entries after the cursor when ?since is provided', async () => {
-      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
+      const meeting = manager.create([githubUser({ id: 10, login: 'a', name: 'A', organisation: '' })]);
       const e1 = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -396,7 +402,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('falls back to returning the full log when the ?since cursor is unknown', async () => {
-      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
+      const meeting = manager.create([githubUser({ id: 10, login: 'a', name: 'A', organisation: '' })]);
       await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -516,7 +522,7 @@ describe('Meeting REST routes', () => {
 
     it('resolves a unique tier-1 (meeting user) name to the real user', async () => {
       // Seed an extra meeting user that the imported name will match.
-      const extra: User = githubUser({ login: 'phlpchm', name: 'Philip Chimento', organisation: 'Igalia' });
+      const extra: User = githubUser({ id: 20, login: 'phlpchm', name: 'Philip Chimento', organisation: 'Igalia' });
       const meetingId = createMeetingWith([extra]);
       const md = [
         '## Agenda Items',
@@ -541,7 +547,7 @@ describe('Meeting REST routes', () => {
       // the spaces of a real display name, but the GitHub login is
       // camel-case with no separator. Both forms must collapse to the
       // same key for the resolver to bind them.
-      const extra: User = githubUser({ login: 'SaminaHusein', name: 'Samina Husein', organisation: 'Apple' });
+      const extra: User = githubUser({ id: 21, login: 'SaminaHusein', name: 'Samina Husein', organisation: 'Apple' });
       const meetingId = createMeetingWith([extra]);
       const md = [
         '## Agenda Items',
@@ -736,6 +742,7 @@ describe('Meeting REST routes', () => {
  */
 describe('Meeting REST routes — import in OAuth mode', () => {
   const OAUTH_USER: User = githubUser({
+    id: 30,
     login: 'michaelficarra',
     name: 'Michael Ficarra',
     organisation: '@f5networks',
@@ -855,7 +862,7 @@ describe('Meeting REST routes — import in OAuth mode', () => {
     // agenda before any autocomplete call would have warmed the cache.
     // Without the in-route warm, "Daniel Ehrenberg" can't match anyone
     // (tier 1 has only the chair, tier 2 is empty) and ends up as a
-    // ghid-0 placeholder — the regression we're guarding against.
+    // `placeholder:<name>` placeholder — the regression we're guarding against.
     const meeting = manager.create([OAUTH_USER]);
     fixtureBody = [
       '## Agenda Items',

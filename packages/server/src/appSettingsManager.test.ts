@@ -3,7 +3,7 @@ import { AppSettingsManager } from './appSettingsManager.js';
 import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
 import { githubUser } from './auth/githubUser.js';
 
-const user = (login: string) => githubUser({ login });
+const user = (login: string) => githubUser({ id: 1, login });
 
 describe('AppSettingsManager', () => {
   let store: InMemoryAppSettingsStore;
@@ -24,8 +24,8 @@ describe('AppSettingsManager', () => {
       await store.save({ premiumUsernames: ['alice', 'bob'] });
       const fresh = new AppSettingsManager(store);
       await fresh.restore();
-      // Legacy bare entries are expanded to `github:` keys on load.
-      expect(fresh.getPremiumUsernames()).toEqual(['github:alice', 'github:bob']);
+      // The premium list stores bare GitHub handles.
+      expect(fresh.getPremiumUsernames()).toEqual(['alice', 'bob']);
     });
 
     it('canonicalises whatever the store returns (trim, lowercase, dedupe, sort)', async () => {
@@ -34,16 +34,16 @@ describe('AppSettingsManager', () => {
       await store.save({ premiumUsernames: ['  Alice ', 'BOB', 'alice', 'charlie'] });
       const fresh = new AppSettingsManager(store);
       await fresh.restore();
-      expect(fresh.getPremiumUsernames()).toEqual(['github:alice', 'github:bob', 'github:charlie']);
+      expect(fresh.getPremiumUsernames()).toEqual(['alice', 'bob', 'charlie']);
     });
   });
 
   describe('isPremium', () => {
-    it('returns true for a user whose lowercased login is in the list', async () => {
+    it('returns true for a user whose lowercased handle is in the list', async () => {
       await manager.addPremiumUsername('Alice');
       expect(manager.isPremium(user('Alice'))).toBe(true);
-      // Case-insensitive: the handle might preserve case, but accountId
-      // (and thus the key) is always the lowercased login.
+      // Case-insensitive: the handle preserves case, but isPremium
+      // matches on the lowercased handle.
       expect(manager.isPremium(user('alice'))).toBe(true);
       expect(manager.isPremium(user('ALICE'))).toBe(true);
     });
@@ -55,14 +55,14 @@ describe('AppSettingsManager', () => {
 
   describe('addPremiumUsername', () => {
     it('returns the canonical form of a newly-added username', async () => {
-      expect(await manager.addPremiumUsername('Alice')).toBe('github:alice');
-      expect(manager.getPremiumUsernames()).toEqual(['github:alice']);
+      expect(await manager.addPremiumUsername('Alice')).toBe('alice');
+      expect(manager.getPremiumUsernames()).toEqual(['alice']);
     });
 
     it('returns null when the username is already present (idempotent)', async () => {
       await manager.addPremiumUsername('alice');
       expect(await manager.addPremiumUsername('Alice')).toBeNull();
-      expect(manager.getPremiumUsernames()).toEqual(['github:alice']);
+      expect(manager.getPremiumUsernames()).toEqual(['alice']);
     });
 
     it('returns null and persists nothing for an empty/whitespace input', async () => {
@@ -74,7 +74,7 @@ describe('AppSettingsManager', () => {
       await manager.addPremiumUsername('charlie');
       await manager.addPremiumUsername('alice');
       await manager.addPremiumUsername('bob');
-      expect(manager.getPremiumUsernames()).toEqual(['github:alice', 'github:bob', 'github:charlie']);
+      expect(manager.getPremiumUsernames()).toEqual(['alice', 'bob', 'charlie']);
     });
 
     it('persists each mutation to the store', async () => {
@@ -84,7 +84,7 @@ describe('AppSettingsManager', () => {
       // just the in-memory cache.
       const witness = new AppSettingsManager(store);
       await witness.restore();
-      expect(witness.getPremiumUsernames()).toEqual(['github:alice']);
+      expect(witness.getPremiumUsernames()).toEqual(['alice']);
     });
   });
 
@@ -115,7 +115,7 @@ describe('AppSettingsManager', () => {
       await manager.addPremiumUsername('alice');
       const snap = manager.getPremiumUsernames();
       snap.push('mallory');
-      expect(manager.getPremiumUsernames()).toEqual(['github:alice']);
+      expect(manager.getPremiumUsernames()).toEqual(['alice']);
     });
   });
 });

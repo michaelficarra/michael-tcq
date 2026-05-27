@@ -2,22 +2,20 @@
  * Unit tests for the lazy on-read migration helpers in `@tcq/shared`'s
  * `migrate.ts`. Lives in the server package because `@tcq/shared` has no
  * test runner of its own. Exercises the legacy→provider-key upgrade for
- * users, keys, meetings, logs, and app-settings, plus idempotency and the
- * colon-based legacy detection invariant.
+ * users, meetings, and logs — targeting numeric GitHub-id keys
+ * (`github:<ghid>`) — plus idempotency and placeholder handling.
  */
 
 import { describe, it, expect } from 'vitest';
 import type { LegacyUser, MeetingState, LogEntry, UserKey, User } from '@tcq/shared';
 import {
   upgradeUser,
-  migrateKey,
+  buildKeyRemap,
   isLegacyKey,
   isLegacyUser,
   isLegacyMeeting,
   upgradeMeeting,
   upgradeLog,
-  isLegacyAppSettings,
-  upgradeAppSettings,
   userKey,
 } from '@tcq/shared';
 
@@ -29,11 +27,11 @@ const legacy = (ghid: number, ghUsername: string, name = ghUsername, organisatio
 });
 
 describe('upgradeUser', () => {
-  it('maps a legacy GitHub user to the provider-neutral shape', () => {
+  it('maps a legacy GitHub user to a numeric-id key shape', () => {
     const u = upgradeUser(legacy(42, 'AliceA', 'Alice Anderson', 'ACME'));
     expect(u).toEqual({
       provider: 'github',
-      accountId: 'alicea',
+      accountId: '42',
       handle: 'AliceA',
       name: 'Alice Anderson',
       organisation: 'ACME',
@@ -41,9 +39,9 @@ describe('upgradeUser', () => {
     });
   });
 
-  it('marks a ghid:0 placeholder with an empty avatarUrl', () => {
+  it('maps a ghid:0 record to a placeholder user', () => {
     const u = upgradeUser(legacy(0, 'Some Free Text'));
-    expect(u.provider).toBe('github');
+    expect(u.provider).toBe('placeholder');
     expect(u.accountId).toBe('some free text');
     expect(u.avatarUrl).toBe('');
   });
@@ -62,25 +60,23 @@ describe('upgradeUser', () => {
 describe('key helpers', () => {
   it('detects legacy (unprefixed) keys', () => {
     expect(isLegacyKey('alice')).toBe(true);
-    expect(isLegacyKey('github:alice')).toBe(false);
-  });
-
-  it('prefixes bare keys and passes through prefixed ones', () => {
-    expect(migrateKey('alice')).toBe('github:alice');
-    expect(migrateKey('github:alice')).toBe('github:alice');
-    expect(migrateKey('google:12345')).toBe('google:12345');
+    expect(isLegacyKey('github:12345')).toBe(false);
   });
 
   it('isLegacyUser discriminates on the provider field', () => {
     expect(isLegacyUser(legacy(1, 'a'))).toBe(true);
     expect(isLegacyUser(upgradeUser(legacy(1, 'a')))).toBe(false);
   });
+
+  it('buildKeyRemap maps old login keys to new numeric-id keys', () => {
+    const remap = buildKeyRemap({ alice: legacy(42, 'alice'), bob: legacy(7, 'bob') });
+    expect(remap.get('alice')).toBe('github:42');
+    expect(remap.get('bob')).toBe('github:7');
+  });
 });
 
-// A legacy meeting with one chair (alice), an agenda item presented by bob,
-// a queue entry from carol, a poll started by alice with a reaction from bob,
-// current speaker/topic, and operational attribution — exercising every
-// UserKey-typed field.
+// A legacy meeting (login keys, `{ghid, ghUsername}` users) exercising every
+// UserKey-typed field. ghids: alice=1, bob=2, carol=3.
 function legacyMeeting(): MeetingState {
   const k = (s: string) => s as UserKey;
   return {
@@ -116,20 +112,20 @@ function legacyMeeting(): MeetingState {
 }
 
 describe('upgradeMeeting', () => {
-  it('re-keys every UserKey-typed field and upgrades user records', () => {
+  it('re-keys every UserKey-typed field to numeric-id keys and upgrades user records', () => {
     const m = upgradeMeeting(legacyMeeting());
-    expect(Object.keys(m.users).sort()).toEqual(['github:alice', 'github:bob', 'github:carol']);
-    expect(m.users['github:alice' as UserKey].provider).toBe('github');
-    expect(m.participantIds).toEqual(['github:alice', 'github:bob']);
-    expect(m.chairIds).toEqual(['github:alice']);
-    expect((m.agenda[0] as { presenterIds: UserKey[] }).presenterIds).toEqual(['github:bob']);
-    expect(m.queue.entries.e1.userId).toBe('github:carol');
-    expect(m.current.speaker?.userId).toBe('github:bob');
-    expect(m.current.topic?.userId).toBe('github:bob');
-    expect(m.current.topicSpeakers[0].userId).toBe('github:carol');
-    expect(m.poll?.startChairId).toBe('github:alice');
-    expect(m.poll?.reactions[0].userId).toBe('github:bob');
-    expect(m.operational.lastAdvancementBy).toBe('github:alice');
+    expect(Object.keys(m.users).sort()).toEqual(['github:1', 'github:2', 'github:3']);
+    expect(m.users['github:1' as UserKey].handle).toBe('alice');
+    expect(m.participantIds).toEqual(['github:1', 'github:2']);
+    expect(m.chairIds).toEqual(['github:1']);
+    expect((m.agenda[0] as { presenterIds: UserKey[] }).presenterIds).toEqual(['github:2']);
+    expect(m.queue.entries.e1.userId).toBe('github:3');
+    expect(m.current.speaker?.userId).toBe('github:2');
+    expect(m.current.topic?.userId).toBe('github:2');
+    expect(m.current.topicSpeakers[0].userId).toBe('github:3');
+    expect(m.poll?.startChairId).toBe('github:1');
+    expect(m.poll?.reactions[0].userId).toBe('github:2');
+    expect(m.operational.lastAdvancementBy).toBe('github:1');
   });
 
   it('detects legacy vs migrated meetings and is idempotent', () => {
@@ -142,7 +138,13 @@ describe('upgradeMeeting', () => {
 });
 
 describe('upgradeLog', () => {
-  it('re-keys log entry user fields but leaves remainingQueue text untouched', () => {
+  it('re-keys log entry user fields via the remap, leaving remainingQueue text untouched', () => {
+    // Remap mirrors a meeting with alice=1, bob=2, carol=3.
+    const remap = buildKeyRemap({
+      alice: legacy(1, 'alice') as unknown as User,
+      bob: legacy(2, 'bob') as unknown as User,
+      carol: legacy(3, 'carol') as unknown as User,
+    });
     const entries: LogEntry[] = [
       { id: 'l1', timestamp: 't', type: 'meeting-started', chairId: 'alice' as UserKey },
       {
@@ -165,30 +167,19 @@ describe('upgradeLog', () => {
         duration: 1,
       },
     ];
-    const out = upgradeLog(entries);
-    expect((out[0] as { chairId: string }).chairId).toBe('github:alice');
+    const out = upgradeLog(entries, remap);
+    expect((out[0] as { chairId: string }).chairId).toBe('github:1');
     const finished = out[1] as { participantIds: string[]; remainingQueue: string };
-    expect(finished.participantIds).toEqual(['github:bob']);
+    expect(finished.participantIds).toEqual(['github:2']);
     // Display text is preserved verbatim — the (carol) is a handle, not a key.
     expect(finished.remainingQueue).toBe('Topic: hi (carol)');
-    expect((out[2] as { speakers: { userId: string }[] }).speakers[0].userId).toBe('github:carol');
-  });
-});
-
-describe('app settings', () => {
-  it('expands bare premium usernames to github keys and detects legacy', () => {
-    expect(isLegacyAppSettings({ premiumUsernames: ['alice', 'github:bob'] })).toBe(true);
-    expect(isLegacyAppSettings({ premiumUsernames: ['github:alice'] })).toBe(false);
-    expect(upgradeAppSettings({ premiumUsernames: ['alice', 'github:bob'] })).toEqual({
-      premiumUsernames: ['github:alice', 'github:bob'],
-    });
+    expect((out[2] as { speakers: { userId: string }[] }).speakers[0].userId).toBe('github:3');
   });
 });
 
 describe('userKey integration', () => {
-  it('an upgraded user keys to the migrated form of its old key', () => {
+  it('an upgraded user keys to github:<ghid>', () => {
     const u = upgradeUser(legacy(99, 'Dana'));
-    expect(userKey(u)).toBe('github:dana');
-    expect(userKey(u)).toBe(migrateKey('dana'));
+    expect(userKey(u)).toBe('github:99');
   });
 });

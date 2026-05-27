@@ -11,7 +11,15 @@ import type {
   User,
   UserKey,
 } from '@tcq/shared';
-import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey, isLegacyMeeting, upgradeMeeting, upgradeLog } from '@tcq/shared';
+import {
+  QUEUE_ENTRY_PRIORITY,
+  isAgendaItem,
+  userKey,
+  isLegacyMeeting,
+  upgradeMeeting,
+  upgradeLog,
+  buildKeyRemap,
+} from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 import { info, notice, error as logError, serialiseError } from './logger.js';
@@ -114,11 +122,14 @@ export class MeetingManager {
 
     let migrated = 0;
     for (const rawMeeting of meetings) {
-      // Lazy migration: upgrade a meeting persisted in the pre-multi-provider
-      // shape (bare-username keys, `{ ghid, ghUsername }` users) to the
-      // provider-prefixed shape, and mark it dirty so the next 30 s sync
-      // flushes the upgraded form back to the store.
+      // Lazy migration: upgrade a meeting persisted in the pre-abstraction
+      // shape (bare-login keys, `{ ghid, ghUsername }` users) to the
+      // provider-prefixed shape (`github:<ghid>`), and mark it dirty so the
+      // next 30 s sync flushes the upgraded form back to the store. The
+      // login→new-key remap (built from the legacy users, which carry ghid)
+      // is reused to re-key the separately-stored log.
       const wasLegacy = isLegacyMeeting(rawMeeting);
+      const keyRemap = wasLegacy ? buildKeyRemap(rawMeeting.users) : null;
       const meeting = wasLegacy ? upgradeMeeting(rawMeeting) : rawMeeting;
       if (this.isExpired(meeting, now)) {
         expired++;
@@ -135,9 +146,10 @@ export class MeetingManager {
           meeting.operational.version = 0;
         }
         // Log entries are upgraded in memory only (append-only, read through
-        // memory) — `upgradeLog` is idempotent so re-running it each boot is
-        // cheap, and we avoid expanding the store with a log-rewrite path.
-        const meetingLogs = upgradeLog(allLogs.get(meeting.id) ?? []);
+        // memory), reusing the meeting's key remap. We avoid expanding the
+        // store with a log-rewrite path; re-running on each boot is cheap.
+        const rawLogs = allLogs.get(meeting.id) ?? [];
+        const meetingLogs = keyRemap ? upgradeLog(rawLogs, keyRemap) : rawLogs;
         // Backfill `current.startedAt` for meetings persisted before
         // the field existed. The `meeting-started` log entry's timestamp
         // is the authoritative record of when the meeting first

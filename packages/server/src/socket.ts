@@ -13,7 +13,7 @@ import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
   userKey,
-  asUserKey,
+  placeholderUser,
   AgendaAddPayloadSchema,
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
@@ -38,7 +38,7 @@ import {
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
 import { fetchGitHubUser } from './auth/github.js';
-import { githubUserKey, githubPlaceholderUser } from './auth/githubUser.js';
+import { findGitHubUserByHandle, GITHUB_PROVIDER_ID } from './auth/githubUser.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { mockUserFromLogin } from './mockUser.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
@@ -80,14 +80,19 @@ function parsePayload<T>(
  * presenter — see `resolvePresentersFor` for the orchestration.
  */
 function resolvePresenterSync(meeting: MeetingState | undefined, sessionUser: User, username: string): User | null {
-  // Chair/presenter entry is by GitHub handle, so the key to look up is the
-  // GitHub key for that handle (`github:<lower>`), not a bare username.
-  const key = githubUserKey(username);
-  const known = meeting?.users[key];
+  // Chair/presenter entry is by GitHub handle. The key is `github:<id>`,
+  // which isn't derivable from the handle alone — so resolve via a handle
+  // scan of the meeting, the acting user, or the mock helper.
+  const known = findGitHubUserByHandle(meeting, username);
   if (known) return known;
-  if (userKey(sessionUser) === key) return sessionUser;
+  if (isGitHubHandle(sessionUser, username)) return sessionUser;
   if (!isOAuthConfigured()) return mockUserFromLogin(username);
   return null;
+}
+
+/** True when `user` is the GitHub account for the given typed-in handle. */
+function isGitHubHandle(user: User, handle: string): boolean {
+  return user.provider === GITHUB_PROVIDER_ID && user.handle?.toLowerCase() === handle.toLowerCase();
 }
 
 /**
@@ -114,7 +119,7 @@ function resolvePresentersFor(
       // Preserve the typed login as a placeholder when GitHub returns
       // 404 (e.g. typo'd handle in OAuth mode) so the chair can spot
       // the mistake on the agenda item.
-      return ghUser ?? githubPlaceholderUser(username);
+      return ghUser ?? placeholderUser(username);
     }),
   );
 }
@@ -282,13 +287,12 @@ export function broadcastPremiumChange(
   io: Server<ClientToServerEvents, ServerToClientEvents>,
   meetingManager: MeetingManager,
   appSettings: AppSettingsManager,
-  // The canonical `${provider}:${accountId}` key whose premium flag changed
-  // (as returned by `AppSettingsManager.add/removePremiumUsername`).
-  premiumKey: string,
+  // The GitHub handle whose premium flag changed. Premium membership is
+  // matched by handle, so we re-broadcast every meeting that handle is in.
+  premiumHandle: string,
 ): void {
-  const key = asUserKey(premiumKey);
   for (const meeting of meetingManager.listAll()) {
-    if (meeting.users[key] !== undefined) {
+    if (findGitHubUserByHandle(meeting, premiumHandle) !== undefined) {
       emitFullState(io, meetingManager, meeting.id, appSettings);
     }
   }
@@ -569,7 +573,7 @@ export function registerSocketHandlers(
           return;
         }
 
-        const selfIncluded = usernames.some((u: string) => githubUserKey(u) === userKey(user));
+        const selfIncluded = usernames.some((u: string) => isGitHubHandle(user, u));
         if (!selfIncluded) {
           socket.emit('error', 'You cannot remove yourself from the chair list');
           return;
@@ -581,14 +585,12 @@ export function registerSocketHandlers(
       const chairs: User[] = [];
 
       for (const username of usernames) {
-        const key = githubUserKey(username);
-
-        // Check if this user is already known in the meeting
-        const known = meeting?.users[key];
+        // Check if this user is already known in the meeting (by handle)
+        const known = findGitHubUserByHandle(meeting, username);
 
         if (known) {
           chairs.push(known);
-        } else if (key === userKey(user)) {
+        } else if (isGitHubHandle(user, username)) {
           chairs.push(user);
         } else if (isOAuthConfigured()) {
           // Validate against GitHub API when OAuth is configured
@@ -978,10 +980,10 @@ export function registerSocketHandlers(
           respond({ ok: false, error: 'Only chairs can add entries on behalf of others' });
           return;
         }
-        const key = githubUserKey(parsed.asUsername);
-        // Look up the user from known meeting participants or create a placeholder.
+        // Look up the user from known meeting participants (by handle) or
+        // create a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
-        entryUser = meeting?.users[key] ?? githubPlaceholderUser(parsed.asUsername);
+        entryUser = findGitHubUserByHandle(meeting, parsed.asUsername) ?? placeholderUser(parsed.asUsername);
       }
 
       // Decide whether this is a "pending initial-edit" add or a finished

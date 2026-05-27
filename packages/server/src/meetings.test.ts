@@ -11,9 +11,9 @@ function asItem(entry: AgendaEntry | undefined): AgendaItem {
   return entry;
 }
 
-const testUser = githubUser({ login: 'alice', name: 'Alice', organisation: 'Test Org' });
+const testUser = githubUser({ id: 1, login: 'alice', name: 'Alice', organisation: 'Test Org' });
 
-const otherUser = githubUser({ login: 'bob', name: 'Bob', organisation: 'Other Org' });
+const otherUser = githubUser({ id: 2, login: 'bob', name: 'Bob', organisation: 'Other Org' });
 
 describe('MeetingManager', () => {
   let manager: MeetingManager;

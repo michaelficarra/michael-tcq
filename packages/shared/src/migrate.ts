@@ -1,17 +1,20 @@
 /**
- * Lazy on-read migration from the pre-multi-provider data shape to the
- * provider-prefixed one.
+ * Lazy on-read migration from the pre-`AuthenticationProvider` data shape to
+ * the provider-prefixed one.
  *
- * Before multi-provider support, every account was a GitHub account: a
+ * Before the provider abstraction, every account was a GitHub account: a
  * `User` was `{ ghid, ghUsername, name, organisation, isPremium? }` and a
  * `UserKey` was the bare lowercased `ghUsername`. The new shape is
  * `{ provider, accountId, handle?, name, organisation, avatarUrl, isPremium? }`
  * with keys `${provider}:${accountId}` (see `types.ts` / `helpers.ts`).
+ * For GitHub, `accountId` is the **numeric GitHub user id** — which the
+ * legacy data already carries as `ghid`, so the migration is lossless.
  *
  * There is no batch migration. Persisted documents (meetings, logs,
- * app-settings, sessions) are upgraded the first time they are read, and
- * written back where that is cheap (meetings, app-settings) — see the call
- * sites in `packages/server`.
+ * sessions) are upgraded the first time they are read, and written back
+ * where that is cheap (meetings) — see the call sites in `packages/server`.
+ * The premium list is not migrated: it stays a list of bare GitHub handles
+ * (its pre-abstraction shape), matched against `user.handle` at runtime.
  *
  * ## Shape detection, not a version marker
  *
@@ -23,16 +26,21 @@
  * GitHub logins are alphanumerics-and-hyphens only (never a colon — see
  * the `strictGithubUsername` regex in `messages.ts`). Legacy is therefore
  * *always* GitHub. New documents are always written in the new shape, so
- * the colon test is only ever applied to decide "is this legacy?" — it is
- * never used to parse an already-migrated key (whose opaque accountId
- * could, for a future provider, contain a colon).
+ * the colon test is only ever applied to decide "is this legacy?".
+ *
+ * ## Re-keying
+ *
+ * Because the new GitHub key is `github:<ghid>` (not derivable from the old
+ * login key alone), re-keying a meeting's cross-references requires a
+ * login→new-key map built from its `users` records (which carry `ghid`).
+ * `buildKeyRemap` produces that map; `upgradeMeeting` uses it internally and
+ * the caller passes it to `upgradeLog` for the separately-stored log.
  */
 
-import type { AppSettings } from './appSettings.js';
-import type { AgendaItem, LogEntry, MeetingState, Reaction, TopicSpeaker, User, UserKey } from './types.js';
-import { isAgendaItem } from './helpers.js';
+import type { LogEntry, MeetingState, Reaction, TopicSpeaker, User, UserKey } from './types.js';
+import { isAgendaItem, placeholderUser, userKey, asUserKey } from './helpers.js';
 
-/** The pre-multi-provider `User` shape. GitHub-only by construction. */
+/** The pre-abstraction `User` shape. GitHub-only by construction. */
 export interface LegacyUser {
   ghid: number;
   ghUsername: string;
@@ -52,11 +60,9 @@ export function isLegacyKey(k: string): boolean {
 }
 
 /**
- * Synthesise the GitHub avatar URL for a login. Kept in lockstep with
- * `GitHubProvider.avatarUrl` (server) and the directory's
- * `avatarUrlForLogin`: `github.com/{login}.png` is a public redirect that
- * works for any valid login, including the hashed-ghid mock-auth users a
- * numeric `avatars.githubusercontent.com/u/{id}` URL would 404 on.
+ * Synthesise the GitHub avatar URL for a login. `github.com/{login}.png` is
+ * a public redirect that works for any valid login, so it's used even though
+ * the new accountId is the numeric id.
  */
 function githubAvatarUrl(login: string): string {
   return `https://github.com/${encodeURIComponent(login)}.png?size=80`;
@@ -64,44 +70,49 @@ function githubAvatarUrl(login: string): string {
 
 /**
  * Upgrade a single user record to the provider-neutral shape. Idempotent:
- * an already-migrated `User` is returned unchanged. Legacy records become
- * GitHub users whose `accountId` and `handle` are the lowercased login —
- * the same value the old key was built from, which is what makes the key
- * migration a pure prefix.
+ * an already-migrated `User` is returned unchanged. A real legacy user
+ * becomes a GitHub user keyed by its numeric `ghid`; a `ghid: 0` record —
+ * the old unresolved-presenter placeholder — becomes a `placeholder` user.
  */
 export function upgradeUser(u: User | LegacyUser): User {
   if (!isLegacyUser(u)) return u;
-  // accountId is the lowercased login (matching the old key); handle keeps
-  // the original casing for display. A `ghid: 0` record is an unresolved
-  // free-text presenter placeholder — preserve its empty-avatar marker so
-  // the directory keeps skipping it (a resolved user always has an avatar).
-  const accountId = u.ghUsername.toLowerCase();
-  const placeholder = u.ghid === 0;
+  if (u.ghid === 0) return placeholderUser(u.ghUsername);
   return {
     provider: 'github',
-    accountId,
+    accountId: String(u.ghid),
     handle: u.ghUsername,
     name: u.name,
     organisation: u.organisation,
-    avatarUrl: placeholder ? '' : githubAvatarUrl(accountId),
+    avatarUrl: githubAvatarUrl(u.ghUsername.toLowerCase()),
     ...(u.isPremium ? { isPremium: true } : {}),
   };
 }
 
-/** Prefix a bare legacy key with the `github:` provider; pass through already-migrated keys. */
-export function migrateKey(key: string): UserKey {
-  return (isLegacyKey(key) ? `github:${key}` : key) as UserKey;
+/**
+ * Build the map from each old (login) key in a meeting's `users` to its new
+ * `${provider}:${accountId}` key, derived from the record's own `ghid`.
+ * Idempotent on already-migrated maps (an already-new key maps to itself).
+ */
+export function buildKeyRemap(users: Record<string, User | LegacyUser>): Map<string, UserKey> {
+  const remap = new Map<string, UserKey>();
+  for (const [oldKey, u] of Object.entries(users)) {
+    remap.set(oldKey, userKey(upgradeUser(u)));
+  }
+  return remap;
 }
 
-function migrateKeys(keys: readonly string[]): UserKey[] {
-  return keys.map(migrateKey);
+/** Re-key one reference through the remap, leaving unknown keys untouched. */
+function remapKey(remap: Map<string, UserKey>, key: string): UserKey {
+  return remap.get(key) ?? asUserKey(key);
+}
+
+function remapKeys(remap: Map<string, UserKey>, keys: readonly string[]): UserKey[] {
+  return keys.map((k) => remapKey(remap, k));
 }
 
 /**
- * True when a meeting is still in the pre-migration shape. Sampling one
- * key is sufficient because a meeting is either wholly legacy or wholly
- * migrated. Chairs are always present at creation; fall back to the users
- * map, then to "nothing to migrate".
+ * True when a meeting is still in the pre-migration shape. Sampling one key
+ * is sufficient because a meeting is either wholly legacy or wholly migrated.
  */
 export function isLegacyMeeting(m: MeetingState): boolean {
   if (m.chairIds.length > 0) return isLegacyKey(m.chairIds[0]);
@@ -112,92 +123,101 @@ export function isLegacyMeeting(m: MeetingState): boolean {
 
 /**
  * Deep-upgrade a meeting: re-key the `users` map (and upgrade each value)
- * plus every `UserKey`-typed cross-reference. Idempotent. Callers should
- * gate on `isLegacyMeeting` so an already-migrated meeting isn't needlessly
- * re-persisted.
+ * plus every `UserKey`-typed cross-reference, via a login→new-key remap
+ * built from the meeting's own user records. Idempotent.
  */
 export function upgradeMeeting(m: MeetingState): MeetingState {
+  const remap = buildKeyRemap(m.users);
+
   const users: Record<UserKey, User> = {};
   for (const [key, user] of Object.entries(m.users)) {
-    users[migrateKey(key)] = upgradeUser(user);
+    users[remapKey(remap, key)] = upgradeUser(user);
   }
 
   const agenda = m.agenda.map((entry) =>
-    isAgendaItem(entry) ? ({ ...entry, presenterIds: migrateKeys(entry.presenterIds) } satisfies AgendaItem) : entry,
+    isAgendaItem(entry) ? { ...entry, presenterIds: remapKeys(remap, entry.presenterIds) } : entry,
   );
 
   const entries: Record<string, MeetingState['queue']['entries'][string]> = {};
   for (const [id, entry] of Object.entries(m.queue.entries)) {
-    entries[id] = { ...entry, userId: migrateKey(entry.userId) };
+    entries[id] = { ...entry, userId: remapKey(remap, entry.userId) };
   }
 
   const current: MeetingState['current'] = {
     ...m.current,
-    ...(m.current.speaker ? { speaker: { ...m.current.speaker, userId: migrateKey(m.current.speaker.userId) } } : {}),
-    ...(m.current.topic ? { topic: { ...m.current.topic, userId: migrateKey(m.current.topic.userId) } } : {}),
-    topicSpeakers: m.current.topicSpeakers.map(migrateTopicSpeaker),
+    ...(m.current.speaker
+      ? { speaker: { ...m.current.speaker, userId: remapKey(remap, m.current.speaker.userId) } }
+      : {}),
+    ...(m.current.topic ? { topic: { ...m.current.topic, userId: remapKey(remap, m.current.topic.userId) } } : {}),
+    topicSpeakers: m.current.topicSpeakers.map((s) => remapTopicSpeaker(remap, s)),
   };
 
   const poll: MeetingState['poll'] = m.poll
     ? {
         ...m.poll,
-        startChairId: migrateKey(m.poll.startChairId),
-        reactions: m.poll.reactions.map((r): Reaction => ({ ...r, userId: migrateKey(r.userId) })),
+        startChairId: remapKey(remap, m.poll.startChairId),
+        reactions: m.poll.reactions.map((r): Reaction => ({ ...r, userId: remapKey(remap, r.userId) })),
       }
     : undefined;
 
   return {
     ...m,
-    participantIds: migrateKeys(m.participantIds),
+    participantIds: remapKeys(remap, m.participantIds),
     users,
-    chairIds: migrateKeys(m.chairIds),
+    chairIds: remapKeys(remap, m.chairIds),
     agenda,
     queue: { ...m.queue, entries },
     current,
     poll,
     operational: {
       ...m.operational,
-      ...(m.operational.lastAdvancementBy ? { lastAdvancementBy: migrateKey(m.operational.lastAdvancementBy) } : {}),
+      ...(m.operational.lastAdvancementBy
+        ? { lastAdvancementBy: remapKey(remap, m.operational.lastAdvancementBy) }
+        : {}),
     },
   };
 }
 
-function migrateTopicSpeaker(s: TopicSpeaker): TopicSpeaker {
-  return { ...s, userId: migrateKey(s.userId) };
+function remapTopicSpeaker(remap: Map<string, UserKey>, s: TopicSpeaker): TopicSpeaker {
+  return { ...s, userId: remapKey(remap, s.userId) };
 }
 
 /**
- * Upgrade log entries in place (by value). Idempotent. Re-keys every
- * `UserKey`-typed field; deliberately leaves `AgendaItemFinishedLog.
- * remainingQueue` untouched — its `(username)` is pre-rendered display
- * text (a handle), not a key.
+ * Upgrade log entries in place (by value), re-keying every `UserKey`-typed
+ * field through the same `remap` the meeting used (build it with
+ * `buildKeyRemap(meeting.users)`). Idempotent. Deliberately leaves
+ * `AgendaItemFinishedLog.remainingQueue` untouched — its `(username)` is
+ * pre-rendered display text (a handle), not a key.
  */
-export function upgradeLog(entries: LogEntry[]): LogEntry[] {
+export function upgradeLog(entries: LogEntry[], remap: Map<string, UserKey>): LogEntry[] {
   return entries.map((entry): LogEntry => {
     switch (entry.type) {
       case 'meeting-started':
-        return { ...entry, chairId: migrateKey(entry.chairId) };
+        return { ...entry, chairId: remapKey(remap, entry.chairId) };
       case 'agenda-item-started':
-        return { ...entry, chairId: migrateKey(entry.chairId), itemPresenterIds: migrateKeys(entry.itemPresenterIds) };
+        return {
+          ...entry,
+          chairId: remapKey(remap, entry.chairId),
+          itemPresenterIds: remapKeys(remap, entry.itemPresenterIds),
+        };
       case 'agenda-item-finished':
-        return { ...entry, chairId: migrateKey(entry.chairId), participantIds: migrateKeys(entry.participantIds) };
+        return {
+          ...entry,
+          chairId: remapKey(remap, entry.chairId),
+          participantIds: remapKeys(remap, entry.participantIds),
+        };
       case 'topic-discussed':
-        return { ...entry, chairId: migrateKey(entry.chairId), speakers: entry.speakers.map(migrateTopicSpeaker) };
+        return {
+          ...entry,
+          chairId: remapKey(remap, entry.chairId),
+          speakers: entry.speakers.map((s) => remapTopicSpeaker(remap, s)),
+        };
       case 'poll-ran':
-        return { ...entry, startChairId: migrateKey(entry.startChairId), endChairId: migrateKey(entry.endChairId) };
+        return {
+          ...entry,
+          startChairId: remapKey(remap, entry.startChairId),
+          endChairId: remapKey(remap, entry.endChairId),
+        };
     }
   });
-}
-
-/** True when any premium entry is still a bare (unprefixed) GitHub username. */
-export function isLegacyAppSettings(s: AppSettings): boolean {
-  return s.premiumUsernames.some(isLegacyKey);
-}
-
-/**
- * Expand bare legacy premium usernames to `github:` keys. Idempotent;
- * already-prefixed entries pass through.
- */
-export function upgradeAppSettings(s: AppSettings): AppSettings {
-  return { ...s, premiumUsernames: s.premiumUsernames.map((u) => migrateKey(u) as string) };
 }

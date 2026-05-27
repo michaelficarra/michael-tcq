@@ -1,17 +1,17 @@
 /**
- * GitHub-specific `User` construction helpers, kept in a dependency-free
- * leaf module so both the GitHub provider (`./github.ts`), the mock-user
- * resolver (`../mockUser.ts`), and the directory (`../githubDirectory.ts`)
- * can share them without import cycles.
+ * GitHub-specific `User` helpers, kept in a dependency-free leaf module so
+ * the GitHub provider (`./github.ts`), the mock-user resolver
+ * (`../mockUser.ts`), the directory (`../githubDirectory.ts`), and the
+ * socket/route handlers can share them without import cycles.
  *
- * GitHub's `accountId` is the lowercased login (so it round-trips with the
- * pre-multi-provider key, which was the lowercased login). The `handle`
- * preserves the login's original casing for display. The numeric GitHub id
- * is intentionally dropped from `User`.
+ * GitHub's `accountId` is the **numeric GitHub user id** (as a string). The
+ * `handle` preserves the login's casing for display. Because the key isn't
+ * derivable from a handle alone, code that has only a typed-in handle
+ * resolves it via `findGitHubUserByHandle` (meeting lookup) or the
+ * provider's `resolveByHandle` (API / mock), both of which yield the id.
  */
 
-import type { User, UserKey } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
+import type { MeetingState, User } from '@tcq/shared';
 
 /** The provider id GitHub-sourced users carry in `User.provider`. */
 export const GITHUB_PROVIDER_ID = 'github';
@@ -24,24 +24,25 @@ export function isGitHubConfigured(): boolean {
 
 /**
  * Synthesise the public avatar URL for a GitHub login. `github.com/{login}.png`
- * is a redirect to the user's canonical avatar that works for any valid login,
- * including mock-auth users whose meeting-state record has no real numeric id
- * (a `avatars.githubusercontent.com/u/{id}` URL would 404 for them).
+ * is a redirect to the user's canonical avatar that works for any valid login
+ * (including mock-auth users), so we key it on the login rather than the
+ * numeric id.
  */
 export function githubAvatarUrl(login: string): string {
   return `https://github.com/${encodeURIComponent(login)}.png?size=80`;
 }
 
-/** The canonical UserKey for a GitHub login (`github:<lowercased-login>`). */
-export function githubUserKey(login: string): UserKey {
-  return userKey({ provider: GITHUB_PROVIDER_ID, accountId: login.toLowerCase() });
-}
-
-/** Build a resolved GitHub `User` from profile fields. */
-export function githubUser(fields: { login: string; name?: string | null; organisation?: string | null }): User {
+/** Build a resolved GitHub `User` from profile fields. The numeric `id` is
+ *  required — it becomes the canonical `accountId` (and thus the key). */
+export function githubUser(fields: {
+  id: number;
+  login: string;
+  name?: string | null;
+  organisation?: string | null;
+}): User {
   return {
     provider: GITHUB_PROVIDER_ID,
-    accountId: fields.login.toLowerCase(),
+    accountId: String(fields.id),
     handle: fields.login,
     // `||` (not `??`) so an empty/whitespace name falls through to the login.
     name: fields.name?.trim() || fields.login,
@@ -51,20 +52,16 @@ export function githubUser(fields: { login: string; name?: string | null; organi
 }
 
 /**
- * Build a placeholder GitHub `User` for a free-text presenter name that
- * didn't resolve to a real account (e.g. a typo, or a name with no GitHub
- * account). Keyed distinctly per name (so multiple placeholders coexist),
- * but marked by an empty `avatarUrl` — the sole signal the directory uses
- * to skip these so they don't shadow real autocomplete matches. A resolved
- * GitHub user always has a non-empty synthesised `avatarUrl`.
+ * Find a GitHub user already present in a meeting by their handle (login),
+ * case-insensitively. This is how a typed-in GitHub username is resolved to
+ * its full record (and numeric-id key) without a fresh API call — the key
+ * can no longer be derived from the handle alone.
  */
-export function githubPlaceholderUser(name: string): User {
-  return {
-    provider: GITHUB_PROVIDER_ID,
-    accountId: name.toLowerCase(),
-    handle: name,
-    name,
-    organisation: '',
-    avatarUrl: '',
-  };
+export function findGitHubUserByHandle(meeting: MeetingState | undefined, handle: string): User | undefined {
+  if (!meeting) return undefined;
+  const wanted = handle.toLowerCase();
+  for (const u of Object.values(meeting.users)) {
+    if (u.provider === GITHUB_PROVIDER_ID && u.handle?.toLowerCase() === wanted) return u;
+  }
+  return undefined;
 }

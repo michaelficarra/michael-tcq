@@ -5,8 +5,8 @@ import { githubUser } from './auth/githubUser.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
 
 function makeMeeting(): MeetingState {
-  const alice = githubUser({ login: 'alice' });
-  const bob = githubUser({ login: 'bob' });
+  const alice = githubUser({ id: 1, login: 'alice' });
+  const bob = githubUser({ id: 2, login: 'bob' });
 
   const agendaItem: AgendaItem = {
     kind: 'item',
@@ -64,7 +64,7 @@ describe('denormalisePayload', () => {
     const meeting = makeMeeting();
     const out = denormalisePayload('agenda:reorder', { id: 'item-1', afterId: 'session-1' }, meeting);
     expect(out).toEqual({
-      id: { kind: 'item', id: 'item-1', name: 'Item one', presenterIds: ['github:alice'], duration: 10 },
+      id: { kind: 'item', id: 'item-1', name: 'Item one', presenterIds: ['github:1'], duration: 10 },
       afterId: { kind: 'session', id: 'session-1', name: 'Morning session', capacity: 60 },
     });
   });
@@ -83,7 +83,7 @@ describe('denormalisePayload', () => {
     const meeting = makeMeeting();
     const out = denormalisePayload('queue:remove', { id: 'qe-1' }, meeting);
     expect(out).toEqual({
-      id: { id: 'qe-1', type: 'topic', topic: 'My topic', userId: 'github:alice' },
+      id: { id: 'qe-1', type: 'topic', topic: 'My topic', userId: 'github:1' },
     });
   });
 
@@ -92,7 +92,7 @@ describe('denormalisePayload', () => {
     const out = denormalisePayload('meeting:updateChairs', { usernames: ['alice', 'bob'] }, meeting) as {
       usernames: unknown[];
     };
-    expect(out.usernames).toEqual([githubUser({ login: 'alice' }), githubUser({ login: 'bob' })]);
+    expect(out.usernames).toEqual([githubUser({ id: 1, login: 'alice' }), githubUser({ id: 2, login: 'bob' })]);
   });
 
   it('replaces queue:add currentTopicSpeakerId with the current topic', () => {

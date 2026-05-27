@@ -14,7 +14,7 @@
 
 import type { MeetingState } from '@tcq/shared';
 import type { SessionUser } from './session.js';
-import { githubUserKey } from './auth/githubUser.js';
+import { findGitHubUserByHandle } from './auth/githubUser.js';
 
 /** Look up an agenda entry (item or session header) by id. */
 function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
@@ -26,7 +26,7 @@ function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
  *  Payload usernames are GitHub handles, so they resolve via the GitHub user key. */
 function lookupUser(meeting: MeetingState, username: unknown): unknown {
   if (typeof username !== 'string') return undefined;
-  return meeting.users[githubUserKey(username)];
+  return findGitHubUserByHandle(meeting, username);
 }
 
 /**
