@@ -11,19 +11,20 @@
  * handler implies the change is durable.
  */
 
-import type { User } from '@tcq/shared';
+import type { User, UserRefIndex } from '@tcq/shared';
+import { canonicalUserRef, buildUserRefIndex, userMatchesIndex } from '@tcq/shared';
 import type { AppSettingsStore } from './appSettingsStore.js';
-import { GITHUB_PROVIDER_ID } from './auth/githubUser.js';
 
 export class AppSettingsManager {
-  /** Canonical list — trimmed, lowercased, deduped, sorted. */
+  /** Canonical reference list — bare GitHub handles or `provider:id`,
+   *  canonicalised, deduped, sorted. */
   private usernames: string[] = [];
 
   /**
-   * Derived from `usernames`; rebuilt on every mutation. Kept as a
-   * `Set` so `isPremium` is O(1).
+   * Index derived from `usernames`; rebuilt on every mutation. Keeps
+   * `isPremium` O(1) (key-set + GitHub-handle-set membership).
    */
-  private premiumSet = new Set<string>();
+  private premiumIndex: UserRefIndex = buildUserRefIndex([]);
 
   /**
    * Tail of the in-flight write chain. Each `addPremiumUsername` /
@@ -43,7 +44,7 @@ export class AppSettingsManager {
   async restore(): Promise<void> {
     const settings = await this.store.load();
     this.usernames = canonicalise(settings.premiumUsernames);
-    this.rebuildSet();
+    this.rebuildIndex();
   }
 
   /**
@@ -56,50 +57,48 @@ export class AppSettingsManager {
   }
 
   /**
-   * Synchronous premium-membership check, used by every state
-   * broadcast and every /api/me response. The premium list is GitHub
-   * handles, so only GitHub accounts can be premium, matched by their
-   * (lowercased) handle.
+   * Synchronous premium-membership check, used by every state broadcast and
+   * every /api/me response. Matches the user against the canonical reference
+   * list — a bare GitHub handle, or a `provider:id` key — via the O(1) index.
    */
   isPremium(user: User): boolean {
-    if (user.provider !== GITHUB_PROVIDER_ID || !user.handle) return false;
-    return this.premiumSet.has(user.handle.toLowerCase());
+    return userMatchesIndex(user, this.premiumIndex);
   }
 
   /**
-   * Add `rawUsername` (a bare GitHub handle) to the premium list. Returns
-   * the canonical (trimmed, lowercased) handle that was added, or `null` if
-   * it was already present (idempotent — admins double-clicking shouldn't
-   * see an error) or the input was empty. Persists eagerly before resolving.
+   * Add a reference (a GitHub handle or a `provider:id`) to the premium list.
+   * Returns the canonical form that was added, or `null` if it was already
+   * present (idempotent — admins double-clicking shouldn't see an error) or
+   * the input was empty/invalid. Persists eagerly before resolving.
    */
   async addPremiumUsername(rawUsername: string): Promise<string | null> {
-    const canonical = rawUsername.trim().toLowerCase();
-    if (canonical === '') return null;
+    const canonical = canonicalUserRef(rawUsername);
+    if (canonical === null) return null;
     return this.enqueue(async () => {
-      if (this.premiumSet.has(canonical)) return null;
+      if (this.usernames.includes(canonical)) return null;
       const next = canonicalise([...this.usernames, canonical]);
       await this.store.save({ premiumUsernames: next });
       this.usernames = next;
-      this.rebuildSet();
+      this.rebuildIndex();
       return canonical;
     });
   }
 
   /**
-   * Remove `rawUsername` from the premium list. Returns `true` when
-   * a row was removed, `false` when the username wasn't present
-   * (idempotent). Persists eagerly before resolving.
+   * Remove a reference from the premium list. Returns the canonical form
+   * when a row was removed, `null` when it wasn't present (idempotent).
+   * Persists eagerly before resolving.
    */
-  async removePremiumUsername(rawUsername: string): Promise<boolean> {
-    const canonical = rawUsername.trim().toLowerCase();
-    if (canonical === '') return false;
+  async removePremiumUsername(rawUsername: string): Promise<string | null> {
+    const canonical = canonicalUserRef(rawUsername);
+    if (canonical === null) return null;
     return this.enqueue(async () => {
-      if (!this.premiumSet.has(canonical)) return false;
+      if (!this.usernames.includes(canonical)) return null;
       const next = this.usernames.filter((u) => u !== canonical);
       await this.store.save({ premiumUsernames: next });
       this.usernames = next;
-      this.rebuildSet();
-      return true;
+      this.rebuildIndex();
+      return canonical;
     });
   }
 
@@ -119,18 +118,18 @@ export class AppSettingsManager {
     return run;
   }
 
-  private rebuildSet(): void {
-    this.premiumSet = new Set(this.usernames);
+  private rebuildIndex(): void {
+    this.premiumIndex = buildUserRefIndex(this.usernames);
   }
 }
 
-/** Trim, lowercase, dedupe, and sort the premium handles to the canonical
- *  persisted shape. */
+/** Canonicalise each reference (bare GitHub handle or `provider:id`), drop
+ *  invalid/empty entries, dedupe, and sort to the canonical persisted shape. */
 function canonicalise(usernames: readonly string[]): string[] {
   const out = new Set<string>();
   for (const u of usernames) {
-    const c = u.trim().toLowerCase();
-    if (c !== '') out.add(c);
+    const c = canonicalUserRef(u);
+    if (c !== null) out.add(c);
   }
   return [...out].sort();
 }

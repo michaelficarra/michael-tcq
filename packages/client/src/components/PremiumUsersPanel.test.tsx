@@ -73,10 +73,12 @@ describe('PremiumUsersPanel', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
+      // The panel sends the raw typed value; the server canonicalises it
+      // (here the mocked response returns the lowercased `alice`).
       expect(mockFetch).toHaveBeenCalledWith('/api/admin/premium-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'alice' }),
+        body: JSON.stringify({ username: 'Alice' }),
       });
       expect(screen.getByLabelText(/Remove alice/)).toBeInTheDocument();
     });

@@ -114,13 +114,16 @@ export {
   userLabel,
   placeholderUser,
   PLACEHOLDER_PROVIDER,
+  canonicalUserRef,
+  buildUserRefIndex,
+  userMatchesIndex,
   isSession,
   isAgendaItem,
   formatDuration,
   formatShortDuration,
   normaliseGithubUsername,
 } from './helpers.js';
-export type { DurationStyle, DurationParts } from './helpers.js';
+export type { DurationStyle, DurationParts, UserRefIndex } from './helpers.js';
 export {
   upgradeUser,
   buildKeyRemap,

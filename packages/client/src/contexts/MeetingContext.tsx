@@ -167,8 +167,8 @@ export function useMeetingDispatch(): Dispatch<MeetingAction> {
 export function useIsChair(): boolean {
   const { meeting, user } = useMeetingState();
   if (!meeting || !user) return false;
-  // Compare by username (case-insensitive) since chairs are specified
-  // by GitHub username, and it's the stable identifier throughout the app.
+  // Compare by canonical user key (`${provider}:${accountId}`) — the stable
+  // identifier chairs are stored under throughout the app.
   return meeting.chairIds.includes(userKey(user));
 }
 

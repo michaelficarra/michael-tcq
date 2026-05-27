@@ -171,9 +171,9 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Managing the Agenda</h4>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             On the <strong>Agenda</strong> tab, click <strong>New Agenda Item</strong> to add items. Each item has a
-            name, zero or more presenters (comma-separated GitHub usernames), and an optional time estimate in minutes.
-            Drag items to reorder them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove
-            items. Agenda item names support basic inline markdown (bold, italic, strikethrough, code, and links).
+            name, zero or more presenters (comma-separated usernames), and an optional time estimate in minutes. Drag
+            items to reorder them. Click <strong>edit</strong> or <strong>delete</strong> to modify or remove items.
+            Agenda item names support basic inline markdown (bold, italic, strikethrough, code, and links).
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
             When an agenda item is completed, its estimate is automatically replaced with the actual duration it took,

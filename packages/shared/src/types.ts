@@ -10,7 +10,7 @@ export interface User {
   provider: string;
   /**
    * Provider-defined stable account identifier. The provider decides what
-   * this is: GitHub uses the lowercased login, a future Google provider
+   * this is: GitHub uses the numeric user id, a future Google provider
    * would use the OIDC `sub`, ORCID the iD. Opaque to everything outside
    * the provider — never parse it, only compare and key on it.
    */
@@ -48,7 +48,7 @@ export interface User {
 
 /**
  * Nominal (branded) string type for a canonical user key — the
- * `${provider}:${accountId}` pair (e.g. `github:alice`). Produced by
+ * `${provider}:${accountId}` pair (e.g. `github:12345`). Produced by
  * `userKey(user)` or `asUserKey(s)`; consumed as a Record key and as
  * cross-references throughout `MeetingState`. The provider prefix lets
  * accounts from different providers coexist in one meeting without

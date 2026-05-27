@@ -1,8 +1,8 @@
 /**
  * Form for adding a new agenda item.
  *
- * Fields: name (required), presenter GitHub username(s) — chip input
- * backed by autocomplete, zero or more (optional), estimated duration
+ * Fields: name (required), presenter(s) — chip input backed by the
+ * user-selector autocomplete, zero or more (optional), estimated duration
  * in minutes (optional). Matches the layout from the original screenshots:
  * a horizontal row of labelled inputs with Create/Cancel buttons.
  */
@@ -83,10 +83,10 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             onChange={setPresenters}
             meetingId={meeting?.id}
             ariaLabel="Presenters"
-            placeholder="GitHub username"
+            placeholder="username"
           />
           <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5">
-            Pick from suggestions, or type a name and press Enter for users without a GitHub account.
+            Pick from suggestions, or type a name and press Enter for people without an account.
           </p>
         </div>
 

@@ -1,23 +1,24 @@
 /**
- * GitHub-username combobox: a text input backed by an autocomplete
- * dropdown of fuzzy matches from the server's directory.
+ * User-selector combobox: a text input backed by an autocomplete dropdown of
+ * fuzzy matches from the searcher's provider directory. Commits a
+ * `SelectedUser` — `{ user }` for a picked account, `{ handle }` for free text.
  *
  * Two modes:
- *   - `mode="single"` — emits one username on selection (clear on blur).
+ *   - `mode="single"` — emits one `SelectedUser` on selection (clear on blur).
  *     Used for the chair-add input and the dev user-switcher.
  *   - `mode="multi"` — chip/tag input. Each commit (Enter, comma, blur)
- *     turns the typed/selected value into a token; existing tokens are
+ *     turns the typed/picked value into a token; existing tokens are
  *     editable as a chip row.
  *
  * The dropdown is a *suggestion* layer, not a constraint: pressing Enter
  * or comma on a value that doesn't match any suggestion still commits the
- * raw text. This matters because some presenters don't have a GitHub
- * account and the input has historically allowed arbitrary names.
+ * raw text as a `{ handle }`. This matters because some presenters don't have
+ * an account and the input has always allowed arbitrary names.
  *
  * Network behaviour: queries the server only after 250ms of typing
- * inactivity. This protects both our endpoint and the upstream GitHub
- * search-API budget (30 req/min/user). The latest in-flight result wins;
- * stale responses are dropped via a request id so a slow earlier query
+ * inactivity. This protects both our endpoint and the upstream provider
+ * search budget (e.g. GitHub's 30 req/min/user). The latest in-flight result
+ * wins; stale responses are dropped via a request id so a slow earlier query
  * cannot overwrite a faster later one.
  */
 

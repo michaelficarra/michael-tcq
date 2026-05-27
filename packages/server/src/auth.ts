@@ -23,16 +23,12 @@ import { warning, error as logError, serialiseError } from './logger.js';
 import { enabledProviders, getProvider, isAnyProviderConfigured } from './auth/registry.js';
 
 /**
- * Build the OAuth callback URL for a provider. A single
- * `OAUTH_CALLBACK_BASE_URL` (default `http://localhost:3000/auth`) yields
- * `${base}/${providerId}/callback` for every provider; the legacy
- * `GITHUB_CALLBACK_URL` is still honoured for GitHub so existing OAuth-app
- * registrations keep working.
+ * Build the OAuth callback URL for a provider: `${base}/${providerId}/callback`,
+ * where `base` is `OAUTH_CALLBACK_BASE_URL` (default `http://localhost:3000/auth`).
+ * Provider-agnostic — set the base per deployment so each provider's derived
+ * callback matches what its OAuth app is registered with.
  */
 function callbackUrl(providerId: string): string {
-  if (providerId === 'github' && process.env.GITHUB_CALLBACK_URL) {
-    return process.env.GITHUB_CALLBACK_URL;
-  }
   const base = process.env.OAUTH_CALLBACK_BASE_URL ?? 'http://localhost:3000/auth';
   return `${base}/${providerId}/callback`;
 }

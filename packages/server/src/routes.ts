@@ -76,7 +76,8 @@ export function createMeetingRoutes(
     // Resolve via the mock-user helper so logins that match a TC39 seed
     // entry pick up the real display name and company; everyone else
     // falls back to login-as-name with no organisation. The login maps to
-    // a stable `github:<login>` key across restarts.
+    // a stable `github:<id>` key across restarts (seed id, else a
+    // deterministic hash of the login).
     const user = mockUserFromLogin(username);
 
     req.session.user = toSessionUser(user);
@@ -604,11 +605,10 @@ export function createMeetingRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid username' });
       return;
     }
-    const canonical = parsed.data.username;
-    const removed = await appSettings.removePremiumUsername(canonical);
-    // `broadcastPremiumChange` matches meeting users by handle (the premium
-    // list is GitHub handles), so the bare canonical handle is what to pass.
-    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, canonical);
+    // `removePremiumUsername` returns the canonical reference that was
+    // removed (or null if it wasn't present); broadcast on an actual change.
+    const removed = await appSettings.removePremiumUsername(parsed.data.username);
+    if (removed !== null) broadcastPremiumChange(io, meetingManager, appSettings, removed);
     const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
     res.json({ ok: true, ...response });
   });

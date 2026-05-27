@@ -11,7 +11,7 @@
  */
 
 import { z } from 'zod';
-import { normaliseGithubUsername } from './helpers.js';
+import { normaliseGithubUsername, canonicalUserRef } from './helpers.js';
 import {
   sanitiseBlockMarkdown,
   sanitiseInlineMarkdown,
@@ -528,32 +528,45 @@ export const ImportAgendaBodySchema = z.object({
 export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
 
 /**
- * GitHub username field enforcing GitHub's documented login rules:
- * 1–39 characters, alphanumeric or hyphen, must not begin or end with
- * a hyphen. Normalises leading `@` and surrounding whitespace, then
- * lowercases to the canonical form stored server-side. Used for admin
- * mutations of the premium-tier list, where we want to reject obvious
- * garbage at the API boundary even though premium membership is
- * checked case-insensitively.
+ * An admin/premium user reference. Accepts either:
+ *   - a bare GitHub handle (GitHub's login rules: 1–39 chars, alphanumeric
+ *     or hyphen, no leading/trailing hyphen; a leading `@` is stripped), or
+ *   - a provider-qualified id `provider:rest` (provider is `[a-z][a-z0-9-]*`;
+ *     `rest` is a non-empty, whitespace-free account id — or, for `github:`,
+ *     a handle).
+ * Rejects obvious garbage at the API boundary; outputs the canonical form
+ * (`canonicalUserRef`) stored and compared server-side.
  */
-const strictGithubUsername = z
+const userRef = z
   .string()
-  .transform((s) => normaliseGithubUsername(s).toLowerCase())
-  .pipe(
-    z
-      .string()
-      .min(1, 'Username is required')
-      .max(39, 'GitHub usernames are at most 39 characters')
-      .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Invalid GitHub username'),
-  );
+  .max(256)
+  .superRefine((raw, ctx) => {
+    const ref = canonicalUserRef(raw);
+    if (ref === null) {
+      ctx.addIssue({ code: 'custom', message: 'A username or provider:id is required' });
+      return;
+    }
+    const colon = ref.indexOf(':');
+    if (colon === -1) {
+      if (ref.length > 39 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(ref)) {
+        ctx.addIssue({ code: 'custom', message: 'Invalid GitHub username' });
+      }
+      return;
+    }
+    const provider = ref.slice(0, colon);
+    const rest = ref.slice(colon + 1);
+    if (!/^[a-z][a-z0-9-]*$/.test(provider)) ctx.addIssue({ code: 'custom', message: 'Invalid provider' });
+    if (rest.length === 0 || /\s/.test(rest)) ctx.addIssue({ code: 'custom', message: 'Invalid account id' });
+  })
+  .transform((raw) => canonicalUserRef(raw) as string);
 
 /**
- * POST /api/admin/premium-users — add a username to the premium tier
- * list. Admin only; idempotent (re-adding an existing username is a
- * no-op success).
+ * POST /api/admin/premium-users — add a user to the premium tier list.
+ * Admin only; idempotent (re-adding an existing entry is a no-op success).
+ * Accepts a GitHub handle or a provider-qualified id (see `userRef`).
  */
 export const PremiumUserBodySchema = z.object({
-  username: strictGithubUsername,
+  username: userRef,
 });
 export type PremiumUserBody = z.infer<typeof PremiumUserBodySchema>;
 

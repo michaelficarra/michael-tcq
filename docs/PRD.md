@@ -31,7 +31,7 @@ The meeting creator is the initial chair. In addition to all participant capabil
 
 ### Admins
 
-Admins are designated by GitHub username via server configuration. In addition to all participant capabilities, admins can:
+Admins are designated via server configuration, by either a GitHub username or a provider-qualified identifier (e.g. `github:12345`, `google:1057…`, `orcid:0000-0002-1825-0097`). In addition to all participant capabilities, admins can:
 
 - See an additional **Admin** tab on the home page (between **Join Meeting** and **Help**) that is hidden from non-admin users. It contains the active-meetings list and the diagnostics panel described below.
 - View a list of all active meetings on the Admin tab, showing each meeting's ID (linked to that meeting), creation time, distinct participant count, and last connection time. The creation and last-connection times render as relative durations (e.g. "3 hr ago") that update live, with the full ISO timestamp shown on hover. While at least one client is currently connected, the last-connection cell instead reads `now (N)`, where N is the current active-connection count (inclusive of every connected socket, admin or otherwise).
@@ -45,7 +45,7 @@ The distinct participant count reflects how many unique users have joined the me
 
 ### Premium-tier users
 
-Premium-tier users are designated by GitHub username via the **Premium Users** section of the Admin tab on the home page. Admins add or remove premium users at runtime; changes take effect immediately for every connected participant of any meeting where the affected user is present — the premium badge appears or disappears next to their name and their queue-entry glow turns on or off without a refresh. The premium list is persisted server-side and survives restarts.
+Premium-tier users are designated via the **Premium Users** section of the Admin tab on the home page, by either a GitHub username or a provider-qualified identifier (the same two forms admins are configured with). Admins add or remove premium users at runtime; changes take effect immediately for every connected participant of any meeting where the affected user is present — the premium badge appears or disappears next to their name and their queue-entry glow turns on or off without a refresh. The premium list is persisted server-side and survives restarts.
 
 The tier is a user-visible status that may gate additional features over time. Two initial visual treatments mark a premium user:
 

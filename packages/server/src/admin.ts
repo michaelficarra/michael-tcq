@@ -1,31 +1,22 @@
 /**
  * Admin role utilities.
  *
- * Admins are identified by GitHub username (handle), configured via the
- * ADMIN_USERNAMES environment variable (comma-separated). Matching is by
- * handle rather than by user key because a GitHub user's key is now
- * `github:<numeric-id>`, which an operator configuring the env var wouldn't
- * know. Admins have access to a dashboard showing all active meetings with
- * connection statistics and the ability to delete meetings.
+ * Admins are configured via the comma-separated ADMIN_USERNAMES environment
+ * variable. Each entry is either a bare GitHub handle (e.g. `alice`) or a
+ * provider-qualified id (e.g. `github:12345`, `google:1057…`, `orcid:0000-…`)
+ * — see `buildUserRefIndex` / `userMatchesIndex` in `@tcq/shared`. Admins
+ * have access to a dashboard of all active meetings with connection
+ * statistics and the ability to delete meetings.
  */
 
 import type { User } from '@tcq/shared';
-import { GITHUB_PROVIDER_ID } from './auth/githubUser.js';
+import { buildUserRefIndex, userMatchesIndex } from '@tcq/shared';
 
-/** Parse the comma-separated admin handles from the environment variable. */
-function getAdminHandles(): Set<string> {
-  const raw = process.env.ADMIN_USERNAMES ?? '';
-  return new Set(
-    raw
-      .split(',')
-      .map((u) => u.trim().toLowerCase())
-      .filter((u) => u.length > 0),
-  );
-}
-
-/** Check whether a user is an admin. Only GitHub accounts can be admins for
- *  now, matched by their (lowercased) handle. */
+/** Check whether a user is an admin (matches any ADMIN_USERNAMES entry). */
 export function isAdmin(user: User): boolean {
-  if (user.provider !== GITHUB_PROVIDER_ID || !user.handle) return false;
-  return getAdminHandles().has(user.handle.toLowerCase());
+  // The env var is small and admin checks are infrequent (login, a few
+  // routes), so building the index per call is cheap and keeps it live to
+  // env changes in tests.
+  const index = buildUserRefIndex((process.env.ADMIN_USERNAMES ?? '').split(','));
+  return userMatchesIndex(user, index);
 }

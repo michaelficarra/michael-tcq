@@ -13,6 +13,8 @@ import type { SessionUser } from './session.js';
 import {
   QUEUE_ENTRY_LABELS,
   userKey,
+  buildUserRefIndex,
+  userMatchesIndex,
   AgendaAddPayloadSchema,
   AgendaDeletePayloadSchema,
   AgendaEditPayloadSchema,
@@ -36,7 +38,6 @@ import {
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
-import { findUserByHandle } from './auth/githubUser.js';
 import { resolveSelections, resolveHandle, selectionIsSelf } from './resolveUser.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
@@ -228,12 +229,13 @@ export function broadcastPremiumChange(
   io: Server<ClientToServerEvents, ServerToClientEvents>,
   meetingManager: MeetingManager,
   appSettings: AppSettingsManager,
-  // The GitHub handle whose premium flag changed. Premium membership is
-  // matched by handle, so we re-broadcast every meeting that handle is in.
-  premiumHandle: string,
+  // The canonical premium reference whose flag changed (a GitHub handle or a
+  // `provider:id`). Re-broadcast every meeting that contains a matching user.
+  premiumRef: string,
 ): void {
+  const index = buildUserRefIndex([premiumRef]);
   for (const meeting of meetingManager.listAll()) {
-    if (findUserByHandle(meeting, premiumHandle) !== undefined) {
+    if (Object.values(meeting.users).some((u) => userMatchesIndex(u, index))) {
       emitFullState(io, meetingManager, meeting.id, appSettings);
     }
   }
@@ -543,9 +545,9 @@ export function registerSocketHandlers(
     });
 
     // --- agenda:add ---
-    // Chair adds a new agenda item. Presenters are specified by GitHub
-    // username; for unknown names we create placeholder User objects.
-    // GitHub API validation will be added when real OAuth is implemented.
+    // Chair adds a new agenda item. Presenters arrive as `UserSelection`s and
+    // are resolved provider-neutrally via `resolveSelections` (picked accounts
+    // re-resolved against the provider; unmatched free text → placeholders).
     socket.on('agenda:add', async (payload) => {
       if (!joinedMeetingId) return;
       if (!meetingManager.isChair(joinedMeetingId, user)) {

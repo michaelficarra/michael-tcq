@@ -89,24 +89,24 @@ describe('AppSettingsManager', () => {
   });
 
   describe('removePremiumUsername', () => {
-    it('returns true and removes the username', async () => {
+    it('returns the canonical ref and removes the username', async () => {
       await manager.addPremiumUsername('alice');
-      expect(await manager.removePremiumUsername('alice')).toBe(true);
+      expect(await manager.removePremiumUsername('alice')).toBe('alice');
       expect(manager.getPremiumUsernames()).toEqual([]);
     });
 
     it('matches case-insensitively', async () => {
       await manager.addPremiumUsername('alice');
-      expect(await manager.removePremiumUsername('ALICE')).toBe(true);
+      expect(await manager.removePremiumUsername('ALICE')).toBe('alice');
       expect(manager.getPremiumUsernames()).toEqual([]);
     });
 
-    it('returns false when the username is not present (idempotent)', async () => {
-      expect(await manager.removePremiumUsername('never-was-here')).toBe(false);
+    it('returns null when the username is not present (idempotent)', async () => {
+      expect(await manager.removePremiumUsername('never-was-here')).toBeNull();
     });
 
-    it('returns false for empty/whitespace input', async () => {
-      expect(await manager.removePremiumUsername('   ')).toBe(false);
+    it('returns null for empty/whitespace input', async () => {
+      expect(await manager.removePremiumUsername('   ')).toBeNull();
     });
   });
 

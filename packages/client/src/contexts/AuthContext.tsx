@@ -29,7 +29,7 @@ interface AuthState {
   /** True while the initial /api/me request is in flight. */
   loading: boolean;
 
-  /** True when the server is using mock auth (no GitHub OAuth configured). */
+  /** True when the server is using mock auth (no auth provider configured). */
   mockAuth: boolean;
 
   /** True when the current user has admin privileges. */

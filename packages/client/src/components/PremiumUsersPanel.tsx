@@ -19,11 +19,44 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PremiumUsersResponse } from '@tcq/shared';
+import type { PremiumUsersResponse, User } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 import { useToast } from '../contexts/ToastContext.js';
 import { UserBadge } from './UserBadge.js';
 import { UserCombobox, type SelectedUser } from './UserCombobox.js';
 import { CircleXIcon } from './icons.js';
+
+/**
+ * Reduce a directory selection (or free-text) to the premium reference to
+ * store: a GitHub pick → its handle (the back-compat bare form); a non-GitHub
+ * pick → its `provider:accountId` key; free text → the typed string (which may
+ * itself be a `provider:id`). The server canonicalises and validates it.
+ */
+function selectionToPremiumRef(sel: SelectedUser): string {
+  if (!('user' in sel)) return sel.handle;
+  const { user } = sel;
+  return user.provider === 'github' ? (user.handle ?? user.accountId) : userKey(user);
+}
+
+/** Build a display-only `User` from a stored premium reference for the badge.
+ *  Bare → a GitHub handle; `provider:rest` → that provider, rest as the
+ *  account id (and, for GitHub, the handle). No avatar (silhouette). */
+function refToUser(ref: string): User {
+  const colon = ref.indexOf(':');
+  if (colon === -1) {
+    return { provider: 'github', accountId: ref, handle: ref, name: ref, organisation: '', avatarUrl: '' };
+  }
+  const provider = ref.slice(0, colon);
+  const rest = ref.slice(colon + 1);
+  return {
+    provider,
+    accountId: rest,
+    ...(provider === 'github' ? { handle: rest } : {}),
+    name: rest,
+    organisation: '',
+    avatarUrl: '',
+  };
+}
 
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
   const { showToast } = useToast();
@@ -68,21 +101,21 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
     fetchUsernames();
   }, [fetchUsernames, refreshTick]);
 
-  /** Add a username — called when the combobox commits. */
+  /** Add a reference — called when the combobox commits. The server
+   *  canonicalises (case, `@`, provider prefix); we send the raw value. */
   async function handleAdd(rawUsername: string) {
-    const canonical = rawUsername.trim().toLowerCase();
-    if (canonical === '' || usernames.includes(canonical)) return;
-    // Optimistic insert: prepend the canonical form locally so the user
-    // sees the pill immediately. Re-sort to match server order (sorted
-    // lexicographically) so a subsequent poll doesn't reshuffle.
-    const optimistic = [...usernames, canonical].sort();
+    const value = rawUsername.trim();
+    if (value === '' || usernames.includes(value)) return;
+    // Optimistic insert so the pill appears immediately; the server's
+    // response replaces it with the canonical list (sorted) momentarily.
+    const optimistic = [...usernames, value].sort();
     generationRef.current++;
     setUsernames(optimistic);
     try {
       const res = await fetch('/api/admin/premium-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: canonical }),
+        body: JSON.stringify({ username: value }),
       });
       if (res.ok) {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
@@ -134,15 +167,8 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
       <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm dark:shadow-stone-950/50 border border-stone-200 dark:border-stone-700 p-4 space-y-3">
         <UserCombobox
           mode="single"
-          onCommit={(sel: SelectedUser) => {
-            // Premium membership stays keyed on bare GitHub handles, so
-            // reduce the selection to a handle: a picked account uses its
-            // handle (falling back to accountId if the provider has none),
-            // free text uses the typed handle directly.
-            const handle = 'user' in sel ? (sel.user.handle ?? sel.user.accountId) : sel.handle;
-            handleAdd(handle);
-          }}
-          placeholder="Add GitHub username"
+          onCommit={(sel: SelectedUser) => handleAdd(selectionToPremiumRef(sel))}
+          placeholder="GitHub username or provider:id"
           ariaLabel="Add premium user"
           inputClassName="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
@@ -164,19 +190,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
                 key={username}
                 className="inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 pr-1"
               >
-                <UserBadge
-                  user={{
-                    provider: 'github',
-                    accountId: username,
-                    handle: username,
-                    name: username,
-                    organisation: '',
-                    // No avatar carried for admin-config entries; the badge
-                    // falls back to the generic silhouette.
-                    avatarUrl: '',
-                  }}
-                  size={18}
-                />
+                <UserBadge user={refToUser(username)} size={18} />
                 <button
                   type="button"
                   onClick={() => handleRemove(username)}

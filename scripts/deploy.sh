@@ -53,7 +53,7 @@
 #
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
-#     GITHUB_CALLBACK_URL
+#     OAUTH_CALLBACK_BASE_URL
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -666,7 +666,7 @@ $([ -n "${FIRESTORE_DATABASE_ID:-}" ] && echo "    FIRESTORE_DATABASE_ID=${FIRES
 $([ -n "${ADMIN_USERNAMES:-}" ] && echo "    ADMIN_USERNAMES=${ADMIN_USERNAMES}")
 $([ -n "${GITHUB_CLIENT_ID:-}" ] && echo "    GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}")
 $([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}")
-$([ -n "${GITHUB_CALLBACK_URL:-}" ] && echo "    GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}")
+$([ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "    OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}")
 
 runcmd:
 - mkdir -p /var/lib/tcq /var/lib/caddy/data /var/lib/caddy/config
@@ -774,7 +774,7 @@ EOF
   [ -n "${ADMIN_USERNAMES:-}" ]       && echo "ADMIN_USERNAMES=${ADMIN_USERNAMES}"           >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_ID:-}" ]      && echo "GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"         >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_SECRET:-}" ]  && echo "GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}" >> "$env_tmp"
-  [ -n "${GITHUB_CALLBACK_URL:-}" ]   && echo "GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"   >> "$env_tmp"
+  [ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}" >> "$env_tmp"
 
   # Wait briefly for SSH to come up on a fresh VM before the first
   # `gcloud compute scp` — fresh COS instances take ~30 s to settle.
@@ -884,7 +884,7 @@ ensure_github_oauth() {
   if ! confirm "Register the app now and paste in its credentials?" y; then
     echo ""
     echo "Skipped. To enable OAuth later, add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,"
-    echo "and GITHUB_CALLBACK_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -893,10 +893,12 @@ ensure_github_oauth() {
   read -r -s -p "Client Secret: " secret
   echo ""
   GITHUB_CLIENT_SECRET="$secret"
-  GITHUB_CALLBACK_URL="$callback"
+  # Persist the provider-agnostic callback base; the server derives GitHub's
+  # callback ($url/auth/github/callback) — the URL registered above — from it.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
   upsert_env GITHUB_CLIENT_ID "$GITHUB_CLIENT_ID"
   upsert_env GITHUB_CLIENT_SECRET "$GITHUB_CLIENT_SECRET"
-  upsert_env GITHUB_CALLBACK_URL "$GITHUB_CALLBACK_URL"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
 
   echo ""
   echo "Pushing updated env to VM and restarting tcq.service..."

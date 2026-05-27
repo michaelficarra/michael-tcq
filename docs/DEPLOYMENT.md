@@ -260,7 +260,11 @@ Add to `.env.production`:
 # GitHub OAuth
 GITHUB_CLIENT_ID=<client-id>
 GITHUB_CLIENT_SECRET=<client-secret>
-GITHUB_CALLBACK_URL=https://<your-domain>/auth/github/callback
+
+# OAuth callback base — each provider's callback is ${base}/<provider>/callback,
+# so GitHub's is https://<your-domain>/auth/github/callback (register that in
+# the GitHub OAuth app). Defaults to http://localhost:3000/auth in dev.
+OAUTH_CALLBACK_BASE_URL=https://<your-domain>/auth
 ```
 
 Then redeploy:

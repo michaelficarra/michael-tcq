@@ -5,11 +5,11 @@ import type { AgendaEntry, AgendaItem, Session, User, UserKey } from './types.js
 
 /**
  * Derive the canonical user key from a User-like object: the
- * `${provider}:${accountId}` pair (e.g. `github:alice`). This is the
+ * `${provider}:${accountId}` pair (e.g. `github:12345`). This is the
  * single source of truth for how users are keyed in the
- * MeetingState.users map. The provider supplies an `accountId` that is
- * already in its canonical form (GitHub lowercases its login), so no
- * normalisation happens here.
+ * MeetingState.users map. The provider supplies an `accountId` already in
+ * its canonical form (e.g. GitHub's numeric user id), so no normalisation
+ * happens here.
  */
 export function userKey(user: { provider: string; accountId: string }): UserKey {
   return `${user.provider}:${user.accountId}` as UserKey;
@@ -67,6 +67,81 @@ export function placeholderUser(name: string): User {
     organisation: '',
     avatarUrl: '',
   };
+}
+
+// -- Admin / premium user references -------------------------------------
+//
+// `ADMIN_USERNAMES` and the premium list let an operator name accounts in
+// either of two forms:
+//   - a bare handle (e.g. `alice`) — interpreted as a GitHub handle, the
+//     backward-compatible form (GitHub is the only handle-based provider);
+//   - a provider-qualified id `provider:rest` (e.g. `github:12345`,
+//     `google:1057…`, `orcid:0000-0002-1825-0097`), where `rest` is the
+//     account id — and, for GitHub, may instead be a handle (`github:alice`).
+//
+// GitHub handles/ids are case-insensitive, so we lowercase them; other
+// providers' account ids are opaque and case-sensitive, so we preserve them.
+
+const GITHUB_PROVIDER = 'github';
+
+/**
+ * Canonicalise a single admin/premium reference for storage and comparison.
+ * Returns null for empty/structurally-invalid input. Does not enforce a
+ * provider's handle charset — callers validate that at the trust boundary.
+ */
+export function canonicalUserRef(raw: string): string | null {
+  const e = raw.trim();
+  if (e === '') return null;
+  const colon = e.indexOf(':');
+  if (colon === -1) {
+    // bare GitHub handle — strip a leading `@` and lowercase.
+    const handle = normaliseGithubUsername(e).toLowerCase();
+    return handle === '' ? null : handle;
+  }
+  const provider = e.slice(0, colon).toLowerCase();
+  const rest = e.slice(colon + 1);
+  if (provider === '' || rest === '') return null;
+  // GitHub's `rest` (handle or numeric id) is case-insensitive; everything
+  // else is an opaque, case-sensitive account id.
+  return provider === GITHUB_PROVIDER ? `${provider}:${rest.toLowerCase()}` : `${provider}:${rest}`;
+}
+
+/**
+ * Pre-indexed admin/premium reference list for O(1) membership checks.
+ * `keys` holds canonical `provider:accountId` keys; `githubHandles` holds
+ * lowercased GitHub handles (from bare entries and `github:<handle>` entries).
+ */
+export interface UserRefIndex {
+  keys: Set<string>;
+  githubHandles: Set<string>;
+}
+
+/** Build a `UserRefIndex` from raw reference strings (each canonicalised). */
+export function buildUserRefIndex(refs: readonly string[]): UserRefIndex {
+  const keys = new Set<string>();
+  const githubHandles = new Set<string>();
+  for (const raw of refs) {
+    const ref = canonicalUserRef(raw);
+    if (ref === null) continue;
+    const colon = ref.indexOf(':');
+    if (colon === -1) {
+      githubHandles.add(ref); // canonical bare = lowercased handle
+      continue;
+    }
+    const provider = ref.slice(0, colon);
+    const rest = ref.slice(colon + 1);
+    keys.add(ref);
+    // A `github:<rest>` entry also matches by handle (rest already lowercased).
+    if (provider === GITHUB_PROVIDER) githubHandles.add(rest);
+  }
+  return { keys, githubHandles };
+}
+
+/** Whether `user` matches any reference in the index (by key, or — for a
+ *  GitHub user — by handle). O(1). */
+export function userMatchesIndex(user: Pick<User, 'provider' | 'accountId' | 'handle'>, index: UserRefIndex): boolean {
+  if (index.keys.has(userKey(user))) return true;
+  return user.provider === GITHUB_PROVIDER && !!user.handle && index.githubHandles.has(user.handle.toLowerCase());
 }
 
 /**
