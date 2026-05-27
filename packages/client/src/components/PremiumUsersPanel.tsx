@@ -25,6 +25,14 @@ import { UserBadge } from './UserBadge.js';
 import { UserCombobox } from './UserCombobox.js';
 import { CircleXIcon } from './icons.js';
 
+// The premium list is GitHub-only: admins enter GitHub usernames, and the
+// server stores them as `github:` keys. Strip that prefix so this panel
+// works in bare handles — what the add/remove endpoints expect on the wire.
+const GITHUB_KEY_PREFIX = 'github:';
+function premiumHandle(key: string): string {
+  return key.startsWith(GITHUB_KEY_PREFIX) ? key.slice(GITHUB_KEY_PREFIX.length) : key;
+}
+
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
   const { showToast } = useToast();
   const [usernames, setUsernames] = useState<string[]>([]);
@@ -50,7 +58,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // mutation's response is authoritative and has already updated
         // state.
         if (myGen !== generationRef.current) return;
-        setUsernames(body.usernames);
+        setUsernames(body.usernames.map(premiumHandle));
       }
     } catch {
       // Silently swallow — same posture as AdminPanel. The next tick
@@ -89,7 +97,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // Replace with the canonical list — this lets server-side
         // canonicalisation (case, whitespace) take effect immediately
         // rather than waiting for the next poll.
-        setUsernames(body.usernames);
+        setUsernames(body.usernames.map(premiumHandle));
       } else {
         // Roll back the optimistic add and surface the server message.
         setUsernames(usernames);
@@ -115,7 +123,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to remove premium user' });
       } else {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
-        setUsernames(body.usernames);
+        setUsernames(body.usernames.map(premiumHandle));
       }
     } catch {
       setUsernames(previous);
@@ -157,7 +165,19 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
                 key={username}
                 className="inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 pr-1"
               >
-                <UserBadge user={{ ghid: 0, ghUsername: username, name: username, organisation: '' }} size={18} />
+                <UserBadge
+                  user={{
+                    provider: 'github',
+                    accountId: username,
+                    handle: username,
+                    name: username,
+                    organisation: '',
+                    // No avatar carried for admin-config entries; the badge
+                    // falls back to the generic silhouette.
+                    avatarUrl: '',
+                  }}
+                  size={18}
+                />
                 <button
                   type="button"
                   onClick={() => handleRemove(username)}

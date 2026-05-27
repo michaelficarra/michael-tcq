@@ -7,9 +7,11 @@ import {
   PremiumUserBodySchema,
   SwitchUserBodySchema,
   userKey,
+  migrateKey,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
-import { fetchGitHubUser } from './auth.js';
+import { fetchGitHubUser } from './auth/github.js';
+import { githubUserKey, githubUser, githubPlaceholderUser } from './auth/githubUser.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import {
   searchUsers,
@@ -73,8 +75,8 @@ export function createMeetingRoutes(
 
     // Resolve via the mock-user helper so logins that match a TC39 seed
     // entry pick up the real display name and company; everyone else
-    // falls back to login-as-name with no organisation. ghid stays
-    // deterministic per login across restarts.
+    // falls back to login-as-name with no organisation. The login maps to
+    // a stable `github:<login>` key across restarts.
     const user = mockUserFromLogin(username);
 
     req.session.user = toSessionUser(user);
@@ -131,7 +133,7 @@ export function createMeetingRoutes(
     const chairs: User[] = [];
     for (const username of chairUsernames) {
       // If this is the current user, use their full session profile
-      if (username.toLowerCase() === user.ghUsername.toLowerCase()) {
+      if (githubUserKey(username) === userKey(user)) {
         chairs.push(user);
         continue;
       }
@@ -147,9 +149,9 @@ export function createMeetingRoutes(
       } else {
         // Without OAuth, create a mock user via the seed-aware helper:
         // logins that match a TC39 seed entry pick up the real display
-        // name and company, others fall back to login-as-name. The ghid
-        // is deterministic per login so the same chair maps to the same
-        // user across restarts and across meetings.
+        // name and company, others fall back to login-as-name. The login
+        // maps to a stable `github:<login>` key so the same chair maps to
+        // the same user across restarts and across meetings.
         chairs.push(mockUserFromLogin(username));
       }
     }
@@ -289,7 +291,7 @@ export function createMeetingRoutes(
     if (!meetingManager.isChair(meetingId, user) && !user.isAdmin) {
       res.status(403).json({
         error: 'Only chairs can import an agenda',
-        user: user.ghUsername,
+        user: userKey(user),
         chairs: meeting.chairIds,
       });
       return;
@@ -411,15 +413,8 @@ export function createMeetingRoutes(
       const presenters: User[] = item.presenters.map((name) => {
         const hit = resolved.get(name.trim().toLowerCase());
         return hit
-          ? {
-              ghid: hit.ghid,
-              // Canonical login from the directory — `userKey` will
-              // lowercase it when storing in `meeting.users`.
-              ghUsername: hit.login,
-              name: hit.name,
-              organisation: hit.organisation,
-            }
-          : { ghid: 0, ghUsername: name, name, organisation: '' };
+          ? githubUser({ login: hit.login, name: hit.name, organisation: hit.organisation })
+          : githubPlaceholderUser(name);
       });
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }
@@ -455,7 +450,7 @@ export function createMeetingRoutes(
     // participantIds and lastConnectionTime live on the persisted meeting
     // state so they survive server restarts; currentConnections is live
     // socket-room state maintained in memory. Participant keys are resolved
-    // to ghUsernames here so the client can render them without access to
+    // to handles here so the client can render them without access to
     // the full meeting users map. Soft-deleted meetings are included so
     // the admin panel can render them (struck-through) and offer Restore.
     for (const meeting of meetingManager.listAll()) {
@@ -463,7 +458,7 @@ export function createMeetingRoutes(
       meetings.push({
         id: meeting.id,
         createdAt: meeting.createdAt,
-        participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.ghUsername ?? key),
+        participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.handle ?? key),
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
         deletedAt: meeting.deletedAt ?? null,
@@ -633,7 +628,10 @@ export function createMeetingRoutes(
     }
     const canonical = parsed.data.username;
     const removed = await appSettings.removePremiumUsername(canonical);
-    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, canonical);
+    // `broadcastPremiumChange` matches against meeting users by their full
+    // `${provider}:${accountId}` key, so prefix the bare username (the add
+    // path already broadcasts the key returned by `addPremiumUsername`).
+    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, migrateKey(canonical));
     const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
     res.json({ ok: true, ...response });
   });

@@ -1,17 +1,15 @@
 /**
- * Displays a user's GitHub avatar alongside their name and organisation.
+ * Displays a user's avatar alongside their name and organisation.
  *
- * Avatars are loaded from GitHub via the public URL pattern
- * https://github.com/{username}.png — this works for any valid GitHub
- * username, even in dev mode with mock users (as long as the username
- * matches a real GitHub account).
- *
- * The avatar has a fixed size (via inline style) so it doesn't cause
- * layout reflow when loading or on error. On error, a generic person
- * silhouette fallback is shown instead of hiding the image.
+ * The avatar URL is provider-supplied (`user.avatarUrl`) — GitHub synthesises
+ * one from the login, other providers supply their own, and some (e.g. ORCID)
+ * supply none. When it's empty or fails to load, a generic person silhouette
+ * is shown instead. The avatar has a fixed size (via inline style) so it
+ * doesn't cause layout reflow when loading or on error.
  */
 
 import type { User } from '@tcq/shared';
+import { userLabel } from '@tcq/shared';
 
 /**
  * Data URI for a generic person silhouette fallback avatar.
@@ -57,7 +55,9 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
   return (
     <span className={`inline-flex items-center align-middle gap-1.5 ${className}`}>
       <img
-        src={`https://github.com/${user.ghUsername}.png?size=${size * 2}`}
+        // Provider-supplied avatar; fall back to the silhouette when the
+        // provider has none (empty string).
+        src={user.avatarUrl || FALLBACK_AVATAR}
         alt=""
         // Fixed dimensions prevent layout reflow during loading
         width={size}
@@ -74,13 +74,12 @@ export function UserBadge({ user, size = 20, className = '' }: UserBadgeProps) {
         }}
       />
       <span>
-        {/* The display name carries the GitHub login as a title so a
-            hover surfaces the underlying username — useful when name and
-            login differ (e.g. "Alice Anderson" → @alice). When the name
-            is empty or whitespace-only (e.g. a User constructed without
-            a real display name), fall back to the login as the visible
-            text so the badge never renders an empty label. */}
-        <span title={user.ghUsername}>{user.name?.trim() || user.ghUsername}</span>
+        {/* The display name carries the account identifier AND provider as
+            a title so a hover surfaces who this is and where they came from
+            (e.g. "Alice Anderson" → "@alice · github"). When the name is
+            empty or whitespace-only, fall back to the handle/account id as
+            the visible text so the badge never renders an empty label. */}
+        <span title={userLabel(user)}>{user.name?.trim() || user.handle || user.accountId}</span>
         {user.isPremium && (
           // Premium-tier verification mark, shown immediately after the
           // display name (verified-account convention). Sized to match

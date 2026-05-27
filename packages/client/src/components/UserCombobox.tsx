@@ -37,7 +37,7 @@ import { FALLBACK_AVATAR } from './UserBadge.js';
 import { CircleXIcon } from './icons.js';
 
 interface DirectoryUser {
-  ghid: number;
+  /** GitHub login — unique within the deduped results, so it doubles as the React key. */
   login: string;
   name: string;
   /** GitHub `company` field if known. Empty string when unknown. */
@@ -701,7 +701,7 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
     >
       {results.map((user, i) => (
         <li
-          key={user.ghid}
+          key={user.login}
           id={`${id}-${i}`}
           role="option"
           aria-selected={i === highlighted}

@@ -4,17 +4,21 @@ import { UserBadge } from './UserBadge.js';
 import type { User } from '@tcq/shared';
 
 const alice: User = {
-  ghid: 1,
-  ghUsername: 'alice',
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
   name: 'Alice',
   organisation: 'ACME Corp',
+  avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
 const bob: User = {
-  ghid: 2,
-  ghUsername: 'bob',
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
   name: 'Bob',
   organisation: '',
+  avatarUrl: 'https://github.com/bob.png?size=80',
 };
 
 describe('UserBadge', () => {
@@ -42,7 +46,14 @@ describe('UserBadge', () => {
   });
 
   it('falls back to the GitHub username when the display name is empty', () => {
-    const noName: User = { ghid: 3, ghUsername: 'alice', name: '', organisation: '' };
+    const noName: User = {
+      provider: 'github',
+      accountId: 'alice',
+      handle: 'alice',
+      name: '',
+      organisation: '',
+      avatarUrl: 'https://github.com/alice.png?size=80',
+    };
     render(<UserBadge user={noName} />);
     // The visible badge text is the login when no display name is
     // available — UserBadge never renders an empty label even if a
@@ -51,17 +62,25 @@ describe('UserBadge', () => {
   });
 
   it('falls back to the GitHub username when the display name is whitespace-only', () => {
-    const blank: User = { ghid: 4, ghUsername: 'bob', name: '   ', organisation: '' };
+    const blank: User = {
+      provider: 'github',
+      accountId: 'bob',
+      handle: 'bob',
+      name: '   ',
+      organisation: '',
+      avatarUrl: 'https://github.com/bob.png?size=80',
+    };
     render(<UserBadge user={blank} />);
     expect(screen.getByText('bob')).toBeInTheDocument();
   });
 
-  it('shows the GitHub username as a tooltip on the display name', () => {
+  it('shows the account identifier and provider as a tooltip on the display name', () => {
     render(<UserBadge user={alice} />);
-    // The display name surfaces the underlying login on hover so it's
-    // recoverable when name and ghUsername diverge.
+    // The display name surfaces the handle and provider on hover so the
+    // user is recoverable when name and handle diverge, and so the same
+    // handle on two providers can be told apart.
     const nameSpan = screen.getByText('Alice');
-    expect(nameSpan).toHaveAttribute('title', 'alice');
+    expect(nameSpan).toHaveAttribute('title', '@alice · github');
   });
 
   it('applies a max-width and truncation to the organisation only (not the name)', () => {
@@ -80,10 +99,12 @@ describe('UserBadge', () => {
     expect(nameSpan.className).not.toContain('max-w-');
   });
 
-  it('renders a GitHub avatar image', () => {
+  it('renders the provider-supplied avatar URL verbatim', () => {
     render(<UserBadge user={alice} />);
     const img = screen.getByRole('presentation');
-    expect(img).toHaveAttribute('src', 'https://github.com/alice.png?size=40');
+    // The badge no longer synthesises a size-scaled URL; it renders the
+    // provider-supplied avatarUrl as-is.
+    expect(img).toHaveAttribute('src', alice.avatarUrl);
   });
 
   it('uses the default size of 20', () => {
@@ -98,8 +119,8 @@ describe('UserBadge', () => {
     const img = screen.getByRole('presentation');
     expect(img).toHaveAttribute('width', '32');
     expect(img).toHaveAttribute('height', '32');
-    // Requests 2x resolution for retina displays
-    expect(img).toHaveAttribute('src', 'https://github.com/alice.png?size=64');
+    // The src is the provider-supplied URL regardless of the render size.
+    expect(img).toHaveAttribute('src', alice.avatarUrl);
   });
 
   it('shows a fallback avatar on load error', () => {

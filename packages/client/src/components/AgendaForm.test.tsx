@@ -6,18 +6,20 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = {
-  ghid: 1,
-  ghUsername: 'alice',
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
   name: 'Alice',
   organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const baseMeeting: MeetingState = buildMeeting(undefined, {
   id: 'test',
-  users: { alice: chairUser },
-  chairIds: ['alice'],
+  users: { 'github:alice': chairUser },
+  chairIds: ['github:alice'],
 });
 
 function renderForm(socket: TypedSocket | null = null, onCancel = () => {}, onSubmit = () => {}) {

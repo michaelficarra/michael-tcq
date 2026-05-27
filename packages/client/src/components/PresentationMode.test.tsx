@@ -9,11 +9,25 @@ import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
-const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
-const otherUser: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+const chairUser: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: '',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
+const otherUser: User = {
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
+  name: 'Bob',
+  organisation: '',
+  avatarUrl: 'https://github.com/bob.png?size=80',
+};
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return buildMeeting(overrides, { id: 'test', users: { alice: chairUser }, chairIds: ['alice'] });
+  return buildMeeting(overrides, { id: 'test', users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
 }
 
 /**
@@ -63,7 +77,7 @@ describe('Presentation mode', () => {
 
     it('hides the Start Meeting button', () => {
       const meeting = makeMeeting({
-        agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['github:alice'] }],
       });
       renderInPresentationMode(
         wrapWithProviders(
@@ -84,8 +98,8 @@ describe('Presentation mode', () => {
     it('hides Next Agenda Item button', () => {
       const meeting = makeMeeting({
         agenda: [
-          { kind: 'item', id: '1', name: 'First', presenterIds: ['alice'] },
-          { kind: 'item', id: '2', name: 'Second', presenterIds: ['alice'] },
+          { kind: 'item', id: '1', name: 'First', presenterIds: ['github:alice'] },
+          { kind: 'item', id: '2', name: 'Second', presenterIds: ['github:alice'] },
         ],
         current: { topicSpeakers: [], agendaItemId: '1' },
       });
@@ -107,14 +121,14 @@ describe('Presentation mode', () => {
 
     it('hides Next Speaker button', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, bob: otherUser },
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
         current: {
           topicSpeakers: [],
           speaker: {
             id: 's1',
             type: 'topic',
             topic: 'Test',
-            userId: 'bob',
+            userId: 'github:bob',
             source: 'queue',
             startTime: '2026-01-01T00:00:00.000Z',
           },
@@ -142,8 +156,8 @@ describe('Presentation mode', () => {
       const meeting = makeMeeting({
         queue: {
           entries: {
-            q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' },
-            q2: { id: 'q2', type: 'topic', topic: 'Other topic', userId: 'alice' },
+            q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'github:alice' },
+            q2: { id: 'q2', type: 'topic', topic: 'Other topic', userId: 'github:alice' },
           },
           orderedIds: ['q1', 'q2'],
           closed: false,
@@ -171,7 +185,7 @@ describe('Presentation mode', () => {
     it('hides edit/delete buttons on queue entries', () => {
       const meeting = makeMeeting({
         queue: {
-          entries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'alice' } },
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'My topic', userId: 'github:alice' } },
           orderedIds: ['q1'],
           closed: false,
         },
@@ -195,9 +209,9 @@ describe('Presentation mode', () => {
 
     it('keeps queue entry content visible', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, bob: otherUser },
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
         queue: {
-          entries: { q1: { id: 'q1', type: 'topic', topic: 'Visible topic', userId: 'bob' } },
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'Visible topic', userId: 'github:bob' } },
           orderedIds: ['q1'],
           closed: false,
         },
@@ -220,9 +234,9 @@ describe('Presentation mode', () => {
 
     it('keeps the type badge visible on queue entries', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, bob: otherUser },
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
         queue: {
-          entries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'bob' } },
+          entries: { q1: { id: 'q1', type: 'topic', topic: 'Test', userId: 'github:bob' } },
           orderedIds: ['q1'],
           closed: false,
         },
@@ -245,14 +259,14 @@ describe('Presentation mode', () => {
 
     it('keeps current speaker info visible', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, bob: otherUser },
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
         current: {
           topicSpeakers: [],
           speaker: {
             id: 's1',
             type: 'topic',
             topic: 'Speaking about this',
-            userId: 'bob',
+            userId: 'github:bob',
             source: 'queue',
             startTime: '2026-01-01T00:00:00.000Z',
           },
@@ -289,7 +303,7 @@ describe('Presentation mode', () => {
 
     it('hides edit/delete buttons on agenda items', () => {
       const meeting = makeMeeting({
-        agenda: [{ kind: 'item', id: '1', name: 'Test Item', presenterIds: ['alice'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'Test Item', presenterIds: ['github:alice'] }],
       });
       renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
@@ -299,8 +313,8 @@ describe('Presentation mode', () => {
 
     it('keeps agenda item content visible', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, bob: otherUser },
-        agenda: [{ kind: 'item', id: '1', name: 'Visible Item', presenterIds: ['bob'], duration: 15 }],
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
+        agenda: [{ kind: 'item', id: '1', name: 'Visible Item', presenterIds: ['github:bob'], duration: 15 }],
       });
       renderInPresentationMode(wrapWithProviders(<AgendaPanel />, meeting));
 
@@ -329,7 +343,7 @@ describe('Presentation mode', () => {
           options,
           reactions: [],
           startTime: new Date().toISOString(),
-          startChairId: 'alice',
+          startChairId: 'github:alice',
           multiSelect: true,
         },
       });
@@ -350,7 +364,7 @@ describe('Presentation mode', () => {
           options,
           reactions: [],
           startTime: new Date().toISOString(),
-          startChairId: 'alice',
+          startChairId: 'github:alice',
           multiSelect: true,
         },
       });

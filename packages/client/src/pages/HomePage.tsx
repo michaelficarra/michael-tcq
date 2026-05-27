@@ -319,7 +319,7 @@ function NewMeetingCard() {
       const res = await fetch('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: [user.ghUsername] }),
+        body: JSON.stringify({ chairs: [user.handle ?? user.accountId] }),
       });
 
       if (!res.ok) {

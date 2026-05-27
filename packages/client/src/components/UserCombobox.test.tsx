@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { UserCombobox } from './UserCombobox.js';
 
 /** Stub /api/users/autocomplete with an in-test fetch. Returns the canned users. */
-function stubFetch(users: Array<{ ghid: number; login: string; name: string; avatarUrl: string }>) {
+function stubFetch(users: Array<{ login: string; name: string; avatarUrl: string }>) {
   return vi.fn(
     async () =>
       new Response(JSON.stringify({ users }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
@@ -68,8 +68,8 @@ describe('UserCombobox (single)', () => {
   it('does NOT auto-select the first suggestion — Enter without ArrowDown commits the typed text', async () => {
     vi.useRealTimers();
     const fetchMock = stubFetch([
-      { ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
-      { ghid: 2, login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
+      { login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
+      { login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
     ]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();
@@ -123,7 +123,7 @@ describe('UserCombobox (single)', () => {
 
   it('does not show the dropdown when the input is empty (focus alone is not a query)', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([{ ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
+    const fetchMock = stubFetch([{ login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     render(<UserCombobox mode="single" onCommit={vi.fn()} ariaLabel="Username" autoFocus />);
@@ -136,7 +136,7 @@ describe('UserCombobox (single)', () => {
 
   it('only commits a suggestion on a primary-button click', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([{ ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
+    const fetchMock = stubFetch([{ login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();
 
@@ -159,8 +159,8 @@ describe('UserCombobox (single)', () => {
   it('selects the first suggestion after ArrowDown + Enter', async () => {
     vi.useRealTimers();
     const fetchMock = stubFetch([
-      { ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
-      { ghid: 2, login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
+      { login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
+      { login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
     ]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();

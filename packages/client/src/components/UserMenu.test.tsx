@@ -9,7 +9,14 @@ function renderWithPrefs(ui: ReactElement) {
   return render(<PreferencesProvider>{ui}</PreferencesProvider>);
 }
 
-const mockUser = { ghid: 1, ghUsername: 'admin', name: 'Admin', organisation: 'Test' };
+const mockUser = {
+  provider: 'github',
+  accountId: 'admin',
+  handle: 'admin',
+  name: 'Admin',
+  organisation: 'Test',
+  avatarUrl: 'https://github.com/admin.png?size=80',
+};
 const mockSwitchUser = vi.fn(async () => {});
 
 vi.mock('../contexts/AuthContext.js', () => ({

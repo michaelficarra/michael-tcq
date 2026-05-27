@@ -164,8 +164,8 @@ test.describe('Saved topics', () => {
     await page.keyboard.press('Escape');
 
     // Switch to a different mock user (still in the same browser context →
-    // shared localStorage, but the saved-topics key is keyed by ghid,
-    // so the new user sees their own fresh default).
+    // shared localStorage, but the saved-topics key is keyed by the user's
+    // account, so the new user sees their own fresh default).
     await switchUser(page, 'bob');
     // After the user switch, the page reconnects; navigate to the meeting
     // again so we land on the queue with the right identity.

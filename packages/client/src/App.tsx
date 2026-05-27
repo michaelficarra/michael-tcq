@@ -43,7 +43,7 @@ function App() {
             <AppRoutes />
           </BrowserRouter>
           {/* PreferencesModal sits inside AuthProvider because the Saved
-              Topics section reads/writes per-user (keyed by user.ghid). */}
+              Topics section reads/writes per-user (keyed by the user key). */}
           <PreferencesModal />
         </ToastProvider>
       </AuthProvider>

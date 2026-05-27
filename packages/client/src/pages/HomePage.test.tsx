@@ -8,7 +8,14 @@ import { ToastProvider } from '../contexts/ToastContext.js';
 
 // -- Mocks --
 
-const adminUser: User = { ghid: 1, ghUsername: 'admin', name: 'Admin', organisation: 'ACME' };
+const adminUser: User = {
+  provider: 'github',
+  accountId: 'admin',
+  handle: 'admin',
+  name: 'Admin',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/admin.png?size=80',
+};
 
 // Mutable mock auth state so tests can toggle isAdmin per case.
 const mockAuthState = {

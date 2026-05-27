@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { User } from '@tcq/shared';
-import { userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
+import { githubUser, githubUserKey } from './auth/githubUser.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { error as logError, critical as logCritical } from './logger.js';
@@ -13,7 +13,7 @@ import { AppSettingsManager } from './appSettingsManager.js';
 import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
 
 /** The admin user for these tests. */
-const ADMIN_USER: User = { ghid: 1, ghUsername: 'testadmin', name: 'Test Admin', organisation: '' };
+const ADMIN_USER: User = githubUser({ login: 'testadmin', name: 'Test Admin' });
 
 /** Capture of the meeting room ids whose sockets were forcibly disconnected
  *  by the admin DELETE handler. Reset per test via the beforeEach. */
@@ -81,8 +81,8 @@ describe('Admin endpoints', () => {
   describe('GET /api/admin/meetings', () => {
     it('returns a list of active meetings for admins', async () => {
       // Create some meetings
-      manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
-      manager.create([{ ghid: 2, ghUsername: 'other', name: 'Other', organisation: '' }]);
+      manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
+      manager.create([githubUser({ login: 'other', name: 'Other', organisation: '' })]);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
       expect(res.status).toBe(200);
@@ -98,7 +98,7 @@ describe('Admin endpoints', () => {
 
     it('records createdAt at meeting creation time', async () => {
       const before = new Date().toISOString();
-      manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
       const after = new Date().toISOString();
 
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
@@ -128,8 +128,8 @@ describe('Admin endpoints', () => {
       // Live meeting reports deletedAt: null; deleted meeting reports
       // the ISO timestamp of the soft-delete so the admin UI can render
       // it with strikethrough + a Restore button.
-      const live = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
-      const deleted = manager.create([{ ghid: 2, ghUsername: 'other', name: 'Other', organisation: '' }]);
+      const live = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
+      const deleted = manager.create([githubUser({ login: 'other', name: 'Other', organisation: '' })]);
       await manager.softDelete(deleted.id);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings`);
@@ -143,7 +143,7 @@ describe('Admin endpoints', () => {
 
   describe('DELETE /api/admin/meetings/:id', () => {
     it('soft-deletes a meeting (stays in memory with deletedAt set)', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, {
         method: 'DELETE',
@@ -161,7 +161,7 @@ describe('Admin endpoints', () => {
       // The handler calls io.in(meetingId).disconnectSockets(true) to
       // boot anyone sitting in the room so they fall through to the
       // not-found UI. We capture the targeted room id via the io mock.
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
 
       await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, { method: 'DELETE' });
 
@@ -179,7 +179,7 @@ describe('Admin endpoints', () => {
       // The admin UI only offers Restore for already-deleted rows, so
       // hitting DELETE twice in a row only happens when the panel is
       // stale — 404 nudges the caller to refresh.
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
       await manager.softDelete(meeting.id);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, { method: 'DELETE' });
@@ -188,7 +188,7 @@ describe('Admin endpoints', () => {
 
     it('rejects non-admin users', async () => {
       vi.stubEnv('ADMIN_USERNAMES', 'someone-else');
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}`, {
         method: 'DELETE',
@@ -203,7 +203,7 @@ describe('Admin endpoints', () => {
 
   describe('POST /api/admin/meetings/:id/restore', () => {
     it('clears deletedAt and makes the meeting joinable again', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
       await manager.softDelete(meeting.id);
       expect(manager.isDeleted(meeting.id)).toBe(true);
 
@@ -220,7 +220,7 @@ describe('Admin endpoints', () => {
       // Restoring a live meeting is a no-op signal that the admin
       // panel is stale; 404 nudges it to refresh, same as restoring a
       // meeting that doesn't exist.
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}/restore`, {
         method: 'POST',
@@ -237,7 +237,7 @@ describe('Admin endpoints', () => {
 
     it('rejects non-admin users', async () => {
       vi.stubEnv('ADMIN_USERNAMES', 'someone-else');
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'testuser', name: 'Test', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
       await manager.softDelete(meeting.id);
 
       const res = await fetch(`${baseUrl}/api/admin/meetings/${meeting.id}/restore`, {
@@ -251,33 +251,19 @@ describe('Admin endpoints', () => {
   describe('Admin chair editing privileges', () => {
     it('admin can edit chairs for a meeting they do not chair', async () => {
       // Create a meeting where testuser is NOT a chair
-      const meeting = manager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
-      ]);
+      const meeting = manager.create([githubUser({ login: 'chairperson', name: 'Chair', organisation: '' })]);
 
       // Create via REST: switch user to testuser (admin), then update chairs
       // We test via the socket tests (socket.test.ts), but verify the manager accepts it
       const result = manager.updateChairs(meeting.id, [
-        { ghid: 50, ghUsername: 'newchair', name: 'New Chair', organisation: '' },
+        githubUser({ login: 'newchair', name: 'New Chair', organisation: '' }),
       ]);
       expect(result).toBe(true);
-      expect(manager.get(meeting.id)!.chairIds[0]).toBe(userKey({ ghUsername: 'newchair' }));
+      expect(manager.get(meeting.id)!.chairIds[0]).toBe(githubUserKey('newchair'));
     });
 
     it('admin can set an empty chair list', async () => {
-      const meeting = manager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test',
-          organisation: '',
-        },
-      ]);
+      const meeting = manager.create([githubUser({ login: 'testuser', name: 'Test', organisation: '' })]);
 
       const result = manager.updateChairs(meeting.id, []);
       expect(result).toBe(true);
@@ -349,10 +335,10 @@ describe('Admin endpoints', () => {
     });
 
     it('aggregates active meetings', async () => {
-      manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       manager.create([
-        { ghid: 2, ghUsername: 'b', name: 'B', organisation: '' },
-        { ghid: 3, ghUsername: 'c', name: 'C', organisation: '' },
+        githubUser({ login: 'b', name: 'B', organisation: '' }),
+        githubUser({ login: 'c', name: 'C', organisation: '' }),
       ]);
 
       const body = await (await fetch(`${baseUrl}/api/admin/diagnostics`)).json();
@@ -435,13 +421,13 @@ describe('Admin endpoints', () => {
         await appSettings.addPremiumUsername('bob');
         const res = await fetch(`${baseUrl}/api/admin/premium-users`);
         const body = await res.json();
-        expect(body).toEqual({ usernames: ['alice', 'bob', 'charlie'] });
+        expect(body).toEqual({ usernames: ['github:alice', 'github:bob', 'github:charlie'] });
       });
 
       it('returns 403 for non-admin users', async () => {
         // Mint a new test app with a non-admin caller; share the same
         // managers so settings persisted above still apply.
-        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const nonAdmin: User = githubUser({ login: 'plain-jane', name: 'Jane', organisation: '' });
         const otherApp = createTestApp(manager, appSettings, nonAdmin);
         const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
         try {
@@ -463,11 +449,11 @@ describe('Admin endpoints', () => {
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.ok).toBe(true);
-        // Stored canonically — lowercased.
-        expect(body.usernames).toEqual(['newpremium']);
+        // Stored canonically — lowercased and expanded to a `github:` key.
+        expect(body.usernames).toEqual(['github:newpremium']);
         // Manager reflects the same state — confirms it went through
         // the manager, not just bounced off the HTTP layer.
-        expect(appSettings.getPremiumUsernames()).toEqual(['newpremium']);
+        expect(appSettings.getPremiumUsernames()).toEqual(['github:newpremium']);
       });
 
       it('is idempotent — re-adding an existing username succeeds without duplication', async () => {
@@ -479,7 +465,7 @@ describe('Admin endpoints', () => {
         });
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.usernames).toEqual(['alice']);
+        expect(body.usernames).toEqual(['github:alice']);
       });
 
       it('normalises @-prefix and surrounding whitespace before validating', async () => {
@@ -490,7 +476,7 @@ describe('Admin endpoints', () => {
         });
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.usernames).toEqual(['alice']);
+        expect(body.usernames).toEqual(['github:alice']);
       });
 
       it('returns 400 for an empty username', async () => {
@@ -521,7 +507,7 @@ describe('Admin endpoints', () => {
       });
 
       it('returns 403 for non-admin users', async () => {
-        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const nonAdmin: User = githubUser({ login: 'plain-jane', name: 'Jane', organisation: '' });
         const otherApp = createTestApp(manager, appSettings, nonAdmin);
         const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
         try {
@@ -545,8 +531,8 @@ describe('Admin endpoints', () => {
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.ok).toBe(true);
-        expect(body.usernames).toEqual(['bob']);
-        expect(appSettings.getPremiumUsernames()).toEqual(['bob']);
+        expect(body.usernames).toEqual(['github:bob']);
+        expect(appSettings.getPremiumUsernames()).toEqual(['github:bob']);
       });
 
       it('is idempotent — deleting a username not in the list returns 200', async () => {
@@ -565,14 +551,14 @@ describe('Admin endpoints', () => {
 
       it('returns 403 for non-admin users', async () => {
         await appSettings.addPremiumUsername('alice');
-        const nonAdmin: User = { ghid: 99, ghUsername: 'plain-jane', name: 'Jane', organisation: '' };
+        const nonAdmin: User = githubUser({ login: 'plain-jane', name: 'Jane', organisation: '' });
         const otherApp = createTestApp(manager, appSettings, nonAdmin);
         const { baseUrl: otherUrl, close: closeOther } = await listen(otherApp);
         try {
           const res = await fetch(`${otherUrl}/api/admin/premium-users/alice`, { method: 'DELETE' });
           expect(res.status).toBe(403);
           // Sanity: server-side list unchanged.
-          expect(appSettings.getPremiumUsernames()).toEqual(['alice']);
+          expect(appSettings.getPremiumUsernames()).toEqual(['github:alice']);
         } finally {
           closeOther();
         }

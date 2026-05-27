@@ -8,12 +8,19 @@ import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
-const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
+const chairUser: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: '',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
 
 const baseMeeting: MeetingState = buildMeeting(undefined, {
   id: 'test',
-  users: { alice: chairUser },
-  chairIds: ['alice'],
+  users: { 'github:alice': chairUser },
+  chairIds: ['github:alice'],
 });
 
 function renderSetup(socket: TypedSocket | null = null, onCancel = () => {}, onStarted = () => {}) {

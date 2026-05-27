@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { userKey } from '@tcq/shared';
 import { useAuth } from '../contexts/AuthContext.js';
 import { RelativeTime } from '../lib/RelativeTime.js';
 
@@ -27,10 +28,10 @@ interface MyMeetingInfo {
 export function MyMeetingsPanel() {
   // The dev user-switcher updates the AuthContext in place rather than
   // reloading the page (see AuthContext's BroadcastChannel comment), so
-  // we re-key our fetch on the current user's ghid. Without this, the
+  // we re-key our fetch on the current user's key. Without this, the
   // previous user's meetings would linger here until the next 10-s tick.
   const { user } = useAuth();
-  const ghid = user?.ghid;
+  const userId = user ? userKey(user) : undefined;
   const [meetings, setMeetings] = useState<MyMeetingInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,11 +66,11 @@ export function MyMeetingsPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMeetings([]);
     setLoading(true);
-    if (ghid === undefined) return;
+    if (userId === undefined) return;
     fetchMeetings();
     const interval = setInterval(fetchMeetings, 10_000);
     return () => clearInterval(interval);
-  }, [ghid, fetchMeetings]);
+  }, [userId, fetchMeetings]);
 
   // Hide the section entirely until the first fetch resolves and when the
   // caller has no associated meetings — an empty section is just noise on

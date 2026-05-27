@@ -214,7 +214,7 @@ function DevUserSwitcher({ user, switchUser }: DevUserSwitcherProps) {
         mode="single"
         autoFocus
         disabled={switching}
-        initialValue={user.ghUsername}
+        initialValue={user.handle ?? user.accountId}
         placeholder="username"
         ariaLabel="Switch to GitHub username"
         onCommit={handleCommit}

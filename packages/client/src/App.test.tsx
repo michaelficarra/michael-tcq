@@ -50,7 +50,15 @@ function renderHomePage() {
   // covered by the URL-routed default ([]).
   queueResponse('/api/me', {
     ok: true,
-    json: () => Promise.resolve({ ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' }),
+    json: () =>
+      Promise.resolve({
+        provider: 'github',
+        accountId: 'alice',
+        handle: 'alice',
+        name: 'Alice',
+        organisation: 'ACME',
+        avatarUrl: 'https://github.com/alice.png?size=80',
+      }),
   });
 
   return render(
@@ -82,17 +90,27 @@ describe('LoginPage', () => {
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
-  it('renders a "Log in with GitHub" link without returnTo on the root path', () => {
+  it('renders a "Log in with GitHub" link without returnTo on the root path', async () => {
+    // The login page renders a button per configured provider, fetched
+    // from /api/auth/providers.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
+    });
     renderAt('/');
-    const link = screen.getByText('Log in with GitHub');
+    const link = await screen.findByText('Log in with GitHub');
     expect(link).toBeInTheDocument();
     // No returnTo param: "/" is already the default post-login redirect.
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github');
   });
 
-  it('includes a returnTo param when rendered at a non-root deep link', () => {
+  it('includes a returnTo param when rendered at a non-root deep link', async () => {
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
+    });
     renderAt('/meeting/foo');
-    const link = screen.getByText('Log in with GitHub');
+    const link = await screen.findByText('Log in with GitHub');
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github?returnTo=%2Fmeeting%2Ffoo');
   });
 });

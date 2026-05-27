@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { AgendaEntry, AgendaItem } from '@tcq/shared';
 import { isAgendaItem, userKey } from '@tcq/shared';
 import { MeetingManager, ensureUser } from './meetings.js';
+import { githubUser } from './auth/githubUser.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
 
 /** Narrow an entry we expect to be an agenda item — fails the test if it's not. */
@@ -10,19 +11,9 @@ function asItem(entry: AgendaEntry | undefined): AgendaItem {
   return entry;
 }
 
-const testUser = {
-  ghid: 1,
-  ghUsername: 'alice',
-  name: 'Alice',
-  organisation: 'Test Org',
-};
+const testUser = githubUser({ login: 'alice', name: 'Alice', organisation: 'Test Org' });
 
-const otherUser = {
-  ghid: 2,
-  ghUsername: 'bob',
-  name: 'Bob',
-  organisation: 'Other Org',
-};
+const otherUser = githubUser({ login: 'bob', name: 'Bob', organisation: 'Other Org' });
 
 describe('MeetingManager', () => {
   let manager: MeetingManager;
@@ -606,7 +597,7 @@ describe('MeetingManager', () => {
 
       expect(meeting.current.speaker).toBeDefined();
       const speaker = meeting.current.speaker!;
-      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+      expect(meeting.users[speaker.userId].accountId).toBe(otherUser.accountId);
       expect(speaker.topic).toBe('Introducing: Proposal');
       expect(speaker.type).toBe('topic');
       expect(speaker.source).toBe('agenda');
@@ -619,7 +610,7 @@ describe('MeetingManager', () => {
       manager.nextAgendaItem(meeting.id);
 
       const speaker = meeting.current.speaker!;
-      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+      expect(meeting.users[speaker.userId].accountId).toBe(otherUser.accountId);
     });
 
     it('advances to the next agenda item', () => {
@@ -636,7 +627,7 @@ describe('MeetingManager', () => {
       expect(result.kind === 'advanced' && result.item.name).toBe('Second');
       expect(meeting.agenda.find((i) => i.id === meeting.current.agendaItemId)?.name).toBe('Second');
       const speaker = meeting.current.speaker!;
-      expect(meeting.users[speaker.userId].ghid).toBe(otherUser.ghid);
+      expect(meeting.users[speaker.userId].accountId).toBe(otherUser.accountId);
     });
 
     it('leaves the floor open when the item has no presenters', () => {
@@ -1212,7 +1203,7 @@ describe('MeetingManager', () => {
       expect(result).toBe(true);
       expect(meeting.poll!.reactions).toHaveLength(1);
       expect(meeting.poll!.reactions[0].optionId).toBe(optionId);
-      expect(meeting.users[meeting.poll!.reactions[0].userId].ghUsername).toBe('alice');
+      expect(meeting.users[meeting.poll!.reactions[0].userId].handle).toBe('alice');
     });
 
     it('removes a reaction when the user already has it (toggle off)', () => {

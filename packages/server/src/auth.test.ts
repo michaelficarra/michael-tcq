@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import { createAuthRoutes } from './auth.js';
@@ -78,9 +78,27 @@ describe('Auth routes', () => {
   });
 
   describe('GET /auth/github/callback', () => {
+    // The callback only exists for a *configured* provider; in mock-auth
+    // mode (no credentials) it 404s before reaching the missing-code check.
+    // Enable GitHub OAuth for this block so the 400 path is exercised; the
+    // rest of the file deliberately runs in mock-auth mode.
+    const original = process.env.GITHUB_CLIENT_ID;
+    beforeEach(() => {
+      process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.GITHUB_CLIENT_ID;
+      else process.env.GITHUB_CLIENT_ID = original;
+    });
+
     it('returns 400 when authorisation code is missing', async () => {
       const res = await fetch(`${baseUrl}/auth/github/callback`);
       expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown / unconfigured provider', async () => {
+      const res = await fetch(`${baseUrl}/auth/nope/callback?code=x`);
+      expect(res.status).toBe(404);
     });
   });
 

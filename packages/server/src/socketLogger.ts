@@ -13,8 +13,8 @@
  */
 
 import type { MeetingState } from '@tcq/shared';
-import { asUserKey } from '@tcq/shared';
 import type { SessionUser } from './session.js';
+import { githubUserKey } from './auth/githubUser.js';
 
 /** Look up an agenda entry (item or session header) by id. */
 function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
@@ -22,10 +22,11 @@ function lookupAgendaEntry(meeting: MeetingState, id: unknown): unknown {
   return meeting.agenda.find((e) => e.id === id);
 }
 
-/** Look up a user by GitHub username (case-insensitive), returning the stored User if known. */
+/** Look up a user by GitHub username (case-insensitive), returning the stored User if known.
+ *  Payload usernames are GitHub handles, so they resolve via the GitHub user key. */
 function lookupUser(meeting: MeetingState, username: unknown): unknown {
   if (typeof username !== 'string') return undefined;
-  return meeting.users[asUserKey(username.toLowerCase())];
+  return meeting.users[githubUserKey(username)];
 }
 
 /**
@@ -109,14 +110,17 @@ export function denormalisePayload(event: string, payload: unknown, meeting: Mee
 
 /**
  * Produce the nested attribution sub-struct for an authenticated log
- * entry. Keyed under `user` so ghid/ghUsername/isAdmin never float free
- * at the top level alongside other unrelated fields.
+ * entry. Keyed under `user` so provider/accountId/handle/isAdmin never
+ * float free at the top level alongside other unrelated fields.
  */
-export function attributionFields(user: SessionUser): { user: { ghid: number; ghUsername: string; isAdmin: boolean } } {
+export function attributionFields(user: SessionUser): {
+  user: { provider: string; accountId: string; handle?: string; isAdmin: boolean };
+} {
   return {
     user: {
-      ghid: user.ghid,
-      ghUsername: user.ghUsername,
+      provider: user.provider,
+      accountId: user.accountId,
+      handle: user.handle,
       isAdmin: user.isAdmin,
     },
   };

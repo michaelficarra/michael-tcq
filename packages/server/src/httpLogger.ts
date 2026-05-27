@@ -10,9 +10,9 @@
  *   https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#HttpRequest
  *   https://cloud.google.com/logging/docs/structured-logging
  *
- * Authenticated user fields (`ghUsername`, `ghid`, `isAdmin`) ride alongside
- * at the top level — they're not part of the GCP schema but are the
- * primary thing we'll filter on.
+ * Authenticated user fields (`provider`, `accountId`, `handle`, `isAdmin`)
+ * ride alongside at the top level — they're not part of the GCP schema but
+ * are the primary thing we'll filter on.
  */
 
 import type { RequestHandler } from 'express';
@@ -78,11 +78,11 @@ export function buildHttpRequestField(
  * with other top-level fields in Cloud Logging.
  */
 export function buildUserFields(req: {
-  session?: { user?: { ghid?: number; ghUsername?: string; isAdmin?: boolean } };
-}): { user?: { ghid?: number; ghUsername?: string; isAdmin?: boolean } } {
+  session?: { user?: { provider?: string; accountId?: string; handle?: string; isAdmin?: boolean } };
+}): { user?: { provider?: string; accountId?: string; handle?: string; isAdmin?: boolean } } {
   const u = req.session?.user;
   if (!u) return {};
-  return { user: { ghid: u.ghid, ghUsername: u.ghUsername, isAdmin: u.isAdmin } };
+  return { user: { provider: u.provider, accountId: u.accountId, handle: u.handle, isAdmin: u.isAdmin } };
 }
 
 /**

@@ -12,6 +12,7 @@
  */
 
 import type { User } from '@tcq/shared';
+import { userKey, migrateKey, isLegacyAppSettings } from '@tcq/shared';
 import type { AppSettingsStore } from './appSettingsStore.js';
 
 export class AppSettingsManager {
@@ -43,6 +44,12 @@ export class AppSettingsManager {
     const settings = await this.store.load();
     this.usernames = canonicalise(settings.premiumUsernames);
     this.rebuildSet();
+    // Lazy migration: if any persisted entry was still a bare (pre-prefix)
+    // username, `canonicalise` has upgraded it to a `github:` key — persist
+    // the upgraded list once so the on-disk form catches up.
+    if (isLegacyAppSettings(settings)) {
+      await this.store.save({ premiumUsernames: this.usernames });
+    }
   }
 
   /**
@@ -57,21 +64,23 @@ export class AppSettingsManager {
   /**
    * Synchronous premium-membership check, used by every state
    * broadcast and every /api/me response. Membership is checked
-   * against the canonical lowercased form.
+   * against the canonical `${provider}:${accountId}` key.
    */
   isPremium(user: User): boolean {
-    return this.premiumSet.has(user.ghUsername.toLowerCase());
+    return this.premiumSet.has(userKey(user));
   }
 
   /**
-   * Add `rawUsername` to the premium list. Returns the canonical
-   * (lowercased) form that was added, or `null` if it was already
-   * present (idempotent — admins double-clicking shouldn't see an
-   * error). Persists eagerly before resolving.
+   * Add `rawUsername` to the premium list. The admin panel passes a bare
+   * GitHub username, which is expanded to a `github:` key. Returns the
+   * canonical key that was added, or `null` if it was already present
+   * (idempotent — admins double-clicking shouldn't see an error) or the
+   * input was empty. Persists eagerly before resolving.
    */
   async addPremiumUsername(rawUsername: string): Promise<string | null> {
-    const canonical = rawUsername.trim().toLowerCase();
-    if (canonical === '') return null;
+    const trimmed = rawUsername.trim().toLowerCase();
+    if (trimmed === '') return null;
+    const canonical = migrateKey(trimmed) as string;
     return this.enqueue(async () => {
       if (this.premiumSet.has(canonical)) return null;
       const next = canonicalise([...this.usernames, canonical]);
@@ -88,8 +97,9 @@ export class AppSettingsManager {
    * (idempotent). Persists eagerly before resolving.
    */
   async removePremiumUsername(rawUsername: string): Promise<boolean> {
-    const canonical = rawUsername.trim().toLowerCase();
-    if (canonical === '') return false;
+    const trimmed = rawUsername.trim().toLowerCase();
+    if (trimmed === '') return false;
+    const canonical = migrateKey(trimmed) as string;
     return this.enqueue(async () => {
       if (!this.premiumSet.has(canonical)) return false;
       const next = this.usernames.filter((u) => u !== canonical);
@@ -121,12 +131,16 @@ export class AppSettingsManager {
   }
 }
 
-/** Trim, lowercase, dedupe, and sort to the canonical persisted shape. */
+/**
+ * Trim, lowercase, expand bare usernames to `github:` keys, dedupe, and
+ * sort to the canonical persisted shape. The `migrateKey` step is what
+ * upgrades a pre-multi-provider premium list (bare usernames) to keys.
+ */
 function canonicalise(usernames: readonly string[]): string[] {
   const out = new Set<string>();
   for (const u of usernames) {
     const c = u.trim().toLowerCase();
-    if (c !== '') out.add(c);
+    if (c !== '') out.add(migrateKey(c) as string);
   }
   return [...out].sort();
 }

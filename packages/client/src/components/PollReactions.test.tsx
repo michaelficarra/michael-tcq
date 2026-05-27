@@ -6,8 +6,22 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
-const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
-const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+const alice: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
+const bob: User = {
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
+  name: 'Bob',
+  organisation: '',
+  avatarUrl: 'https://github.com/bob.png?size=80',
+};
 
 /** Sample options for testing. */
 const sampleOptions: PollOption[] = [
@@ -22,7 +36,7 @@ function makePoll(overrides?: Partial<ActivePoll>): ActivePoll {
     options: sampleOptions,
     reactions: [],
     startTime: new Date().toISOString(),
-    startChairId: 'alice',
+    startChairId: 'github:alice',
     multiSelect: true,
     ...overrides,
   };
@@ -61,9 +75,9 @@ describe('PollReactions', () => {
     const meeting = makeMeeting({
       poll: makePoll({
         reactions: [
-          { optionId: 'opt-1', userId: 'alice' },
-          { optionId: 'opt-1', userId: 'bob' },
-          { optionId: 'opt-2', userId: 'alice' },
+          { optionId: 'opt-1', userId: 'github:alice' },
+          { optionId: 'opt-1', userId: 'github:bob' },
+          { optionId: 'opt-2', userId: 'github:alice' },
         ],
       }),
     });
@@ -77,7 +91,7 @@ describe('PollReactions', () => {
   it("highlights the current user's selected reactions", () => {
     const meeting = makeMeeting({
       poll: makePoll({
-        reactions: [{ optionId: 'opt-2', userId: 'alice' }],
+        reactions: [{ optionId: 'opt-2', userId: 'github:alice' }],
       }),
     });
     renderPoll(meeting, alice);
@@ -101,11 +115,11 @@ describe('PollReactions', () => {
 
   it('shows user names in the tooltip', () => {
     const meeting = makeMeeting({
-      users: { alice, bob },
+      users: { 'github:alice': alice, 'github:bob': bob },
       poll: makePoll({
         reactions: [
-          { optionId: 'opt-1', userId: 'alice' },
-          { optionId: 'opt-1', userId: 'bob' },
+          { optionId: 'opt-1', userId: 'github:alice' },
+          { optionId: 'opt-1', userId: 'github:bob' },
         ],
       }),
     });

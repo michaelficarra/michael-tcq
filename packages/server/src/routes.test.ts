@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import type { User } from '@tcq/shared';
-import { asUserKey } from '@tcq/shared';
+import { asUserKey, userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
+import { githubUser } from './auth/githubUser.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
 import { setFetchForTesting, resetDirectoryForTesting } from './githubDirectory.js';
@@ -21,7 +22,7 @@ function emptyAppSettings(): AppSettingsManager {
  * Helper: make a request to the Express app without starting a real HTTP server.
  * Uses the built-in fetch against a dynamically assigned port.
  */
-const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '' };
+const TEST_USER: User = githubUser({ login: 'testuser', name: 'Test User', organisation: '' });
 
 /**
  * Mirror of the directory's match check (case-insensitive exact / prefix
@@ -98,7 +99,7 @@ describe('Meeting REST routes', () => {
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.ghUsername).toBe('testuser');
+      expect(body.handle).toBe('testuser');
       expect(body.name).toBe('Test User');
     });
   });
@@ -116,7 +117,7 @@ describe('Meeting REST routes', () => {
       const body = await res.json();
       expect(body.id).toMatch(/^[a-z]+(-[a-z]+)+$/);
       expect(body.chairIds).toHaveLength(1);
-      expect(body.chairIds[0]).toBe('testuser');
+      expect(body.chairIds[0]).toBe('github:testuser');
       expect(body.agenda).toEqual([]);
       expect(body.queue.orderedIds).toEqual([]);
     });
@@ -153,7 +154,7 @@ describe('Meeting REST routes', () => {
 
       expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body.chairIds).toEqual(['testuser', 'alice']);
+      expect(body.chairIds).toEqual(['github:testuser', 'github:alice']);
     });
   });
 
@@ -235,9 +236,9 @@ describe('Meeting REST routes', () => {
     it('returns meetings where the caller appears only in meeting.users (e.g. as a presenter)', async () => {
       // A different user is the chair; the caller is added separately to
       // `users` to model "named on an agenda item" without ever joining.
-      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
       const meeting = manager.create([other]);
-      meeting.users[asUserKey(TEST_USER.ghUsername)] = TEST_USER;
+      meeting.users[userKey(TEST_USER)] = TEST_USER;
 
       const res = await fetch(`${baseUrl}/api/my-meetings`);
       const body = await res.json();
@@ -248,9 +249,9 @@ describe('Meeting REST routes', () => {
       // Caller is not in `users` (so not a chair/presenter/queued user) but
       // is recorded as having joined via socket. Guarantees the
       // participantIds branch of the filter is exercised.
-      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
       const meeting = manager.create([other]);
-      meeting.participantIds.push(asUserKey(TEST_USER.ghUsername));
+      meeting.participantIds.push(userKey(TEST_USER));
 
       const res = await fetch(`${baseUrl}/api/my-meetings`);
       const body = await res.json();
@@ -258,7 +259,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('excludes meetings where the caller is unrelated', async () => {
-      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const other: User = githubUser({ login: 'other', name: 'Other', organisation: '' });
       manager.create([other]);
 
       const res = await fetch(`${baseUrl}/api/my-meetings`);
@@ -325,7 +326,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns the empty array and an empty-cursor ETag for a meeting with no log entries', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       const res = await fetch(`${baseUrl}/api/meetings/${meeting.id}/log`);
       expect(res.status).toBe(200);
       expect(res.headers.get('ETag')).toBe('""');
@@ -335,7 +336,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns all entries on a fresh fetch and exposes the latest id as the ETag', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       const e1 = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -359,7 +360,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns 304 when If-None-Match matches the current ETag', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       const entry = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -373,7 +374,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('returns only entries after the cursor when ?since is provided', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       const e1 = await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -395,7 +396,7 @@ describe('Meeting REST routes', () => {
     });
 
     it('falls back to returning the full log when the ?since cursor is unknown', async () => {
-      const meeting = manager.create([{ ghid: 1, ghUsername: 'a', name: 'A', organisation: '' }]);
+      const meeting = manager.create([githubUser({ login: 'a', name: 'A', organisation: '' })]);
       await manager.appendLog(meeting.id, {
         type: 'meeting-started',
         timestamp: '2026-01-01T00:00:00.000Z',
@@ -507,20 +508,15 @@ describe('Meeting REST routes', () => {
       const meeting = await getMeeting(meetingId);
       expect(meeting.agenda).toHaveLength(1);
       const presenter = firstPresenter(meeting, 0);
-      expect(presenter.ghid).toBe(189835);
-      expect(presenter.ghUsername).toBe('littledan');
+      expect(presenter.avatarUrl).not.toBe('');
+      expect(presenter.handle).toBe('littledan');
       expect(presenter.name).toBe('Daniel Ehrenberg');
       expect(presenter.organisation).toBe('Bloomberg');
     });
 
     it('resolves a unique tier-1 (meeting user) name to the real user', async () => {
       // Seed an extra meeting user that the imported name will match.
-      const extra: User = {
-        ghid: 42,
-        ghUsername: 'phlpchm',
-        name: 'Philip Chimento',
-        organisation: 'Igalia',
-      };
+      const extra: User = githubUser({ login: 'phlpchm', name: 'Philip Chimento', organisation: 'Igalia' });
       const meetingId = createMeetingWith([extra]);
       const md = [
         '## Agenda Items',
@@ -535,8 +531,8 @@ describe('Meeting REST routes', () => {
 
       const meeting = await getMeeting(meetingId);
       const presenter = firstPresenter(meeting, 0);
-      expect(presenter.ghid).toBe(42);
-      expect(presenter.ghUsername).toBe('phlpchm');
+      expect(presenter.avatarUrl).not.toBe('');
+      expect(presenter.handle).toBe('phlpchm');
       expect(presenter.name).toBe('Philip Chimento');
     });
 
@@ -545,12 +541,7 @@ describe('Meeting REST routes', () => {
       // the spaces of a real display name, but the GitHub login is
       // camel-case with no separator. Both forms must collapse to the
       // same key for the resolver to bind them.
-      const extra: User = {
-        ghid: 99,
-        ghUsername: 'SaminaHusein',
-        name: 'Samina Husein',
-        organisation: 'Apple',
-      };
+      const extra: User = githubUser({ login: 'SaminaHusein', name: 'Samina Husein', organisation: 'Apple' });
       const meetingId = createMeetingWith([extra]);
       const md = [
         '## Agenda Items',
@@ -565,8 +556,8 @@ describe('Meeting REST routes', () => {
 
       const meeting = await getMeeting(meetingId);
       const presenter = firstPresenter(meeting, 0);
-      expect(presenter.ghid).toBe(99);
-      expect(presenter.ghUsername).toBe('SaminaHusein');
+      expect(presenter.avatarUrl).not.toBe('');
+      expect(presenter.handle).toBe('SaminaHusein');
       expect(presenter.name).toBe('Samina Husein');
     });
 
@@ -585,8 +576,8 @@ describe('Meeting REST routes', () => {
 
       const meeting = await getMeeting(meetingId);
       const presenter = firstPresenter(meeting, 0);
-      expect(presenter.ghid).toBe(0);
-      expect(presenter.ghUsername).toBe('Q9zzzqq Unknown');
+      expect(presenter.avatarUrl).toBe('');
+      expect(presenter.handle).toBe('Q9zzzqq Unknown');
       expect(presenter.name).toBe('Q9zzzqq Unknown');
     });
 
@@ -607,8 +598,8 @@ describe('Meeting REST routes', () => {
 
       const meeting = await getMeeting(meetingId);
       const presenter = firstPresenter(meeting, 0);
-      expect(presenter.ghid).toBe(0);
-      expect(presenter.ghUsername).toBe('Daniel');
+      expect(presenter.avatarUrl).toBe('');
+      expect(presenter.handle).toBe('Daniel');
     });
 
     it('imports an item with no presenters when only a duration is parsed', async () => {
@@ -646,10 +637,10 @@ describe('Meeting REST routes', () => {
 
       const first = meeting.users[item.presenterIds[0]];
       const second = meeting.users[item.presenterIds[1]];
-      expect(first.ghid).toBe(189835);
-      expect(first.ghUsername).toBe('littledan');
-      expect(second.ghid).toBe(0);
-      expect(second.ghUsername).toBe('Q9zzzqq Unknown');
+      expect(first.avatarUrl).not.toBe('');
+      expect(first.handle).toBe('littledan');
+      expect(second.avatarUrl).toBe('');
+      expect(second.handle).toBe('Q9zzzqq Unknown');
     });
 
     it('resolves every entry when all comma-separated presenters match uniquely', async () => {
@@ -670,7 +661,7 @@ describe('Meeting REST routes', () => {
       const meeting = await getMeeting(meetingId);
       const item = meeting.agenda[0];
       expect(item.presenterIds).toHaveLength(2);
-      const logins = item.presenterIds.map((k: string) => meeting.users[k].ghUsername).sort();
+      const logins = item.presenterIds.map((k: string) => meeting.users[k].handle).sort();
       expect(logins).toEqual(['allenwb', 'littledan']);
     });
 
@@ -693,7 +684,7 @@ describe('Meeting REST routes', () => {
       const firstKey = meeting.agenda[0].presenterIds[0];
       const secondKey = meeting.agenda[1].presenterIds[0];
       expect(firstKey).toBe(secondKey);
-      expect(meeting.users[firstKey].ghid).toBe(189835);
+      expect(meeting.users[firstKey].avatarUrl).not.toBe('');
     });
   });
 
@@ -744,12 +735,11 @@ describe('Meeting REST routes', () => {
  * a chair who just landed on a fresh instance still gets tier-2 hits.
  */
 describe('Meeting REST routes — import in OAuth mode', () => {
-  const OAUTH_USER: User = {
-    ghid: 218840,
-    ghUsername: 'michaelficarra',
+  const OAUTH_USER: User = githubUser({
+    login: 'michaelficarra',
     name: 'Michael Ficarra',
     organisation: '@f5networks',
-  };
+  });
 
   const fixtureUrl = 'https://test-fixture.invalid/oauth-agenda.md';
   let manager: MeetingManager;
@@ -893,8 +883,8 @@ describe('Meeting REST routes — import in OAuth mode', () => {
     const updated = await meetingRes.json();
     const presenterKey = updated.agenda[0].presenterIds[0];
     const presenter = updated.users[presenterKey];
-    expect(presenter.ghid).toBe(189835);
-    expect(presenter.ghUsername).toBe('littledan');
+    expect(presenter.avatarUrl).not.toBe('');
+    expect(presenter.handle).toBe('littledan');
     expect(presenter.name).toBe('Daniel Ehrenberg');
   });
 });

@@ -313,7 +313,7 @@ export function QueuePanel({
   function handleCopyQueue() {
     if (!meeting) return;
     const text = queuedSpeakers
-      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.ghUsername ?? e.userId})`)
+      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.handle ?? e.userId})`)
       .join('\n');
     navigator.clipboard.writeText(text).catch(() => {});
   }

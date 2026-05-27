@@ -1,26 +1,44 @@
 // Pull in the ES2025 Intl type slice for `Intl.DurationFormat` (used below)
 // without changing the emit target. Types only — no runtime polyfill.
 /// <reference lib="es2025.intl" />
-import type { AgendaEntry, AgendaItem, Session, UserKey } from './types.js';
+import type { AgendaEntry, AgendaItem, Session, User, UserKey } from './types.js';
 
 /**
- * Derive the canonical user key from a User-like object.
- * This is the single source of truth for how users are keyed in
- * the MeetingState.users map.
+ * Derive the canonical user key from a User-like object: the
+ * `${provider}:${accountId}` pair (e.g. `github:alice`). This is the
+ * single source of truth for how users are keyed in the
+ * MeetingState.users map. The provider supplies an `accountId` that is
+ * already in its canonical form (GitHub lowercases its login), so no
+ * normalisation happens here.
  */
-export function userKey(user: { ghUsername: string }): UserKey {
-  return user.ghUsername.toLowerCase() as UserKey;
+export function userKey(user: { provider: string; accountId: string }): UserKey {
+  return `${user.provider}:${user.accountId}` as UserKey;
 }
 
 /**
- * Brand an already-normalised (lowercased) username as a UserKey.
- * Use this at trust boundaries — for example, when accepting a username
- * string from a wire payload and using it to index `meeting.users`. The
- * caller is asserting that the string is equivalent to what `userKey()`
- * would produce from the corresponding `User` object.
+ * Brand an already-canonical `${provider}:${accountId}` string as a
+ * UserKey. Use this at trust boundaries — for example, when accepting a
+ * key string from a wire payload and using it to index `meeting.users`.
+ * The caller is asserting that the string is equivalent to what
+ * `userKey()` would produce from the corresponding `User` object. Note
+ * this is NOT for branding a bare handle: a typed-in login must be
+ * resolved to a `User` (and thus a `{provider, accountId}`) first.
  */
 export function asUserKey(s: string): UserKey {
   return s as UserKey;
+}
+
+/**
+ * Format a user's identity for a hover title / tooltip: the human-readable
+ * handle when the provider has one (prefixed with `@`, mirroring the
+ * mention convention), otherwise the bare account identifier — always
+ * suffixed with the provider so the same display name from two different
+ * providers is distinguishable. Examples: `@alice · github`,
+ * `0000-0002-1825-0097 · orcid`.
+ */
+export function userLabel(user: Pick<User, 'provider' | 'accountId' | 'handle'>): string {
+  const identifier = user.handle ? `@${user.handle}` : user.accountId;
+  return `${identifier} · ${user.provider}`;
 }
 
 /**

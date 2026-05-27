@@ -67,7 +67,8 @@ tcq/
 │   └── server/                  # Express + Socket.IO backend
 │       └── src/
 │           ├── index.ts         # Server entry point, store selection
-│           ├── auth.ts          # GitHub OAuth routes
+│           ├── auth.ts          # Generic OAuth routes (/auth/:providerId)
+│           ├── auth/            # AuthenticationProvider interface, registry, GitHub impl
 │           ├── meetings.ts      # MeetingManager class and mutations
 │           ├── socket.ts        # Socket.IO event handlers
 │           ├── meetingId.ts     # Word-based ID generation (human-id)
@@ -159,17 +160,18 @@ Express is the most widely known Node.js server framework. For an application wi
 
 The server exposes a small number of REST endpoints:
 
-| Route                   | Method | Purpose                                                      |
-| ----------------------- | ------ | ------------------------------------------------------------ |
-| `/auth/github`          | GET    | Redirect to GitHub OAuth                                     |
-| `/auth/github/callback` | GET    | Handle OAuth callback, create session                        |
-| `/auth/logout`          | GET    | Destroy session                                              |
-| `/api/health`           | GET    | Health check                                                 |
-| `/api/me`               | GET    | Return current authenticated user (includes `mockAuth` flag) |
-| `/api/meetings`         | POST   | Create a new meeting                                         |
-| `/api/meetings/:id`     | GET    | Get a meeting's current state                                |
-| `/api/meetings/:id/log` | GET    | Fetch the meeting log (supports `?since=<id>` and ETag)      |
-| `/api/dev/switch-user`  | POST   | Switch mock auth identity (dev mode only)                    |
+| Route                        | Method | Purpose                                                      |
+| ---------------------------- | ------ | ------------------------------------------------------------ |
+| `/auth/:providerId`          | GET    | Redirect to a provider's OAuth (e.g. `/auth/github`)         |
+| `/auth/:providerId/callback` | GET    | Handle OAuth callback, create session                        |
+| `/auth/logout`               | GET    | Destroy session                                              |
+| `/api/auth/providers`        | GET    | List enabled login providers (`{ id, label }`)               |
+| `/api/health`                | GET    | Health check                                                 |
+| `/api/me`                    | GET    | Return current authenticated user (includes `mockAuth` flag) |
+| `/api/meetings`              | POST   | Create a new meeting                                         |
+| `/api/meetings/:id`          | GET    | Get a meeting's current state                                |
+| `/api/meetings/:id/log`      | GET    | Fetch the meeting log (supports `?since=<id>` and ETag)      |
+| `/api/dev/switch-user`       | POST   | Switch mock auth identity (dev mode only)                    |
 
 All other interaction happens over Socket.IO. The server also serves the Vite-built client assets in production and has a catch-all for client-side routing.
 
@@ -284,16 +286,21 @@ For local development, sessions use the default in-memory session store (express
 
 The Express session middleware is shared with Socket.IO, so WebSocket connections are authenticated using the same session cookie. On connection, the server reads the session to identify the user and determine their role (chair or participant) in the meeting they are joining.
 
-## Authentication: Direct GitHub OAuth
+## Authentication: pluggable OAuth providers
 
-GitHub OAuth is a simple three-step flow: redirect to GitHub, receive a code on callback, exchange the code for an access token, fetch the user profile. This is straightforward to implement directly in ~40 lines of code.
+Authentication is structured around an `AuthenticationProvider` interface (`packages/server/src/auth/provider.ts`) so that multiple OAuth providers can coexist. Today there is a single implementation — `GitHubProvider` (`auth/github.ts`) — but the abstraction is shaped for adding Google (OIDC) and ORCID, which are also OAuth 2.0 authorization-code flows. The set of enabled providers is the registry in `auth/registry.ts`; a provider is "enabled" simply when its credentials are present in the environment. When none are enabled the server runs in mock-auth mode.
 
-The flow:
+A user is identified provider-neutrally. The `User` type (`@tcq/shared`) carries `provider` (e.g. `github`), `accountId` (the provider's stable id — for GitHub the lowercased login), an optional human-readable `handle`, `name`, `organisation`, and a provider-supplied `avatarUrl`. The canonical `UserKey` is `${provider}:${accountId}` (e.g. `github:alice`), which lets accounts from different providers coexist in one meeting without colliding. `userKey()` in `@tcq/shared` is the single source of truth for deriving it.
 
-1. `GET /auth/github` — Redirect to `https://github.com/login/oauth/authorize` with client ID and the requested scope (`read:user` only). The consent screen therefore mentions only profile data; no org-membership permission is requested. The autocomplete directory backs off to GitHub's public-only endpoints, so concealed org membership is invisible to TCQ by design.
-2. `GET /auth/github/callback` — Receive the authorisation code, exchange it for an access token, fetch the user profile from the GitHub API, store user info **and the OAuth access token** in the session, redirect to the application.
+The routes are generic (`packages/server/src/auth.ts`):
+
+1. `GET /auth/:providerId` — Look up the provider and redirect to its authorization URL. The GitHub provider requests the `read:user` scope only; the consent screen therefore mentions only profile data, no org-membership permission. In mock-auth mode (no provider configured) any `:providerId` just clears the logged-out flag and the mock middleware repopulates a fake user.
+2. `GET /auth/:providerId/callback` — Exchange the authorisation code for a profile via the provider, store the user **and any provider access token** in the session, fire a background directory warm, and redirect to the application.
 3. `GET /auth/logout` — Destroy the session.
-4. `GET /api/me` — Return the current user from the session (used by the frontend on page load to check auth status). The OAuth access token is server-only — `toClientUser()` in `session.ts` strips it before any response is shaped.
+4. `GET /api/auth/providers` — Public list of `{ id, label }` for the login page (one button per enabled provider).
+5. `GET /api/me` — Return the current user from the session. Provider access tokens are server-only — `toClientUser()` in `session.ts` strips them before any response is shaped.
+
+**Backward compatibility / migration.** Accounts predating the provider abstraction were stored GitHub-only: a `User` was `{ ghid, ghUsername, … }` and the `UserKey` was the bare lowercased login. Persisted data is upgraded lazily on read by `@tcq/shared`'s `migrate.ts` — a meeting/log/app-settings document or a session is detected as legacy by shape (no `provider` field; an unprefixed key) and rewritten to the new form (`alice` → `github:alice`) the first time it's loaded, then written back where cheap (meetings and app-settings; sessions are upgraded in place by a middleware on both the HTTP and Socket.IO paths so a returning user isn't forced to re-log-in; logs are upgraded in memory only). The colon-based legacy detection is sound because legacy keys are bare GitHub logins, which never contain a colon.
 
 ### Username Autocomplete Directory
 
@@ -304,11 +311,12 @@ The `/api/users/autocomplete` endpoint backs every GitHub-username input. It ans
 - **Three-tier search** — meeting users → caller's public-org members → global GitHub user search (`/search/users`, called on the user's behalf, only when tiers 1+2 don't fill the dropdown).
 - **Reused for agenda import** — the import handler resolves each parsed presenter name against the same directory via `searchUsersLocal` / `resolvePresenterFromDirectory` (tiers 1+2 only; tier 3 is intentionally skipped) and binds the item to the real user only when there's exactly one match. This is why `searchUsersLocal` is split out from `searchUsers` — autocomplete and import share ranking semantics but not autocomplete's background cache-warm side-effect. Import does, however, **await** `warmDirectoryForUser` before resolving so a chair landing on a freshly restarted instance (the cache is in-process memory) still gets tier-2 hits — a multi-second wait is acceptable for a one-shot import but would ruin the keystroke-driven autocomplete UX, hence the asymmetry.
 - **Token revocation** — every server-side call that uses the persisted token routes through a single helper. A 401 / "Bad credentials" response clears the token from the session in place, so subsequent requests degrade silently rather than retrying with a known-bad credential.
-- **Mock-auth fallback** — when OAuth is not configured, the directory returns matches from a hardcoded TC39 public-member seed list (`packages/shared/src/devUsers.ts`, regenerated by `scripts/refresh-dev-users.sh`).
+- **Mock-auth fallback** — when GitHub OAuth is not configured, the directory returns matches from a hardcoded TC39 public-member seed list (`packages/shared/src/devUsers.ts`, regenerated by `scripts/refresh-dev-users.sh`).
+- **Provider capability** — the directory is exposed as the GitHub provider's optional `directory` capability (`DirectoryCapability` in `auth/provider.ts`). Other providers (Google, ORCID) have no equivalent org-membership directory and may omit it.
 
 **Alternatives considered:**
 
-- **Passport.js** — Adds `passport`, `passport-github2`, and a serialise/deserialise abstraction. For a single OAuth provider, the abstraction cost exceeds the benefit. If TCQ ever needed multiple OAuth providers, Passport would start making sense.
+- **Passport.js** — Adds `passport`, `passport-github2`, and a serialise/deserialise abstraction. TCQ's own `AuthenticationProvider` interface is lighter than Passport's strategy/serialise machinery for the handful of OAuth providers in scope, and keeps the provider-neutral `User`/`UserKey` model under our control; Passport would be reconsidered if the provider count grew substantially.
 - **Auth.js (NextAuth)** — Tightly coupled to Next.js. The standalone `@auth/core` exists but is less mature and less well-documented.
 
 ### Markdown Subsystem
@@ -322,7 +330,7 @@ User-authored fields that render formatted (agenda item names, queue topics, ses
 
 ### Cross-Tab Auth Sync
 
-The session cookie is shared across tabs in the same browser, so the server-side identity is always coherent — but each tab maintains its own React `AuthContext` user state. To keep all open tabs in sync after a login, logout, or dev-mode user switch, the client uses a `BroadcastChannel('tcq:auth')`. After every `/api/me` fetch, `AuthContext` compares the observed identity to a marker in `localStorage` (`tcq:auth:ghid`); on a mismatch, it updates the marker and posts an `auth-changed` message. Receiving tabs re-fetch `/api/me` rather than reloading, so ephemeral state (form drafts, scroll position, the open meeting view) is preserved. The new identity propagates from `AuthContext` into `MeetingContext`, and `useSocketConnection` re-handshakes the WebSocket because `user.ghid` is in its effect dependencies — necessary because socket auth is captured once at handshake from the session cookie.
+The session cookie is shared across tabs in the same browser, so the server-side identity is always coherent — but each tab maintains its own React `AuthContext` user state. To keep all open tabs in sync after a login, logout, or dev-mode user switch, the client uses a `BroadcastChannel('tcq:auth')`. After every `/api/me` fetch, `AuthContext` compares the observed identity to a marker in `localStorage` (`tcq:auth:id`, holding the user key); on a mismatch, it updates the marker and posts an `auth-changed` message. Receiving tabs re-fetch `/api/me` rather than reloading, so ephemeral state (form drafts, scroll position, the open meeting view) is preserved. The new identity propagates from `AuthContext` into `MeetingContext`, and `useSocketConnection` re-handshakes the WebSocket because the user key is in its effect dependencies — necessary because socket auth is captured once at handshake from the session cookie.
 
 ## Logging and Observability
 
@@ -330,7 +338,7 @@ All logging goes through a small zero-dependency module (`packages/server/src/lo
 
 Every entry carries `severity`, `message`, `time`, `service`, and — when `GIT_SHA` is set at deploy time — the deployment commit SHA. Callers add domain-specific fields alongside those defaults.
 
-**Attribution.** Every log entry that names an acting user groups `ghid`, `ghUsername`, and `isAdmin` under a nested `user` field, so attribution stays together and does not collide with other top-level fields.
+**Attribution.** Every log entry that names an acting user groups `provider`, `accountId`, `handle`, and `isAdmin` under a nested `user` field, so attribution stays together and does not collide with other top-level fields.
 
 **HTTP access log.** A middleware (`httpLogger.ts`) emits one entry per response via `res.on('finish')`. The HTTP details go inside a top-level `httpRequest` object matching the [`LogEntry.HttpRequest`](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#HttpRequest) schema (`requestMethod`, `requestUrl`, `status`, `latency`, `protocol`, `responseSize`, `userAgent`, `referer`, `remoteIp`), which Cloud Logging renders inline in the Logs Explorer and exposes as queryable attributes. 2xx/3xx responses log at `INFO`, 4xx at `WARNING`, 5xx at `ERROR`. The uptime-probe path `/api/health` is skipped to avoid log spam.
 

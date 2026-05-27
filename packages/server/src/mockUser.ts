@@ -1,6 +1,5 @@
 /**
- * Resolve a GitHub login into a mock-mode `User` by combining a
- * deterministic ghid (a hash of the login) with display name and
+ * Resolve a GitHub login into a mock-mode `User`, with display name and
  * organisation looked up from the static dev seed list
  * (`packages/shared/src/devUsers.ts`).
  *
@@ -17,6 +16,7 @@
 
 import type { User } from '@tcq/shared';
 import { DEV_USERS } from '@tcq/shared';
+import { githubUser } from './auth/githubUser.js';
 
 interface SeedEntry {
   name: string;
@@ -36,29 +36,10 @@ function getSeedByLogin(): Map<string, SeedEntry> {
   return seedByLogin;
 }
 
-/**
- * Stable hash of the login so the same username always resolves to the
- * same numeric ghid across requests and across server restarts. Same
- * algorithm as the original inline implementation in `routes.ts` so the
- * ids the dev switcher used to produce continue to round-trip.
- */
-function deterministicGhid(login: string): number {
-  let hash = 0;
-  for (const ch of login) {
-    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
-  }
-  return Math.abs(hash);
-}
-
 export function mockUserFromLogin(login: string): User {
   const seed = getSeedByLogin().get(login.toLowerCase());
-  return {
-    ghid: deterministicGhid(login),
-    ghUsername: login,
-    // `||` (not `??`) so a seed entry whose `name` is empty/whitespace
-    // also falls through to the login — keeps the badge from rendering
-    // an empty label even if a refreshed seed ever produces one.
-    name: seed?.name?.trim() || login,
-    organisation: seed?.organisation ?? '',
-  };
+  // `githubUser` produces the canonical GitHub `User` shape (provider,
+  // accountId = lowercased login, synthesised avatar) and applies the
+  // name-falls-back-to-login rule.
+  return githubUser({ login, name: seed?.name, organisation: seed?.organisation });
 }

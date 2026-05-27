@@ -11,7 +11,7 @@
  *     name + company for up to 100 logins per round-trip. Concealed
  *     members are intentionally not surfaced — we don't request
  *     `read:org` and so cannot read them.
- *   - `userOrgs`: user ghid → list of org logins the user is *publicly* a
+ *   - `userOrgs`: searcher account id → list of org logins the user is *publicly* a
  *     member of. Filled by calling `GET /user/orgs` with that user's
  *     OAuth token; without `read:org` this endpoint returns only the
  *     user's public memberships. Acts as the ACL when answering
@@ -41,12 +41,13 @@
 import type { MeetingState, User, UserKey } from '@tcq/shared';
 import { DEV_USERS, asUserKey } from '@tcq/shared';
 import type { SessionUser } from './session.js';
-import { isOAuthConfigured } from './mockAuth.js';
+import { isGitHubConfigured } from './auth/githubUser.js';
 import { warning, info, serialiseError } from './logger.js';
 
 /** Compact user record returned by autocomplete and stored in the caches. */
 export interface DirectoryUser {
-  ghid: number;
+  /** GitHub login. Doubles as the dedup/identity key (lowercased) within the
+   *  directory and as the value the client submits for chair/presenter entry. */
   login: string;
   name: string;
   /**
@@ -62,7 +63,8 @@ export interface DirectoryUser {
 
 interface OrgMembersCacheEntry {
   fetchedAt: number;
-  members: Map<number, DirectoryUser>;
+  /** Members keyed by lowercased login. */
+  members: Map<string, DirectoryUser>;
 }
 
 interface UserOrgsCacheEntry {
@@ -72,7 +74,8 @@ interface UserOrgsCacheEntry {
 
 /** Directory state — module-scoped so it's shared across all requests. */
 const orgMembers = new Map<string, OrgMembersCacheEntry>();
-const userOrgs = new Map<number, UserOrgsCacheEntry>();
+/** Keyed by the searcher's account id (lowercased GitHub login). */
+const userOrgs = new Map<string, UserOrgsCacheEntry>();
 
 /**
  * Coalesces concurrent refresh attempts: while one request is already
@@ -81,7 +84,7 @@ const userOrgs = new Map<number, UserOrgsCacheEntry>();
  * call. Cleared when the underlying fetch settles.
  */
 const inflightOrgRefresh = new Map<string, Promise<void>>();
-const inflightUserOrgsRefresh = new Map<number, Promise<void>>();
+const inflightUserOrgsRefresh = new Map<string, Promise<void>>();
 
 /** TTL for both caches — re-fetched on the next request after this elapses. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
@@ -136,11 +139,11 @@ async function githubFetchAs(session: SessionUser, url: string): Promise<Respons
       },
     });
   } catch (err) {
-    warning('github_fetch_failed', { url, error: serialiseError(err), ghUsername: session.ghUsername });
+    warning('github_fetch_failed', { url, error: serialiseError(err), account: session.accountId });
     return null;
   }
   if (res.status === 401) {
-    info('github_token_revoked', { ghUsername: session.ghUsername });
+    info('github_token_revoked', { account: session.accountId });
     // Mutate in place — the caller still holds the same SessionUser
     // reference because Express session reads are reference-stable per
     // request, and the next persistence write (express-session
@@ -175,21 +178,21 @@ async function githubGraphqlAs<T>(
       body: JSON.stringify({ query, variables }),
     });
   } catch (err) {
-    warning('github_graphql_failed', { error: serialiseError(err), ghUsername: session.ghUsername });
+    warning('github_graphql_failed', { error: serialiseError(err), account: session.accountId });
     return null;
   }
   if (res.status === 401) {
-    info('github_token_revoked', { ghUsername: session.ghUsername });
+    info('github_token_revoked', { account: session.accountId });
     delete session.accessToken;
     return null;
   }
   if (!res.ok) {
-    warning('github_graphql_failed', { status: res.status, ghUsername: session.ghUsername });
+    warning('github_graphql_failed', { status: res.status, account: session.accountId });
     return null;
   }
   const body = (await res.json()) as { data?: T; errors?: unknown };
   if (body.errors) {
-    warning('github_graphql_errors', { errors: body.errors, ghUsername: session.ghUsername });
+    warning('github_graphql_errors', { errors: body.errors, account: session.accountId });
     return null;
   }
   return body.data ?? null;
@@ -318,7 +321,7 @@ async function refreshOrgMembers(session: SessionUser, org: string): Promise<voi
         warning('github_org_members_fetch_failed', {
           org,
           status: res.status,
-          ghUsername: session.ghUsername,
+          account: session.accountId,
         });
         return;
       }
@@ -336,15 +339,14 @@ async function refreshOrgMembers(session: SessionUser, org: string): Promise<voi
       basic.map((m) => m.login),
     );
 
-    const members = new Map<number, DirectoryUser>();
+    const members = new Map<string, DirectoryUser>();
     for (const m of basic) {
       const e = enriched.get(m.login.toLowerCase());
-      members.set(m.id, {
-        ghid: m.id,
+      members.set(m.login.toLowerCase(), {
         login: m.login,
         // `||` (not `??`) so a whitespace-only `name` from GitHub also
         // falls through to the login — same defensive shape used by
-        // `fetchGitHubUser` in `auth.ts`.
+        // `fetchGitHubUser`.
         name: e?.name?.trim() || m.login,
         organisation: e?.company?.trim() ?? '',
         // Use the URL the REST API hands back directly — same as tier 3 does
@@ -366,10 +368,10 @@ async function refreshOrgMembers(session: SessionUser, org: string): Promise<voi
  * refreshes via `inflightUserOrgsRefresh`.
  */
 async function refreshUserOrgs(session: SessionUser): Promise<void> {
-  const existing = userOrgs.get(session.ghid);
+  const existing = userOrgs.get(session.accountId);
   if (existing && isFresh(existing.fetchedAt)) return;
 
-  const inflight = inflightUserOrgsRefresh.get(session.ghid);
+  const inflight = inflightUserOrgsRefresh.get(session.accountId);
   if (inflight) return inflight;
 
   const refresh = (async () => {
@@ -380,19 +382,19 @@ async function refreshUserOrgs(session: SessionUser): Promise<void> {
     // they publicly belong to, and only those).
     const res = await githubFetchAs(session, 'https://api.github.com/user/orgs?per_page=100');
     if (!res || !res.ok) {
-      if (res) warning('github_user_orgs_fetch_failed', { ghUsername: session.ghUsername, status: res.status });
+      if (res) warning('github_user_orgs_fetch_failed', { account: session.accountId, status: res.status });
       return;
     }
     const data = (await res.json()) as Array<{ login: string }>;
-    userOrgs.set(session.ghid, {
+    userOrgs.set(session.accountId, {
       fetchedAt: Date.now(),
       orgs: data.map((o) => o.login),
     });
   })().finally(() => {
-    inflightUserOrgsRefresh.delete(session.ghid);
+    inflightUserOrgsRefresh.delete(session.accountId);
   });
 
-  inflightUserOrgsRefresh.set(session.ghid, refresh);
+  inflightUserOrgsRefresh.set(session.accountId, refresh);
   return refresh;
 }
 
@@ -406,7 +408,7 @@ async function refreshUserOrgs(session: SessionUser): Promise<void> {
 export async function warmDirectoryForUser(session: SessionUser): Promise<void> {
   if (!session.accessToken) return;
   await refreshUserOrgs(session);
-  const orgs = userOrgs.get(session.ghid)?.orgs ?? [];
+  const orgs = userOrgs.get(session.accountId)?.orgs ?? [];
   // Refresh org members in parallel — each org is independent and the
   // GitHub primary rate limit (5000/hr/user) is generous.
   await Promise.all(orgs.map((org) => refreshOrgMembers(session, org)));
@@ -522,55 +524,47 @@ function meetingUserCandidates(meeting: MeetingState | undefined): DirectoryUser
   if (!meeting) return [];
   const out: DirectoryUser[] = [];
   for (const user of Object.values(meeting.users) as User[]) {
+    // Only GitHub accounts are autocomplete candidates here (chair/presenter
+    // entry is by GitHub handle); skip users from other providers.
+    if (user.provider !== 'github') continue;
     // Skip unresolved presenter placeholders. These are written into
     // meeting.users by agenda import when a free-text presenter name
     // doesn't bind to a real GitHub user (see resolvePresenterFromDirectory),
     // and they exist solely so the agenda item can render the name. They
     // have no real identity to autocomplete onto, and including them here
     // would also let them shadow real tier-2 matches via the login dedup
-    // in mergeTiered when the agenda is re-imported.
-    if (user.ghid === 0) continue;
+    // in mergeTiered when the agenda is re-imported. A placeholder is the
+    // only kind of resolved GitHub user with an empty `avatarUrl`.
+    if (user.avatarUrl === '') continue;
     out.push({
-      ghid: user.ghid,
-      login: user.ghUsername,
+      login: user.handle ?? user.accountId,
       name: user.name,
       // Meeting-state User objects carry the company string from when the
       // user was first resolved against GitHub — preserve it so the search
       // can match queries like "google".
       organisation: user.organisation,
-      avatarUrl: avatarUrlForLogin(user.ghUsername),
+      avatarUrl: user.avatarUrl,
       badge: 'meeting',
     });
   }
   return out;
 }
 
-function orgMemberCandidates(searcherGhid: number): DirectoryUser[] {
-  const orgs = userOrgs.get(searcherGhid)?.orgs ?? [];
+function orgMemberCandidates(searcherAccountId: string): DirectoryUser[] {
+  const orgs = userOrgs.get(searcherAccountId)?.orgs ?? [];
   if (orgs.length === 0) return [];
   // Dedupe across orgs: a user in multiple of the searcher's orgs should
-  // only appear once in the candidate pool.
-  const byGhid = new Map<number, DirectoryUser>();
+  // only appear once in the candidate pool. Keyed by lowercased login.
+  const byLogin = new Map<string, DirectoryUser>();
   for (const org of orgs) {
     const entry = orgMembers.get(org);
     if (!entry) continue;
     for (const member of entry.members.values()) {
-      if (!byGhid.has(member.ghid)) byGhid.set(member.ghid, { ...member, badge: 'org' });
+      const k = member.login.toLowerCase();
+      if (!byLogin.has(k)) byLogin.set(k, { ...member, badge: 'org' });
     }
   }
-  return [...byGhid.values()];
-}
-
-/**
- * Synthesise the avatar URL from a GitHub login. `github.com/{login}.png`
- * is a public redirect to the user's canonical avatar — works for any
- * valid login regardless of how the meeting-state ghid was derived. This
- * matters in mock-auth mode, where the meeting-user ghid is a hash of the
- * username rather than the real GitHub numeric id, so a ghid-based URL
- * (`avatars.githubusercontent.com/u/{ghid}`) would 404.
- */
-function avatarUrlForLogin(login: string): string {
-  return `https://github.com/${encodeURIComponent(login)}.png?size=80`;
+  return [...byLogin.values()];
 }
 
 // -- Tier 3: global GitHub user search -----------------------------------
@@ -584,10 +578,9 @@ async function tier3Search(session: SessionUser, query: string, limit: number): 
   const url = `https://api.github.com/search/users?q=${encodeURIComponent(`${query} in:login`)}&per_page=${limit}&page=1`;
   const res = await githubFetchAs(session, url);
   if (!res || !res.ok) return [];
-  const data = (await res.json()) as { items?: Array<{ id: number; login: string; avatar_url: string }> };
+  const data = (await res.json()) as { items?: Array<{ login: string; avatar_url: string }> };
   if (!data.items) return [];
   return data.items.map((item) => ({
-    ghid: item.id,
     login: item.login,
     // Search results don't include display name or company; degrade to
     // login for the name and leave organisation blank.
@@ -617,10 +610,9 @@ export function searchUsersLocal(
   // Mock-auth mode: tier 2 is backed by the static seed list (acts as
   // the single "org" in dev). In OAuth mode, tier 2 comes from the
   // searcher's org-membership cache.
-  const tier2Candidates = isOAuthConfigured()
-    ? orgMemberCandidates(session.ghid)
+  const tier2Candidates = isGitHubConfigured()
+    ? orgMemberCandidates(session.accountId)
     : DEV_USERS.map<DirectoryUser>((u) => ({
-        ghid: u.ghid,
         login: u.login,
         name: u.name,
         organisation: u.organisation ?? '',
@@ -644,17 +636,17 @@ export async function searchUsers(
   limit: number = DEFAULT_AUTOCOMPLETE_LIMIT,
 ): Promise<DirectoryUser[]> {
   // Mock-auth mode: no GitHub calls at all. Tier 3 is skipped entirely.
-  if (!isOAuthConfigured()) {
+  if (!isGitHubConfigured()) {
     return searchUsersLocal(session, query, meeting, limit);
   }
 
   // Stale caches → kick off a refresh in the background, but answer this
   // request from whatever we have right now. The next request after the
   // refresh settles will see the fresh data.
-  const userOrgsEntry = userOrgs.get(session.ghid);
+  const userOrgsEntry = userOrgs.get(session.accountId);
   if (!userOrgsEntry || !isFresh(userOrgsEntry.fetchedAt)) {
     warmDirectoryForUser(session).catch((err) => {
-      warning('directory_lazy_warm_failed', { error: serialiseError(err), ghUsername: session.ghUsername });
+      warning('directory_lazy_warm_failed', { error: serialiseError(err), account: session.accountId });
     });
   }
 
@@ -690,21 +682,19 @@ export function resolvePresenterFromDirectory(
 }
 
 /**
- * Concatenate tiers in order, dedupe by ghid AND by lowercase login
- * (first tier wins), truncate to `limit`. The login fallback matters when
- * a meeting-state user record predates an org-cache refresh and the same
- * login ends up with two differing ghids — the dropdown should still show
- * one row, with tier 1's record (the locally-known one) winning.
+ * Concatenate tiers in order, dedupe by lowercase login (first tier wins),
+ * truncate to `limit`. Login is the identity key throughout the directory,
+ * so the same person appearing in multiple tiers (meeting + org + global
+ * search) collapses to one row, with the earliest (most locally-known)
+ * tier's record winning.
  */
 function mergeTiered(tiers: DirectoryUser[][], limit: number): DirectoryUser[] {
-  const seenGhid = new Set<number>();
   const seenLogin = new Set<string>();
   const out: DirectoryUser[] = [];
   for (const tier of tiers) {
     for (const user of tier) {
       const lLogin = user.login.toLowerCase();
-      if (seenGhid.has(user.ghid) || seenLogin.has(lLogin)) continue;
-      seenGhid.add(user.ghid);
+      if (seenLogin.has(lLogin)) continue;
       seenLogin.add(lLogin);
       out.push(user);
       if (out.length >= limit) return out;

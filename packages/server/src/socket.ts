@@ -37,7 +37,8 @@ import {
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
-import { fetchGitHubUser } from './auth.js';
+import { fetchGitHubUser } from './auth/github.js';
+import { githubUserKey, githubPlaceholderUser } from './auth/githubUser.js';
 import { isOAuthConfigured } from './mockAuth.js';
 import { mockUserFromLogin } from './mockUser.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
@@ -79,7 +80,9 @@ function parsePayload<T>(
  * presenter — see `resolvePresentersFor` for the orchestration.
  */
 function resolvePresenterSync(meeting: MeetingState | undefined, sessionUser: User, username: string): User | null {
-  const key = asUserKey(username.toLowerCase());
+  // Chair/presenter entry is by GitHub handle, so the key to look up is the
+  // GitHub key for that handle (`github:<lower>`), not a bare username.
+  const key = githubUserKey(username);
   const known = meeting?.users[key];
   if (known) return known;
   if (userKey(sessionUser) === key) return sessionUser;
@@ -111,7 +114,7 @@ function resolvePresentersFor(
       // Preserve the typed login as a placeholder when GitHub returns
       // 404 (e.g. typo'd handle in OAuth mode) so the chair can spot
       // the mistake on the agenda item.
-      return ghUser ?? { ghid: 0, ghUsername: username, name: username, organisation: '' };
+      return ghUser ?? githubPlaceholderUser(username);
     }),
   );
 }
@@ -279,9 +282,11 @@ export function broadcastPremiumChange(
   io: Server<ClientToServerEvents, ServerToClientEvents>,
   meetingManager: MeetingManager,
   appSettings: AppSettingsManager,
-  username: string,
+  // The canonical `${provider}:${accountId}` key whose premium flag changed
+  // (as returned by `AppSettingsManager.add/removePremiumUsername`).
+  premiumKey: string,
 ): void {
-  const key = asUserKey(username.toLowerCase());
+  const key = asUserKey(premiumKey);
   for (const meeting of meetingManager.listAll()) {
     if (meeting.users[key] !== undefined) {
       emitFullState(io, meetingManager, meeting.id, appSettings);
@@ -564,7 +569,7 @@ export function registerSocketHandlers(
           return;
         }
 
-        const selfIncluded = usernames.some((u: string) => u.toLowerCase() === user.ghUsername.toLowerCase());
+        const selfIncluded = usernames.some((u: string) => githubUserKey(u) === userKey(user));
         if (!selfIncluded) {
           socket.emit('error', 'You cannot remove yourself from the chair list');
           return;
@@ -576,14 +581,14 @@ export function registerSocketHandlers(
       const chairs: User[] = [];
 
       for (const username of usernames) {
-        const key = asUserKey(username.toLowerCase());
+        const key = githubUserKey(username);
 
         // Check if this user is already known in the meeting
         const known = meeting?.users[key];
 
         if (known) {
           chairs.push(known);
-        } else if (key === user.ghUsername.toLowerCase()) {
+        } else if (key === userKey(user)) {
           chairs.push(user);
         } else if (isOAuthConfigured()) {
           // Validate against GitHub API when OAuth is configured
@@ -973,15 +978,10 @@ export function registerSocketHandlers(
           respond({ ok: false, error: 'Only chairs can add entries on behalf of others' });
           return;
         }
-        const key = asUserKey(parsed.asUsername.toLowerCase());
+        const key = githubUserKey(parsed.asUsername);
         // Look up the user from known meeting participants or create a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
-        entryUser = meeting?.users[key] ?? {
-          ghid: 0,
-          ghUsername: parsed.asUsername,
-          name: parsed.asUsername,
-          organisation: '',
-        };
+        entryUser = meeting?.users[key] ?? githubPlaceholderUser(parsed.asUsername);
       }
 
       // Decide whether this is a "pending initial-edit" add or a finished
@@ -1470,7 +1470,7 @@ export function registerSocketHandlers(
                 .map((id) => {
                   const e = meeting.queue.entries[id];
                   const u = meeting.users[e.userId];
-                  return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.ghUsername ?? e.userId})`;
+                  return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.handle ?? u?.accountId ?? e.userId})`;
                 })
                 .join('\n')
             : undefined;

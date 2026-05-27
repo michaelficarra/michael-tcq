@@ -7,11 +7,29 @@ import { PreferencesProvider, type NotificationPrefs } from '../contexts/Prefere
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { useMeetingNotifications } from './useMeetingNotifications.js';
 
-const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' };
-const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+const alice: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: '',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
+const bob: User = {
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
+  name: 'Bob',
+  organisation: '',
+  avatarUrl: 'https://github.com/bob.png?size=80',
+};
 
 function makeMeeting(overrides: Partial<MeetingState> = {}): MeetingState {
-  return buildMeeting(overrides, { id: 'm', users: { alice, bob }, chairIds: ['alice'] });
+  return buildMeeting(overrides, {
+    id: 'm',
+    users: { 'github:alice': alice, 'github:bob': bob },
+    chairIds: ['github:alice'],
+  });
 }
 
 /** Seed the PreferencesContext's initial state synchronously via localStorage. */
@@ -88,8 +106,8 @@ describe('useMeetingNotifications', () => {
   it('fires "Agenda advanced" when currentAgendaItemId changes after the meeting has started', () => {
     seedPreferences({ enabled: true });
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'] },
-      { kind: 'item' as const, id: 'b', name: 'Discussion', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:alice'] },
+      { kind: 'item' as const, id: 'b', name: 'Discussion', presenterIds: ['github:bob'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -108,7 +126,7 @@ describe('useMeetingNotifications', () => {
 
   it('fires "Meeting started" (not "Agenda advanced") on the first agenda item transition', () => {
     seedPreferences({ enabled: true });
-    const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'] }];
+    const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:alice'] }];
     const prev = makeMeeting({ agenda });
     const { rerender } = render(<Scene meeting={prev} />);
 
@@ -135,7 +153,7 @@ describe('useMeetingNotifications', () => {
         options: [],
         reactions: [],
         startTime: new Date().toISOString(),
-        startChairId: 'bob',
+        startChairId: 'github:bob',
         topic: 'Should we break?',
         multiSelect: true,
       },
@@ -160,7 +178,7 @@ describe('useMeetingNotifications', () => {
         options: [],
         reactions: [],
         startTime: new Date().toISOString(),
-        startChairId: 'alice',
+        startChairId: 'github:alice',
         topic: 'Should we break?',
         multiSelect: true,
       },
@@ -174,7 +192,12 @@ describe('useMeetingNotifications', () => {
   it('fires "Clarifying question" when someone queues one on your current topic', () => {
     seedPreferences({ enabled: true });
     // Alice is the current-topic author via t1; no prior question entries.
-    const aliceTopic = { speakerId: 't1', userId: 'alice', topic: 'my topic', startTime: '2026-01-01T00:00:00.000Z' };
+    const aliceTopic = {
+      speakerId: 't1',
+      userId: 'github:alice',
+      topic: 'my topic',
+      startTime: '2026-01-01T00:00:00.000Z',
+    };
     const prev = makeMeeting({
       current: { topicSpeakers: [], topic: aliceTopic },
     });
@@ -182,7 +205,7 @@ describe('useMeetingNotifications', () => {
 
     const next = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'bob' } },
+        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'github:bob' } },
         orderedIds: ['q1'],
         closed: false,
       },
@@ -200,7 +223,7 @@ describe('useMeetingNotifications', () => {
     seedPreferences({ enabled: true });
     // Bob is the current-topic author; a question from another user shouldn't
     // notify Alice because the topic isn't hers.
-    const bobTopic = { speakerId: 't1', userId: 'bob', topic: "bob's", startTime: '2026-01-01T00:00:00.000Z' };
+    const bobTopic = { speakerId: 't1', userId: 'github:bob', topic: "bob's", startTime: '2026-01-01T00:00:00.000Z' };
     const prev = makeMeeting({
       current: { topicSpeakers: [], topic: bobTopic },
     });
@@ -208,7 +231,7 @@ describe('useMeetingNotifications', () => {
 
     const next = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'carol' } },
+        entries: { q1: { id: 'q1', type: 'question', topic: 'why?', userId: 'github:carol' } },
         orderedIds: ['q1'],
         closed: false,
       },
@@ -224,7 +247,7 @@ describe('useMeetingNotifications', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' } },
+        entries: { q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'github:bob' } },
         orderedIds: ['q1'],
         closed: false,
       },
@@ -234,8 +257,8 @@ describe('useMeetingNotifications', () => {
     const next = makeMeeting({
       queue: {
         entries: {
-          q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'bob' },
-          q2: { id: 'q2', type: 'topic', topic: 'my turn', userId: 'alice' },
+          q1: { id: 'q1', type: 'topic', topic: 'bob topic', userId: 'github:bob' },
+          q2: { id: 'q2', type: 'topic', topic: 'my turn', userId: 'github:alice' },
         },
         orderedIds: ['q2', 'q1'],
         closed: false,
@@ -249,14 +272,14 @@ describe('useMeetingNotifications', () => {
   it('fires "Your agenda item is next" when the upcoming agenda item is yours', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
-      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['bob'] }],
+      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['github:bob'] }],
       current: { topicSpeakers: [], agendaItemId: 'a' },
     });
     const { rerender } = render(<Scene meeting={prev} />);
 
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['bob'] },
-      { kind: 'item' as const, id: 'b', name: 'My item', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:bob'] },
+      { kind: 'item' as const, id: 'b', name: 'My item', presenterIds: ['github:alice'] },
     ];
     const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
@@ -270,15 +293,15 @@ describe('useMeetingNotifications', () => {
   it('fires "Your agenda item is next" when you are a co-presenter', () => {
     seedPreferences({ enabled: true });
     const prev = makeMeeting({
-      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['bob'] }],
+      agenda: [{ kind: 'item', id: 'a', name: 'Opening', presenterIds: ['github:bob'] }],
       current: { topicSpeakers: [], agendaItemId: 'a' },
     });
     const { rerender } = render(<Scene meeting={prev} />);
 
     // Upcoming item has bob as first presenter and alice as co-presenter.
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['bob'] },
-      { kind: 'item' as const, id: 'b', name: 'Joint item', presenterIds: ['bob', 'alice'] },
+      { kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:bob'] },
+      { kind: 'item' as const, id: 'b', name: 'Joint item', presenterIds: ['github:bob', 'github:alice'] },
     ];
     const next = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     rerender(<Scene meeting={next} />);
@@ -296,7 +319,7 @@ describe('useMeetingNotifications', () => {
 
     const next = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'order please', userId: 'bob' } },
+        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'order please', userId: 'github:bob' } },
         orderedIds: ['q1'],
         closed: false,
       },
@@ -316,7 +339,7 @@ describe('useMeetingNotifications', () => {
 
     const next = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'mine', userId: 'alice' } },
+        entries: { q1: { id: 'q1', type: 'point-of-order', topic: 'mine', userId: 'github:alice' } },
         orderedIds: ['q1'],
         closed: false,
       },
@@ -330,8 +353,8 @@ describe('useMeetingNotifications', () => {
   it('fires nothing when notifications are disabled', () => {
     seedPreferences({ enabled: false });
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['alice'] },
-      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['github:alice'] },
+      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['github:alice'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -345,8 +368,8 @@ describe('useMeetingNotifications', () => {
   it('respects per-event toggles (agenda-advance off)', () => {
     seedPreferences({ enabled: true, prefs: { onAgendaAdvance: false } });
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['bob'] },
-      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['bob'] },
+      { kind: 'item' as const, id: 'a', name: 'A', presenterIds: ['github:bob'] },
+      { kind: 'item' as const, id: 'b', name: 'B', presenterIds: ['github:bob'] },
     ];
     const prev = makeMeeting({ agenda, current: { topicSpeakers: [], agendaItemId: 'a' } });
     const { rerender } = render(<Scene meeting={prev} />);
@@ -364,7 +387,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }]; // 5-minute estimate
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:alice'], duration: 5 }]; // 5-minute estimate
       const meeting = makeMeeting({
         agenda,
         current: {
@@ -397,7 +420,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true, prefs: { onAgendaItemOverrun: true } });
       const now = new Date('2026-04-19T10:30:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:alice'], duration: 5 }];
       // Start time was 30 minutes ago — deadline is 25 minutes in the past.
       const meeting = makeMeeting({
         agenda,
@@ -426,7 +449,7 @@ describe('useMeetingNotifications', () => {
       seedPreferences({ enabled: true }); // default: onAgendaItemOverrun false
       const now = new Date('2026-04-19T10:00:00Z').getTime();
       vi.setSystemTime(now);
-      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['alice'], duration: 5 }];
+      const agenda = [{ kind: 'item' as const, id: 'a', name: 'Opening', presenterIds: ['github:alice'], duration: 5 }];
       const meeting = makeMeeting({
         agenda,
         current: {
@@ -456,7 +479,7 @@ describe('useMeetingNotifications', () => {
 
     const next = makeMeeting({
       queue: {
-        entries: { q1: { id: 'q1', type: 'topic', topic: 'anything', userId: 'bob' } },
+        entries: { q1: { id: 'q1', type: 'topic', topic: 'anything', userId: 'github:bob' } },
         orderedIds: ['q1'],
         closed: false,
       },

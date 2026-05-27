@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { userKey } from '@tcq/shared';
 import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
@@ -79,7 +80,7 @@ function MeetingPageInner() {
   const dispatch = useMeetingDispatch();
   const { showToast } = useToast();
   const { user } = useAuth();
-  const socket = useSocketConnection(meetingId ?? '', user?.ghid ?? null);
+  const socket = useSocketConnection(meetingId ?? '', user ? userKey(user) : null);
   // Watches for a Cloud Run revision change vs the revision this WebSocket
   // bound to; flips true so we can surface the reload banner.
   const versionStale = useStaleVersionCheck(serverRevision);

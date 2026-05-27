@@ -6,7 +6,8 @@
  * available everywhere.
  */
 
-import type { User } from '@tcq/shared';
+import type { User, LegacyUser } from '@tcq/shared';
+import { upgradeUser } from '@tcq/shared';
 import { isAdmin } from './admin.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
 
@@ -26,6 +27,22 @@ export type SessionUser = User & { isAdmin: boolean; accessToken?: string };
 /** Attach `isAdmin` to a User to produce the session-shaped record. */
 export function toSessionUser(user: User): SessionUser {
   return { ...user, isAdmin: isAdmin(user) };
+}
+
+/**
+ * Upgrade a session user persisted in the pre-multi-provider shape
+ * (`{ ghid, ghUsername, … }`) to the provider-neutral one, in place on
+ * read so a returning user is not forced to re-log-in. The `User` portion
+ * goes through the shared `upgradeUser`; `isAdmin` is re-derived from the
+ * upgraded record (the admin check now keys on `${provider}:${accountId}`)
+ * and any server-side `accessToken` is preserved. Idempotent: an
+ * already-migrated session user is returned with `isAdmin` refreshed.
+ */
+export function upgradeSessionUser(raw: SessionUser): SessionUser {
+  const { isAdmin: _staleAdmin, accessToken, ...userPart } = raw;
+  void _staleAdmin;
+  const user = upgradeUser(userPart as unknown as User | LegacyUser);
+  return { ...user, isAdmin: isAdmin(user), ...(accessToken ? { accessToken } : {}) };
 }
 
 /**

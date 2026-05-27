@@ -1,10 +1,38 @@
 import { z } from 'zod';
 
 export interface User {
-  ghid: number;
-  ghUsername: string;
+  /**
+   * The authentication provider this account belongs to — equal to the
+   * `id` of the `AuthenticationProvider` that produced it (e.g. `'github'`,
+   * and in future `'google'` / `'orcid'`). Together with `accountId` it
+   * forms the canonical `UserKey` (`userKey(user)`).
+   */
+  provider: string;
+  /**
+   * Provider-defined stable account identifier. The provider decides what
+   * this is: GitHub uses the lowercased login, a future Google provider
+   * would use the OIDC `sub`, ORCID the iD. Opaque to everything outside
+   * the provider — never parse it, only compare and key on it.
+   */
+  accountId: string;
+  /**
+   * Human-readable login / handle, when the provider has one distinct from
+   * `accountId` (GitHub does; Google and ORCID do not). Display- and
+   * entry-only — never used to compute the key. Optional precisely because
+   * not every provider exposes a handle.
+   */
+  handle?: string;
   name: string;
   organisation: string;
+  /**
+   * Provider-supplied avatar URL. Required: the client renders it directly
+   * (falling back to a generic silhouette when empty or on load error)
+   * rather than synthesising a provider-specific URL, since avatars are not
+   * uniformly derivable across providers (GitHub's is derivable from the
+   * handle, Google's is an opaque URL, ORCID has none). May be the empty
+   * string for a provider/account with no avatar.
+   */
+  avatarUrl: string;
   /**
    * Whether this user belongs to the premium tier — server-stamped at
    * broadcast time from the admin-managed premium list (persisted in
@@ -20,10 +48,12 @@ export interface User {
 
 /**
  * Nominal (branded) string type for a canonical user key — the
- * lowercased `ghUsername`. Produced by `userKey(user)` or `asUserKey(s)`;
- * consumed as a Record key and as cross-references throughout
- * `MeetingState`. The brand prevents a plain `string` or a non-lowercased
- * `ghUsername` from being passed where a user key is expected.
+ * `${provider}:${accountId}` pair (e.g. `github:alice`). Produced by
+ * `userKey(user)` or `asUserKey(s)`; consumed as a Record key and as
+ * cross-references throughout `MeetingState`. The provider prefix lets
+ * accounts from different providers coexist in one meeting without
+ * colliding. The brand prevents a plain `string` (or a bare, unprefixed
+ * handle) from being passed where a user key is expected.
  */
 export type UserKey = string & { readonly __brand: 'UserKey' };
 
@@ -374,7 +404,7 @@ export interface MeetingState {
    * participant summary.
    */
   participantIds: UserKey[];
-  /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
+  /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (`${provider}:${accountId}`). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];
   /**

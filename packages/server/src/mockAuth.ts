@@ -1,32 +1,32 @@
 /**
  * Mock authentication middleware for development.
  *
- * When GitHub OAuth credentials are not configured (GITHUB_CLIENT_ID is
- * empty), this middleware automatically sets a fake user on every
- * request's session. This allows features to be developed and tested
- * without creating a GitHub OAuth App.
+ * When no authentication provider is configured, this middleware
+ * automatically sets a fake user on every request's session. This allows
+ * features to be developed and tested without creating an OAuth App.
  *
- * When OAuth credentials ARE configured, this middleware does nothing
- * and real GitHub authentication is used instead.
+ * When any provider IS configured, this middleware does nothing and real
+ * OAuth is used instead.
  */
 
 import type { RequestHandler } from 'express';
 import type { User } from '@tcq/shared';
 import { toSessionUser } from './session.js';
+import { isAnyProviderConfigured } from './auth/registry.js';
+import { githubUser } from './auth/githubUser.js';
 
-export const MOCK_USER: User = {
-  ghid: 1,
-  ghUsername: 'admin',
-  name: 'Admin',
-  organisation: '',
-};
+// The mock user is a GitHub account (`github:admin`) so dev keys match the
+// shape real GitHub auth and the migration produce.
+export const MOCK_USER: User = githubUser({ login: 'admin', name: 'Admin' });
 
 /**
- * Returns true if GitHub OAuth is configured (client ID is set).
- * When true, mock auth is skipped and real OAuth is used.
+ * Returns true if any authentication provider is configured. When true,
+ * mock auth is skipped and real OAuth is used. Retains the historical name
+ * `isOAuthConfigured` (now a thin alias) so the many call sites that gate
+ * mock-only behaviour on it don't need to change.
  */
 export function isOAuthConfigured(): boolean {
-  return !!process.env.GITHUB_CLIENT_ID;
+  return isAnyProviderConfigured();
 }
 
 /**

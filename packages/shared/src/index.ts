@@ -108,6 +108,7 @@ export {
 export {
   userKey,
   asUserKey,
+  userLabel,
   isSession,
   isAgendaItem,
   formatDuration,
@@ -115,6 +116,18 @@ export {
   normaliseGithubUsername,
 } from './helpers.js';
 export type { DurationStyle, DurationParts } from './helpers.js';
+export {
+  upgradeUser,
+  migrateKey,
+  isLegacyUser,
+  isLegacyKey,
+  isLegacyMeeting,
+  upgradeMeeting,
+  upgradeLog,
+  isLegacyAppSettings,
+  upgradeAppSettings,
+} from './migrate.js';
+export type { LegacyUser } from './migrate.js';
 export { applyDelta } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
 export { DEV_USERS } from './devUsers.js';

@@ -39,13 +39,13 @@ const DELTA_EVENT_TYPES = [
  * The socket connects on mount and disconnects on unmount. When the server
  * emits a `state` event, the full meeting state is dispatched to the reducer.
  *
- * `userGhid` is included in the dependency array so that a cross-tab auth
+ * `userKey` is included in the dependency array so that a cross-tab auth
  * change (handled in AuthContext) tears down the existing socket and opens
  * a fresh one. WebSocket auth is captured at handshake from the session
  * cookie, so a soft identity swap requires a reconnect for the server-side
  * socket to bind to the new user.
  */
-export function useSocketConnection(meetingId: string, userGhid: number | null): TypedSocket | null {
+export function useSocketConnection(meetingId: string, userKey: string | null): TypedSocket | null {
   const dispatch = useMeetingDispatch();
   const { showToast } = useToast();
   const socketRef = useRef<TypedSocket | null>(null);
@@ -168,7 +168,7 @@ export function useSocketConnection(meetingId: string, userGhid: number | null):
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
-  }, [meetingId, dispatch, showToast, userGhid]);
+  }, [meetingId, dispatch, showToast, userKey]);
 
   // eslint-disable-next-line react-hooks/refs -- Ref is synchronised by the effect above; reading it here is safe.
   return socketRef.current;

@@ -525,7 +525,7 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
   /** Open the inline edit form, pre-populated with current values. */
   function startEditing() {
     setEditName(item.name);
-    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.ghUsername ?? k));
+    setEditPresenters(item.presenterIds.map((k) => meeting?.users[k]?.handle ?? k));
     setEditDuration(item.duration != null && item.duration > 0 ? String(item.duration) : '');
     setEditing(true);
   }
@@ -993,9 +993,7 @@ function ChairsSection() {
 
   /** Remove a chair by emitting the updated list without them. */
   function handleRemove(chairId: string) {
-    const usernames = meeting!.chairIds
-      .filter((id) => id !== chairId)
-      .map((id) => meeting!.users[id]?.ghUsername ?? id);
+    const usernames = meeting!.chairIds.filter((id) => id !== chairId).map((id) => meeting!.users[id]?.handle ?? id);
     socket?.emit('meeting:updateChairs', { usernames });
     setRemoveConfirm(null);
   }
@@ -1005,7 +1003,7 @@ function ChairsSection() {
     const username = normaliseGithubUsername(rawUsername);
     if (!username) return;
 
-    const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.ghUsername ?? id);
+    const usernames = meeting!.chairIds.map((id) => meeting!.users[id]?.handle ?? id);
     if (!usernames.some((u) => u.toLowerCase() === username.toLowerCase())) {
       usernames.push(username);
     }
@@ -1031,7 +1029,7 @@ function ChairsSection() {
                   onClick={() => setRemoveConfirm(chairId)}
                   className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors
                              cursor-pointer presentation-hidden"
-                  aria-label={`Remove chair ${chair?.ghUsername ?? chairId}`}
+                  aria-label={`Remove chair ${chair?.handle ?? chairId}`}
                 >
                   <CircleXIcon />
                 </button>

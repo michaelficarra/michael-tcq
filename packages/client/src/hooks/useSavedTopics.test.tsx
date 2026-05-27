@@ -18,13 +18,27 @@ import {
   useSavedTopics,
 } from './useSavedTopics.js';
 
-/** Stub /api/me so AuthProvider resolves to the requested user. */
-function stubMe(ghid: number, username = 'alice'): void {
+/**
+ * Stub /api/me so AuthProvider resolves to the requested user.
+ *
+ * The numeric `id` argument is retained purely to give each test a distinct
+ * user (and thus a distinct storage key) without changing the call sites: it
+ * becomes the GitHub `accountId`, so the canonical `userKey` — and the
+ * `tcq:saved-topics:` storage key — is `github:<id>`.
+ */
+function stubMe(id: number, username = 'alice'): void {
   globalThis.fetch = (async (url: string | URL | Request) => {
     if (String(url) === '/api/me') {
       return {
         ok: true,
-        json: async () => ({ ghid, ghUsername: username, name: username, organisation: '' }),
+        json: async () => ({
+          provider: 'github',
+          accountId: String(id),
+          handle: username,
+          name: username,
+          organisation: '',
+          avatarUrl: `https://github.com/${username}.png?size=80`,
+        }),
       } as Response;
     }
     throw new Error(`Unexpected fetch: ${url}`);
@@ -56,13 +70,13 @@ describe('useSavedTopics', () => {
     expect(result.current.topics).toHaveLength(DEFAULT_SAVED_TOPICS.length);
     expect(result.current.topics[0].text).toBe('👍 I support this. (EOM)');
     // Default is persisted so a second mount sees the same ids.
-    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:42') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:github:42') ?? '[]');
     expect(stored).toHaveLength(1);
     expect(stored[0].text).toBe('👍 I support this. (EOM)');
   });
 
   it('does not re-seed when storage already has a (possibly empty) list', async () => {
-    localStorage.setItem('tcq:saved-topics:42', JSON.stringify([]));
+    localStorage.setItem('tcq:saved-topics:github:42', JSON.stringify([]));
     stubMe(42);
     const { result } = await renderUseSavedTopics();
     // The user explicitly emptied the list — don't put the default back.
@@ -94,14 +108,14 @@ describe('useSavedTopics', () => {
     expect(newId).not.toBeNull();
     expect(result.current.topics).toHaveLength(initialLen + 1);
     expect(result.current.topics[initialLen].text).toBe('Thanks');
-    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:7') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:github:7') ?? '[]');
     expect(stored).toHaveLength(initialLen + 1);
   });
 
   it('add returns null and is a no-op at the cap', async () => {
     // Seed exactly MAX entries
     const full = Array.from({ length: SAVED_TOPICS_MAX }, (_, i) => ({ id: `id-${i}`, text: `t-${i}` }));
-    localStorage.setItem('tcq:saved-topics:9', JSON.stringify(full));
+    localStorage.setItem('tcq:saved-topics:github:9', JSON.stringify(full));
     stubMe(9);
     const { result } = await renderUseSavedTopics();
     expect(result.current.topics).toHaveLength(SAVED_TOPICS_MAX);
@@ -115,7 +129,7 @@ describe('useSavedTopics', () => {
   });
 
   it('update trims text and ignores empty edits', async () => {
-    localStorage.setItem('tcq:saved-topics:5', JSON.stringify([{ id: 'a', text: 'hi' }]));
+    localStorage.setItem('tcq:saved-topics:github:5', JSON.stringify([{ id: 'a', text: 'hi' }]));
     stubMe(5);
     const { result } = await renderUseSavedTopics();
 
@@ -139,7 +153,7 @@ describe('useSavedTopics', () => {
 
   it('remove deletes by id and persists', async () => {
     localStorage.setItem(
-      'tcq:saved-topics:11',
+      'tcq:saved-topics:github:11',
       JSON.stringify([
         { id: 'a', text: 'A' },
         { id: 'b', text: 'B' },
@@ -153,14 +167,14 @@ describe('useSavedTopics', () => {
       result.current.remove('a');
     });
     expect(result.current.topics).toEqual([{ id: 'b', text: 'B', type: 'topic' }]);
-    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:11') ?? '[]')).toEqual([
+    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:github:11') ?? '[]')).toEqual([
       { id: 'b', text: 'B', type: 'topic' },
     ]);
   });
 
   it('reorder moves an entry by id and persists', async () => {
     localStorage.setItem(
-      'tcq:saved-topics:13',
+      'tcq:saved-topics:github:13',
       JSON.stringify([
         { id: 'a', text: 'A' },
         { id: 'b', text: 'B' },
@@ -191,14 +205,14 @@ describe('useSavedTopics', () => {
       id: `id-${i}`,
       text: `t-${i}`,
     }));
-    localStorage.setItem('tcq:saved-topics:21', JSON.stringify(overflow));
+    localStorage.setItem('tcq:saved-topics:github:21', JSON.stringify(overflow));
     stubMe(21);
     const { result } = await renderUseSavedTopics();
     expect(result.current.topics).toHaveLength(SAVED_TOPICS_MAX);
   });
 
   it('ignores garbled storage rather than crashing', async () => {
-    localStorage.setItem('tcq:saved-topics:99', '{not json');
+    localStorage.setItem('tcq:saved-topics:github:99', '{not json');
     stubMe(99);
     const { result } = await renderUseSavedTopics();
     // Garbled storage → empty list (caller may seed by adding entries).
@@ -212,7 +226,7 @@ describe('useSavedTopics', () => {
   });
 
   it('add defaults to topic and stores an explicit type', async () => {
-    localStorage.setItem('tcq:saved-topics:7', JSON.stringify([]));
+    localStorage.setItem('tcq:saved-topics:github:7', JSON.stringify([]));
     stubMe(7);
     const { result } = await renderUseSavedTopics();
 
@@ -224,13 +238,13 @@ describe('useSavedTopics', () => {
     expect(result.current.topics[0]).toMatchObject({ text: 'default-priority', type: 'topic' });
     expect(result.current.topics[1]).toMatchObject({ text: 'a reply', type: 'reply' });
     // Persisted with the type intact.
-    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:7') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem('tcq:saved-topics:github:7') ?? '[]');
     expect(stored.map((t: { type: string }) => t.type)).toEqual(['topic', 'reply']);
   });
 
   it('coerces a missing or invalid stored type to topic', async () => {
     localStorage.setItem(
-      'tcq:saved-topics:31',
+      'tcq:saved-topics:github:31',
       JSON.stringify([
         { id: 'a', text: 'legacy, no type' },
         { id: 'b', text: 'bogus type', type: 'not-a-real-type' },
@@ -247,7 +261,7 @@ describe('useSavedTopics', () => {
   });
 
   it('setType updates a topic priority and persists; unknown ids are ignored', async () => {
-    localStorage.setItem('tcq:saved-topics:33', JSON.stringify([{ id: 'a', text: 'A', type: 'topic' }]));
+    localStorage.setItem('tcq:saved-topics:github:33', JSON.stringify([{ id: 'a', text: 'A', type: 'topic' }]));
     stubMe(33);
     const { result } = await renderUseSavedTopics();
 
@@ -255,7 +269,7 @@ describe('useSavedTopics', () => {
       result.current.setType('a', 'question');
     });
     expect(result.current.topics[0].type).toBe('question');
-    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:33') ?? '[]')).toEqual([
+    expect(JSON.parse(localStorage.getItem('tcq:saved-topics:github:33') ?? '[]')).toEqual([
       { id: 'a', text: 'A', type: 'question' },
     ]);
 

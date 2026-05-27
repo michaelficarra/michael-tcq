@@ -11,7 +11,7 @@ import type {
   User,
   UserKey,
 } from '@tcq/shared';
-import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey } from '@tcq/shared';
+import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey, isLegacyMeeting, upgradeMeeting, upgradeLog } from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 import { info, notice, error as logError, serialiseError } from './logger.js';
@@ -112,18 +112,32 @@ export class MeetingManager {
     const now = Date.now();
     let expired = 0;
 
-    for (const meeting of meetings) {
+    let migrated = 0;
+    for (const rawMeeting of meetings) {
+      // Lazy migration: upgrade a meeting persisted in the pre-multi-provider
+      // shape (bare-username keys, `{ ghid, ghUsername }` users) to the
+      // provider-prefixed shape, and mark it dirty so the next 30 s sync
+      // flushes the upgraded form back to the store.
+      const wasLegacy = isLegacyMeeting(rawMeeting);
+      const meeting = wasLegacy ? upgradeMeeting(rawMeeting) : rawMeeting;
       if (this.isExpired(meeting, now)) {
         expired++;
         await this.store.remove(meeting.id);
       } else {
+        if (wasLegacy) {
+          migrated++;
+          this.markDirty(meeting.id);
+        }
         // Backfill `operational.version` for meetings persisted before
         // the field existed. Without this, the first `bumpVersion` would
         // compute `undefined + 1 === NaN` and emit a corrupt version.
         if (typeof meeting.operational.version !== 'number') {
           meeting.operational.version = 0;
         }
-        const meetingLogs = allLogs.get(meeting.id) ?? [];
+        // Log entries are upgraded in memory only (append-only, read through
+        // memory) — `upgradeLog` is idempotent so re-running it each boot is
+        // cheap, and we avoid expanding the store with a log-rewrite path.
+        const meetingLogs = upgradeLog(allLogs.get(meeting.id) ?? []);
         // Backfill `current.startedAt` for meetings persisted before
         // the field existed. The `meeting-started` log entry's timestamp
         // is the authoritative record of when the meeting first
@@ -142,6 +156,7 @@ export class MeetingManager {
     info('meetings_restored', {
       restored: this.meetings.size,
       expiredAtStartup: expired,
+      migratedToProviderKeys: migrated,
     });
   }
 

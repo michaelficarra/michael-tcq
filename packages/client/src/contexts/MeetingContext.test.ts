@@ -21,7 +21,14 @@ function makeState(overrides?: Partial<MeetingContextState>): MeetingContextStat
   };
 }
 
-const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
+const alice: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
 
 describe('meetingReducer', () => {
   // -- state --
@@ -78,9 +85,9 @@ describe('meetingReducer', () => {
 
   describe('optimisticAgendaReorder action', () => {
     const agenda = [
-      { kind: 'item' as const, id: 'a', name: 'First', presenterIds: ['alice'] },
-      { kind: 'item' as const, id: 'b', name: 'Second', presenterIds: ['alice'] },
-      { kind: 'item' as const, id: 'c', name: 'Third', presenterIds: ['alice'] },
+      { kind: 'item' as const, id: 'a', name: 'First', presenterIds: ['github:alice'] },
+      { kind: 'item' as const, id: 'b', name: 'Second', presenterIds: ['github:alice'] },
+      { kind: 'item' as const, id: 'c', name: 'Third', presenterIds: ['github:alice'] },
     ];
 
     it('moves an item forward (down the list)', () => {

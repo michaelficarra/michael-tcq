@@ -354,7 +354,7 @@ function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, 
 // -- Plain-text export --
 
 function userName(users: Record<string, User>, id: string): string {
-  return `@${users[id]?.ghUsername ?? id}`;
+  return `@${users[id]?.handle ?? id}`;
 }
 
 function formatTimestamp(iso: string): string {

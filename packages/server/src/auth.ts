@@ -1,59 +1,40 @@
 /**
- * GitHub OAuth authentication routes.
+ * Generic OAuth authentication routes, provider-agnostic.
  *
- * Implements the three-step OAuth flow directly (no Passport.js) since
- * we only support a single OAuth provider:
+ * Mounted at `/auth`. Each enabled `AuthenticationProvider` (see
+ * `./auth/registry.ts`) is reachable as:
  *
- * 1. GET /auth/github — Redirect the user to GitHub's authorisation page.
- * 2. GET /auth/github/callback — Exchange the authorisation code for an
- *    access token, fetch the user's profile, and store it in the session.
- * 3. GET /auth/logout — Destroy the session and redirect home.
+ * 1. GET /auth/:providerId          — redirect to the provider's auth page.
+ * 2. GET /auth/:providerId/callback — exchange the code, store the user.
+ * 3. GET /auth/logout               — clear the session and redirect home.
  *
- * The user's GitHub profile (ghid, ghUsername, name, organisation) is
- * stored in the session and used to identify them throughout the app.
+ * When no provider is configured the server is in mock-auth mode: any
+ * `/auth/:providerId` hit simply clears the logged-out flag so the mock
+ * middleware repopulates a fake user on the next request.
+ *
+ * The resolved (provider-neutral) user is stored in the session and used to
+ * identify the account throughout the app.
  */
 
 import { Router } from 'express';
-import type { User } from '@tcq/shared';
+import type { RequestHandler } from 'express';
 import { toSessionUser } from './session.js';
 import { warning, error as logError, serialiseError } from './logger.js';
-import { warmDirectoryForUser } from './githubDirectory.js';
-
-// OAuth configuration from environment variables
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? '';
-const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL ?? 'http://localhost:3000/auth/github/callback';
+import { enabledProviders, getProvider, isAnyProviderConfigured } from './auth/registry.js';
 
 /**
- * Fetch a GitHub user's profile by username using a personal access token
- * or the OAuth app's client credentials. Used to resolve chair usernames
- * to full User objects when creating meetings.
- *
- * Returns null if the username doesn't exist.
+ * Build the OAuth callback URL for a provider. A single
+ * `OAUTH_CALLBACK_BASE_URL` (default `http://localhost:3000/auth`) yields
+ * `${base}/${providerId}/callback` for every provider; the legacy
+ * `GITHUB_CALLBACK_URL` is still honoured for GitHub so existing OAuth-app
+ * registrations keep working.
  */
-export async function fetchGitHubUser(username: string): Promise<User | null> {
-  const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      // Use client credentials for higher rate limits (5000/hr vs 60/hr)
-      ...(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET
-        ? { Authorization: `Basic ${btoa(`${GITHUB_CLIENT_ID}:${GITHUB_CLIENT_SECRET}`)}` }
-        : {}),
-    },
-  });
-
-  if (!res.ok) return null;
-
-  const data = await res.json();
-  return {
-    ghid: data.id,
-    ghUsername: data.login,
-    // `||` (not `??`) so an empty/whitespace `name` from GitHub also
-    // falls through to the login — UserBadge ultimately defends this
-    // too, but keep the shape clean here.
-    name: data.name?.trim() || data.login,
-    organisation: data.company ?? '',
-  };
+function callbackUrl(providerId: string): string {
+  if (providerId === 'github' && process.env.GITHUB_CALLBACK_URL) {
+    return process.env.GITHUB_CALLBACK_URL;
+  }
+  const base = process.env.OAUTH_CALLBACK_BASE_URL ?? 'http://localhost:3000/auth';
+  return `${base}/${providerId}/callback`;
 }
 
 /**
@@ -61,7 +42,7 @@ export async function fetchGitHubUser(username: string): Promise<User | null> {
  * allowed: must start with "/" but not "//" or "/\" (which browsers may
  * interpret as protocol-relative cross-origin URLs). Anything else returns
  * null so the caller falls back to "/" — this is the open-redirect guard
- * on the `returnTo` query parameter accepted by GET /auth/github.
+ * on the `returnTo` query parameter accepted by GET /auth/:providerId.
  */
 function sanitiseReturnTo(raw: unknown): string | null {
   if (typeof raw !== 'string' || raw.length === 0) return null;
@@ -70,147 +51,108 @@ function sanitiseReturnTo(raw: unknown): string | null {
   return raw;
 }
 
+/**
+ * Public handler (no auth) for `GET /api/auth/providers`. Lists the login
+ * options for the login page. In mock-auth mode it returns a single
+ * pseudo-provider so the login page still offers a way back in after an
+ * explicit logout.
+ */
+export const authProvidersHandler: RequestHandler = (_req, res) => {
+  if (!isAnyProviderConfigured()) {
+    // Mock-auth (dev) mode: a single pseudo-provider whose id routes to the
+    // mock branch of GET /auth/:providerId. Labelled "GitHub" so the dev
+    // login button reads identically to production's GitHub button.
+    res.json({ providers: [{ id: 'mock', label: 'GitHub' }], mockAuth: true });
+    return;
+  }
+  res.json({
+    providers: enabledProviders().map((p) => ({ id: p.id, label: p.label })),
+    mockAuth: false,
+  });
+};
+
 export function createAuthRoutes(): Router {
   const router = Router();
 
-  // --- GET /auth/github ---
-  // Redirect to GitHub's OAuth authorisation page. The user will be
-  // asked to grant our app access to their profile information.
-  router.get('/github', (req, res) => {
-    // Allow callers (e.g. LoginPage) to specify where to land after
-    // login completes. Validated to reject open-redirect attempts.
-    const returnTo = sanitiseReturnTo(req.query.returnTo);
-
-    if (!GITHUB_CLIENT_ID) {
-      // In mock auth mode, just clear the logged-out flag and redirect.
-      // The mock auth middleware will auto-populate the user on next request,
-      // so we can land directly on the requested URL without round-tripping
-      // through req.session.returnTo.
-      delete req.session.mockLoggedOut;
-      res.redirect(returnTo ?? '/');
+  // --- GET /auth/:providerId/callback ---
+  // The provider redirects back here with an authorisation code. Exchange
+  // it for a profile and store the user in the session. Registered before
+  // the bare `/:providerId` route so the deeper path matches first.
+  router.get('/:providerId/callback', async (req, res) => {
+    const provider = getProvider(req.params.providerId);
+    if (!provider) {
+      res.status(404).send('Unknown authentication provider');
       return;
     }
-
-    // Production OAuth — stash the requested URL in the session so the
-    // /github/callback handler can redirect back to it once GitHub has
-    // sent us the authorisation code.
-    if (returnTo) {
-      req.session.returnTo = returnTo;
-    }
-
-    const params = new URLSearchParams({
-      client_id: GITHUB_CLIENT_ID,
-      redirect_uri: GITHUB_CALLBACK_URL,
-      // Only profile data is needed. The autocomplete directory uses
-      // public-membership endpoints (`/user/orgs` returns publicly-visible
-      // org memberships without `read:org`; `/orgs/{org}/public_members`
-      // returns public members of an org without any user grant beyond
-      // identity), so we deliberately do not request `read:org` — that
-      // scope showed up in the consent screen as access to all of the
-      // user's org memberships including concealed ones in unrelated orgs.
-      scope: 'read:user',
-    });
-
-    res.redirect(`https://github.com/login/oauth/authorize?${params}`);
-  });
-
-  // --- GET /auth/github/callback ---
-  // GitHub redirects back here with an authorisation code. We exchange
-  // it for an access token, fetch the user's profile, and store it in
-  // the session.
-  router.get('/github/callback', async (req, res) => {
     const code = req.query.code as string | undefined;
     if (!code) {
       res.status(400).send('Missing authorisation code');
       return;
     }
-
     try {
-      // Step 1: Exchange the authorisation code for an access token
-      const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: GITHUB_CLIENT_ID,
-          client_secret: GITHUB_CLIENT_SECRET,
-          code,
-          redirect_uri: GITHUB_CALLBACK_URL,
-        }),
-      });
-
-      const tokenData = await tokenRes.json();
-      if (tokenData.error) {
-        warning('github_oauth_token_error', { description: tokenData.error_description });
+      const profile = await provider.exchangeCode(code, callbackUrl(provider.id));
+      if (!profile) {
         res.status(401).send('Authentication failed');
         return;
       }
-
-      const accessToken = tokenData.access_token as string;
-
-      // Step 2: Fetch the user's profile from the GitHub API
-      const userRes = await fetch('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github+json',
-        },
-      });
-
-      if (!userRes.ok) {
-        warning('github_user_api_error', { status: userRes.status });
-        res.status(401).send('Failed to fetch user profile');
-        return;
-      }
-
-      const userData = await userRes.json();
-
-      // Step 3: Store the user in the session
-      const user: User = {
-        ghid: userData.id,
-        ghUsername: userData.login,
-        // `||` (not `??`) so an empty/whitespace `name` also falls
-        // through to the login — same defensive shape as `fetchGitHubUser`.
-        name: userData.name?.trim() || userData.login,
-        organisation: userData.company ?? '',
-      };
-
-      const sessionUser = toSessionUser(user);
-      // Persist the OAuth bearer alongside the user so the server can call
-      // GitHub on the user's behalf later (autocomplete directory refresh,
-      // tier-3 user search). Held server-side only — `toClientUser` strips
-      // it before any response is shaped.
-      sessionUser.accessToken = accessToken;
+      const sessionUser = toSessionUser(profile.user);
+      // Persist any server-side access token alongside the user (e.g. for
+      // GitHub directory refreshes). `toClientUser` strips it before any
+      // response is shaped.
+      if (profile.accessToken) sessionUser.accessToken = profile.accessToken;
       req.session.user = sessionUser;
 
-      // Kick off a non-blocking refresh of the autocomplete directory for
-      // this user. We don't await it: the redirect should land immediately
-      // and the cache fills in the background. Errors (revoked token,
-      // network) are logged and dropped — the dropdown silently degrades.
-      warmDirectoryForUser(sessionUser).catch((err) => {
-        warning('directory_warm_failed', { error: serialiseError(err), ghUsername: sessionUser.ghUsername });
+      // Fire-and-forget directory warm (no-op for providers without one).
+      provider.directory?.warmDirectory(sessionUser).catch((err) => {
+        warning('directory_warm_failed', { error: serialiseError(err), provider: provider.id });
       });
 
-      // Redirect to the app's home page (the Vite dev server in development)
       const redirectTo = req.session.returnTo ?? '/';
       delete req.session.returnTo;
       res.redirect(redirectTo);
     } catch (err) {
-      logError('github_oauth_error', { error: serialiseError(err) });
+      logError('oauth_error', { error: serialiseError(err), provider: provider.id });
       res.status(500).send('Authentication failed');
     }
   });
 
   // --- GET /auth/logout ---
-  // Clear the user and redirect to the home page.
-  // In mock auth mode, set a flag so the middleware doesn't auto-repopulate.
+  // Clear the user and redirect home. In mock-auth mode, set a flag so the
+  // middleware doesn't auto-repopulate. Registered before `/:providerId` so
+  // "logout" isn't captured as a provider id.
   router.get('/logout', (req, res) => {
     delete req.session.user;
     req.session.mockLoggedOut = true;
     req.session.save(() => {
       res.redirect('/');
     });
+  });
+
+  // --- GET /auth/:providerId ---
+  // Redirect to the provider's authorisation page.
+  router.get('/:providerId', (req, res) => {
+    // Allow callers (e.g. LoginPage) to specify where to land after login.
+    // Validated to reject open-redirect attempts.
+    const returnTo = sanitiseReturnTo(req.query.returnTo);
+
+    if (!isAnyProviderConfigured()) {
+      // Mock-auth mode: any provider id just clears the logged-out flag.
+      // The mock middleware repopulates the user on the next request, so we
+      // can land directly on the requested URL.
+      delete req.session.mockLoggedOut;
+      res.redirect(returnTo ?? '/');
+      return;
+    }
+
+    const provider = getProvider(req.params.providerId);
+    if (!provider) {
+      res.status(404).send('Unknown authentication provider');
+      return;
+    }
+
+    // Stash the requested URL so the callback can redirect back to it.
+    if (returnTo) req.session.returnTo = returnTo;
+    res.redirect(provider.authorizationUrl({ redirectUri: callbackUrl(provider.id) }));
   });
 
   return router;
