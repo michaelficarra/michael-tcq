@@ -19,6 +19,7 @@ import { Logo } from '../components/Logo.js';
 import { MyMeetingsPanel } from '../components/MyMeetingsPanel.js';
 import { UserMenu } from '../components/UserMenu.js';
 import { useSlidingTabUnderline } from '../hooks/useSlidingTabUnderline.js';
+import { inputValidation } from '../lib/inputStyles.js';
 
 type HomeTab = 'join' | 'admin' | 'help';
 const HOME_TABS: readonly HomeTab[] = ['join', 'admin', 'help'];
@@ -283,9 +284,9 @@ function JoinMeetingCard() {
           onChange={(e) => setMeetingId(e.target.value)}
           placeholder="e.g. bright-pine-lake"
           required
-          className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-1
+          className={`w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-2 text-sm mb-1
                      bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100
-                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                     focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${inputValidation}`}
         />
 
         <button

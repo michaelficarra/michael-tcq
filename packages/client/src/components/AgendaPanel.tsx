@@ -47,6 +47,7 @@ import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/Mee
 import { useSocket } from '../contexts/SocketContext.js';
 import { useToast } from '../contexts/ToastContext.js';
 import { computeContainment } from '../lib/containment.js';
+import { inputValidation } from '../lib/inputStyles.js';
 import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
 import { useNow } from '../lib/secondClock.js';
@@ -274,9 +275,9 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                 required
                 autoFocus
                 aria-label="Agenda markdown URL"
-                className="border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
+                className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
                            dark:bg-stone-700 dark:text-stone-100
-                           focus:outline-none focus:ring-1 focus:ring-teal-500"
+                           focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
               />
               <button
                 type="submit"
@@ -588,9 +589,9 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             required
             autoFocus
             aria-label="Agenda item name"
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+            className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+                       focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
           />
           <div className="min-w-[10rem] max-w-[24rem]">
             <UserCombobox
@@ -610,9 +611,9 @@ const SortableAgendaItem = memo(function SortableAgendaItem({
             max="999"
             placeholder="min"
             aria-label={isPast ? 'Duration in minutes' : 'Estimate in minutes'}
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-16
+            className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-16
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+                       focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
           />
           <button
             type="submit"
@@ -808,9 +809,9 @@ const SortableSession = memo(function SortableSession({
             required
             autoFocus
             aria-label="Session name"
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
+            className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[120px]
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+                       focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
           />
           <input
             type="number"
@@ -820,9 +821,9 @@ const SortableSession = memo(function SortableSession({
             max="9999"
             required
             aria-label="Session capacity in minutes"
-            className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-20
+            className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-20
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-1 focus:ring-teal-500"
+                       focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
           />
           <button
             type="submit"

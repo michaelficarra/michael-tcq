@@ -48,6 +48,7 @@ import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
 const PollSetup = lazy(() => import('./PollSetup.js').then((m) => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
+import { inputValidation } from '../lib/inputStyles.js';
 
 // Stable references so useSensor's internal useMemo doesn't invalidate every render.
 const POINTER_SENSOR_OPTIONS = {
@@ -1056,9 +1057,9 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
               // immediately start typing. (For pending entries the input
               // starts empty, so the select is a no-op.)
               ref={editInputRef}
-              className="border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
+              className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm flex-1 min-w-[100px]
                          dark:bg-stone-700 dark:text-stone-100
-                         focus:outline-none focus:ring-1 focus:ring-teal-500"
+                         focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
             />
             <button
               type="submit"

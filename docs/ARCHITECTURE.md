@@ -127,6 +127,10 @@ Transient in-app messages — server-reported errors, failed actions, and the ag
 
 A join failure that arrives before any meeting state (e.g. "Meeting not found") is the exception: it's dispatched to `MeetingContext.error` for the page's full-page error fallback rather than a toast that would vanish. `useSocketConnection` branches on whether the version cursor is still null to tell the two apart.
 
+### Form validation: native `:user-invalid` + `useAriaInvalidSync`
+
+Constrained form controls style their validity with the native `:user-invalid` / `:user-valid` pseudo-classes, so error/success feedback is deferred to _after_ the user interacts rather than firing on first paint, with no per-field "touched" bookkeeping in React. The shared variant classes live in `lib/inputStyles.ts` (`inputValidation`). Since the pseudo-classes are purely visual, the `hooks/useAriaInvalidSync` hook — installed once at the app root — bridges them to `aria-invalid` for assistive tech, setting the attribute from capture-phase listeners (React owns these inputs' `value` but never renders `aria-invalid`, so it won't clobber it).
+
 ### State Management: React Context + useReducer
 
 The server is the single source of truth for meeting state. The client receives the full state on connection and state patches on updates. A single `MeetingContext` with a reducer that applies server messages is sufficient.

@@ -501,6 +501,8 @@ UI elements should meet the WCAG 2 AA minimum contrast ratio thresholds (4.5:1 f
 
 Any animations should be disabled when the user agent indicates that the user prefers reduced motion (i.e. the CSS `prefers-reduced-motion: reduce` media query matches).
 
+Form fields with constraints (required text fields, the numeric estimate/capacity inputs with their min/max bounds, and the agenda-import URL) give **inline validation feedback**, but only _after_ the user has finished interacting with a field — never prematurely while typing or on first load. A field left invalid once the user moves on (e.g. a required name left empty, or a number outside its allowed range) shows a red border and a subtle red tint; required fields show a subtle green border once satisfied. The feedback clears the instant the value becomes valid. This visual state is mirrored to assistive technology (the field is marked invalid for screen readers at the same moment the styling appears), and submitting a form with an invalid field focuses the first offending field and shows the browser's native validation message.
+
 ## Real-Time Updates
 
 All meeting state changes are broadcast to all connected participants in real time. This includes:

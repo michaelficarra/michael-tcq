@@ -5,6 +5,7 @@ import { PreferencesProvider } from './contexts/PreferencesContext.js';
 import { ToastProvider } from './contexts/ToastContext.js';
 import { PreferencesModal } from './components/PreferencesModal.js';
 import { LoginPage } from './pages/LoginPage.js';
+import { useAriaInvalidSync } from './hooks/useAriaInvalidSync.js';
 
 // Route-level code splitting: HomePage and MeetingPage each pull in a
 // large slice of the dependency tree (MeetingPage in particular owns the
@@ -27,6 +28,9 @@ function LoadingScreen() {
  * check whether the user is authenticated.
  */
 function App() {
+  // Keep aria-invalid mirrored to the visual :user-invalid state app-wide.
+  useAriaInvalidSync();
+
   return (
     <PreferencesProvider>
       <AuthProvider>

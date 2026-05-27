@@ -12,6 +12,7 @@ import { normaliseGithubUsername } from '@tcq/shared';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useMeetingState } from '../contexts/MeetingContext.js';
 import { UserCombobox } from './UserCombobox.js';
+import { inputValidation } from '../lib/inputStyles.js';
 
 interface AgendaFormProps {
   onCancel: () => void;
@@ -69,9 +70,9 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
+            className={`w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${inputValidation}`}
           />
         </div>
 
@@ -107,9 +108,9 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             value={estimate}
             onChange={(e) => setEstimate(e.target.value)}
             placeholder=""
-            className="w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
+            className={`w-full border border-stone-300 dark:border-stone-600 rounded px-3 py-1.5 text-sm
                        dark:bg-stone-700 dark:text-stone-100
-                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                       focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${inputValidation}`}
           />
           <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5">Minutes</p>
         </div>
