@@ -52,6 +52,7 @@ export type {
   UserSelection,
   SwitchUserBody,
   ImportAgendaBody,
+  PremiumUser,
   PremiumUserBody,
   PremiumUsersResponse,
   ChairsUpdatedDelta,

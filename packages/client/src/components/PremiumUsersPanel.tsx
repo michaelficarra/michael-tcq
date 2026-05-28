@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PremiumUsersResponse, User } from '@tcq/shared';
+import type { PremiumUser, PremiumUsersResponse, User } from '@tcq/shared';
 import { userKey } from '@tcq/shared';
 import { useToast } from '../contexts/ToastContext.js';
 import { UserBadge } from './UserBadge.js';
@@ -38,9 +38,13 @@ function selectionToPremiumRef(sel: SelectedUser): string {
   return user.provider === 'github' ? (user.handle ?? user.accountId) : userKey(user);
 }
 
-/** Build a display-only `User` from a stored premium reference for the badge.
- *  Bare → a GitHub handle; `provider:rest` → that provider, rest as the
- *  account id (and, for GitHub, the handle). No avatar (silhouette). */
+/** Build a display-only `User` from a stored premium reference, used only as
+ *  the optimistic placeholder while a freshly-added pill awaits the server's
+ *  resolved entry (which carries the real display name and avatar). Kept
+ *  provider-neutral — the parse mirrors `canonicalUserRef`'s format (bare → a
+ *  GitHub handle; `provider:rest` → that provider's account id) and the avatar
+ *  is left blank (the badge shows a silhouette) until the resolved entry lands
+ *  a moment later. */
 function refToUser(ref: string): User {
   const colon = ref.indexOf(':');
   if (colon === -1) {
@@ -48,19 +52,15 @@ function refToUser(ref: string): User {
   }
   const provider = ref.slice(0, colon);
   const rest = ref.slice(colon + 1);
-  return {
-    provider,
-    accountId: rest,
-    ...(provider === 'github' ? { handle: rest } : {}),
-    name: rest,
-    organisation: '',
-    avatarUrl: '',
-  };
+  return { provider, accountId: rest, name: rest, organisation: '', avatarUrl: '' };
 }
 
 export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
   const { showToast } = useToast();
-  const [usernames, setUsernames] = useState<string[]>([]);
+  // Resolved entries (canonical ref + display profile), sorted by ref to match
+  // the server. The ref is the identity key for dedup/remove; the user drives
+  // the badge.
+  const [entries, setEntries] = useState<PremiumUser[]>([]);
   const [loading, setLoading] = useState(true);
   // Monotonic generation counter for response ordering. Bumped on every
   // mutation (add / remove); GET responses that resolve with an older
@@ -72,7 +72,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
   // GET the canonical list from the server. Called on mount and on
   // every shared refresh tick — same pattern as AdminPanel so any
   // optimistic local divergence is reconciled within ~10 s.
-  const fetchUsernames = useCallback(async () => {
+  const fetchEntries = useCallback(async () => {
     // Capture the generation at fetch start so we can compare on resolve.
     const myGen = generationRef.current;
     try {
@@ -83,7 +83,7 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
         // mutation's response is authoritative and has already updated
         // state.
         if (myGen !== generationRef.current) return;
-        setUsernames(body.usernames);
+        setEntries(body.users);
       }
     } catch {
       // Silently swallow — same posture as AdminPanel. The next tick
@@ -98,19 +98,21 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
     // Intentional polled fetch — setState lands asynchronously after
     // the response, not synchronously inside the effect body.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchUsernames();
-  }, [fetchUsernames, refreshTick]);
+    fetchEntries();
+  }, [fetchEntries, refreshTick]);
 
   /** Add a reference — called when the combobox commits. The server
    *  canonicalises (case, `@`, provider prefix); we send the raw value. */
   async function handleAdd(rawUsername: string) {
     const value = rawUsername.trim();
-    if (value === '' || usernames.includes(value)) return;
-    // Optimistic insert so the pill appears immediately; the server's
-    // response replaces it with the canonical list (sorted) momentarily.
-    const optimistic = [...usernames, value].sort();
+    if (value === '' || entries.some((e) => e.ref === value)) return;
+    const previous = entries;
+    // Optimistic insert so the pill appears immediately; the placeholder
+    // carries a synthesised avatar until the server's resolved entry (real
+    // display name + avatar) replaces it. Sort by ref to match the server.
+    const optimistic = [...entries, { ref: value, user: refToUser(value) }].sort((a, b) => a.ref.localeCompare(b.ref));
     generationRef.current++;
-    setUsernames(optimistic);
+    setEntries(optimistic);
     try {
       const res = await fetch('/api/admin/premium-users', {
         method: 'POST',
@@ -119,39 +121,39 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
       });
       if (res.ok) {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
-        // Replace with the canonical list — this lets server-side
-        // canonicalisation (case, whitespace) take effect immediately
-        // rather than waiting for the next poll.
-        setUsernames(body.usernames);
+        // Replace with the canonical, resolved list — this lets server-side
+        // canonicalisation (case, whitespace) and profile resolution take
+        // effect immediately rather than waiting for the next poll.
+        setEntries(body.users);
       } else {
         // Roll back the optimistic add and surface the server message.
-        setUsernames(usernames);
+        setEntries(previous);
         const body = await res.json().catch(() => ({}));
         showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to add premium user' });
       }
     } catch {
-      setUsernames(usernames);
+      setEntries(previous);
       showToast({ message: 'Failed to add premium user' });
     }
   }
 
-  /** Remove a username via the × button on a pill. */
-  async function handleRemove(username: string) {
-    const previous = usernames;
+  /** Remove a premium user via the × button on a pill, keyed by canonical ref. */
+  async function handleRemove(ref: string) {
+    const previous = entries;
     generationRef.current++;
-    setUsernames(usernames.filter((u) => u !== username));
+    setEntries(entries.filter((e) => e.ref !== ref));
     try {
-      const res = await fetch(`/api/admin/premium-users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/premium-users/${encodeURIComponent(ref)}`, { method: 'DELETE' });
       if (!res.ok) {
-        setUsernames(previous);
+        setEntries(previous);
         const body = await res.json().catch(() => ({}));
         showToast({ message: typeof body.error === 'string' ? body.error : 'Failed to remove premium user' });
       } else {
         const body: PremiumUsersResponse & { ok: true } = await res.json();
-        setUsernames(body.usernames);
+        setEntries(body.users);
       }
     } catch {
-      setUsernames(previous);
+      setEntries(previous);
       showToast({ message: 'Failed to remove premium user' });
     }
   }
@@ -173,28 +175,28 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
           inputClassName="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
 
-        {usernames.length === 0 ? (
+        {entries.length === 0 ? (
           <p className="text-sm text-stone-600 dark:text-stone-300 italic">No premium users yet.</p>
         ) : (
           // Scrollable wrapped pill list — works for a handful of pills
           // up to several hundred without virtualisation. If the list
           // grows beyond that, swap in a virtualised renderer.
           <ul aria-label="Premium users" className="flex flex-wrap gap-2 max-h-64 overflow-y-auto">
-            {usernames.map((username) => (
+            {entries.map(({ ref, user }) => (
               // Pill styling intentionally matches the chair-list pill in
               // `AgendaPanel.tsx` (ChairsSection) — same rounded shape,
               // background, and remove-icon affordance, so admin users see
               // a single consistent "removable user pill" look across
               // the app.
               <li
-                key={username}
+                key={ref}
                 className="inline-flex items-center gap-1 bg-stone-200 dark:bg-stone-700 rounded-full pl-1 py-1 pr-1"
               >
-                <UserBadge user={refToUser(username)} size={18} />
+                <UserBadge user={user} size={18} />
                 <button
                   type="button"
-                  onClick={() => handleRemove(username)}
-                  aria-label={`Remove ${username}`}
+                  onClick={() => handleRemove(ref)}
+                  aria-label={`Remove ${ref}`}
                   className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
                 >
                   <CircleXIcon />

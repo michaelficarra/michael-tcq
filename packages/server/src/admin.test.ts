@@ -12,6 +12,7 @@ import { resetErrorBuffer } from './errorBuffer.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
 import { AppSettingsManager } from './appSettingsManager.js';
 import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
+import { resetPremiumDirectoryForTesting } from './premiumDirectory.js';
 
 /** The admin user for these tests. */
 const ADMIN_USER: User = githubUser({ id: 100, login: 'testadmin', name: 'Test Admin' });
@@ -69,6 +70,9 @@ describe('Admin endpoints', () => {
 
     manager = new MeetingManager(new InMemoryStore());
     appSettings = new AppSettingsManager(new InMemoryAppSettingsStore());
+    // The premium-ref resolution cache is module-scoped; clear it so resolved
+    // entries don't leak between tests.
+    resetPremiumDirectoryForTesting();
     disconnectedRooms.length = 0;
     const app = createTestApp(manager, appSettings);
     ({ baseUrl, close } = await listen(app));
@@ -410,19 +414,24 @@ describe('Admin endpoints', () => {
         const res = await fetch(`${baseUrl}/api/admin/premium-users`);
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body).toEqual({ usernames: [] });
+        expect(body).toEqual({ users: [] });
       });
 
-      it('returns the persisted list, sorted lexicographically', async () => {
+      it('returns the persisted list as resolved entries, sorted lexicographically by ref', async () => {
         // Seed in non-alphabetical order to verify the manager sorts on
         // output. The client relies on a stable order so its local
-        // optimistic state stays in sync with the canonical list.
+        // optimistic state stays in sync with the canonical list. Each entry
+        // pairs the canonical ref with a resolved display profile.
         await appSettings.addPremiumUsername('charlie');
         await appSettings.addPremiumUsername('alice');
         await appSettings.addPremiumUsername('bob');
         const res = await fetch(`${baseUrl}/api/admin/premium-users`);
         const body = await res.json();
-        expect(body).toEqual({ usernames: ['alice', 'bob', 'charlie'] });
+        expect(body.users.map((u: { ref: string }) => u.ref)).toEqual(['alice', 'bob', 'charlie']);
+        // In mock-auth mode a bare handle resolves (via the provider) to a
+        // GitHub user whose handle echoes the ref and who carries an avatar.
+        expect(body.users[0].user.handle).toBe('alice');
+        expect(body.users[0].user.avatarUrl).toBeTruthy();
       });
 
       it('returns 403 for non-admin users', async () => {
@@ -451,7 +460,7 @@ describe('Admin endpoints', () => {
         const body = await res.json();
         expect(body.ok).toBe(true);
         // Stored canonically — trimmed and lowercased to a bare handle.
-        expect(body.usernames).toEqual(['newpremium']);
+        expect(body.users.map((u: { ref: string }) => u.ref)).toEqual(['newpremium']);
         // Manager reflects the same state — confirms it went through
         // the manager, not just bounced off the HTTP layer.
         expect(appSettings.getPremiumUsernames()).toEqual(['newpremium']);
@@ -466,7 +475,7 @@ describe('Admin endpoints', () => {
         });
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.usernames).toEqual(['alice']);
+        expect(body.users.map((u: { ref: string }) => u.ref)).toEqual(['alice']);
       });
 
       it('normalises @-prefix and surrounding whitespace before validating', async () => {
@@ -477,7 +486,7 @@ describe('Admin endpoints', () => {
         });
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.usernames).toEqual(['alice']);
+        expect(body.users.map((u: { ref: string }) => u.ref)).toEqual(['alice']);
       });
 
       it('returns 400 for an empty username', async () => {
@@ -532,7 +541,7 @@ describe('Admin endpoints', () => {
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.ok).toBe(true);
-        expect(body.usernames).toEqual(['bob']);
+        expect(body.users.map((u: { ref: string }) => u.ref)).toEqual(['bob']);
         expect(appSettings.getPremiumUsernames()).toEqual(['bob']);
       });
 
@@ -540,7 +549,7 @@ describe('Admin endpoints', () => {
         const res = await fetch(`${baseUrl}/api/admin/premium-users/never-was-here`, { method: 'DELETE' });
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.usernames).toEqual([]);
+        expect(body.users).toEqual([]);
       });
 
       it('returns 400 when the path param fails validation', async () => {

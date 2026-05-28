@@ -571,12 +571,25 @@ export const PremiumUserBodySchema = z.object({
 export type PremiumUserBody = z.infer<typeof PremiumUserBodySchema>;
 
 /**
- * Shape of the responses from the admin premium-user endpoints. `usernames`
- * is sorted lexicographically over the canonical lowercased form so
- * clients can use referential/stringified equality for change detection.
+ * One entry in the premium-user list: the canonical stored reference plus a
+ * best-effort resolved profile for display. `ref` is the stable, lowercased
+ * canonical form (a bare GitHub handle or `provider:accountId`) used as the
+ * identity key for add/remove; `user` is the resolved `User` (real display
+ * name + avatar where the provider could be reached, otherwise a display-only
+ * fallback built from the ref) used to render the badge.
+ */
+export interface PremiumUser {
+  ref: string;
+  user: User;
+}
+
+/**
+ * Shape of the responses from the admin premium-user endpoints. `users` is
+ * sorted lexicographically by `ref` (the canonical lowercased form) so clients
+ * can rely on a stable order for change detection.
  */
 export interface PremiumUsersResponse {
-  usernames: string[];
+  users: PremiumUser[];
 }
 
 // -- Event interfaces --

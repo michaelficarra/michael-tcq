@@ -20,6 +20,7 @@ import { isMockAuthEnabled } from './mockAuth.js';
 import { providerById } from './auth/registry.js';
 import { resolveSelections } from './resolveUser.js';
 import { resolvePresenterFromDirectory, warmDirectoryForUser, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
+import { resolvePremiumUsers } from './premiumDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
@@ -559,13 +560,13 @@ export function createMeetingRoutes(
   // meeting rooms the affected user is sitting in, so badges/glow flip
   // on/off live without a page refresh.
 
-  router.get('/admin/premium-users', (req, res) => {
+  router.get('/admin/premium-users', async (req, res) => {
     const user = req.session.user;
     if (!user || !user.isAdmin) {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json(response);
   });
 
@@ -587,7 +588,7 @@ export function createMeetingRoutes(
     // socket traffic.
     const added = await appSettings.addPremiumUsername(parsed.data.username);
     if (added !== null) broadcastPremiumChange(io, meetingManager, appSettings, added);
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json({ ok: true, ...response });
   });
 
@@ -609,7 +610,7 @@ export function createMeetingRoutes(
     // removed (or null if it wasn't present); broadcast on an actual change.
     const removed = await appSettings.removePremiumUsername(parsed.data.username);
     if (removed !== null) broadcastPremiumChange(io, meetingManager, appSettings, removed);
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json({ ok: true, ...response });
   });
 
