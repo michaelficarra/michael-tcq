@@ -172,6 +172,9 @@ export function PremiumUsersPanel({ refreshTick }: { refreshTick: number }) {
           onCommit={(sel: SelectedUser) => handleAdd(selectionToPremiumRef(sel))}
           placeholder="GitHub username or provider:id"
           ariaLabel="Add premium user"
+          // Fill the panel width so the full placeholder is readable — the
+          // combobox wrapper is content-width (inline-block) by default.
+          wrapperClassName="w-full"
           inputClassName="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
 

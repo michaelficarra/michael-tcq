@@ -124,6 +124,13 @@ interface CommonProps {
   placeholder?: string;
   /** Extra classes for the input element. */
   inputClassName?: string;
+  /**
+   * Extra classes for the positioning wrapper around the input. The wrapper
+   * is `inline-block` by default (compact, content-width — right for the
+   * dev user-switcher and chair-add inputs); pass `w-full` here when the
+   * field should fill its container (e.g. so a long placeholder is readable).
+   */
+  wrapperClassName?: string;
   /** ARIA label for the input. */
   ariaLabel?: string;
   /** Whether to autofocus the input on mount. */
@@ -178,6 +185,7 @@ function SingleCombobox(props: SingleProps) {
     meetingId,
     placeholder,
     inputClassName,
+    wrapperClassName,
     ariaLabel,
     autoFocus,
     disabled,
@@ -291,7 +299,7 @@ function SingleCombobox(props: SingleProps) {
   }
 
   return (
-    <div className="relative inline-block">
+    <div className={`relative inline-block ${wrapperClassName ?? ''}`}>
       <input
         ref={inputRef}
         type="text"
