@@ -13,7 +13,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Logo } from '../components/Logo.js';
-import { GitHubMark, OrcidMark, DevMark } from '../components/BrandLogos.js';
+import { GitHubMark, OrcidMark, GoogleMark, DevMark } from '../components/BrandLogos.js';
 
 interface AuthProvider {
   id: string;
@@ -32,9 +32,10 @@ interface Brand {
 /**
  * Per-provider button styling. Real providers use their official brand colour
  * with a contrasting mark (white on GitHub's charcoal; dark on ORCID's green,
- * since white on `#a6ce39` fails contrast). The dev `mock` pseudo-provider
- * deliberately looks *unlike* a real provider: TCQ teal, a code-bracket glyph,
- * and explicit "dev mode" wording so nobody mistakes it for a production login.
+ * since white on `#a6ce39` fails contrast; dark text on Google's mandated white
+ * variant). The dev `mock` pseudo-provider deliberately looks *unlike* a real
+ * provider: TCQ teal, a code-bracket glyph, and explicit "dev mode" wording so
+ * nobody mistakes it for a production login.
  */
 const PROVIDER_BRAND: Record<string, Brand> = {
   github: {
@@ -46,6 +47,16 @@ const PROVIDER_BRAND: Record<string, Brand> = {
     className:
       'bg-[#a6ce39] text-[#1f2328] hover:bg-[#99be33] focus-visible:ring-[#a6ce39] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
     logo: <OrcidMark />,
+  },
+  google: {
+    // Google's "Sign in with Google" white variant: white background, dark
+    // text, thin grey border (#747775). Permitted in both light and dark mode;
+    // the text and the multi-colour "G" mark are mandated by the branding
+    // guidelines, so the text is set here and the mark is never recoloured.
+    className:
+      'bg-white text-[#1f1f1f] border border-[#747775] hover:bg-[#f8f9fa] focus-visible:ring-[#dadce0] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
+    logo: <GoogleMark />,
+    text: 'Sign in with Google',
   },
   mock: {
     className:

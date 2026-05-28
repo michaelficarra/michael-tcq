@@ -22,6 +22,7 @@ import { toSessionUser } from './session.js';
 import { warning, error as logError, serialiseError } from './logger.js';
 import { enabledProviders, getProvider } from './auth/registry.js';
 import { isMockAuthEnabled } from './mockAuth.js';
+import { recordUser } from './knownUsers.js';
 
 /**
  * Build the OAuth callback URL for a provider: `${base}/${providerId}/callback`,
@@ -102,6 +103,13 @@ export function createAuthRoutes(): Router {
       // response is shaped.
       if (profile.accessToken) sessionUser.accessToken = profile.accessToken;
       req.session.user = sessionUser;
+
+      // Seed the server-wide known-users cache so this account resolves to a
+      // real name + avatar wherever it's later referenced — covering users who
+      // log in but haven't yet joined any meeting (the meeting-user write path
+      // and boot restore cover the rest). Crucial for Google, which has no
+      // public lookup-by-id to re-resolve a stored reference.
+      recordUser(profile.user);
 
       // Fire-and-forget directory warm (no-op for providers without one).
       provider.directory?.warmDirectory(sessionUser).catch((err) => {

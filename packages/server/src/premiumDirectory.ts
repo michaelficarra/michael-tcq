@@ -24,6 +24,7 @@ import type { User, PremiumUser } from '@tcq/shared';
 import type { AuthenticationProvider } from './auth/provider.js';
 import { providerById } from './auth/registry.js';
 import { GITHUB_PROVIDER_ID } from './auth/githubUser.js';
+import { getKnownUserByProviderAccount, getKnownUserByHandle } from './knownUsers.js';
 
 interface CacheEntry {
   user: User;
@@ -96,6 +97,22 @@ async function resolveOne(ref: string): Promise<User> {
   if (cached && Date.now() < cached.expiresAt) return cached.user;
 
   const parsed = parseRef(ref);
+
+  // Before any provider round-trip, consult the server-wide known-users cache:
+  // a user seen anywhere on this server (login or any meeting) resolves to a
+  // real name + avatar for free. This is the only path that resolves a Google
+  // reference, which has no public lookup-by-id. A bare reference is a GitHub
+  // handle; otherwise it's a `provider:accountId` key.
+  const seen = parsed.isBareHandle
+    ? getKnownUserByHandle(parsed.accountId)
+    : getKnownUserByProviderAccount(parsed.provider, parsed.accountId);
+  if (seen) {
+    // Promote into the TTL cache so the panel's ~10 s poll is pure-cache for
+    // the next hour, exactly as a provider-resolved hit would be.
+    cache.set(ref, { user: seen, expiresAt: Date.now() + TTL_MS });
+    return seen;
+  }
+
   const impl = providerById(parsed.provider);
   let resolved: User | null = null;
   try {

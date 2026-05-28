@@ -1,9 +1,12 @@
 /**
  * Brand marks for the login buttons, used solely for the sanctioned
- * "Log in with <provider>" affordance. Single-path monochrome SVGs (24×24)
- * that inherit the button's text colour via `fill="currentColor"`, so each
- * button sets the appropriate contrasting fill. Artwork: Simple Icons (CC0);
- * the GitHub and ORCID marks are trademarks of their respective owners.
+ * "Log in with <provider>" affordance. Mostly single-path monochrome SVGs
+ * (24×24) that inherit the button's text colour via `fill="currentColor"`, so
+ * each button sets the appropriate contrasting fill. The Google mark is the
+ * exception: its four-colour logo carries hard-coded brand fills because
+ * Google's guidelines forbid recolouring it. Artwork: Simple Icons (CC0) for
+ * GitHub/ORCID; Google's own brand assets for the "G". The GitHub, ORCID, and
+ * Google marks are trademarks of their respective owners.
  */
 
 interface MarkProps {
@@ -24,6 +27,35 @@ export function OrcidMark({ className = 'h-5 w-5' }: MarkProps) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
       <path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z" />
+    </svg>
+  );
+}
+
+/**
+ * Google "G" mark. Unlike the GitHub and ORCID marks this is the official
+ * four-colour logo with hard-coded brand fills — Google's guidelines forbid
+ * recolouring it, so it deliberately does NOT use `fill="currentColor"`. Sits
+ * on the white "Sign in with Google" button.
+ */
+export function GoogleMark({ className = 'h-5 w-5' }: MarkProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        fill="#4285F4"
+        d="M23.52 12.273c0-.851-.076-1.67-.218-2.455H12v4.642h6.458a5.52 5.52 0 0 1-2.394 3.622v3.01h3.878c2.269-2.088 3.578-5.165 3.578-8.819z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.956-1.075 7.942-2.908l-3.878-3.01c-1.075.72-2.45 1.145-4.064 1.145-3.125 0-5.77-2.11-6.714-4.947H1.276v3.108A11.997 11.997 0 0 0 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.286 14.28a7.213 7.213 0 0 1-.376-2.28c0-.79.136-1.557.376-2.28V6.612H1.276A11.997 11.997 0 0 0 0 12c0 1.936.464 3.768 1.276 5.388l4.01-3.108z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.773c1.762 0 3.344.606 4.589 1.795l3.44-3.44C17.952 1.19 15.235 0 12 0A11.997 11.997 0 0 0 1.276 6.612l4.01 3.108C6.23 6.883 8.875 4.773 12 4.773z"
+      />
     </svg>
   );
 }

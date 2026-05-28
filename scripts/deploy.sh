@@ -54,7 +54,7 @@
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
 #     ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, ORCID_BASE_URL,
-#     OAUTH_CALLBACK_BASE_URL
+#     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_CALLBACK_BASE_URL
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -670,6 +670,8 @@ $([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_
 $([ -n "${ORCID_CLIENT_ID:-}" ] && echo "    ORCID_CLIENT_ID=${ORCID_CLIENT_ID}")
 $([ -n "${ORCID_CLIENT_SECRET:-}" ] && echo "    ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}")
 $([ -n "${ORCID_BASE_URL:-}" ] && echo "    ORCID_BASE_URL=${ORCID_BASE_URL}")
+$([ -n "${GOOGLE_CLIENT_ID:-}" ] && echo "    GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
+$([ -n "${GOOGLE_CLIENT_SECRET:-}" ] && echo "    GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}")
 $([ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "    OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}")
 
 runcmd:
@@ -781,6 +783,8 @@ EOF
   [ -n "${ORCID_CLIENT_ID:-}" ]       && echo "ORCID_CLIENT_ID=${ORCID_CLIENT_ID}"           >> "$env_tmp"
   [ -n "${ORCID_CLIENT_SECRET:-}" ]   && echo "ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}"   >> "$env_tmp"
   [ -n "${ORCID_BASE_URL:-}" ]        && echo "ORCID_BASE_URL=${ORCID_BASE_URL}"             >> "$env_tmp"
+  [ -n "${GOOGLE_CLIENT_ID:-}" ]      && echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${GOOGLE_CLIENT_SECRET:-}" ]  && echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" >> "$env_tmp"
   [ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}" >> "$env_tmp"
 
   # Wait briefly for SSH to come up on a fresh VM before the first
@@ -967,6 +971,59 @@ ensure_orcid_oauth() {
   deploy_to_vm
 }
 
+# Mirrors ensure_orcid_oauth for Google. Google's Cloud Console has no
+# pre-fillable form (and the client must be created in a GCP project), so we
+# print the credentials-page URL plus the exact redirect URI to register by
+# hand. Independent of GitHub/ORCID: enabling Google alone still writes the
+# shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
+ensure_google_oauth() {
+  if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/google/callback"
+
+  echo ""
+  echo "Google OAuth is not configured — \"Sign in with Google\" is disabled."
+  echo ""
+  echo "To enable Google sign-in, create an OAuth 2.0 client. Google has no"
+  echo "pre-fillable form, so create it manually:"
+  echo ""
+  echo "  1. Open https://console.cloud.google.com/apis/credentials"
+  echo "     (configure the OAuth consent screen first if prompted)."
+  echo "  2. Create Credentials → OAuth client ID → Application type: Web application."
+  echo "  3. Under \"Authorised redirect URIs\" add this URI exactly:"
+  echo "       $callback"
+  echo "  4. Note the Client ID and Client Secret."
+  echo ""
+
+  if ! confirm "Create the client now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable Google later, add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  GOOGLE_CLIENT_ID="$(prompt_with_default "Client ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  GOOGLE_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives Google's
+  # callback ($url/auth/google/callback) — the URI registered above — from it.
+  # Harmless to re-set if ensure_github_oauth/ensure_orcid_oauth wrote the same.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+  upsert_env GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1014,6 +1071,7 @@ EOF
 
   ensure_github_oauth
   ensure_orcid_oauth
+  ensure_google_oauth
 
   echo ""
   echo "Deploy complete!"

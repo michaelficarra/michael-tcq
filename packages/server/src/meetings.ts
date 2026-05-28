@@ -23,14 +23,19 @@ import {
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 import { info, notice, error as logError, serialiseError } from './logger.js';
+import { recordUser } from './knownUsers.js';
 
 /**
  * Register a user in a meeting's users map, returning their canonical key.
  * Always updates the stored user so name/organisation changes are picked up.
+ * Also records the user in the server-wide known-users cache — this is the
+ * single central write for meeting participants, so the cache stays current
+ * with every chair add, presenter, queue entry, and reaction.
  */
 export function ensureUser(meeting: MeetingState, user: User): UserKey {
   const key = userKey(user);
   meeting.users[key] = user;
+  recordUser(user);
   return key;
 }
 
@@ -162,6 +167,12 @@ export class MeetingManager {
         }
         this.meetings.set(meeting.id, meeting);
         this.logs.set(meeting.id, meetingLogs);
+        // Rebuild the known-users cache from the persisted participants, so a
+        // user referenced in any restored meeting resolves to a real name +
+        // avatar after a restart — without needing a provider lookup (which
+        // Google can't do). The only post-restart gap is users who logged in
+        // but never joined a meeting; they re-populate on their next request.
+        for (const user of Object.values(meeting.users)) recordUser(user);
       }
     }
 
@@ -180,6 +191,9 @@ export class MeetingManager {
     const chairIds = chairs.map((c) => {
       const key = userKey(c);
       users[key] = c;
+      // The meeting object doesn't exist yet, so this bypasses `ensureUser`;
+      // record the chair in the known-users cache directly to match it.
+      recordUser(c);
       return key;
     });
 

@@ -115,8 +115,8 @@ describe('LoginPage', () => {
   });
 
   it('renders a branded, logo-bearing button per configured provider', async () => {
-    // Both GitHub and ORCID enabled — the page renders one button each, in
-    // provider order (GitHub first → ORCID below), each linking to its own
+    // All three providers enabled — the page renders one button each, in
+    // provider order (GitHub → ORCID → Google), each linking to its own
     // /auth/:id route and carrying its brand colour + an inline SVG logo.
     queueResponse('/api/auth/providers', {
       ok: true,
@@ -125,6 +125,7 @@ describe('LoginPage', () => {
           providers: [
             { id: 'github', label: 'GitHub' },
             { id: 'orcid', label: 'ORCID' },
+            { id: 'google', label: 'Google' },
           ],
         }),
     });
@@ -132,17 +133,24 @@ describe('LoginPage', () => {
 
     const githubLink = (await screen.findByText('Log in with GitHub')).closest('a');
     const orcidLink = screen.getByText('Log in with ORCID').closest('a');
+    // Google mandates its own button text ("Sign in with Google"), so it uses
+    // the brand `text` override rather than the default "Log in with {label}".
+    const googleLink = screen.getByText('Sign in with Google').closest('a');
 
     expect(githubLink).toHaveAttribute('href', '/auth/github');
     expect(orcidLink).toHaveAttribute('href', '/auth/orcid');
+    expect(googleLink).toHaveAttribute('href', '/auth/google');
 
-    // Each uses its official brand colour (GitHub charcoal, ORCID green).
+    // Each uses its official brand colour (GitHub charcoal, ORCID green,
+    // Google's white variant).
     expect(githubLink).toHaveClass('bg-[#24292f]');
     expect(orcidLink).toHaveClass('bg-[#a6ce39]');
+    expect(googleLink).toHaveClass('bg-white');
 
     // Each button carries an inline brand SVG mark.
     expect(githubLink?.querySelector('svg')).toBeInTheDocument();
     expect(orcidLink?.querySelector('svg')).toBeInTheDocument();
+    expect(googleLink?.querySelector('svg')).toBeInTheDocument();
   });
 
   it('renders the mock pseudo-provider as a distinct dev-mode button', async () => {

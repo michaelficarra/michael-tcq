@@ -49,7 +49,7 @@ The script will:
 - Build the Docker image, push it, provision the VM with cloud-init that installs both systemd units (`tcq` and `caddy`) on first boot, copy a fresh env file to the VM via `gcloud compute scp`, and restart the `tcq` unit.
 - Print the static IP so you can configure your DNS A record.
 - Once the first deploy finishes, print a pre-filled GitHub OAuth App registration URL. Click it, hit **Register application**, copy the Client ID and Client Secret back into the prompt, and the script copies the new env to the VM and restarts.
-- Then offer the same for **ORCID**: since ORCID has no pre-fillable form, it prints the developer-tools URL and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping it (or skipping GitHub) just leaves that provider disabled. Both prompts are skipped on later runs once the credentials are in `.env.production`.
+- Then offer the same for **ORCID** and **Google**: neither has a pre-fillable form, so the script prints the registration URL (ORCID developer tools / Google Cloud credentials page) and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping any provider just leaves it disabled. All prompts are skipped on later runs once the credentials are in `.env.production`.
 
 Every step is idempotent. Re-running the script with a fully populated `.env.production` skips every prompt and behaves as a plain build + push + redeploy.
 
@@ -259,6 +259,16 @@ _Why:_ enables "Log in with ORCID". In your ORCID account → **Developer tools*
 For testing, register a separate client on the [ORCID Sandbox](https://sandbox.orcid.org) and
 set `ORCID_BASE_URL=https://sandbox.orcid.org`.
 
+### 14c. (Optional) Register a Google OAuth client
+
+_Why:_ enables "Sign in with Google". Open
+[Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+(configure the OAuth consent screen first if prompted), then **Create Credentials → OAuth
+client ID → Application type: Web application**. Under **Authorised redirect URIs** add
+`https://<your-domain>/auth/google/callback` exactly. Note the **Client ID** and **Client
+Secret**. Only the OpenID Connect `openid email profile` scopes are used — no extra APIs to
+enable.
+
 ### 15. Redeploy with OAuth
 
 _Why:_ the server reads provider credentials at boot, so they have to be in the env file the systemd unit passes to the container. The deploy script rewrites `/etc/tcq/env` and restarts the unit on every run.
@@ -275,9 +285,14 @@ ORCID_CLIENT_ID=<client-id>
 ORCID_CLIENT_SECRET=<client-secret>
 # ORCID_BASE_URL defaults to https://orcid.org; set to the sandbox for testing.
 
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=<client-id>
+GOOGLE_CLIENT_SECRET=<client-secret>
+
 # OAuth callback base — each provider's callback is ${base}/<provider>/callback,
-# so GitHub's is https://<your-domain>/auth/github/callback and ORCID's is
-# https://<your-domain>/auth/orcid/callback (register those with each provider).
+# so GitHub's is https://<your-domain>/auth/github/callback, ORCID's is
+# https://<your-domain>/auth/orcid/callback, and Google's is
+# https://<your-domain>/auth/google/callback (register those with each provider).
 # Defaults to http://localhost:3000/auth in dev.
 OAUTH_CALLBACK_BASE_URL=https://<your-domain>/auth
 ```

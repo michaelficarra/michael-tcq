@@ -3,6 +3,8 @@ import type { User } from '@tcq/shared';
 import { resolvePremiumUsers, resetPremiumDirectoryForTesting } from './premiumDirectory.js';
 import { githubProvider } from './auth/github.js';
 import { orcidProvider } from './auth/orcid.js';
+import { googleProvider } from './auth/google.js';
+import { recordUser, resetKnownUsersForTesting } from './knownUsers.js';
 
 /**
  * Resolution dispatches entirely through the `AuthenticationProvider`
@@ -23,6 +25,7 @@ const githubAlice: User = {
 describe('resolvePremiumUsers', () => {
   beforeEach(() => {
     resetPremiumDirectoryForTesting();
+    resetKnownUsersForTesting();
   });
 
   afterEach(() => {
@@ -97,6 +100,34 @@ describe('resolvePremiumUsers', () => {
     expect(entry.ref).toBe('alice');
     expect(entry.user.provider).toBe('github');
     expect(entry.user.name).toBe('alice');
+  });
+
+  it('resolves a Google reference from the known-users cache (Google has no id lookup)', async () => {
+    // Google omits resolveByAccountId, so a stored `google:<sub>` reference can
+    // only be resolved from the server-wide known-users cache. With a cache hit
+    // it shows the real name + avatar instead of the bare-sub silhouette.
+    const ada: User = {
+      provider: 'google',
+      accountId: 'sub-ada',
+      handle: undefined,
+      name: 'Ada Lovelace',
+      organisation: 'analytical.test',
+      avatarUrl: 'https://lh3.googleusercontent.com/a/ada=s96',
+    };
+    recordUser(ada);
+    // Sanity: the provider genuinely has no id resolver to fall back on.
+    expect(googleProvider.resolveByAccountId).toBeUndefined();
+
+    const [entry] = await resolvePremiumUsers(['google:sub-ada']);
+    expect(entry.user).toEqual(ada);
+    expect(entry.user.name).toBe('Ada Lovelace');
+  });
+
+  it('falls back to the bare-sub silhouette for an unknown Google reference', async () => {
+    const [entry] = await resolvePremiumUsers(['google:never-seen']);
+    expect(entry.user.name).toBe('never-seen');
+    // Google synthesises no avatar from the sub, so the fallback is empty.
+    expect(entry.user.avatarUrl).toBe('');
   });
 
   it('resolves multiple references in one call, preserving order', async () => {

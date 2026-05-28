@@ -25,6 +25,7 @@ import { isMockAuthEnabled } from './mockAuth.js';
 import { providerById } from './auth/registry.js';
 import { findUserByHandle } from './auth/githubUser.js';
 import { mockUserFromLogin, mockUserFromId } from './mockUser.js';
+import { getKnownUser, getKnownUserByHandle } from './knownUsers.js';
 
 /**
  * Whether a selection refers to the acting user themselves — used by the
@@ -63,6 +64,10 @@ function resolveSelectionSync(
     if (session.handle?.toLowerCase() === handle.toLowerCase()) return sessionAsUser(session);
     const known = findUserByHandle(meeting, handle);
     if (known) return known;
+    // Server-wide known-users fallback: a handle seen on this server (in
+    // another meeting, or at login) resolves without a provider round-trip.
+    const seen = getKnownUserByHandle(handle);
+    if (seen) return seen;
     // Dev (mock-auth) mode: resolve synchronously via the seed-aware helper.
     if (isMockAuthEnabled()) return mockUserFromLogin(handle);
     return null;
@@ -71,6 +76,11 @@ function resolveSelectionSync(
   if (userKey(session) === key) return sessionAsUser(session);
   const known = meeting?.users[key as UserKey];
   if (known) return known;
+  // Server-wide known-users fallback: an account seen anywhere on this server
+  // resolves synchronously — essential for Google, which has no public
+  // lookup-by-id for the async `resolveByAccountId` path to fall back on.
+  const seen = getKnownUser(key);
+  if (seen) return seen;
   // Dev mode: re-resolve a picked id via the seed (null if not a seed member).
   if (isMockAuthEnabled()) return mockUserFromId(sel.accountId);
   return null;
