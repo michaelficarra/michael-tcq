@@ -83,6 +83,44 @@ describe('UserBadge', () => {
     expect(nameSpan).toHaveAttribute('title', '@alice · github');
   });
 
+  it('shows an ORCID user by display name, with the ORCID iD on hover (not the iD as the label)', () => {
+    // ORCID users have no handle and the iD is the account identifier.
+    // The badge must show the human display name as the visible label and
+    // surface the iD on hover — the ORCID analogue of GitHub's @handle
+    // tooltip — rather than rendering the bare iD as the name.
+    const grace: User = {
+      provider: 'orcid',
+      accountId: '0000-0002-1825-0097',
+      handle: undefined,
+      name: 'Grace Hopper',
+      organisation: 'US Navy',
+      avatarUrl: 'https://gravatar.com/avatar/abc?d=identicon&s=80',
+    };
+    render(<UserBadge user={grace} />);
+    const nameSpan = screen.getByText('Grace Hopper');
+    expect(nameSpan).toBeInTheDocument();
+    expect(nameSpan).toHaveAttribute('title', '0000-0002-1825-0097 · orcid');
+    // The iD is not shown as visible label text — only in the tooltip.
+    expect(screen.queryByText('0000-0002-1825-0097')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the ORCID iD as the label only when the user has no display name', () => {
+    // When ORCID exposes no public name there is nothing else to show, so
+    // the iD becomes the visible label (mirroring GitHub's fall-back to the
+    // login). The tooltip still carries the iD and provider.
+    const anon: User = {
+      provider: 'orcid',
+      accountId: '0000-0002-1825-0097',
+      handle: undefined,
+      name: '',
+      organisation: '',
+      avatarUrl: '',
+    };
+    render(<UserBadge user={anon} />);
+    const label = screen.getByText('0000-0002-1825-0097');
+    expect(label).toHaveAttribute('title', '0000-0002-1825-0097 · orcid');
+  });
+
   it('applies a max-width and truncation to the organisation only (not the name)', () => {
     render(<UserBadge user={alice} />);
     const orgSpan = screen.getByText('ACME Corp');

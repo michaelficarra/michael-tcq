@@ -9,9 +9,11 @@
 
 import type { AuthenticationProvider } from './provider.js';
 import { githubProvider } from './github.js';
+import { orcidProvider } from './orcid.js';
 
-/** All known providers, enabled or not. Order is the login-button order. */
-const ALL_PROVIDERS: readonly AuthenticationProvider[] = [githubProvider];
+/** All known providers, enabled or not. Order is the login-button order
+ *  (GitHub, then ORCID). */
+const ALL_PROVIDERS: readonly AuthenticationProvider[] = [githubProvider, orcidProvider];
 
 /** Providers that are actually configured (credentials present). */
 export function enabledProviders(): AuthenticationProvider[] {
@@ -35,10 +37,10 @@ export function providerById(id: string): AuthenticationProvider | undefined {
 }
 
 /**
- * Whether any provider is configured. When false the server runs in
- * mock-auth mode (a fake user is injected and `/api/dev/switch-user` is
- * enabled). This is the multi-provider generalisation of the former
- * single-provider `isOAuthConfigured()` check.
+ * Whether any provider is configured. When false *and* the process is not
+ * running in production, the server falls back to mock-auth mode — see
+ * `isMockAuthEnabled()` in `../mockAuth.ts`, which combines this with the
+ * environment check.
  */
 export function isAnyProviderConfigured(): boolean {
   return ALL_PROVIDERS.some((p) => p.enabled);

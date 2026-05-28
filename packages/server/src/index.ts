@@ -26,7 +26,7 @@ import { createMeetingRoutes } from './routes.js';
 import { createAuthRoutes, authProvidersHandler } from './auth.js';
 import { enabledProviders } from './auth/registry.js';
 import { requireAuth } from './requireAuth.js';
-import { mockAuth, isOAuthConfigured } from './mockAuth.js';
+import { mockAuth, isMockAuthEnabled } from './mockAuth.js';
 import { upgradeSessionUser } from './session.js';
 import { securityHeaders } from './securityHeaders.js';
 import { registerSocketHandlers } from './socket.js';
@@ -282,9 +282,13 @@ process.on('unhandledRejection', (reason) => {
 async function start() {
   // Log which modes are active
   info('server_starting', { persistence: STORE_TYPE });
+  // 'oauth' when real providers are configured, 'mock' for the dev auto-login,
+  // and 'none' when neither applies (e.g. a production deploy missing its OAuth
+  // credentials) — that state fails closed, so surface it loudly in the logs.
+  const providerIds = enabledProviders().map((p) => p.id);
   info('auth_mode', {
-    mode: isOAuthConfigured() ? 'oauth' : 'mock',
-    providers: enabledProviders().map((p) => p.id),
+    mode: providerIds.length > 0 ? 'oauth' : isMockAuthEnabled() ? 'mock' : 'none',
+    providers: providerIds,
   });
 
   // Restore any persisted meetings from the store. If this fails

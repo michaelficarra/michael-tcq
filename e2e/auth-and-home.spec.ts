@@ -13,7 +13,9 @@ test.describe('Authentication / Login', () => {
     await page.goto('/auth/logout');
     await page.waitForURL('/');
     await expect(page.getByText('Welcome to TCQ')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Log in with GitHub' })).toBeVisible();
+    // In mock-auth (dev) mode the single login button is the distinct teal
+    // "Enter dev mode" button rather than a real provider button.
+    await expect(page.getByRole('link', { name: 'Enter dev mode' })).toBeVisible();
   });
 
   test('after logout, visiting / shows the login page', async ({ page }) => {
@@ -36,16 +38,16 @@ test.describe('Authentication / Login', () => {
   test('logging in from a meeting deep-link returns to that meeting', async ({ page }) => {
     // Create a meeting while logged in so we have a real id, then log out
     // and deep-link back to it — the LoginPage should preserve the URL so
-    // clicking "Log in with GitHub" returns us to the same meeting page
+    // clicking the dev-mode login button returns us to the same meeting page
     // instead of the home page.
     const id = await createMeeting(page);
     await page.goto('/auth/logout');
     await page.waitForURL('/');
 
     await page.goto(`/meeting/${encodeURIComponent(id)}`);
-    await expect(page.getByRole('link', { name: 'Log in with GitHub' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Enter dev mode' })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Log in with GitHub' }).click();
+    await page.getByRole('link', { name: 'Enter dev mode' }).click();
     await page.waitForURL(`**/meeting/${encodeURIComponent(id)}`);
     // The meeting page renders (Queue tab is the default).
     await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');

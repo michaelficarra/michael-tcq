@@ -16,7 +16,7 @@ import {
   placeholderUser,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
-import { isOAuthConfigured } from './mockAuth.js';
+import { isMockAuthEnabled } from './mockAuth.js';
 import { providerById } from './auth/registry.js';
 import { resolveSelections } from './resolveUser.js';
 import { resolvePresenterFromDirectory, warmDirectoryForUser, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
@@ -54,14 +54,14 @@ export function createMeetingRoutes(
       return;
     }
     // toClientUser strips the OAuth access token (server-only) before serialising.
-    res.json({ ...toClientUser(user, appSettings), mockAuth: !isOAuthConfigured() });
+    res.json({ ...toClientUser(user, appSettings), mockAuth: isMockAuthEnabled() });
   });
 
   // --- Dev-only: switch the mock user ---
   // Allows changing the logged-in identity during development without
   // OAuth. Only available when mock auth is active.
   router.post('/dev/switch-user', (req, res) => {
-    if (isOAuthConfigured()) {
+    if (!isMockAuthEnabled()) {
       res.status(404).json({ error: 'Not available' });
       return;
     }

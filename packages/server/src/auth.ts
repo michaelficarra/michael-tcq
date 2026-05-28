@@ -20,7 +20,8 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { toSessionUser } from './session.js';
 import { warning, error as logError, serialiseError } from './logger.js';
-import { enabledProviders, getProvider, isAnyProviderConfigured } from './auth/registry.js';
+import { enabledProviders, getProvider } from './auth/registry.js';
+import { isMockAuthEnabled } from './mockAuth.js';
 
 /**
  * Build the OAuth callback URL for a provider: `${base}/${providerId}/callback`,
@@ -54,13 +55,17 @@ function sanitiseReturnTo(raw: unknown): string | null {
  * explicit logout.
  */
 export const authProvidersHandler: RequestHandler = (_req, res) => {
-  if (!isAnyProviderConfigured()) {
+  if (isMockAuthEnabled()) {
     // Mock-auth (dev) mode: a single pseudo-provider whose id routes to the
-    // mock branch of GET /auth/:providerId. Labelled "GitHub" so the dev
-    // login button reads identically to production's GitHub button.
-    res.json({ providers: [{ id: 'mock', label: 'GitHub' }], mockAuth: true });
+    // mock branch of GET /auth/:providerId. The client renders the `mock` id
+    // as a distinct teal "Enter dev mode" button so it's never mistaken for a
+    // real OAuth login; the label is only a fallback.
+    res.json({ providers: [{ id: 'mock', label: 'Dev Mode' }], mockAuth: true });
     return;
   }
+  // Either real providers are configured, or none are and we're in production
+  // (mock auth disabled) — in the latter case the list is empty and the login
+  // page simply offers no way in, which is the intended fail-closed behaviour.
   res.json({
     providers: enabledProviders().map((p) => ({ id: p.id, label: p.label })),
     mockAuth: false,
@@ -131,7 +136,7 @@ export function createAuthRoutes(): Router {
     // Validated to reject open-redirect attempts.
     const returnTo = sanitiseReturnTo(req.query.returnTo);
 
-    if (!isAnyProviderConfigured()) {
+    if (isMockAuthEnabled()) {
       // Mock-auth mode: any provider id just clears the logged-out flag.
       // The mock middleware repopulates the user on the next request, so we
       // can land directly on the requested URL.

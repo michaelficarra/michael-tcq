@@ -109,4 +109,24 @@ describe('Auth routes', () => {
       expect(res.headers.get('location')).toBe('/');
     });
   });
+
+  describe('production with no providers (fail closed)', () => {
+    // A production deploy missing its OAuth credentials must NOT fall back to
+    // the mock-auth redirect — the `mock` branch is gated on a non-production
+    // environment. With no enabled provider, `/auth/github` resolves to no
+    // provider and 404s instead of bouncing through mock login.
+    const original = process.env.NODE_ENV;
+    beforeEach(() => {
+      process.env.NODE_ENV = 'production';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = original;
+    });
+
+    it('does not mock-redirect /auth/github; returns 404', async () => {
+      const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      expect(res.status).toBe(404);
+    });
+  });
 });

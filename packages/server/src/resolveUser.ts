@@ -21,7 +21,7 @@
 import type { MeetingState, User, UserKey, UserSelection } from '@tcq/shared';
 import { userKey, placeholderUser } from '@tcq/shared';
 import type { SessionUser } from './session.js';
-import { isOAuthConfigured } from './mockAuth.js';
+import { isMockAuthEnabled } from './mockAuth.js';
 import { providerById } from './auth/registry.js';
 import { findUserByHandle } from './auth/githubUser.js';
 import { mockUserFromLogin, mockUserFromId } from './mockUser.js';
@@ -64,7 +64,7 @@ function resolveSelectionSync(
     const known = findUserByHandle(meeting, handle);
     if (known) return known;
     // Dev (mock-auth) mode: resolve synchronously via the seed-aware helper.
-    if (!isOAuthConfigured()) return mockUserFromLogin(handle);
+    if (isMockAuthEnabled()) return mockUserFromLogin(handle);
     return null;
   }
   const key = userKey(sel);
@@ -72,7 +72,7 @@ function resolveSelectionSync(
   const known = meeting?.users[key as UserKey];
   if (known) return known;
   // Dev mode: re-resolve a picked id via the seed (null if not a seed member).
-  if (!isOAuthConfigured()) return mockUserFromId(sel.accountId);
+  if (isMockAuthEnabled()) return mockUserFromId(sel.accountId);
   return null;
 }
 

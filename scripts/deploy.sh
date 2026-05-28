@@ -53,6 +53,7 @@
 #
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
+#     ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, ORCID_BASE_URL,
 #     OAUTH_CALLBACK_BASE_URL
 #
 # Usage:
@@ -666,6 +667,9 @@ $([ -n "${FIRESTORE_DATABASE_ID:-}" ] && echo "    FIRESTORE_DATABASE_ID=${FIRES
 $([ -n "${ADMIN_USERNAMES:-}" ] && echo "    ADMIN_USERNAMES=${ADMIN_USERNAMES}")
 $([ -n "${GITHUB_CLIENT_ID:-}" ] && echo "    GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}")
 $([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}")
+$([ -n "${ORCID_CLIENT_ID:-}" ] && echo "    ORCID_CLIENT_ID=${ORCID_CLIENT_ID}")
+$([ -n "${ORCID_CLIENT_SECRET:-}" ] && echo "    ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}")
+$([ -n "${ORCID_BASE_URL:-}" ] && echo "    ORCID_BASE_URL=${ORCID_BASE_URL}")
 $([ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "    OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}")
 
 runcmd:
@@ -774,6 +778,9 @@ EOF
   [ -n "${ADMIN_USERNAMES:-}" ]       && echo "ADMIN_USERNAMES=${ADMIN_USERNAMES}"           >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_ID:-}" ]      && echo "GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"         >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_SECRET:-}" ]  && echo "GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${ORCID_CLIENT_ID:-}" ]       && echo "ORCID_CLIENT_ID=${ORCID_CLIENT_ID}"           >> "$env_tmp"
+  [ -n "${ORCID_CLIENT_SECRET:-}" ]   && echo "ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}"   >> "$env_tmp"
+  [ -n "${ORCID_BASE_URL:-}" ]        && echo "ORCID_BASE_URL=${ORCID_BASE_URL}"             >> "$env_tmp"
   [ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}" >> "$env_tmp"
 
   # Wait briefly for SSH to come up on a fresh VM before the first
@@ -905,6 +912,61 @@ ensure_github_oauth() {
   deploy_to_vm
 }
 
+# Mirrors ensure_github_oauth for ORCID. ORCID has no pre-fillable
+# registration form (and no API to create a client), so instead of a deep
+# link we print the developer-tools URL plus the exact redirect URI to
+# register by hand. Independent of GitHub: enabling ORCID alone still writes
+# the shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
+ensure_orcid_oauth() {
+  if [ -n "${ORCID_CLIENT_ID:-}" ] && [ -n "${ORCID_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/orcid/callback"
+
+  echo ""
+  echo "ORCID OAuth is not configured — \"Log in with ORCID\" is disabled."
+  echo ""
+  echo "To enable ORCID sign-in, register a public-API client in your ORCID"
+  echo "account (the account needs a verified email, or Developer tools stays"
+  echo "locked). ORCID has no pre-fillable form, so register it manually:"
+  echo ""
+  echo "  1. Sign in at https://orcid.org, then open https://orcid.org/developer-tools"
+  echo "  2. Register for the public API and add this Redirect URI exactly:"
+  echo "       $callback"
+  echo "  3. Note the Client ID (APP-XXXXXXXXXXXXXXXX) and Client Secret."
+  echo ""
+  echo "(To test against the sandbox instead, register at https://sandbox.orcid.org"
+  echo "and add ORCID_BASE_URL=https://sandbox.orcid.org to $ENV_FILE.)"
+  echo ""
+
+  if ! confirm "Register the client now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable ORCID later, add ORCID_CLIENT_ID, ORCID_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  ORCID_CLIENT_ID="$(prompt_with_default "Client ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  ORCID_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives ORCID's
+  # callback ($url/auth/orcid/callback) — the URI registered above — from it.
+  # Harmless to re-set if ensure_github_oauth already wrote the same value.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env ORCID_CLIENT_ID "$ORCID_CLIENT_ID"
+  upsert_env ORCID_CLIENT_SECRET "$ORCID_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -951,6 +1013,7 @@ EOF
   deploy_to_vm
 
   ensure_github_oauth
+  ensure_orcid_oauth
 
   echo ""
   echo "Deploy complete!"

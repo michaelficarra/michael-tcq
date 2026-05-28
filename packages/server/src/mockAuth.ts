@@ -1,12 +1,15 @@
 /**
  * Mock authentication middleware for development.
  *
- * When no authentication provider is configured, this middleware
- * automatically sets a fake user on every request's session. This allows
- * features to be developed and tested without creating an OAuth App.
+ * When mock auth is enabled, this middleware automatically sets a fake user
+ * on every request's session. This allows features to be developed and tested
+ * without creating an OAuth App.
  *
- * When any provider IS configured, this middleware does nothing and real
- * OAuth is used instead.
+ * Mock auth is enabled only in a non-production environment AND when no real
+ * authentication provider is configured. Gating on the environment (not just
+ * the absence of providers) is a safety measure: a production deploy that is
+ * missing its OAuth credentials must fail closed — returning 401s — rather
+ * than silently auto-logging everyone in as the admin mock user.
  */
 
 import type { RequestHandler } from 'express';
@@ -24,21 +27,22 @@ import { mockUserFromLogin } from './mockUser.js';
 export const MOCK_USER: User = { ...mockUserFromLogin('admin'), name: 'Admin' };
 
 /**
- * Returns true if any authentication provider is configured. When true,
- * mock auth is skipped and real OAuth is used. Retains the historical name
- * `isOAuthConfigured` (now a thin alias) so the many call sites that gate
- * mock-only behaviour on it don't need to change.
+ * Whether mock auth is active. True only outside production AND when no real
+ * authentication provider is configured — see the module comment for why the
+ * environment check matters. Every mock-only code path (the auto-login
+ * middleware, the `/api/dev/switch-user` endpoint, the `mock` pseudo-provider
+ * on the login page, mock user resolution) gates on this.
  */
-export function isOAuthConfigured(): boolean {
-  return isAnyProviderConfigured();
+export function isMockAuthEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' && !isAnyProviderConfigured();
 }
 
 /**
- * Middleware that injects a mock user into the session when OAuth
- * is not configured. Does nothing when OAuth credentials are present.
+ * Middleware that injects a mock user into the session when mock auth is
+ * enabled. Does nothing in production or when OAuth credentials are present.
  */
 export const mockAuth: RequestHandler = (req, _res, next) => {
-  if (!isOAuthConfigured() && !req.session.user && !req.session.mockLoggedOut) {
+  if (isMockAuthEnabled() && !req.session.user && !req.session.mockLoggedOut) {
     req.session.user = toSessionUser(MOCK_USER);
   }
   next();

@@ -732,6 +732,17 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
 
   if (!pos) return null;
 
+  // For handle-less providers (e.g. ORCID) we show name + organisation and
+  // reveal the opaque account id (the ORCID iD) only to disambiguate rows
+  // that share the same (name, organisation) pair.
+  const nameOrgCounts = new Map<string, number>();
+  for (const s of results) {
+    if (!s.user.handle) {
+      const k = `${s.user.name} ${s.user.organisation}`;
+      nameOrgCounts.set(k, (nameOrgCounts.get(k) ?? 0) + 1);
+    }
+  }
+
   return (
     <ul
       id={id}
@@ -758,11 +769,9 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
     >
       {results.map((suggestion, i) => {
         const user = suggestion.user;
-        // Primary identifier shown on the row: the handle when the provider
-        // exposes one (GitHub), otherwise the opaque account id. Used both
-        // as the row label and for the "don't repeat the display name when
-        // it equals the identifier" check below.
-        const identifier = user.handle ?? user.accountId;
+        // A handle-less suggestion shows its account id only when its
+        // (name, organisation) pair collides with another row.
+        const ambiguous = !user.handle && (nameOrgCounts.get(`${user.name} ${user.organisation}`) ?? 0) > 1;
         return (
           <li
             key={userKey(user)}
@@ -798,9 +807,24 @@ function SuggestionList({ id, results, highlighted, onPick, onHover, anchorRef }
               style={{ width: 20, height: 20, minWidth: 20, minHeight: 20 }}
               className="rounded-full shrink-0"
             />
-            <span>{identifier}</span>
-            {user.name && user.name !== identifier && (
-              <span className="text-stone-500 dark:text-stone-400">{user.name}</span>
+            {user.handle ? (
+              // Provider with a handle (GitHub): handle is the primary label,
+              // display name follows when it differs.
+              <>
+                <span>{user.handle}</span>
+                {user.name && user.name !== user.handle && (
+                  <span className="text-stone-500 dark:text-stone-400">{user.name}</span>
+                )}
+              </>
+            ) : (
+              // Handle-less provider (ORCID): name is primary; the account id
+              // (iD) appears only to disambiguate a duplicate (name, org) pair.
+              <>
+                <span>{user.name}</span>
+                {ambiguous && user.name !== user.accountId && (
+                  <span className="text-stone-500 dark:text-stone-400 text-xs">{user.accountId}</span>
+                )}
+              </>
             )}
             {user.organisation && (
               // Organisation gets a fixed max-width and ellipsis so a long

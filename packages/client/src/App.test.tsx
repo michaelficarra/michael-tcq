@@ -113,6 +113,56 @@ describe('LoginPage', () => {
     const link = await screen.findByText('Log in with GitHub');
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github?returnTo=%2Fmeeting%2Ffoo');
   });
+
+  it('renders a branded, logo-bearing button per configured provider', async () => {
+    // Both GitHub and ORCID enabled — the page renders one button each, in
+    // provider order (GitHub first → ORCID below), each linking to its own
+    // /auth/:id route and carrying its brand colour + an inline SVG logo.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          providers: [
+            { id: 'github', label: 'GitHub' },
+            { id: 'orcid', label: 'ORCID' },
+          ],
+        }),
+    });
+    renderAt('/');
+
+    const githubLink = (await screen.findByText('Log in with GitHub')).closest('a');
+    const orcidLink = screen.getByText('Log in with ORCID').closest('a');
+
+    expect(githubLink).toHaveAttribute('href', '/auth/github');
+    expect(orcidLink).toHaveAttribute('href', '/auth/orcid');
+
+    // Each uses its official brand colour (GitHub charcoal, ORCID green).
+    expect(githubLink).toHaveClass('bg-[#24292f]');
+    expect(orcidLink).toHaveClass('bg-[#a6ce39]');
+
+    // Each button carries an inline brand SVG mark.
+    expect(githubLink?.querySelector('svg')).toBeInTheDocument();
+    expect(orcidLink?.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('renders the mock pseudo-provider as a distinct dev-mode button', async () => {
+    // In dev (mock-auth) mode the providers endpoint returns the `mock`
+    // pseudo-provider. The button must read "Enter dev mode" (not "Log in
+    // with …"), use TCQ teal, and carry a caption flagging it as mock auth.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'mock', label: 'Dev Mode' }], mockAuth: true }),
+    });
+    renderAt('/');
+
+    const link = (await screen.findByText('Enter dev mode')).closest('a');
+    expect(link).toHaveAttribute('href', '/auth/mock');
+    expect(link).toHaveClass('bg-teal-700');
+    // No "Log in with …" phrasing for the dev button.
+    expect(screen.queryByText(/Log in with/)).not.toBeInTheDocument();
+    // The mock-auth caption is shown beneath the button.
+    expect(screen.getByText('Mock authentication — no OAuth provider is configured.')).toBeInTheDocument();
+  });
 });
 
 describe('HomePage', () => {
