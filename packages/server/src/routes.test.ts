@@ -5,6 +5,7 @@ import type { User } from '@tcq/shared';
 import { asUserKey, userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
 import { githubUser } from './auth/githubUser.js';
+import { googleUser } from './auth/googleUser.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { createMeetingRoutes } from './routes.js';
 import { toSessionUser } from './session.js';
@@ -606,6 +607,59 @@ describe('Meeting REST routes', () => {
       const presenter = firstPresenter(meeting, 0);
       expect(presenter.avatarUrl).toBe('');
       expect(presenter.handle).toBe('Daniel');
+    });
+
+    it("resolves presenters through the importer's own provider directory, not a hardcoded GitHub one", async () => {
+      // Regression guard for the provider-dispatch change: import resolution
+      // runs through `providerById(importer.provider).directory`, so a
+      // non-GitHub importer never falls through to GitHub's DEV_USERS seed.
+      // Google's directory is meeting-tier only, so a name matching a Google
+      // meeting-user resolves, while a name that exists *only* in GitHub's
+      // tier-2 seed does not — under the old GitHub-hardcoded path,
+      // "Daniel Ehrenberg" would have resolved to littledan.
+      const importer = googleUser({ sub: 'g-importer-1', name: 'Importer Persona', email: 'importer@example.com' });
+      const member = googleUser({
+        sub: 'g-member-2',
+        name: 'Philip Chimento',
+        email: 'phil@example.com',
+        picture: 'https://cdn.example.invalid/phil.png',
+      });
+      const meeting = manager.create([importer, member]);
+
+      // A second app whose session user is the Google importer (the default
+      // test app authenticates as the GitHub TEST_USER).
+      const googleApp = createTestApp(manager, importer);
+      const { baseUrl: googleBaseUrl, close: closeGoogle } = await listen(googleApp);
+      try {
+        fixtureBody = [
+          '## Agenda Items',
+          '',
+          '| Topic | Presenter | Duration |',
+          '| ----- | --------- | -------- |',
+          '| Local match | Philip Chimento | 30 |',
+          '| GitHub-only name | Daniel Ehrenberg | 30 |',
+        ].join('\n');
+        const res = await fetch(`${googleBaseUrl}/api/meetings/${meeting.id}/import-agenda`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: fixtureUrl }),
+        });
+        expect(res.status).toBe(200);
+
+        const stored = await (await fetch(`${googleBaseUrl}/api/meetings/${meeting.id}`)).json();
+        // Tier-1 local match via Google's directory → the real Google member.
+        const local = firstPresenter(stored, 0);
+        expect(local.provider).toBe('google');
+        expect(local.accountId).toBe('g-member-2');
+        expect(local.avatarUrl).toBe('https://cdn.example.invalid/phil.png');
+        // GitHub's DEV_USERS tier is *not* consulted for a Google importer.
+        const ghOnly = firstPresenter(stored, 1);
+        expect(ghOnly.provider).toBe('placeholder');
+        expect(ghOnly.handle).not.toBe('littledan');
+        expect(ghOnly.avatarUrl).toBe('');
+      } finally {
+        closeGoogle();
+      }
     });
 
     it('imports an item with no presenters when only a duration is parsed', async () => {

@@ -19,7 +19,7 @@ import type { MeetingManager } from './meetings.js';
 import { isMockAuthEnabled } from './mockAuth.js';
 import { providerById } from './auth/registry.js';
 import { resolveSelections } from './resolveUser.js';
-import { resolvePresenterFromDirectory, warmDirectoryForUser, DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
+import { DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
 import { resolvePremiumUsers } from './premiumDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
@@ -357,17 +357,24 @@ export function createMeetingRoutes(
       return;
     }
 
+    // Resolve presenter names through the importer's provider directory,
+    // dispatched via the same `providerById` path as the autocomplete handler
+    // so import resolution matches what the dropdown would show for the same
+    // searcher (enabled-agnostic, so the GitHub seed directory still answers in
+    // mock-auth mode). A provider with no directory resolves nothing and every
+    // presenter falls through to a placeholder.
+    const directory = providerById(user.provider)?.directory;
+
     // Make sure the importer's org directory is in cache before resolving.
-    // `warmDirectoryForUser` is fire-and-forget at OAuth login, and the
-    // org-members cache is in-process only — so a restarted instance, a
-    // login from this morning paired with an import this afternoon (cache
-    // TTL elapsed), or simply an import seconds after first login can all
-    // leave tier 2 empty when resolution runs. Awaiting here guarantees
-    // tier 2 is populated and matches what the autocomplete dropdown would
-    // see for the same searcher. The helper coalesces concurrent refreshes
-    // and is a no-op in mock-auth mode (no access token), so this is cheap
-    // when the cache is already warm.
-    await warmDirectoryForUser(user);
+    // `warmDirectory` is fire-and-forget at OAuth login, and the org-members
+    // cache is in-process only — so a restarted instance, a login from this
+    // morning paired with an import this afternoon (cache TTL elapsed), or
+    // simply an import seconds after first login can all leave tier 2 empty
+    // when resolution runs. Awaiting here guarantees tier 2 is populated and
+    // matches what the autocomplete dropdown would see. The helper coalesces
+    // concurrent refreshes and is a no-op in mock-auth mode (no access token),
+    // so this is cheap when the cache is already warm.
+    await directory?.warmDirectory(user);
 
     // Resolve unique presenter names against the local directory (tier 1
     // + tier 2 only — meeting users and the importer's org members). When
@@ -383,7 +390,7 @@ export function createMeetingRoutes(
         const dedupKey = raw.trim().toLowerCase();
         if (dedupKey.length === 0 || seenKeys.has(dedupKey)) continue;
         seenKeys.add(dedupKey);
-        const hit = resolvePresenterFromDirectory(user, raw, meeting);
+        const hit = directory?.resolvePresenterFromDirectory(user, raw, meeting) ?? null;
         if (hit) resolved.set(dedupKey, hit);
       }
     }
