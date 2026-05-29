@@ -40,12 +40,12 @@ interface Brand {
 const PROVIDER_BRAND: Record<string, Brand> = {
   github: {
     className:
-      'bg-[#24292f] text-white hover:bg-[#2b3137] focus-visible:ring-[#24292f] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
+      'bg-[#24292f] text-white border border-[#8c8c8c] hover:bg-[#2b3137] focus-visible:ring-[#24292f] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
     logo: <GitHubMark />,
   },
   orcid: {
     className:
-      'bg-[#a6ce39] text-[#1f2328] hover:bg-[#99be33] focus-visible:ring-[#a6ce39] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
+      'bg-[#a6ce39] text-[#1f2328] border border-[#8c8c8c] hover:bg-[#99be33] focus-visible:ring-[#a6ce39] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
     logo: <OrcidMark />,
   },
   google: {

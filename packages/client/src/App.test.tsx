@@ -146,9 +146,10 @@ describe('LoginPage', () => {
     expect(microsoftLink).toHaveAttribute('href', '/auth/microsoft');
 
     // Each uses its official brand colour (GitHub charcoal, ORCID green; Google
-    // and Microsoft both use a white variant, distinguished by their borders).
-    expect(githubLink).toHaveClass('bg-[#24292f]');
-    expect(orcidLink).toHaveClass('bg-[#a6ce39]');
+    // and Microsoft both use a white variant). All four carry a grey border for
+    // a consistent edge — Google keeps its mandated #747775, the rest #8c8c8c.
+    expect(githubLink).toHaveClass('bg-[#24292f]', 'border-[#8c8c8c]');
+    expect(orcidLink).toHaveClass('bg-[#a6ce39]', 'border-[#8c8c8c]');
     expect(googleLink).toHaveClass('bg-white', 'border-[#747775]');
     expect(microsoftLink).toHaveClass('bg-white', 'border-[#8c8c8c]');
 
