@@ -2,11 +2,12 @@
  * Brand marks for the login buttons, used solely for the sanctioned
  * "Log in with <provider>" affordance. Mostly single-path monochrome SVGs
  * (24×24) that inherit the button's text colour via `fill="currentColor"`, so
- * each button sets the appropriate contrasting fill. The Google mark is the
- * exception: its four-colour logo carries hard-coded brand fills because
- * Google's guidelines forbid recolouring it. Artwork: Simple Icons (CC0) for
- * GitHub/ORCID; Google's own brand assets for the "G". The GitHub, ORCID, and
- * Google marks are trademarks of their respective owners.
+ * each button sets the appropriate contrasting fill. The Google and Microsoft
+ * marks are the exceptions: their multi-colour logos carry hard-coded brand
+ * fills because both vendors' guidelines forbid recolouring them. Artwork:
+ * Simple Icons (CC0) for GitHub/ORCID; Google's and Microsoft's own brand
+ * assets for their marks. The GitHub, ORCID, Google, and Microsoft marks are
+ * trademarks of their respective owners.
  */
 
 interface MarkProps {
@@ -56,6 +57,23 @@ export function GoogleMark({ className = 'h-5 w-5' }: MarkProps) {
         fill="#EA4335"
         d="M12 4.773c1.762 0 3.344.606 4.589 1.795l3.44-3.44C17.952 1.19 15.235 0 12 0A11.997 11.997 0 0 0 1.276 6.612l4.01 3.108C6.23 6.883 8.875 4.773 12 4.773z"
       />
+    </svg>
+  );
+}
+
+/**
+ * Microsoft logo — the four coloured squares. Like the Google mark this is the
+ * official multi-colour logo with hard-coded brand fills; Microsoft's
+ * guidelines forbid recolouring it, so it does NOT use `fill="currentColor"`.
+ * Sits on the white "Sign in with Microsoft" button.
+ */
+export function MicrosoftMark({ className = 'h-5 w-5' }: MarkProps) {
+  return (
+    <svg viewBox="0 0 23 23" aria-hidden="true" className={className}>
+      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+      <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
+      <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
+      <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
     </svg>
   );
 }

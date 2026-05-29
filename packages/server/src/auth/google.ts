@@ -22,6 +22,7 @@
 import type { MeetingState, User, DirectorySuggestion } from '@tcq/shared';
 import type { AuthenticationProvider, OAuthProfile } from './provider.js';
 import { GOOGLE_PROVIDER_ID, isGoogleConfigured, googleUser } from './googleUser.js';
+import { decodeIdTokenPayload } from './idToken.js';
 import { warning, serialiseError } from '../logger.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
@@ -39,23 +40,25 @@ interface GoogleIdTokenClaims {
   hd?: string;
 }
 
-/**
- * Decode (without verifying) the payload of a Google id_token. A JWT is
- * `header.payload.signature`; the middle segment is base64url-encoded JSON.
- * Returns null on any structural problem (wrong segment count, bad base64,
- * non-JSON, or a payload missing the `sub` claim).
- */
-function decodeIdTokenPayload(jwt: string): GoogleIdTokenClaims | null {
-  const segments = jwt.split('.');
-  if (segments.length !== 3) return null;
-  try {
-    const json = Buffer.from(segments[1], 'base64url').toString('utf8');
-    const claims = JSON.parse(json) as Partial<GoogleIdTokenClaims>;
-    if (typeof claims.sub !== 'string' || claims.sub === '') return null;
-    return claims as GoogleIdTokenClaims;
-  } catch {
-    return null;
-  }
+/** Read a string claim, ignoring any non-string (or absent) value. */
+function strClaim(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Decode a Google id_token's payload (shared, signature-not-verified) and
+ *  return it as Google claims, or null when the `sub` claim is missing/empty. */
+function googleClaims(jwt: string): GoogleIdTokenClaims | null {
+  const claims = decodeIdTokenPayload(jwt);
+  if (!claims) return null;
+  const sub = claims.sub;
+  if (typeof sub !== 'string' || sub === '') return null;
+  return {
+    sub,
+    name: strClaim(claims.name),
+    email: strClaim(claims.email),
+    picture: strClaim(claims.picture),
+    hd: strClaim(claims.hd),
+  };
 }
 
 /** Case-insensitive substring match of a query against a Google meeting
@@ -127,7 +130,7 @@ export const googleProvider: AuthenticationProvider = {
       warning('google_oauth_no_id_token', {});
       return null;
     }
-    const claims = decodeIdTokenPayload(data.id_token);
+    const claims = googleClaims(data.id_token);
     if (!claims) {
       warning('google_oauth_bad_id_token', {});
       return null;

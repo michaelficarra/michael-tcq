@@ -5,13 +5,18 @@
  *
  * ORCID's `accountId` is the ORCID iD itself (e.g. `0000-0002-1825-0097`).
  * ORCID has no handle, so `User.handle` is left undefined — `userLabel` then
- * shows the iD. ORCID provides no avatar, so we synthesise one via Gravatar:
- * the SHA-256 of the researcher's public email when known, otherwise of the
- * iD (which yields a stable identicon, never a real photo).
+ * shows the iD. ORCID provides no avatar, so we synthesise one via Gravatar
+ * (`./gravatar.ts`): the SHA-256 of the researcher's public email when known,
+ * otherwise of the iD (which yields a stable identicon, never a real photo).
  */
 
-import { createHash } from 'node:crypto';
 import type { User } from '@tcq/shared';
+import { gravatarUrl } from './gravatar.js';
+
+// Re-exported for back-compat: existing call sites import `gravatarUrl` from
+// this module (the ORCID provider and its tests). The implementation now lives
+// in the shared `./gravatar.ts` leaf so non-ORCID providers can reuse it.
+export { gravatarUrl } from './gravatar.js';
 
 /** The provider id ORCID-sourced users carry in `User.provider`. */
 export const ORCID_PROVIDER_ID = 'orcid';
@@ -40,18 +45,6 @@ export function normaliseOrcidId(raw: string): string {
     .trim()
     .replace(/^https?:\/\/(?:sandbox\.)?orcid\.org\//i, '')
     .toUpperCase();
-}
-
-/**
- * Build the Gravatar avatar URL for an ORCID user. Gravatar keys off the
- * SHA-256 of the lowercased, trimmed email; `d=identicon` returns the real
- * photo when that hash matches a Gravatar account and a deterministic
- * identicon otherwise. With no public email we hash the iD instead, which is
- * stable per user but never matches an account (always an identicon).
- */
-export function gravatarUrl(emailOrSeed: string): string {
-  const hash = createHash('sha256').update(emailOrSeed.trim().toLowerCase()).digest('hex');
-  return `https://gravatar.com/avatar/${hash}?d=identicon&s=80`;
 }
 
 /** Build a resolved ORCID `User`. The iD is the canonical `accountId`/key. */

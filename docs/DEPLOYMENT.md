@@ -49,7 +49,7 @@ The script will:
 - Build the Docker image, push it, provision the VM with cloud-init that installs both systemd units (`tcq` and `caddy`) on first boot, copy a fresh env file to the VM via `gcloud compute scp`, and restart the `tcq` unit.
 - Print the static IP so you can configure your DNS A record.
 - Once the first deploy finishes, print a pre-filled GitHub OAuth App registration URL. Click it, hit **Register application**, copy the Client ID and Client Secret back into the prompt, and the script copies the new env to the VM and restarts.
-- Then offer the same for **ORCID** and **Google**: neither has a pre-fillable form, so the script prints the registration URL (ORCID developer tools / Google Cloud credentials page) and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping any provider just leaves it disabled. All prompts are skipped on later runs once the credentials are in `.env.production`.
+- Then offer the same for **ORCID**, **Google**, and **Microsoft**: none has a pre-fillable form, so the script prints the registration URL (ORCID developer tools / Google Cloud credentials page / Microsoft Entra app registrations) and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping any provider just leaves it disabled. All prompts are skipped on later runs once the credentials are in `.env.production`.
 
 Every step is idempotent. Re-running the script with a fully populated `.env.production` skips every prompt and behaves as a plain build + push + redeploy.
 
@@ -269,6 +269,18 @@ client ID → Application type: Web application**. Under **Authorised redirect U
 Secret**. Only the OpenID Connect `openid email profile` scopes are used — no extra APIs to
 enable.
 
+### 14d. (Optional) Register a Microsoft (Entra ID) OAuth client
+
+_Why:_ enables "Sign in with Microsoft". Open the
+[Microsoft Entra admin centre](https://entra.microsoft.com) → **Identity → Applications →
+App registrations → New registration**. For supported account types choose **"Accounts in any
+organizational directory and personal Microsoft accounts"** (matches the default `common`
+tenant). Add a **Web** platform with redirect URI `https://<your-domain>/auth/microsoft/callback`
+exactly, then under **Certificates & secrets** add a client secret. Note the **Application
+(client) ID** and the secret **value**. Only the OpenID Connect `openid email profile` scopes
+are used. To restrict sign-in to a single tenant, set `MICROSOFT_TENANT` to your tenant id and
+pick the matching account type.
+
 ### 15. Redeploy with OAuth
 
 _Why:_ the server reads provider credentials at boot, so they have to be in the env file the systemd unit passes to the container. The deploy script rewrites `/etc/tcq/env` and restarts the unit on every run.
@@ -289,10 +301,16 @@ ORCID_CLIENT_SECRET=<client-secret>
 GOOGLE_CLIENT_ID=<client-id>
 GOOGLE_CLIENT_SECRET=<client-secret>
 
+# Microsoft OAuth (optional)
+MICROSOFT_CLIENT_ID=<client-id>
+MICROSOFT_CLIENT_SECRET=<client-secret>
+# MICROSOFT_TENANT defaults to "common"; set a tenant id to restrict sign-in.
+
 # OAuth callback base — each provider's callback is ${base}/<provider>/callback,
 # so GitHub's is https://<your-domain>/auth/github/callback, ORCID's is
-# https://<your-domain>/auth/orcid/callback, and Google's is
-# https://<your-domain>/auth/google/callback (register those with each provider).
+# https://<your-domain>/auth/orcid/callback, Google's is
+# https://<your-domain>/auth/google/callback, and Microsoft's is
+# https://<your-domain>/auth/microsoft/callback (register those with each provider).
 # Defaults to http://localhost:3000/auth in dev.
 OAUTH_CALLBACK_BASE_URL=https://<your-domain>/auth
 ```

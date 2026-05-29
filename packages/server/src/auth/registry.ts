@@ -11,10 +11,16 @@ import type { AuthenticationProvider } from './provider.js';
 import { githubProvider } from './github.js';
 import { orcidProvider } from './orcid.js';
 import { googleProvider } from './google.js';
+import { microsoftProvider } from './microsoft.js';
 
 /** All known providers, enabled or not. Order is the login-button order
- *  (GitHub, then ORCID, then Google). */
-const ALL_PROVIDERS: readonly AuthenticationProvider[] = [githubProvider, orcidProvider, googleProvider];
+ *  (GitHub, then ORCID, then Google, then Microsoft). */
+const ALL_PROVIDERS: readonly AuthenticationProvider[] = [
+  githubProvider,
+  orcidProvider,
+  googleProvider,
+  microsoftProvider,
+];
 
 /** Providers that are actually configured (credentials present). */
 export function enabledProviders(): AuthenticationProvider[] {

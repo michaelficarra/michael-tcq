@@ -54,7 +54,9 @@
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
 #     ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, ORCID_BASE_URL,
-#     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_CALLBACK_BASE_URL
+#     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#     MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT,
+#     OAUTH_CALLBACK_BASE_URL
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -672,6 +674,9 @@ $([ -n "${ORCID_CLIENT_SECRET:-}" ] && echo "    ORCID_CLIENT_SECRET=${ORCID_CLI
 $([ -n "${ORCID_BASE_URL:-}" ] && echo "    ORCID_BASE_URL=${ORCID_BASE_URL}")
 $([ -n "${GOOGLE_CLIENT_ID:-}" ] && echo "    GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
 $([ -n "${GOOGLE_CLIENT_SECRET:-}" ] && echo "    GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}")
+$([ -n "${MICROSOFT_CLIENT_ID:-}" ] && echo "    MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}")
+$([ -n "${MICROSOFT_CLIENT_SECRET:-}" ] && echo "    MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}")
+$([ -n "${MICROSOFT_TENANT:-}" ] && echo "    MICROSOFT_TENANT=${MICROSOFT_TENANT}")
 $([ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "    OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}")
 
 runcmd:
@@ -785,6 +790,9 @@ EOF
   [ -n "${ORCID_BASE_URL:-}" ]        && echo "ORCID_BASE_URL=${ORCID_BASE_URL}"             >> "$env_tmp"
   [ -n "${GOOGLE_CLIENT_ID:-}" ]      && echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"         >> "$env_tmp"
   [ -n "${GOOGLE_CLIENT_SECRET:-}" ]  && echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${MICROSOFT_CLIENT_ID:-}" ]     && echo "MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${MICROSOFT_CLIENT_SECRET:-}" ] && echo "MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${MICROSOFT_TENANT:-}" ]        && echo "MICROSOFT_TENANT=${MICROSOFT_TENANT}"               >> "$env_tmp"
   [ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}" >> "$env_tmp"
 
   # Wait briefly for SSH to come up on a fresh VM before the first
@@ -1024,6 +1032,64 @@ ensure_google_oauth() {
   deploy_to_vm
 }
 
+# Mirrors ensure_google_oauth for Microsoft (Entra ID). Azure has no
+# pre-fillable form, so we print the App-registrations URL plus the exact
+# redirect URI to register by hand. Independent of the other providers:
+# enabling Microsoft alone still writes the shared OAUTH_CALLBACK_BASE_URL the
+# server needs to build callback URLs.
+ensure_microsoft_oauth() {
+  if [ -n "${MICROSOFT_CLIENT_ID:-}" ] && [ -n "${MICROSOFT_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/microsoft/callback"
+
+  echo ""
+  echo "Microsoft OAuth is not configured — \"Sign in with Microsoft\" is disabled."
+  echo ""
+  echo "To enable Microsoft sign-in, register an app. Microsoft has no"
+  echo "pre-fillable form, so register it manually:"
+  echo ""
+  echo "  1. Open https://entra.microsoft.com → Identity → Applications →"
+  echo "     App registrations → New registration."
+  echo "  2. Supported account types: \"Accounts in any organizational directory"
+  echo "     and personal Microsoft accounts\" (matches the default 'common' tenant)."
+  echo "  3. Add a platform → Web → Redirect URI, exactly:"
+  echo "       $callback"
+  echo "  4. Under Certificates & secrets, add a client secret."
+  echo "  5. Note the Application (client) ID and the secret VALUE."
+  echo ""
+  echo "(To restrict sign-in to one tenant, set MICROSOFT_TENANT in $ENV_FILE to"
+  echo "your tenant id and pick the matching account type above.)"
+  echo ""
+
+  if ! confirm "Register the app now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable Microsoft later, add MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  MICROSOFT_CLIENT_ID="$(prompt_with_default "Application (client) ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  MICROSOFT_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives Microsoft's
+  # callback ($url/auth/microsoft/callback) — the URI registered above — from it.
+  # Harmless to re-set if an earlier ensure_*_oauth wrote the same value.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env MICROSOFT_CLIENT_ID "$MICROSOFT_CLIENT_ID"
+  upsert_env MICROSOFT_CLIENT_SECRET "$MICROSOFT_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1072,6 +1138,7 @@ EOF
   ensure_github_oauth
   ensure_orcid_oauth
   ensure_google_oauth
+  ensure_microsoft_oauth
 
   echo ""
   echo "Deploy complete!"

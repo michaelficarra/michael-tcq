@@ -13,7 +13,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Logo } from '../components/Logo.js';
-import { GitHubMark, OrcidMark, GoogleMark, DevMark } from '../components/BrandLogos.js';
+import { GitHubMark, OrcidMark, GoogleMark, MicrosoftMark, DevMark } from '../components/BrandLogos.js';
 
 interface AuthProvider {
   id: string;
@@ -57,6 +57,16 @@ const PROVIDER_BRAND: Record<string, Brand> = {
       'bg-white text-[#1f1f1f] border border-[#747775] hover:bg-[#f8f9fa] focus-visible:ring-[#dadce0] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
     logo: <GoogleMark />,
     text: 'Sign in with Google',
+  },
+  microsoft: {
+    // Microsoft's "Sign in with Microsoft" light variant: white background,
+    // grey border (#8c8c8c) and text (#5e5e5e). Both the text and the
+    // four-colour squares mark are mandated by the branding guidelines, so the
+    // text is set here and the mark is never recoloured.
+    className:
+      'bg-white text-[#5e5e5e] border border-[#8c8c8c] hover:bg-[#f3f3f3] focus-visible:ring-[#8c8c8c] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
+    logo: <MicrosoftMark />,
+    text: 'Sign in with Microsoft',
   },
   mock: {
     className:
