@@ -12,8 +12,11 @@
  *
  * The dropdown is a *suggestion* layer, not a constraint: pressing Enter
  * or comma on a value that doesn't match any suggestion still commits the
- * raw text as a `{ handle }`. This matters because some presenters don't have
- * an account and the input has always allowed arbitrary names.
+ * raw text as a `{ handle }`. The free-text path is GitHub-handle-shaped —
+ * the input is normalised via `normaliseGithubUsername` and the server
+ * validates it against the GitHub username charset — so an unmatched value
+ * resolves as a GitHub account if one exists, else becomes a placeholder
+ * presenter (handle-less providers have no typeable identifier to commit).
  *
  * Network behaviour: queries the server only after 250ms of typing
  * inactivity. This protects both our endpoint and the upstream provider
