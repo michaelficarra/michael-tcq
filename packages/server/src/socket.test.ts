@@ -16,6 +16,7 @@ import type {
 import { isAgendaItem, userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
 import { githubUser } from './auth/githubUser.js';
+import { googleUser } from './auth/googleUser.js';
 import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
@@ -979,6 +980,30 @@ describe('Socket.IO integration', () => {
       const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(state.users[entry.userId].name).toBe('Known User');
       expect(state.users[entry.userId].organisation).toBe('ACME');
+    });
+
+    it('resolves a provider-qualified key (handle-less user) via asUsername', async () => {
+      // Regression: Copy serialises a handle-less author (Google/Microsoft/
+      // ORCID) as their `provider:accountId` key, since they have no handle.
+      // Restore must resolve that key back to the real account, not degrade to
+      // a machine-key placeholder via the handle path.
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const meeting = ctx.meetingManager.create([owner]);
+      // A Google user (no handle) present in the meeting as an agenda presenter.
+      const googleAuthor = googleUser({ sub: '110169484476', name: 'Ada Lovelace', email: 'ada@example.com' });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [googleAuthor]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', topic: 'Restored', asUsername: 'google:110169484476' });
+      const state = await statePromise;
+
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
+      // Resolved to the real Google identity (keyed by sub), not a placeholder.
+      expect(entry.userId).toBe('google:110169484476');
+      expect(state.users[entry.userId].provider).toBe('google');
+      expect(state.users[entry.userId].name).toBe('Ada Lovelace');
     });
 
     it('creates a placeholder user for unknown asUsername', async () => {
@@ -2534,6 +2559,39 @@ describe('Socket.IO integration', () => {
         expect(finished.remainingQueue).toBeDefined();
         expect(finished.remainingQueue).toContain('Leftover topic');
         expect(finished.remainingQueue).toContain('testuser');
+      }
+    });
+
+    it('serialises a handle-less author in remainingQueue as the full provider key', async () => {
+      // Parity with the client's "Copy queue": a handle-less author (Google/
+      // Microsoft/ORCID) must be written as the full `provider:accountId` key,
+      // not the bare accountId — so the log text round-trips through "Restore
+      // Queue" (the colon routes `resolveUserRef` down the key path).
+      const meeting = ctx.meetingManager.create([owner]);
+      const googleAuthor = googleUser({ sub: '110169484476', name: 'Ada Lovelace', email: 'ada@example.com' });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [googleAuthor]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
+      await statePromise;
+
+      // Chair adds a queue entry on behalf of the handle-less Google author.
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', topic: 'Ada topic', asUsername: 'google:110169484476' });
+      const state = await statePromise;
+
+      // Advance, leaving the queue non-empty so it gets serialised.
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
+      await statePromise;
+
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
+      expect(finished?.type).toBe('agenda-item-finished');
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.remainingQueue).toContain('(google:110169484476)');
       }
     });
 

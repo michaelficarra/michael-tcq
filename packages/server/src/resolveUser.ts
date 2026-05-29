@@ -147,3 +147,34 @@ export async function resolveHandle(
   // case of a provider with no resolveByHandle; default to a placeholder.
   return u ?? placeholderUser(handle);
 }
+
+/**
+ * Resolve a queue-restore "user ref" — the text inside the trailing `(…)` of a
+ * copied queue line — to a `User`. The ref is one of two shapes, mirroring how
+ * `handleCopyQueue` serialises an entry's author (`user.handle ?? userKey`):
+ *   - a bare GitHub handle / free-text name (no colon) — resolved via the
+ *     handle path (known participant → provider handle lookup → placeholder), or
+ *   - a provider-qualified `provider:accountId` key (what Copy writes for a
+ *     handle-less user, e.g. `google:1234…`) — resolved by key against the
+ *     meeting / known-users cache / provider, so a Google/Microsoft/ORCID
+ *     author round-trips to their real identity instead of degrading to a
+ *     machine-key placeholder.
+ * A GitHub handle can't contain a colon, so the colon cleanly discriminates the
+ * two. Never null: an unresolvable ref becomes a placeholder so the entry still
+ * renders (matching the typed-handle contract).
+ */
+export async function resolveUserRef(
+  session: SessionUser,
+  meeting: MeetingState | undefined,
+  ref: string,
+): Promise<User> {
+  const colon = ref.indexOf(':');
+  // A `provider:accountId` key requires a non-empty segment on each side.
+  if (colon > 0 && colon < ref.length - 1) {
+    const provider = ref.slice(0, colon);
+    const accountId = ref.slice(colon + 1);
+    const resolved = await resolveSelection(session, meeting, { provider, accountId });
+    return resolved ?? placeholderUser(ref);
+  }
+  return resolveHandle(session, meeting, ref);
+}

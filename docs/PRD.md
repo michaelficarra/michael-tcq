@@ -331,7 +331,7 @@ New Topic: My discussion point (alice)
 Clarifying Question: How does this work? (bob)
 ```
 
-Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(username)`, the entry is added on behalf of that user, preserving the original author. The username is resolved against known meeting participants (chairs, existing queue entries, agenda presenters); unknown usernames create a placeholder user. Non-chairs cannot add entries on behalf of other users.
+Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(reference)`, the entry is added on behalf of that user, preserving the original author. The reference is whatever Copy emitted: a GitHub handle for GitHub users, or a provider-qualified `provider:accountId` (e.g. `google:1234…`) for users without a handle (Google, Microsoft, ORCID). It is resolved against known meeting participants (chairs, existing queue entries, agenda presenters) and the server's known-users cache; an unresolvable reference creates a placeholder user. Non-chairs cannot add entries on behalf of other users.
 
 ### Current Speaker
 

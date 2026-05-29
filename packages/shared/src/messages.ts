@@ -392,8 +392,14 @@ export const QueueAddPayloadSchema = z.object({
    */
   pending: z.boolean().optional(),
   /**
-   * Optional: GitHub username to add the entry as. Chair only. When omitted,
-   * the entry is added as the current session user.
+   * Optional: who to add the entry as — chair only, used by "Restore Queue".
+   * Either a bare GitHub handle / free-text name, or a provider-qualified
+   * `provider:accountId` key (what Copy writes for handle-less Google/
+   * Microsoft/ORCID users); the server (`resolveUserRef`) branches on the
+   * colon and falls back to a placeholder for an unknown ref. When omitted,
+   * the entry is added as the current session user. The validator only
+   * strips an `@`/whitespace and requires non-emptiness — deliberately not
+   * the GitHub charset, so keys and free-text names both pass.
    */
   asUsername: githubUsername().optional(),
   /**

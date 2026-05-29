@@ -38,7 +38,7 @@ import {
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
-import { resolveSelections, resolveHandle, selectionIsSelf } from './resolveUser.js';
+import { resolveSelections, resolveUserRef, selectionIsSelf } from './resolveUser.js';
 import type { AppSettingsManager } from './appSettingsManager.js';
 import { info, warning, error as logError, serialiseError, formatLatency } from './logger.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
@@ -907,11 +907,12 @@ export function registerSocketHandlers(
           respond({ ok: false, error: 'Only chairs can add entries on behalf of others' });
           return;
         }
-        // `asUsername` is a typed handle (parsed from a chair command), so
-        // resolve it via the free-text path: known participant → provider
-        // handle lookup → placeholder.
+        // `asUsername` is either a bare GitHub handle / free-text name or a
+        // `provider:accountId` key (what Copy writes for handle-less users).
+        // `resolveUserRef` branches on the colon so a Google/Microsoft/ORCID
+        // author round-trips to their real identity rather than a placeholder.
         const meeting = meetingManager.get(joinedMeetingId);
-        entryUser = await resolveHandle(user, meeting, parsed.asUsername);
+        entryUser = await resolveUserRef(user, meeting, parsed.asUsername);
       }
 
       // Decide whether this is a "pending initial-edit" add or a finished
@@ -1393,14 +1394,19 @@ export function registerSocketHandlers(
         // Collect participants from all topic groups during this item
         const participantIds = collectParticipantIds(meetingManager, meeting, outgoingStartTime);
 
-        // Serialise the remaining queue if non-empty
+        // Serialise the remaining queue if non-empty. The author ref must match
+        // what the client's "Copy queue" emits (`QueuePanel.handleCopyQueue`)
+        // so this text round-trips through "Restore Queue": a handle when the
+        // user has one, otherwise the full `provider:accountId` key (`e.userId`
+        // is exactly that key). Falling back to the bare `accountId` would drop
+        // the provider and resolve as an unknown handle on restore.
         const remainingQueue =
           meeting.queue.orderedIds.length > 0
             ? meeting.queue.orderedIds
                 .map((id) => {
                   const e = meeting.queue.entries[id];
                   const u = meeting.users[e.userId];
-                  return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.handle ?? u?.accountId ?? e.userId})`;
+                  return `${QUEUE_ENTRY_LABELS[e.type]}: ${e.topic} (${u?.handle ?? e.userId})`;
                 })
                 .join('\n')
             : undefined;
