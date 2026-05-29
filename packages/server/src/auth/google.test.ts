@@ -64,7 +64,12 @@ describe('googleUser', () => {
       name: 'Ada Lovelace',
       organisation: 'analytical.test',
       avatarUrl: 'https://lh3.googleusercontent.com/a/ada=s96',
+      email: 'ada@analytical.test',
     });
+  });
+
+  it('stores no email field when the claim is absent', () => {
+    expect(googleUser({ sub: 'abc' })).not.toHaveProperty('email');
   });
 
   it('falls back name to email then sub, and leaves org/avatar empty when absent', () => {
@@ -141,6 +146,7 @@ describe('googleProvider', () => {
         name: 'Ada Lovelace',
         organisation: 'analytical.test',
         avatarUrl: 'https://lh3.googleusercontent.com/a/ada=s96',
+        email: 'ada@analytical.test',
       });
     });
 

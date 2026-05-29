@@ -5,7 +5,9 @@
  *
  * Google's `accountId` is the OIDC `sub` claim — an opaque, stable numeric
  * string (e.g. `110169484474386276334`). Google has no handle, so
- * `User.handle` is left undefined and `userLabel` shows `<sub> · google`.
+ * `User.handle` is left undefined; the `email` claim is stored so `userLabel`
+ * can show `<email> · google` in the badge tooltip (the bare `sub` means
+ * nothing to a human), falling back to the `sub` when no email is available.
  * The avatar is the `picture` claim from the id_token (a Google CDN URL),
  * captured at login; Google offers no way to derive one from the `sub` alone,
  * so users referenced before they log in rely on the known-users cache
@@ -36,15 +38,20 @@ export function googleUser(fields: {
   picture?: string | null;
   hd?: string | null;
 }): User {
+  const email = fields.email?.trim() || undefined;
   return {
     provider: GOOGLE_PROVIDER_ID,
     accountId: fields.sub,
-    // No handle — the `sub` is the identifier. `userLabel` renders `<sub> · google`.
+    // No handle — the `sub` is the identifier. The email (when present) is the
+    // recognisable label `userLabel` shows in the badge tooltip; otherwise the
+    // opaque `sub`.
     handle: undefined,
     // `||` (not `??`) so an empty/whitespace/absent name falls through to the
     // email, then the opaque `sub` as a last resort.
-    name: fields.name?.trim() || fields.email?.trim() || fields.sub,
+    name: fields.name?.trim() || email || fields.sub,
     organisation: fields.hd?.trim() ?? '',
     avatarUrl: fields.picture ?? '',
+    // Display-only, surfaced in the hover tooltip; omitted when absent.
+    ...(email ? { email } : {}),
   };
 }

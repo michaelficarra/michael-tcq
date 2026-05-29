@@ -29,18 +29,20 @@ export function asUserKey(s: string): UserKey {
 }
 
 /**
- * Format a user's identity for a hover title / tooltip: the human-readable
- * handle when the provider has one (prefixed with `@`, mirroring the
- * mention convention), otherwise the bare account identifier — always
- * suffixed with the provider so the same display name from two different
- * providers is distinguishable. Examples: `@alice · github`,
- * `0000-0002-1825-0097 · orcid`.
+ * Format a user's identity for a hover title / tooltip — always suffixed with
+ * the provider so the same display name from two different providers is
+ * distinguishable. The identifier is the most human-readable handle available:
+ * the `@handle` when the provider has one (mirroring the mention convention),
+ * else the email when one is known, else the bare account id. Examples:
+ * `@alice · github`, `someone@gmail.com · google`, `0000-0002-1825-0097 · orcid`.
  *
  * Note for GitHub: `accountId` is the numeric GitHub user id, so the label
- * deliberately shows the `@handle` (login), not the id.
+ * deliberately shows the `@handle` (login), not the id. For handle-less
+ * providers whose `accountId` is opaque (Google's numeric `sub`), the email —
+ * when the provider supplied one — is far more recognisable than the id.
  */
-export function userLabel(user: Pick<User, 'provider' | 'accountId' | 'handle'>): string {
-  const identifier = user.handle ? `@${user.handle}` : user.accountId;
+export function userLabel(user: Pick<User, 'provider' | 'accountId' | 'handle' | 'email'>): string {
+  const identifier = user.handle ? `@${user.handle}` : (user.email ?? user.accountId);
   return `${identifier} · ${user.provider}`;
 }
 

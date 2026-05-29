@@ -34,6 +34,17 @@ export interface User {
    */
   avatarUrl: string;
   /**
+   * Provider-supplied email address, when the provider exposes one and it's
+   * useful as a human-readable identifier. Optional and display-only: it is
+   * surfaced in the user-badge hover tooltip (via `userLabel`) for handle-less
+   * providers like Google, whose `accountId` is an opaque numeric `sub` that
+   * means nothing to a human. Currently populated only for Google. Note this
+   * rides in broadcast meeting state and is therefore visible to every
+   * participant who hovers the badge — only set it where that exposure is
+   * acceptable. Never used to key or match a user (`userKey` ignores it).
+   */
+  email?: string;
+  /**
    * Whether this user belongs to the premium tier — server-stamped at
    * broadcast time from the admin-managed premium list (persisted in
    * the AppSettings document, mutated via the admin panel), never

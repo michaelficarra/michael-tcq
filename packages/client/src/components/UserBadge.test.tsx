@@ -121,6 +121,53 @@ describe('UserBadge', () => {
     expect(label).toHaveAttribute('title', '0000-0002-1825-0097 · orcid');
   });
 
+  it('shows a Google user by display name, with the email (not the numeric sub) on hover', () => {
+    // Google users have no handle and the account id is an opaque numeric
+    // `sub` that means nothing to a human, so the tooltip surfaces the email
+    // when one is known — the bare sub is shown only as a last resort.
+    const ada: User = {
+      provider: 'google',
+      accountId: '110169484474386276334',
+      handle: undefined,
+      name: 'Ada Lovelace',
+      organisation: '',
+      avatarUrl: 'https://lh3.googleusercontent.com/a/ada=s96',
+      email: 'ada@gmail.com',
+    };
+    render(<UserBadge user={ada} />);
+    const nameSpan = screen.getByText('Ada Lovelace');
+    expect(nameSpan).toHaveAttribute('title', 'ada@gmail.com · google');
+    // The numeric sub never appears (neither as label nor tooltip).
+    expect(screen.queryByText(/110169484474386276334/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the numeric sub on hover for a Google user with no email', () => {
+    const noEmail: User = {
+      provider: 'google',
+      accountId: '110169484474386276334',
+      handle: undefined,
+      name: 'Ada Lovelace',
+      organisation: '',
+      avatarUrl: '',
+    };
+    render(<UserBadge user={noEmail} />);
+    expect(screen.getByText('Ada Lovelace')).toHaveAttribute('title', '110169484474386276334 · google');
+  });
+
+  it('shows a Microsoft user by display name, with the email/UPN on hover', () => {
+    const ada: User = {
+      provider: 'microsoft',
+      accountId: 'AAAAAAAAAAAAAAAAAAAAAA',
+      handle: undefined,
+      name: 'Ada Lovelace',
+      organisation: '',
+      avatarUrl: 'https://gravatar.com/avatar/abc?d=identicon&s=80',
+      email: 'ada@contoso.com',
+    };
+    render(<UserBadge user={ada} />);
+    expect(screen.getByText('Ada Lovelace')).toHaveAttribute('title', 'ada@contoso.com · microsoft');
+  });
+
   it('applies a max-width and truncation to the organisation only (not the name)', () => {
     render(<UserBadge user={alice} />);
     const orgSpan = screen.getByText('ACME Corp');

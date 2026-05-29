@@ -64,7 +64,16 @@ describe('microsoftUser', () => {
       name: 'Ada Lovelace',
       organisation: '',
       avatarUrl: gravatarUrl('ada@contoso.test'),
+      email: 'ada@contoso.test',
     });
+  });
+
+  it('stores preferred_username as the email when there is no explicit email claim', () => {
+    expect(microsoftUser({ sub: 's', preferredUsername: 'ada@contoso.test' }).email).toBe('ada@contoso.test');
+  });
+
+  it('stores no email field when neither email nor preferred_username is present', () => {
+    expect(microsoftUser({ sub: 'bare-sub' })).not.toHaveProperty('email');
   });
 
   it('falls the name back through preferred_username then email then sub', () => {
@@ -158,6 +167,7 @@ describe('microsoftProvider', () => {
         name: 'Ada Lovelace',
         organisation: '',
         avatarUrl: gravatarUrl('ada@contoso.test'),
+        email: 'ada@contoso.test',
       });
     });
 
