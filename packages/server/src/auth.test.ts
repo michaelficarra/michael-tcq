@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import session from 'express-session';
 import { createAuthRoutes } from './auth.js';
@@ -78,8 +78,70 @@ describe('Auth routes', () => {
   });
 
   describe('GET /auth/github/callback', () => {
+    // The callback only exists for a *configured* provider; in mock-auth
+    // mode (no credentials) it 404s before reaching the missing-code check.
+    // Enable GitHub OAuth for this block so the 400 path is exercised; the
+    // rest of the file deliberately runs in mock-auth mode.
+    const original = process.env.GITHUB_CLIENT_ID;
+    beforeEach(() => {
+      process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.GITHUB_CLIENT_ID;
+      else process.env.GITHUB_CLIENT_ID = original;
+    });
+
     it('returns 400 when authorisation code is missing', async () => {
       const res = await fetch(`${baseUrl}/auth/github/callback`);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown / unconfigured provider', async () => {
+      const res = await fetch(`${baseUrl}/auth/nope/callback?code=x`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('OAuth state (CSRF defence)', () => {
+    // State generation + validation only happen for a *configured* provider
+    // (the mock-auth branch never round-trips through a real callback).
+    const original = process.env.GITHUB_CLIENT_ID;
+    beforeEach(() => {
+      process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.GITHUB_CLIENT_ID;
+      else process.env.GITHUB_CLIENT_ID = original;
+    });
+
+    it('mints a state nonce on the authorize redirect and stores it on the session', async () => {
+      const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      const location = res.headers.get('location') ?? '';
+      // The provider's authorize URL must carry our generated state...
+      const state = new URL(location).searchParams.get('state');
+      expect(state).toBeTruthy();
+      // ...and the session (holding the same nonce) must be persisted.
+      expect(res.headers.get('set-cookie')).toBeTruthy();
+    });
+
+    it('rejects a callback with no state (defends against an unsolicited code)', async () => {
+      // Code present, but no state and no prior session → cannot have been
+      // initiated by us, so the code is never exchanged.
+      const res = await fetch(`${baseUrl}/auth/github/callback?code=x`, { redirect: 'manual' });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a callback whose state does not match the session', async () => {
+      // Establish a session carrying a freshly-minted nonce...
+      const start = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      const cookie = (start.headers.get('set-cookie') ?? '').split(';')[0];
+      expect(cookie).toBeTruthy();
+      // ...then replay the callback with a *different* state on that session.
+      const res = await fetch(`${baseUrl}/auth/github/callback?code=x&state=not-the-real-nonce`, {
+        headers: { cookie },
+        redirect: 'manual',
+      });
       expect(res.status).toBe(400);
     });
   });
@@ -89,6 +151,26 @@ describe('Auth routes', () => {
       const res = await fetch(`${baseUrl}/auth/logout`, { redirect: 'manual' });
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toBe('/');
+    });
+  });
+
+  describe('production with no providers (fail closed)', () => {
+    // A production deploy missing its OAuth credentials must NOT fall back to
+    // the mock-auth redirect — the `mock` branch is gated on a non-production
+    // environment. With no enabled provider, `/auth/github` resolves to no
+    // provider and 404s instead of bouncing through mock login.
+    const original = process.env.NODE_ENV;
+    beforeEach(() => {
+      process.env.NODE_ENV = 'production';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = original;
+    });
+
+    it('does not mock-redirect /auth/github; returns 404', async () => {
+      const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      expect(res.status).toBe(404);
     });
   });
 });

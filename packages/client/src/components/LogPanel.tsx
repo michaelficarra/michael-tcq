@@ -354,7 +354,13 @@ function LogEntryRow({ entry, users }: { entry: LogEntry; users: Record<string, 
 // -- Plain-text export --
 
 function userName(users: Record<string, User>, id: string): string {
-  return `@${users[id]?.ghUsername ?? id}`;
+  const u = users[id];
+  // GitHub users read naturally as `@handle`; handle-less providers (Google/
+  // Microsoft/ORCID) have no handle, so fall back to their display name rather
+  // than the opaque `provider:accountId` key. The key shows only when the user
+  // isn't in the meeting map at all.
+  if (u?.handle) return `@${u.handle}`;
+  return u?.name ?? id;
 }
 
 function formatTimestamp(iso: string): string {

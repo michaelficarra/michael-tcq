@@ -9,10 +9,12 @@ import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 import { __resetSavedTopicsCacheForTests } from '../hooks/useSavedTopics.js';
 
 const testUser: User = {
-  ghid: 1,
-  ghUsername: 'alice',
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
   name: 'Alice',
   organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
@@ -56,10 +58,15 @@ describe('SpeakerControls', () => {
 
   it('shows the Reply button when there is a current topic', () => {
     const meeting = makeMeeting({
-      users: { alice: testUser },
+      users: { 'github:alice': testUser },
       current: {
         topicSpeakers: [],
-        topic: { speakerId: 'ct-1', userId: 'alice', topic: 'Active topic', startTime: '2026-01-01T00:00:00.000Z' },
+        topic: {
+          speakerId: 'ct-1',
+          userId: 'github:alice',
+          topic: 'Active topic',
+          startTime: '2026-01-01T00:00:00.000Z',
+        },
       },
     });
     renderControls(meeting);
@@ -96,7 +103,7 @@ describe('SpeakerControls', () => {
   });
 
   it('enables buttons when queue is closed and user IS a chair', () => {
-    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true }, chairIds: ['alice'] });
+    const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true }, chairIds: ['github:alice'] });
     renderControls(meeting);
 
     expect(screen.getByRole('button', { name: 'New Topic' })).toBeEnabled();
@@ -121,16 +128,24 @@ describe('SpeakerControls', () => {
 // ----- Saved topics dropdown -----
 //
 // These tests wrap the component in a real AuthProvider so `useSavedTopics`
-// can key by user.ghid. /api/me is stubbed so the provider resolves without
-// network. Each render awaits an act() tick so the AuthProvider's initial
-// fetch settles before the dropdown reads its (now-seeded) list.
+// can key by the user's canonical key. /api/me is stubbed so the provider
+// resolves without network. Each render awaits an act() tick so the
+// AuthProvider's initial fetch settles before the dropdown reads its
+// (now-seeded) list.
 
-function stubMe(ghid: number, username = 'alice'): void {
+function stubMe(username = 'alice'): void {
   globalThis.fetch = (async (url: string | URL | Request) => {
     if (String(url) === '/api/me') {
       return {
         ok: true,
-        json: async () => ({ ghid, ghUsername: username, name: username, organisation: '' }),
+        json: async () => ({
+          provider: 'github',
+          accountId: username.toLowerCase(),
+          handle: username,
+          name: username,
+          organisation: '',
+          avatarUrl: `https://github.com/${username.toLowerCase()}.png?size=80`,
+        }),
       } as Response;
     }
     throw new Error(`Unexpected fetch: ${url}`);
@@ -154,7 +169,7 @@ async function renderControlsWithAuth(meeting: MeetingState, onAddEntry = vi.fn(
 
 describe('SpeakerControls — saved topics dropdown', () => {
   it('opens the dropdown with the seeded default topic on first click', async () => {
-    stubMe(1);
+    stubMe();
     await renderControlsWithAuth(makeMeeting());
     const trigger = screen.getByRole('button', { name: 'Saved topics' });
 
@@ -172,7 +187,7 @@ describe('SpeakerControls — saved topics dropdown', () => {
   });
 
   it('calls onSavedTopic with the selected text and closes the menu', async () => {
-    stubMe(1);
+    stubMe();
     const { onSavedTopic } = await renderControlsWithAuth(makeMeeting());
     fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
 
@@ -185,8 +200,11 @@ describe('SpeakerControls — saved topics dropdown', () => {
   });
 
   it('disables a Reply-typed saved topic when there is no active topic', async () => {
-    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]));
-    stubMe(1);
+    localStorage.setItem(
+      'tcq:saved-topics:github:alice',
+      JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]),
+    );
+    stubMe();
     const { onSavedTopic } = await renderControlsWithAuth(makeMeeting());
     fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
 
@@ -200,13 +218,21 @@ describe('SpeakerControls — saved topics dropdown', () => {
   });
 
   it('enables a Reply-typed saved topic when a topic is active', async () => {
-    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]));
-    stubMe(1);
+    localStorage.setItem(
+      'tcq:saved-topics:github:alice',
+      JSON.stringify([{ id: 'r', text: 'Good point', type: 'reply' }]),
+    );
+    stubMe();
     const meeting = makeMeeting({
-      users: { alice: testUser },
+      users: { 'github:alice': testUser },
       current: {
         topicSpeakers: [],
-        topic: { speakerId: 'ct-1', userId: 'alice', topic: 'Active topic', startTime: '2026-01-01T00:00:00.000Z' },
+        topic: {
+          speakerId: 'ct-1',
+          userId: 'github:alice',
+          topic: 'Active topic',
+          startTime: '2026-01-01T00:00:00.000Z',
+        },
       },
     });
     const { onSavedTopic } = await renderControlsWithAuth(meeting);
@@ -220,13 +246,13 @@ describe('SpeakerControls — saved topics dropdown', () => {
 
   it('when the queue is closed for a non-chair, disables non-Point-of-Order saved topics', async () => {
     localStorage.setItem(
-      'tcq:saved-topics:1',
+      'tcq:saved-topics:github:alice',
       JSON.stringify([
         { id: 't', text: 'A new topic', type: 'topic' },
         { id: 'p', text: 'Out of order!', type: 'point-of-order' },
       ]),
     );
-    stubMe(1);
+    stubMe();
     const meeting = makeMeeting({ queue: { entries: {}, orderedIds: [], closed: true } });
     await renderControlsWithAuth(meeting);
     fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
@@ -240,8 +266,8 @@ describe('SpeakerControls — saved topics dropdown', () => {
 
   it('renders the empty-state message when the user has deleted every entry', async () => {
     // Pre-seed an empty list so the hook doesn't add the default back.
-    localStorage.setItem('tcq:saved-topics:1', JSON.stringify([]));
-    stubMe(1);
+    localStorage.setItem('tcq:saved-topics:github:alice', JSON.stringify([]));
+    stubMe();
     await renderControlsWithAuth(makeMeeting());
 
     fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));

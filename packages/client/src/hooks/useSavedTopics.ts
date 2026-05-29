@@ -1,7 +1,8 @@
 /**
  * Per-user saved topics — short, pre-written queue topics the user can
  * fire into the queue with a single click. Persisted to localStorage,
- * keyed by `user.ghid` so each authenticated identity has its own list.
+ * keyed by the canonical user key (`${provider}:${accountId}`) so each
+ * authenticated identity has its own list.
  *
  * The list has a hard cap of 5 entries. On first read for a given user
  * (no key in storage), the hook seeds the list with a single default
@@ -16,8 +17,8 @@
  */
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import type { QueueEntryType } from '@tcq/shared';
-import { QueueEntryTypeSchema } from '@tcq/shared';
+import type { QueueEntryType, User } from '@tcq/shared';
+import { QueueEntryTypeSchema, userKey } from '@tcq/shared';
 import { useAuth } from '../contexts/AuthContext.js';
 
 export interface SavedTopic {
@@ -43,8 +44,31 @@ export const DEFAULT_SAVED_TOPICS: ReadonlyArray<Pick<SavedTopic, 'text'>> = [{ 
 
 const STORAGE_KEY_PREFIX = 'tcq:saved-topics:';
 
-function storageKey(ghid: number | null): string | null {
-  return ghid == null ? null : `${STORAGE_KEY_PREFIX}${ghid}`;
+function storageKey(key: string | null): string | null {
+  return key == null ? null : `${STORAGE_KEY_PREFIX}${key}`;
+}
+
+// One-time bridge from the pre-multi-provider storage key (which keyed on
+// the numeric GitHub id) to the new provider-key form. The legacy numeric id
+// is recoverable only from the still-present `tcq:auth:ghid` marker that the
+// old AuthContext wrote, so the bridge is best-effort and applies only to
+// GitHub users (the only kind that existed before migration). Tracks which
+// new keys have been checked so it runs at most once each.
+const AUTH_GHID_STORAGE_KEY = 'tcq:auth:ghid';
+const bridgedKeys = new Set<string>();
+function bridgeLegacySavedTopics(newStorageKey: string, user: User): void {
+  if (user.provider !== 'github' || bridgedKeys.has(newStorageKey)) return;
+  bridgedKeys.add(newStorageKey);
+  try {
+    // Don't clobber a list already stored under the new key.
+    if (localStorage.getItem(newStorageKey) !== null) return;
+    const legacyGhid = localStorage.getItem(AUTH_GHID_STORAGE_KEY);
+    if (!legacyGhid) return;
+    const legacyValue = localStorage.getItem(`${STORAGE_KEY_PREFIX}${legacyGhid}`);
+    if (legacyValue !== null) localStorage.setItem(newStorageKey, legacyValue);
+  } catch {
+    // localStorage unavailable — nothing to bridge.
+  }
 }
 
 /** Browser-side ID generator. crypto.randomUUID is widely supported in all
@@ -180,8 +204,9 @@ const subscribe = (callback: () => void): (() => void) => {
  */
 export function useSavedTopics(): UseSavedTopicsResult {
   const { user } = useAuth();
-  const ghid = user?.ghid ?? null;
-  const key = storageKey(ghid);
+  const key = storageKey(user ? userKey(user) : null);
+  // Migrate a pre-multi-provider list to the new key before the first read.
+  if (key !== null && user) bridgeLegacySavedTopics(key, user);
 
   // Snapshot getter is recomputed when key changes (new user) so React
   // resubscribes with a getter pointing at the new cache slot.

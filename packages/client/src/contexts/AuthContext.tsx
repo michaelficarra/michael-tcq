@@ -12,11 +12,15 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import type { User } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 
 // Channel name and storage key used to keep the logged-in identity in sync
 // across tabs of the same browser. See the BroadcastChannel effect below.
+// The marker stores the canonical user key (`${provider}:${accountId}`);
+// the legacy `tcq:auth:ghid` marker is left untouched for the saved-topics
+// migration bridge (see useSavedTopics).
 const AUTH_CHANNEL_NAME = 'tcq:auth';
-const AUTH_GHID_STORAGE_KEY = 'tcq:auth:ghid';
+const AUTH_ID_STORAGE_KEY = 'tcq:auth:id';
 
 interface AuthState {
   /** The authenticated user, or null if not logged in. */
@@ -25,7 +29,7 @@ interface AuthState {
   /** True while the initial /api/me request is in flight. */
   loading: boolean;
 
-  /** True when the server is using mock auth (no GitHub OAuth configured). */
+  /** True when the server is using mock auth (no auth provider configured). */
   mockAuth: boolean;
 
   /** True when the current user has admin privileges. */
@@ -63,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch the current user from the server
   const fetchMe = useCallback(async () => {
-    let nextGhid = '';
+    let nextId = '';
     try {
       const res = await fetch('/api/me');
       if (!res.ok) {
@@ -77,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       delete data.mockAuth;
       delete data.isAdmin;
       const fetched = data as User;
-      nextGhid = String(fetched.ghid);
+      nextId = userKey(fetched);
       setUser(fetched);
     } catch {
       setUser(null);
@@ -89,11 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // since either no peer tabs exist or they're about to write the same
       // value themselves on their own initial fetchMe.
       try {
-        const marker = localStorage.getItem(AUTH_GHID_STORAGE_KEY);
+        const marker = localStorage.getItem(AUTH_ID_STORAGE_KEY);
         if (marker === null) {
-          localStorage.setItem(AUTH_GHID_STORAGE_KEY, nextGhid);
-        } else if (marker !== nextGhid) {
-          localStorage.setItem(AUTH_GHID_STORAGE_KEY, nextGhid);
+          localStorage.setItem(AUTH_ID_STORAGE_KEY, nextId);
+        } else if (marker !== nextId) {
+          localStorage.setItem(AUTH_ID_STORAGE_KEY, nextId);
           channelRef.current?.postMessage({ type: 'auth-changed' });
         }
       } catch {
@@ -115,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // rather than reloading so ephemeral state (form drafts, scroll position,
   // open meeting context) is preserved. Identity changes propagate from
   // AuthContext through MeetingContext (see MeetingPage's setUser effect)
-  // and force a WebSocket re-handshake via useSocketConnection's user.ghid
+  // and force a WebSocket re-handshake via useSocketConnection's user-key
   // dependency.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;

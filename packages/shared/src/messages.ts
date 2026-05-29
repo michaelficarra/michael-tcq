@@ -11,7 +11,7 @@
  */
 
 import { z } from 'zod';
-import { normaliseGithubUsername } from './helpers.js';
+import { normaliseGithubUsername, canonicalUserRef } from './helpers.js';
 import {
   sanitiseBlockMarkdown,
   sanitiseInlineMarkdown,
@@ -258,12 +258,32 @@ const clearableBlockMarkdownString = (field: string) =>
 const githubUsername = (msg = 'Username is required') =>
   z.string().transform(normaliseGithubUsername).pipe(z.string().min(1, msg));
 
+/**
+ * A user reference committed from a user selector (chair/presenter inputs).
+ * Two shapes:
+ *   - `{ provider, accountId }` — a concrete account picked from the
+ *     provider directory. Identity only: the server re-resolves it to a
+ *     full profile (via the provider), so we never trust client-supplied
+ *     display fields or avatar URLs.
+ *   - `{ handle }` — free text the user typed without picking a suggestion.
+ *     The server resolves it via the searcher's provider's handle lookup
+ *     (GitHub today), falling back to an unverified placeholder.
+ */
+export const UserSelectionSchema = z.union([
+  z.object({
+    provider: z.string().min(1).max(64),
+    accountId: z.string().min(1).max(256),
+  }),
+  z.object({ handle: githubUsername() }),
+]);
+export type UserSelection = z.infer<typeof UserSelectionSchema>;
+
 // -- Payloads for client-to-server events --
 
 /** Payload for adding a new agenda item. */
 export const AgendaAddPayloadSchema = z.object({
   name: markdownString('Agenda item name'),
-  presenterUsernames: z.array(githubUsername()),
+  presenters: z.array(UserSelectionSchema),
   /** Estimated duration in minutes; omit or 0 for no estimate. */
   duration: z.number().int().positive().optional(),
 });
@@ -295,7 +315,7 @@ export const AgendaEditPayloadSchema = z.object({
   id: z.string(),
   name: optionalMarkdownString('Agenda item name'),
   // Omitted = unchanged; an empty array explicitly clears the presenter list.
-  presenterUsernames: z.array(githubUsername()).optional(),
+  presenters: z.array(UserSelectionSchema).optional(),
   duration: z.number().int().nullable().optional(),
 });
 export type AgendaEditPayload = z.infer<typeof AgendaEditPayloadSchema>;
@@ -372,8 +392,14 @@ export const QueueAddPayloadSchema = z.object({
    */
   pending: z.boolean().optional(),
   /**
-   * Optional: GitHub username to add the entry as. Chair only. When omitted,
-   * the entry is added as the current session user.
+   * Optional: who to add the entry as — chair only, used by "Restore Queue".
+   * Either a bare GitHub handle / free-text name, or a provider-qualified
+   * `provider:accountId` key (what Copy writes for handle-less Google/
+   * Microsoft/ORCID users); the server (`resolveUserRef`) branches on the
+   * colon and falls back to a placeholder for an unknown ref. When omitted,
+   * the entry is added as the current session user. The validator only
+   * strips an `@`/whitespace and requires non-emptiness — deliberately not
+   * the GitHub charset, so keys and free-text names both pass.
    */
   asUsername: githubUsername().optional(),
   /**
@@ -445,7 +471,7 @@ export type PollReactPayload = z.infer<typeof PollReactPayloadSchema>;
  * least one chair must remain (except when an admin performs the update).
  */
 export const ChairsUpdatePayloadSchema = z.object({
-  usernames: z.array(githubUsername()),
+  chairs: z.array(UserSelectionSchema),
 });
 export type ChairsUpdatePayload = z.infer<typeof ChairsUpdatePayloadSchema>;
 
@@ -491,7 +517,7 @@ export interface AdvanceResponse {
 
 /** POST /api/meetings — create a new meeting. */
 export const CreateMeetingBodySchema = z.object({
-  chairs: z.array(githubUsername()).min(1, 'At least one chair username is required'),
+  chairs: z.array(UserSelectionSchema).min(1, 'At least one chair is required'),
 });
 export type CreateMeetingBody = z.infer<typeof CreateMeetingBodySchema>;
 
@@ -508,42 +534,68 @@ export const ImportAgendaBodySchema = z.object({
 export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
 
 /**
- * GitHub username field enforcing GitHub's documented login rules:
- * 1–39 characters, alphanumeric or hyphen, must not begin or end with
- * a hyphen. Normalises leading `@` and surrounding whitespace, then
- * lowercases to the canonical form stored server-side. Used for admin
- * mutations of the premium-tier list, where we want to reject obvious
- * garbage at the API boundary even though premium membership is
- * checked case-insensitively.
+ * An admin/premium user reference. Accepts either:
+ *   - a bare GitHub handle (GitHub's login rules: 1–39 chars, alphanumeric
+ *     or hyphen, no leading/trailing hyphen; a leading `@` is stripped), or
+ *   - a provider-qualified id `provider:rest` (provider is `[a-z][a-z0-9-]*`;
+ *     `rest` is a non-empty, whitespace-free account id — or, for `github:`,
+ *     a handle).
+ * Rejects obvious garbage at the API boundary; outputs the canonical form
+ * (`canonicalUserRef`) stored and compared server-side.
  */
-const strictGithubUsername = z
+const userRef = z
   .string()
-  .transform((s) => normaliseGithubUsername(s).toLowerCase())
-  .pipe(
-    z
-      .string()
-      .min(1, 'Username is required')
-      .max(39, 'GitHub usernames are at most 39 characters')
-      .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Invalid GitHub username'),
-  );
+  .max(256)
+  .superRefine((raw, ctx) => {
+    const ref = canonicalUserRef(raw);
+    if (ref === null) {
+      ctx.addIssue({ code: 'custom', message: 'A username or provider:id is required' });
+      return;
+    }
+    const colon = ref.indexOf(':');
+    if (colon === -1) {
+      if (ref.length > 39 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(ref)) {
+        ctx.addIssue({ code: 'custom', message: 'Invalid GitHub username' });
+      }
+      return;
+    }
+    const provider = ref.slice(0, colon);
+    const rest = ref.slice(colon + 1);
+    if (!/^[a-z][a-z0-9-]*$/.test(provider)) ctx.addIssue({ code: 'custom', message: 'Invalid provider' });
+    if (rest.length === 0 || /\s/.test(rest)) ctx.addIssue({ code: 'custom', message: 'Invalid account id' });
+  })
+  .transform((raw) => canonicalUserRef(raw) as string);
 
 /**
- * POST /api/admin/premium-users — add a username to the premium tier
- * list. Admin only; idempotent (re-adding an existing username is a
- * no-op success).
+ * POST /api/admin/premium-users — add a user to the premium tier list.
+ * Admin only; idempotent (re-adding an existing entry is a no-op success).
+ * Accepts a GitHub handle or a provider-qualified id (see `userRef`).
  */
 export const PremiumUserBodySchema = z.object({
-  username: strictGithubUsername,
+  username: userRef,
 });
 export type PremiumUserBody = z.infer<typeof PremiumUserBodySchema>;
 
 /**
- * Shape of the responses from the admin premium-user endpoints. `usernames`
- * is sorted lexicographically over the canonical lowercased form so
- * clients can use referential/stringified equality for change detection.
+ * One entry in the premium-user list: the canonical stored reference plus a
+ * best-effort resolved profile for display. `ref` is the stable, lowercased
+ * canonical form (a bare GitHub handle or `provider:accountId`) used as the
+ * identity key for add/remove; `user` is the resolved `User` (real display
+ * name + avatar where the provider could be reached, otherwise a display-only
+ * fallback built from the ref) used to render the badge.
+ */
+export interface PremiumUser {
+  ref: string;
+  user: User;
+}
+
+/**
+ * Shape of the responses from the admin premium-user endpoints. `users` is
+ * sorted lexicographically by `ref` (the canonical lowercased form) so clients
+ * can rely on a stable order for change detection.
  */
 export interface PremiumUsersResponse {
-  usernames: string[];
+  users: PremiumUser[];
 }
 
 // -- Event interfaces --

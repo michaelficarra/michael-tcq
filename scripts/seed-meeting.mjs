@@ -239,7 +239,9 @@ console.log(
 const createRes = await fetch(`${SERVER}/api/meetings`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ chairs: [PEOPLE[0], PEOPLE[1], PEOPLE[2]] }),
+  // Chairs are provider-neutral UserSelections; a bare GitHub handle is the
+  // simplest form and resolves server-side.
+  body: JSON.stringify({ chairs: [{ handle: PEOPLE[0] }, { handle: PEOPLE[1] }, { handle: PEOPLE[2] }] }),
 });
 if (!createRes.ok) {
   console.error(`Error creating meeting: ${createRes.status} ${await createRes.text()}`);
@@ -486,7 +488,9 @@ selectedAgenda.forEach((item) => {
   // pool entries without a curated duration just don't carry the key.
   const payload = {
     name: item.name,
-    presenterUsernames: pickPresenters(presenterCount),
+    // Presenters are provider-neutral UserSelections; bare GitHub handles
+    // resolve server-side.
+    presenters: pickPresenters(presenterCount).map((handle) => ({ handle })),
   };
   if (item.duration != null) payload.duration = item.duration;
   actions.push(() => socket.emit('agenda:add', payload));

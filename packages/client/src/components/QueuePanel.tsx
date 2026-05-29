@@ -313,7 +313,7 @@ export function QueuePanel({
   function handleCopyQueue() {
     if (!meeting) return;
     const text = queuedSpeakers
-      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.ghUsername ?? e.userId})`)
+      .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.handle ?? e.userId})`)
       .join('\n');
     navigator.clipboard.writeText(text).catch(() => {});
   }
@@ -339,12 +339,15 @@ export function QueuePanel({
       const typeLabel = trimmed.slice(0, colonIndex).trim();
       let rest = trimmed.slice(colonIndex + 1).trim();
 
-      // Extract trailing "(username)" if present
+      // Extract trailing "(username)" if present. Copy writes either a bare
+      // GitHub handle or a `provider:accountId` key (for handle-less users);
+      // pass a key through verbatim, and only GitHub-normalise a bare handle.
       let asUsername: string | undefined;
       const parenMatch = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
       if (parenMatch) {
         rest = parenMatch[1].trim();
-        asUsername = normaliseGithubUsername(parenMatch[2]);
+        const ref = parenMatch[2].trim();
+        asUsername = ref.includes(':') ? ref : normaliseGithubUsername(ref);
       }
 
       const type = parseEntryType(typeLabel);

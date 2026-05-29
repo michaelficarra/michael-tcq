@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { MeetingState } from '@tcq/shared';
+import type { MeetingState, User } from '@tcq/shared';
+import { userKey } from '@tcq/shared';
 import {
   searchUsers,
   resolvePresenterFromDirectory,
@@ -7,6 +8,8 @@ import {
   setFetchForTesting,
   resetDirectoryForTesting,
 } from './githubDirectory.js';
+import { placeholderUser } from '@tcq/shared';
+import { githubUser } from './auth/githubUser.js';
 import type { SessionUser } from './session.js';
 
 /**
@@ -16,10 +19,12 @@ import type { SessionUser } from './session.js';
  */
 function makeSession(overrides: Partial<SessionUser> = {}): SessionUser {
   return {
-    ghid: 1,
-    ghUsername: 'searcher',
+    provider: 'github',
+    accountId: 'searcher',
+    handle: 'searcher',
     name: 'Searcher',
     organisation: '',
+    avatarUrl: 'https://github.com/searcher.png?size=80',
     isAdmin: false,
     accessToken: 'token-searcher',
     ...overrides,
@@ -28,18 +33,16 @@ function makeSession(overrides: Partial<SessionUser> = {}): SessionUser {
 
 /**
  * Minimal MeetingState fixture. We only consume `users` from the meeting
- * inside the directory module, so the rest can be left as defaults.
+ * inside the directory module, so the rest can be left as defaults. Each
+ * entry is a full `User` keyed by its canonical `${provider}:${accountId}`
+ * key — pass `githubUser(...)` / `placeholderUser(...)` builders.
  */
-function makeMeeting(
-  users: Record<string, { ghid: number; ghUsername: string; name: string; organisation?: string }>,
-): MeetingState {
+function makeMeeting(users: User[]): MeetingState {
   return {
     id: 'm1',
     createdAt: new Date().toISOString(),
     participantIds: [],
-    users: Object.fromEntries(
-      Object.entries(users).map(([key, u]) => [key, { ...u, organisation: u.organisation ?? '' }]),
-    ) as MeetingState['users'],
+    users: Object.fromEntries(users.map((u) => [userKey(u), u])) as MeetingState['users'],
     chairIds: [],
     agenda: [],
     queue: { entries: {}, orderedIds: [], closed: false },
@@ -270,7 +273,7 @@ describe('githubDirectory', () => {
       await warmDirectoryForUser(session);
     }
 
-    it('synthesises tier-1 avatar URLs from the login (works for mock-auth ghids)', async () => {
+    it('synthesises tier-1 avatar URLs from the login (works for mock-auth users)', async () => {
       const session = makeSession();
       // No org cache — searcher has no orgs, so tier 2 returns nothing.
       restoreFetch = setFetchForTesting(async (url) => {
@@ -279,15 +282,12 @@ describe('githubDirectory', () => {
         throw new Error(`unexpected: ${url}`);
       });
 
-      // A meeting user with a hashed ghid (the shape mock-auth produces) —
-      // the avatar URL must be derived from the login, not the fake ghid,
-      // otherwise github.com/avatars/u/{fakeId} 404s.
-      const meeting = makeMeeting({
-        admin: { ghid: 9999999, ghUsername: 'admin', name: 'Admin' },
-      });
+      // A mock-auth meeting user — the avatar URL is the synthesised
+      // github.com/{login}.png form carried on the stored User record.
+      const meeting = makeMeeting([githubUser({ id: 1, login: 'admin', name: 'Admin' })]);
       const results = await searchUsers(session, 'adm', meeting, 5);
       expect(results).toHaveLength(1);
-      expect(results[0].avatarUrl).toBe('https://github.com/admin.png?size=80');
+      expect(results[0].user.avatarUrl).toBe('https://github.com/admin.png?size=80');
     });
 
     it('enriches tier-2 entries with display name and company from the GraphQL query', async () => {
@@ -306,29 +306,27 @@ describe('githubDirectory', () => {
 
       // Match by display name (which is *not* a substring of the login).
       const byName = await searchUsers(session, 'Anderson', undefined, 5);
-      expect(byName.map((r) => r.login)).toEqual(['alice']);
-      expect(byName[0].name).toBe('Alice Anderson');
-      expect(byName[0].organisation).toBe('Acme');
+      expect(byName.map((s) => s.user.handle)).toEqual(['alice']);
+      expect(byName[0].user.name).toBe('Alice Anderson');
+      expect(byName[0].user.organisation).toBe('Acme');
 
       // Match by company.
       const byCompany = await searchUsers(session, 'Bumble', undefined, 5);
-      expect(byCompany.map((r) => r.login)).toEqual(['allison']);
-      expect(byCompany[0].organisation).toBe('Bumble');
+      expect(byCompany.map((s) => s.user.handle)).toEqual(['allison']);
+      expect(byCompany[0].user.organisation).toBe('Bumble');
     });
 
     it('returns meeting users (tier 1) before org members (tier 2)', async () => {
       const session = makeSession();
       await seedCacheFor(session);
 
-      const meeting = makeMeeting({
-        alice: { ghid: 999, ghUsername: 'alice', name: 'Alice In Meeting' },
-      });
+      const meeting = makeMeeting([githubUser({ id: 2, login: 'alice', name: 'Alice In Meeting' })]);
       const results = await searchUsers(session, 'al', meeting, 5);
 
-      // The meeting copy of alice (ghid 999, badge 'meeting') wins over the
-      // org copy (ghid 100, badge 'org') because tier 1 takes precedence.
+      // The meeting copy of alice (badge 'meeting') wins over the org copy
+      // (badge 'org') because tier 1 takes precedence (deduped by login).
       // Allison should still appear from tier 2.
-      expect(results.map((r) => r.login)).toEqual(['alice', 'allison']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'allison']);
       expect(results[0].badge).toBe('meeting');
       expect(results[1].badge).toBe('org');
     });
@@ -336,11 +334,11 @@ describe('githubDirectory', () => {
     it('only consults cached members of orgs the searcher belongs to (ACL)', async () => {
       // Searcher belongs to no orgs — but tc39 cache exists from a prior user.
       // The search must NOT surface tc39 members to this searcher.
-      const seeder = makeSession({ ghid: 99, ghUsername: 'seeder' });
+      const seeder = makeSession({ accountId: 'seeder', handle: 'seeder' });
       await seedCacheFor(seeder);
 
       // The actual searcher has a separate session with no orgs in cache.
-      const searcher = makeSession({ ghid: 1, ghUsername: 'searcher', accessToken: 'tok2' });
+      const searcher = makeSession({ accountId: 'searcher', handle: 'searcher', accessToken: 'tok2' });
       // Stub fetch to *only* answer the searcher's own /user/orgs (returning
       // an empty list) and refuse anything else — proves no other call happens
       // because the org member candidates are filtered to the empty set.
@@ -387,7 +385,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'al', undefined, 3);
       // tier 2: alice (100), allison (101) → 2 hits, less than limit 3.
       // tier 3 returns alice (dup) + allen → only allen survives dedup.
-      expect(results.map((r) => r.login)).toEqual(['alice', 'allison', 'allen']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'allison', 'allen']);
     });
 
     it('skips tier 3 when tiers 1+2 already meet the limit', async () => {
@@ -404,7 +402,7 @@ describe('githubDirectory', () => {
       });
 
       const results = await searchUsers(session, 'al', undefined, 1);
-      expect(results.map((r) => r.login)).toEqual(['alice']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice']);
       expect(searchCalled).toBe(false);
     });
 
@@ -449,11 +447,11 @@ describe('githubDirectory', () => {
 
       // Uppercase query against lowercase storage.
       const upperToLower = await searchUsers(session, 'BOB', undefined, 5);
-      expect(upperToLower.map((r) => r.login)).toEqual(['bob-jones']);
+      expect(upperToLower.map((s) => s.user.handle)).toEqual(['bob-jones']);
 
       // Lowercase query against mixed-case storage.
       const lowerToMixed = await searchUsers(session, 'alice', undefined, 5);
-      expect(lowerToMixed.map((r) => r.login)).toEqual(['AliceSmith']);
+      expect(lowerToMixed.map((s) => s.user.handle)).toEqual(['AliceSmith']);
     });
 
     it('matches a space-separated query against a camel-case login', async () => {
@@ -476,15 +474,15 @@ describe('githubDirectory', () => {
       // Title-cased query with an internal space — the form a user is
       // most likely to type when they know the display name.
       const titled = await searchUsers(session, 'Samina Husein', undefined, 5);
-      expect(titled.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(titled.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
 
       // Lowercase + space — both axes of normalisation working together.
       const lower = await searchUsers(session, 'samina husein', undefined, 5);
-      expect(lower.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(lower.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
 
       // Regression guard: the no-space form must keep working.
       const collapsed = await searchUsers(session, 'saminahusein', undefined, 5);
-      expect(collapsed.map((r) => r.login)).toEqual(['SaminaHusein']);
+      expect(collapsed.map((s) => s.user.handle)).toEqual(['SaminaHusein']);
     });
 
     it('matches across diacritics in either direction', async () => {
@@ -511,15 +509,15 @@ describe('githubDirectory', () => {
 
       // Stored name has accents; typed query has none.
       const ascii = await searchUsers(session, 'Jose Perez', undefined, 5);
-      expect(ascii.map((r) => r.login)).toEqual(['joseperez']);
+      expect(ascii.map((s) => s.user.handle)).toEqual(['joseperez']);
 
       // Typed query has accent; stored name does not.
       const accented = await searchUsers(session, 'Jürgen', undefined, 5);
-      expect(accented.map((r) => r.login)).toEqual(['jurgenschmidt']);
+      expect(accented.map((s) => s.user.handle)).toEqual(['jurgenschmidt']);
 
       // Both sides accented (round-trip).
       const both = await searchUsers(session, 'José', undefined, 5);
-      expect(both.map((r) => r.login)).toEqual(['joseperez']);
+      expect(both.map((s) => s.user.handle)).toEqual(['joseperez']);
     });
 
     it('ranks prefix matches above fuzzy (subsequence) matches within a tier', async () => {
@@ -546,7 +544,7 @@ describe('githubDirectory', () => {
       });
 
       const results = await searchUsers(session, 'al', undefined, 5);
-      expect(results.map((r) => r.login)).toEqual(['alice', 'kallai']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alice', 'kallai']);
     });
 
     it('ranks any prefix match above any non-prefix match across fields', async () => {
@@ -580,7 +578,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, 'ali', undefined, 5);
       // alibaba (login prefix, weight 3) > aline (name prefix, weight 2) >
       // xalix (login subsequence — different class entirely).
-      expect(results.map((r) => r.login)).toEqual(['alibaba', 'aline', 'xalix']);
+      expect(results.map((s) => s.user.handle)).toEqual(['alibaba', 'aline', 'xalix']);
     });
 
     it('matches against the GitHub `company` field on cached org members', async () => {
@@ -595,14 +593,14 @@ describe('githubDirectory', () => {
       // 'acme' isn't in any login or display name in the seed; the only
       // way it surfaces a result is via the company field on alice.
       const results = await searchUsers(session, 'acme', undefined, 5);
-      expect(results.map((r) => r.login)).toContain('alice');
+      expect(results.map((s) => s.user.handle)).toContain('alice');
     });
 
-    it('excludes unresolved presenter placeholders (ghid 0) from results', async () => {
+    it('excludes unresolved presenter placeholders (empty avatarUrl) from results', async () => {
       // Agenda import stores presenters whose names didn't bind to a real
-      // GitHub user as placeholder rows in meeting.users with ghid: 0.
-      // Those placeholders must not surface in autocomplete — they have
-      // no real identity to bind to.
+      // GitHub user as placeholder rows in meeting.users, marked by an
+      // empty `avatarUrl`. Those placeholders must not surface in
+      // autocomplete — they have no real identity to bind to.
       const session = makeSession();
       await seedCacheFor(session);
 
@@ -612,24 +610,24 @@ describe('githubDirectory', () => {
       });
 
       // The meeting holds:
-      //   - bob: a normally-resolved meeting user (ghid > 0).
+      //   - bob: a normally-resolved meeting user (non-empty avatarUrl).
       //   - 'alice anderson': an unresolved placeholder created by agenda
-      //     import. Same login (lowercased) as the real org-cached alice
-      //     (ghid 100); without the filter, login dedup in mergeTiered
-      //     would have the placeholder shadow the real user.
+      //     import. Same login (lowercased) as the real org-cached alice;
+      //     without the filter, login dedup in mergeTiered would have the
+      //     placeholder shadow the real user.
       //   - 'unknown person': an unresolved placeholder with no real
       //     counterpart in any tier — should simply not appear at all.
-      const meeting = makeMeeting({
-        bob: { ghid: 7, ghUsername: 'bob', name: 'Bob Smith' },
-        'alice anderson': { ghid: 0, ghUsername: 'alice anderson', name: 'alice anderson' },
-        'unknown person': { ghid: 0, ghUsername: 'unknown person', name: 'unknown person' },
-      });
+      const meeting = makeMeeting([
+        githubUser({ id: 3, login: 'bob', name: 'Bob Smith' }),
+        placeholderUser('alice anderson'),
+        placeholderUser('unknown person'),
+      ]);
 
       // Query 'alice' — the placeholder must be filtered out so the real
-      // tier-2 alice (ghid 100, badge 'org') is what comes back.
+      // tier-2 alice (badge 'org') is what comes back.
       const aliceResults = await searchUsers(session, 'alice', meeting, 5);
-      expect(aliceResults.map((r) => ({ login: r.login, ghid: r.ghid, badge: r.badge }))).toEqual([
-        { login: 'alice', ghid: 100, badge: 'org' },
+      expect(aliceResults.map((r) => ({ login: r.user.handle, badge: r.badge }))).toEqual([
+        { login: 'alice', badge: 'org' },
       ]);
 
       // Query 'unknown' — the placeholder is the only thing that would
@@ -639,7 +637,7 @@ describe('githubDirectory', () => {
 
       // Resolved meeting users still come through normally.
       const bobResults = await searchUsers(session, 'bob', meeting, 5);
-      expect(bobResults.map((r) => r.login)).toEqual(['bob']);
+      expect(bobResults.map((s) => s.user.handle)).toEqual(['bob']);
     });
 
     it('skips the empty-query tier-3 call (GitHub rejects q=)', async () => {
@@ -658,7 +656,7 @@ describe('githubDirectory', () => {
       const results = await searchUsers(session, '', undefined, 100);
       // All cached org members come back; no upstream search.
       expect(searchCalled).toBe(false);
-      expect(results.map((r) => r.login).sort()).toEqual(['alice', 'allison', 'wendy']);
+      expect(results.map((s) => s.user.handle).sort()).toEqual(['alice', 'allison', 'wendy']);
     });
   });
 
@@ -681,7 +679,7 @@ describe('githubDirectory', () => {
       // org — just assert each result actually scores against the query.
       expect(results.length).toBeGreaterThan(0);
       for (const r of results) {
-        expect(matchesQuery('mike', r.login, r.name, r.organisation)).toBe(true);
+        expect(matchesQuery('mike', r.user.handle ?? '', r.user.name, r.user.organisation)).toBe(true);
       }
     });
   });
@@ -725,12 +723,10 @@ describe('githubDirectory', () => {
       await seedOAuthCache(session);
       forbidTier3();
 
-      const meeting = makeMeeting({
-        bob: { ghid: 7, ghUsername: 'bob', name: 'Bob Smith' },
-      });
+      const meeting = makeMeeting([githubUser({ id: 3, login: 'bob', name: 'Bob Smith' })]);
       const hit = resolvePresenterFromDirectory(session, 'Bob Smith', meeting);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('bob');
+      expect(hit?.user.handle).toBe('bob');
       expect(hit?.badge).toBe('meeting');
     });
 
@@ -743,7 +739,7 @@ describe('githubDirectory', () => {
       // but not the full display name.
       const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', undefined);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('alice');
+      expect(hit?.user.handle).toBe('alice');
       expect(hit?.badge).toBe('org');
     });
 
@@ -771,17 +767,15 @@ describe('githubDirectory', () => {
       await seedOAuthCache(session);
       forbidTier3();
 
-      // Tier 1: meeting copy of alice (ghid 100, same as the org cache).
-      // Tier 2: org copy of alice (ghid 100). mergeTiered dedupes by ghid,
-      // so the resolver still sees exactly one match — and it should resolve.
+      // Tier 1: meeting copy of alice (same login as the org cache).
+      // Tier 2: org copy of alice. mergeTiered dedupes by login, so the
+      // resolver still sees exactly one match — and it should resolve.
       // We use a query precise enough that allison (the other org member
       // matching "al") doesn't match.
-      const meeting = makeMeeting({
-        alice: { ghid: 100, ghUsername: 'alice', name: 'Alice Anderson' },
-      });
+      const meeting = makeMeeting([githubUser({ id: 2, login: 'alice', name: 'Alice Anderson' })]);
       const hit = resolvePresenterFromDirectory(session, 'Alice Anderson', meeting);
       expect(hit).not.toBeNull();
-      expect(hit?.login).toBe('alice');
+      expect(hit?.user.handle).toBe('alice');
       // Tier 1 wins on overlap.
       expect(hit?.badge).toBe('meeting');
     });
@@ -810,7 +804,7 @@ describe('githubDirectory', () => {
 
         expect(fetchMock).not.toHaveBeenCalled();
         expect(hit).not.toBeNull();
-        expect(hit?.login).toBe('littledan');
+        expect(hit?.user.handle).toBe('littledan');
       });
 
       it('returns null when DEV_USERS produces multiple matches', async () => {

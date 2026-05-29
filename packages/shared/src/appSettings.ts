@@ -10,10 +10,11 @@
  */
 export interface AppSettings {
   /**
-   * Canonical (trimmed, lowercased, deduped) GitHub usernames who
-   * belong to the premium tier. Replaces the former
-   * `PREMIUM_USERNAMES` environment variable; managed at runtime via
-   * the admin panel.
+   * Canonical (deduped, sorted) references to the users who belong to the
+   * premium tier — each a bare GitHub handle or a provider-qualified
+   * `provider:id` (see `canonicalUserRef`). Replaces the former
+   * `PREMIUM_USERNAMES` environment variable; managed at runtime via the
+   * admin panel. (Field name kept for store-shape back-compat.)
    */
   premiumUsernames: string[];
 }

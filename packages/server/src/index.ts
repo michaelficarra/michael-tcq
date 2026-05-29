@@ -23,9 +23,11 @@ import type { MeetingStore } from './store.js';
 import { AppSettingsManager } from './appSettingsManager.js';
 import { FileAppSettingsStore, FirestoreAppSettingsStore, type AppSettingsStore } from './appSettingsStore.js';
 import { createMeetingRoutes } from './routes.js';
-import { createAuthRoutes } from './auth.js';
+import { createAuthRoutes, authProvidersHandler } from './auth.js';
+import { enabledProviders } from './auth/registry.js';
 import { requireAuth } from './requireAuth.js';
-import { mockAuth, isOAuthConfigured } from './mockAuth.js';
+import { mockAuth, isMockAuthEnabled } from './mockAuth.js';
+import { upgradeSessionUser } from './session.js';
 import { securityHeaders } from './securityHeaders.js';
 import { registerSocketHandlers } from './socket.js';
 import { versionHandler } from './versionRoute.js';
@@ -151,9 +153,23 @@ app.use(securityHeaders);
 app.use(express.json());
 app.use(sessionMiddleware);
 
-// Mock auth: when GitHub OAuth credentials are not configured, inject
-// a fake user so features work without an OAuth App. Does nothing when
-// GITHUB_CLIENT_ID is set.
+// Upgrade any session persisted in the pre-multi-provider user shape
+// (`{ ghid, ghUsername, … }`) to the provider-neutral one on read, so a
+// returning user isn't forced to log in again. Mounted right after the
+// session middleware and before mock auth, and applied to the Socket.IO
+// engine path too (see below) so WebSocket handshakes see the upgraded user.
+const normaliseSessionUser: express.RequestHandler = (req, _res, next) => {
+  const u = req.session?.user;
+  // Legacy session users lack `provider`; idempotent for already-migrated ones.
+  if (u && !('provider' in u)) {
+    req.session.user = upgradeSessionUser(u);
+  }
+  next();
+};
+app.use(normaliseSessionUser);
+
+// Mock auth: when no authentication provider is configured, inject a fake
+// user so features work without an OAuth App. Does nothing otherwise.
 app.use(mockAuth);
 
 // Structured access logging — emits a GCP HttpRequest-shaped entry when
@@ -174,6 +190,9 @@ app.get('/api/health', (_req, res) => {
 
 // Version endpoint: returns the deployed commit SHA, or 204 in dev.
 app.get('/api/version', versionHandler);
+
+// Public list of login options for the login page (no auth required).
+app.get('/api/auth/providers', authProvidersHandler);
 
 // All other /api routes require an authenticated session
 app.use('/api', requireAuth, createMeetingRoutes(meetingManager, io, appSettingsManager));
@@ -232,8 +251,13 @@ app.use(errorHandler);
 // are authenticated using the same session cookie.
 io.engine.use(sessionMiddleware);
 
-// Apply mock auth to socket handshake requests (only effective when
-// OAuth is not configured — otherwise it's a no-op).
+// Upgrade legacy session users on the socket handshake too, before mock
+// auth — otherwise a returning user's WebSocket would carry a pre-migration
+// user that fails the key-based chair/participant checks.
+io.engine.use(normaliseSessionUser);
+
+// Apply mock auth to socket handshake requests (only effective when no
+// provider is configured — otherwise it's a no-op).
 io.engine.use(mockAuth);
 
 // Register all Socket.IO event handlers (join, disconnect, etc.)
@@ -258,7 +282,14 @@ process.on('unhandledRejection', (reason) => {
 async function start() {
   // Log which modes are active
   info('server_starting', { persistence: STORE_TYPE });
-  info('auth_mode', { mode: isOAuthConfigured() ? 'github_oauth' : 'mock' });
+  // 'oauth' when real providers are configured, 'mock' for the dev auto-login,
+  // and 'none' when neither applies (e.g. a production deploy missing its OAuth
+  // credentials) — that state fails closed, so surface it loudly in the logs.
+  const providerIds = enabledProviders().map((p) => p.id);
+  info('auth_mode', {
+    mode: providerIds.length > 0 ? 'oauth' : isMockAuthEnabled() ? 'mock' : 'none',
+    providers: providerIds,
+  });
 
   // Restore any persisted meetings from the store. If this fails
   // (e.g. Firestore not yet set up), log the error but continue

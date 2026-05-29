@@ -41,8 +41,12 @@ describe('httpLogger middleware', () => {
       // fake session shape isn't force-fit to express-session's augmented
       // SessionData type.
       if (req.path === '/me') {
-        (req as unknown as { session: { user: { ghid: number; ghUsername: string; isAdmin: boolean } } }).session = {
-          user: { ghid: 42, ghUsername: 'octocat', isAdmin: false },
+        (
+          req as unknown as {
+            session: { user: { provider: string; accountId: string; handle: string; isAdmin: boolean } };
+          }
+        ).session = {
+          user: { provider: 'github', accountId: 'octocat', handle: 'octocat', isAdmin: false },
         };
       }
       next();
@@ -94,10 +98,11 @@ describe('httpLogger middleware', () => {
     await new Promise((r) => setImmediate(r));
 
     const entry = capture.entries().find((e) => e.message === 'http_request');
-    expect(entry?.user).toEqual({ ghid: 42, ghUsername: 'octocat', isAdmin: false });
+    expect(entry?.user).toEqual({ provider: 'github', accountId: 'octocat', handle: 'octocat', isAdmin: false });
     // Top-level should NOT have the individual fields — attribution stays grouped.
-    expect(entry?.ghid).toBeUndefined();
-    expect(entry?.ghUsername).toBeUndefined();
+    expect(entry?.provider).toBeUndefined();
+    expect(entry?.accountId).toBeUndefined();
+    expect(entry?.handle).toBeUndefined();
     expect(entry?.isAdmin).toBeUndefined();
   });
 

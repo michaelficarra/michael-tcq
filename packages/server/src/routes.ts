@@ -1,23 +1,26 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
-import type { PremiumUsersResponse, User, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
+import type {
+  PremiumUsersResponse,
+  User,
+  DirectorySuggestion,
+  ClientToServerEvents,
+  ServerToClientEvents,
+} from '@tcq/shared';
 import {
   CreateMeetingBodySchema,
   ImportAgendaBodySchema,
   PremiumUserBodySchema,
   SwitchUserBodySchema,
   userKey,
+  placeholderUser,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
-import { fetchGitHubUser } from './auth.js';
-import { isOAuthConfigured } from './mockAuth.js';
-import {
-  searchUsers,
-  resolvePresenterFromDirectory,
-  warmDirectoryForUser,
-  DEFAULT_AUTOCOMPLETE_LIMIT,
-  type DirectoryUser,
-} from './githubDirectory.js';
+import { isMockAuthEnabled } from './mockAuth.js';
+import { providerById } from './auth/registry.js';
+import { resolveSelections } from './resolveUser.js';
+import { DEFAULT_AUTOCOMPLETE_LIMIT } from './githubDirectory.js';
+import { resolvePremiumUsers } from './premiumDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
@@ -52,14 +55,14 @@ export function createMeetingRoutes(
       return;
     }
     // toClientUser strips the OAuth access token (server-only) before serialising.
-    res.json({ ...toClientUser(user, appSettings), mockAuth: !isOAuthConfigured() });
+    res.json({ ...toClientUser(user, appSettings), mockAuth: isMockAuthEnabled() });
   });
 
   // --- Dev-only: switch the mock user ---
   // Allows changing the logged-in identity during development without
   // OAuth. Only available when mock auth is active.
   router.post('/dev/switch-user', (req, res) => {
-    if (isOAuthConfigured()) {
+    if (!isMockAuthEnabled()) {
       res.status(404).json({ error: 'Not available' });
       return;
     }
@@ -73,8 +76,9 @@ export function createMeetingRoutes(
 
     // Resolve via the mock-user helper so logins that match a TC39 seed
     // entry pick up the real display name and company; everyone else
-    // falls back to login-as-name with no organisation. ghid stays
-    // deterministic per login across restarts.
+    // falls back to login-as-name with no organisation. The login maps to
+    // a stable `github:<id>` key across restarts (seed id, else a
+    // deterministic hash of the login).
     const user = mockUserFromLogin(username);
 
     req.session.user = toSessionUser(user);
@@ -106,13 +110,18 @@ export function createMeetingRoutes(
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 25) : DEFAULT_AUTOCOMPLETE_LIMIT;
 
     const meeting = meetingIdRaw ? meetingManager.get(meetingIdRaw) : undefined;
-    const users = await searchUsers(user, q, meeting, limit);
-    res.json({ users });
+    // Dispatch to the searcher's provider directory (enabled-agnostic so the
+    // GitHub seed directory still answers in mock-auth mode). A provider with
+    // no directory capability returns nothing.
+    const directory = providerById(user.provider)?.directory;
+    const suggestions = directory ? await directory.searchUsers(user, q, meeting, limit) : [];
+    res.json({ suggestions });
   });
 
-  // Create a new meeting. The request body should contain a `chairs` array
-  // of GitHub usernames. Each username is validated against the GitHub API
-  // when OAuth is configured; otherwise placeholder User objects are used.
+  // Create a new meeting. The body carries `chairs` as a list of
+  // `UserSelection`s (typically just the creator's own identity). Each is
+  // resolved through the provider — an account selection is re-resolved to an
+  // authoritative profile, a free-text handle via the provider's handle lookup.
   router.post('/meetings', async (req, res) => {
     const user = req.session.user;
     if (!user) {
@@ -125,37 +134,12 @@ export function createMeetingRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' });
       return;
     }
-    const chairUsernames = parsed.data.chairs;
 
-    // Resolve each username to a User object
-    const chairs: User[] = [];
-    for (const username of chairUsernames) {
-      // If this is the current user, use their full session profile
-      if (username.toLowerCase() === user.ghUsername.toLowerCase()) {
-        chairs.push(user);
-        continue;
-      }
-
-      if (isOAuthConfigured()) {
-        // Validate against the GitHub API when OAuth is configured
-        const ghUser = await fetchGitHubUser(username);
-        if (!ghUser) {
-          res.status(400).json({ error: `GitHub user "${username}" not found` });
-          return;
-        }
-        chairs.push(ghUser);
-      } else {
-        // Without OAuth, create a mock user via the seed-aware helper:
-        // logins that match a TC39 seed entry pick up the real display
-        // name and company, others fall back to login-as-name. The ghid
-        // is deterministic per login so the same chair maps to the same
-        // user across restarts and across meetings.
-        chairs.push(mockUserFromLogin(username));
-      }
-    }
+    // No meeting exists yet, so resolution falls to the acting user / provider.
+    const chairs = await resolveSelections(user, undefined, parsed.data.chairs);
 
     if (chairs.length === 0) {
-      res.status(400).json({ error: 'At least one valid chair username is required' });
+      res.status(400).json({ error: 'At least one valid chair is required' });
       return;
     }
 
@@ -289,7 +273,7 @@ export function createMeetingRoutes(
     if (!meetingManager.isChair(meetingId, user) && !user.isAdmin) {
       res.status(403).json({
         error: 'Only chairs can import an agenda',
-        user: user.ghUsername,
+        user: userKey(user),
         chairs: meeting.chairIds,
       });
       return;
@@ -373,17 +357,24 @@ export function createMeetingRoutes(
       return;
     }
 
+    // Resolve presenter names through the importer's provider directory,
+    // dispatched via the same `providerById` path as the autocomplete handler
+    // so import resolution matches what the dropdown would show for the same
+    // searcher (enabled-agnostic, so the GitHub seed directory still answers in
+    // mock-auth mode). A provider with no directory resolves nothing and every
+    // presenter falls through to a placeholder.
+    const directory = providerById(user.provider)?.directory;
+
     // Make sure the importer's org directory is in cache before resolving.
-    // `warmDirectoryForUser` is fire-and-forget at OAuth login, and the
-    // org-members cache is in-process only — so a restarted instance, a
-    // login from this morning paired with an import this afternoon (cache
-    // TTL elapsed), or simply an import seconds after first login can all
-    // leave tier 2 empty when resolution runs. Awaiting here guarantees
-    // tier 2 is populated and matches what the autocomplete dropdown would
-    // see for the same searcher. The helper coalesces concurrent refreshes
-    // and is a no-op in mock-auth mode (no access token), so this is cheap
-    // when the cache is already warm.
-    await warmDirectoryForUser(user);
+    // `warmDirectory` is fire-and-forget at OAuth login, and the org-members
+    // cache is in-process only — so a restarted instance, a login from this
+    // morning paired with an import this afternoon (cache TTL elapsed), or
+    // simply an import seconds after first login can all leave tier 2 empty
+    // when resolution runs. Awaiting here guarantees tier 2 is populated and
+    // matches what the autocomplete dropdown would see. The helper coalesces
+    // concurrent refreshes and is a no-op in mock-auth mode (no access token),
+    // so this is cheap when the cache is already warm.
+    await directory?.warmDirectory(user);
 
     // Resolve unique presenter names against the local directory (tier 1
     // + tier 2 only — meeting users and the importer's org members). When
@@ -392,14 +383,14 @@ export function createMeetingRoutes(
     // placeholder behaviour. Resolution is per-name, so the comma-split
     // presenters of a single cell can be a mix of resolved and placeholder
     // entries. Names appearing across multiple items are resolved once.
-    const resolved = new Map<string, DirectoryUser>();
+    const resolved = new Map<string, DirectorySuggestion>();
     const seenKeys = new Set<string>();
     for (const item of items) {
       for (const raw of item.presenters) {
         const dedupKey = raw.trim().toLowerCase();
         if (dedupKey.length === 0 || seenKeys.has(dedupKey)) continue;
         seenKeys.add(dedupKey);
-        const hit = resolvePresenterFromDirectory(user, raw, meeting);
+        const hit = directory?.resolvePresenterFromDirectory(user, raw, meeting) ?? null;
         if (hit) resolved.set(dedupKey, hit);
       }
     }
@@ -410,16 +401,7 @@ export function createMeetingRoutes(
     for (const item of items) {
       const presenters: User[] = item.presenters.map((name) => {
         const hit = resolved.get(name.trim().toLowerCase());
-        return hit
-          ? {
-              ghid: hit.ghid,
-              // Canonical login from the directory — `userKey` will
-              // lowercase it when storing in `meeting.users`.
-              ghUsername: hit.login,
-              name: hit.name,
-              organisation: hit.organisation,
-            }
-          : { ghid: 0, ghUsername: name, name, organisation: '' };
+        return hit ? hit.user : placeholderUser(name);
       });
       meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
     }
@@ -455,7 +437,7 @@ export function createMeetingRoutes(
     // participantIds and lastConnectionTime live on the persisted meeting
     // state so they survive server restarts; currentConnections is live
     // socket-room state maintained in memory. Participant keys are resolved
-    // to ghUsernames here so the client can render them without access to
+    // to handles here so the client can render them without access to
     // the full meeting users map. Soft-deleted meetings are included so
     // the admin panel can render them (struck-through) and offer Restore.
     for (const meeting of meetingManager.listAll()) {
@@ -463,7 +445,13 @@ export function createMeetingRoutes(
       meetings.push({
         id: meeting.id,
         createdAt: meeting.createdAt,
-        participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.ghUsername ?? key),
+        // Handle for GitHub users; display name for handle-less providers
+        // (Google/Microsoft/ORCID), so the admin tooltip never shows an opaque
+        // `provider:accountId` key. Key only as a last resort if unresolved.
+        participantUsernames: meeting.participantIds.map((key) => {
+          const u = meeting.users[key];
+          return u?.handle ?? u?.name ?? key;
+        }),
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
         deletedAt: meeting.deletedAt ?? null,
@@ -585,13 +573,13 @@ export function createMeetingRoutes(
   // meeting rooms the affected user is sitting in, so badges/glow flip
   // on/off live without a page refresh.
 
-  router.get('/admin/premium-users', (req, res) => {
+  router.get('/admin/premium-users', async (req, res) => {
     const user = req.session.user;
     if (!user || !user.isAdmin) {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json(response);
   });
 
@@ -613,7 +601,7 @@ export function createMeetingRoutes(
     // socket traffic.
     const added = await appSettings.addPremiumUsername(parsed.data.username);
     if (added !== null) broadcastPremiumChange(io, meetingManager, appSettings, added);
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json({ ok: true, ...response });
   });
 
@@ -631,10 +619,11 @@ export function createMeetingRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid username' });
       return;
     }
-    const canonical = parsed.data.username;
-    const removed = await appSettings.removePremiumUsername(canonical);
-    if (removed) broadcastPremiumChange(io, meetingManager, appSettings, canonical);
-    const response: PremiumUsersResponse = { usernames: appSettings.getPremiumUsernames() };
+    // `removePremiumUsername` returns the canonical reference that was
+    // removed (or null if it wasn't present); broadcast on an actual change.
+    const removed = await appSettings.removePremiumUsername(parsed.data.username);
+    if (removed !== null) broadcastPremiumChange(io, meetingManager, appSettings, removed);
+    const response: PremiumUsersResponse = { users: await resolvePremiumUsers(appSettings.getPremiumUsernames()) };
     res.json({ ok: true, ...response });
   });
 

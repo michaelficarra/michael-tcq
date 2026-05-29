@@ -56,8 +56,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const ALICE = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
-const BOB = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'ACME' };
+const ALICE = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
+const BOB = {
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
+  name: 'Bob',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/bob.png?size=80',
+};
 
 function mockMeOnce(user: typeof ALICE | null, opts: { mockAuth?: boolean; isAdmin?: boolean } = {}) {
   if (user === null) {
@@ -73,7 +87,7 @@ function mockMeOnce(user: typeof ALICE | null, opts: { mockAuth?: boolean; isAdm
 function CurrentUser() {
   const { user, loading } = useAuth();
   if (loading) return <span>loading</span>;
-  return <span>{user ? user.ghUsername : 'anon'}</span>;
+  return <span>{user ? user.handle : 'anon'}</span>;
 }
 
 describe('AuthContext cross-tab sync', () => {
@@ -97,13 +111,13 @@ describe('AuthContext cross-tab sync', () => {
       await Promise.resolve();
     });
 
-    expect(localStorage.getItem('tcq:auth:ghid')).toBe('1');
+    expect(localStorage.getItem('tcq:auth:id')).toBe('github:alice');
     expect(received).not.toHaveBeenCalled();
     observer.close();
   });
 
   it('does not broadcast when the marker matches the fetched user', async () => {
-    localStorage.setItem('tcq:auth:ghid', '1');
+    localStorage.setItem('tcq:auth:id', 'github:alice');
     mockMeOnce(ALICE);
 
     const observer = new BroadcastChannel('tcq:auth');
@@ -128,7 +142,7 @@ describe('AuthContext cross-tab sync', () => {
   it('broadcasts when the fetched identity differs from the marker (e.g., post-login bootstrap)', async () => {
     // Simulate Tab A returning from /auth/github — last-known identity was
     // logged-out, the fresh /api/me reveals a logged-in user.
-    localStorage.setItem('tcq:auth:ghid', '');
+    localStorage.setItem('tcq:auth:id', '');
     mockMeOnce(ALICE);
 
     const observer = new BroadcastChannel('tcq:auth');
@@ -144,12 +158,12 @@ describe('AuthContext cross-tab sync', () => {
     await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument());
     await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
     expect(received.mock.calls[0]?.[0]?.data).toEqual({ type: 'auth-changed' });
-    expect(localStorage.getItem('tcq:auth:ghid')).toBe('1');
+    expect(localStorage.getItem('tcq:auth:id')).toBe('github:alice');
     observer.close();
   });
 
   it('broadcasts a logout (ghid → empty) when the marker held a previous user', async () => {
-    localStorage.setItem('tcq:auth:ghid', '1');
+    localStorage.setItem('tcq:auth:id', 'github:alice');
     mockMeOnce(null);
 
     const observer = new BroadcastChannel('tcq:auth');
@@ -164,12 +178,12 @@ describe('AuthContext cross-tab sync', () => {
 
     await waitFor(() => expect(screen.getByText('anon')).toBeInTheDocument());
     await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
-    expect(localStorage.getItem('tcq:auth:ghid')).toBe('');
+    expect(localStorage.getItem('tcq:auth:id')).toBe('');
     observer.close();
   });
 
   it('refetches /api/me when an auth-changed message arrives on the channel', async () => {
-    localStorage.setItem('tcq:auth:ghid', '1');
+    localStorage.setItem('tcq:auth:id', 'github:alice');
     mockMeOnce(ALICE);
     // Second fetch — peer broadcast indicates identity may have changed.
     mockMeOnce(BOB);
@@ -185,7 +199,7 @@ describe('AuthContext cross-tab sync', () => {
     // A peer tab updates the marker (this is what the broadcasting tab
     // would have done before posting) so the receiver doesn't re-broadcast
     // and create a feedback loop.
-    localStorage.setItem('tcq:auth:ghid', '2');
+    localStorage.setItem('tcq:auth:id', 'github:bob');
     const peer = new BroadcastChannel('tcq:auth');
     peer.postMessage({ type: 'auth-changed' });
 
@@ -195,7 +209,7 @@ describe('AuthContext cross-tab sync', () => {
   });
 
   it('switchUser triggers a broadcast when the identity changes', async () => {
-    localStorage.setItem('tcq:auth:ghid', '1');
+    localStorage.setItem('tcq:auth:id', 'github:alice');
     mockMeOnce(ALICE);
     // Sequence triggered by switchUser():
     //   POST /api/dev/switch-user → fetchMe() → /api/me returns BOB.
@@ -206,7 +220,7 @@ describe('AuthContext cross-tab sync', () => {
       const { user, switchUser } = useAuth();
       return (
         <>
-          <span>{user?.ghUsername ?? 'anon'}</span>
+          <span>{user?.handle ?? 'anon'}</span>
           <button onClick={() => switchUser('bob')}>switch</button>
         </>
       );
@@ -231,13 +245,13 @@ describe('AuthContext cross-tab sync', () => {
     await waitFor(() => expect(screen.getByText('bob')).toBeInTheDocument());
     await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
     expect(received.mock.calls[0]?.[0]?.data).toEqual({ type: 'auth-changed' });
-    expect(localStorage.getItem('tcq:auth:ghid')).toBe('2');
+    expect(localStorage.getItem('tcq:auth:id')).toBe('github:bob');
     observer.close();
   });
 
   it('renders without throwing when BroadcastChannel is unavailable', async () => {
     vi.stubGlobal('BroadcastChannel', undefined);
-    localStorage.setItem('tcq:auth:ghid', '');
+    localStorage.setItem('tcq:auth:id', '');
     mockMeOnce(ALICE);
 
     render(
@@ -247,6 +261,6 @@ describe('AuthContext cross-tab sync', () => {
     );
 
     await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument());
-    expect(localStorage.getItem('tcq:auth:ghid')).toBe('1');
+    expect(localStorage.getItem('tcq:auth:id')).toBe('github:alice');
   });
 });

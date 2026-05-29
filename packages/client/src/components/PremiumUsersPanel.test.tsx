@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { PremiumUser } from '@tcq/shared';
 import { PremiumUsersPanel } from './PremiumUsersPanel.js';
 import { ToastProvider } from '../contexts/ToastContext.js';
 
@@ -13,11 +14,21 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
+/** Turn a list of canonical refs into resolved premium entries, mirroring the
+ *  server's `{ ref, user }` shape. The display name here is just the ref —
+ *  resolution itself lives server-side and is covered by its own tests. */
+function entriesFor(refs: string[]): PremiumUser[] {
+  return refs.map((ref) => ({
+    ref,
+    user: { provider: 'github', accountId: ref, handle: ref, name: ref, organisation: '', avatarUrl: '' },
+  }));
+}
+
 /** Mock a single GET /api/admin/premium-users response. */
 function mockListResponse(usernames: string[]) {
   mockFetch.mockResolvedValueOnce({
     ok: true,
-    json: () => Promise.resolve({ usernames }),
+    json: () => Promise.resolve({ users: entriesFor(usernames) }),
   });
 }
 
@@ -25,7 +36,7 @@ function mockListResponse(usernames: string[]) {
 function mockMutationResponse(usernames: string[], ok = true, error?: string) {
   mockFetch.mockResolvedValueOnce({
     ok,
-    json: () => Promise.resolve(ok ? { ok: true, usernames } : { error }),
+    json: () => Promise.resolve(ok ? { ok: true, users: entriesFor(usernames) } : { error }),
   });
 }
 
@@ -73,10 +84,12 @@ describe('PremiumUsersPanel', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
+      // The panel sends the raw typed value; the server canonicalises it
+      // (here the mocked response returns the lowercased `alice`).
       expect(mockFetch).toHaveBeenCalledWith('/api/admin/premium-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'alice' }),
+        body: JSON.stringify({ username: 'Alice' }),
       });
       expect(screen.getByLabelText(/Remove alice/)).toBeInTheDocument();
     });

@@ -23,7 +23,14 @@ function renderNav(ui: ReactElement) {
 beforeEach(() => {
   // Default: real OAuth mode (shows Log out link)
   mockUseAuth.mockReturnValue({
-    user: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: '' },
+    user: {
+      provider: 'github',
+      accountId: 'alice',
+      handle: 'alice',
+      name: 'Alice',
+      organisation: '',
+      avatarUrl: 'https://github.com/alice.png?size=80',
+    },
     mockAuth: false,
     switchUser: async () => {},
   });
@@ -67,7 +74,14 @@ describe('NavBar', () => {
 
   it('renders the username button and hamburger menu in mock auth mode', () => {
     mockUseAuth.mockReturnValue({
-      user: { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: '' },
+      user: {
+        provider: 'github',
+        accountId: 'testuser',
+        handle: 'testuser',
+        name: 'Test User',
+        organisation: '',
+        avatarUrl: 'https://github.com/testuser.png?size=80',
+      },
       mockAuth: true,
       switchUser: async () => {},
     });

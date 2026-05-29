@@ -1,15 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { MeetingState, AgendaItem, Session, QueueEntry, CurrentTopic, CurrentSpeaker, User } from '@tcq/shared';
+import type { MeetingState, AgendaItem, Session, QueueEntry, CurrentTopic, CurrentSpeaker } from '@tcq/shared';
 import { userKey } from '@tcq/shared';
+import { githubUser } from './auth/githubUser.js';
 import { denormalisePayload, attributionFields } from './socketLogger.js';
 
-function makeUser(ghid: number, ghUsername: string): User {
-  return { ghid, ghUsername, name: ghUsername, organisation: '' };
-}
-
 function makeMeeting(): MeetingState {
-  const alice = makeUser(1, 'alice');
-  const bob = makeUser(2, 'bob');
+  const alice = githubUser({ id: 1, login: 'alice' });
+  const bob = githubUser({ id: 2, login: 'bob' });
 
   const agendaItem: AgendaItem = {
     kind: 'item',
@@ -67,7 +64,7 @@ describe('denormalisePayload', () => {
     const meeting = makeMeeting();
     const out = denormalisePayload('agenda:reorder', { id: 'item-1', afterId: 'session-1' }, meeting);
     expect(out).toEqual({
-      id: { kind: 'item', id: 'item-1', name: 'Item one', presenterIds: ['alice'], duration: 10 },
+      id: { kind: 'item', id: 'item-1', name: 'Item one', presenterIds: ['github:1'], duration: 10 },
       afterId: { kind: 'session', id: 'session-1', name: 'Morning session', capacity: 60 },
     });
   });
@@ -86,19 +83,21 @@ describe('denormalisePayload', () => {
     const meeting = makeMeeting();
     const out = denormalisePayload('queue:remove', { id: 'qe-1' }, meeting);
     expect(out).toEqual({
-      id: { id: 'qe-1', type: 'topic', topic: 'My topic', userId: 'alice' },
+      id: { id: 'qe-1', type: 'topic', topic: 'My topic', userId: 'github:1' },
     });
   });
 
-  it('replaces meeting:updateChairs usernames with User objects', () => {
+  it('replaces meeting:updateChairs selections with User objects', () => {
     const meeting = makeMeeting();
-    const out = denormalisePayload('meeting:updateChairs', { usernames: ['alice', 'bob'] }, meeting) as {
-      usernames: unknown[];
-    };
-    expect(out.usernames).toEqual([
-      { ghid: 1, ghUsername: 'alice', name: 'alice', organisation: '' },
-      { ghid: 2, ghUsername: 'bob', name: 'bob', organisation: '' },
-    ]);
+    // A mix of selection shapes: a `{handle}` resolved by handle scan and a
+    // `{provider,accountId}` resolved via the meeting's users map. Both
+    // denormalise to the stored User for readable logging.
+    const out = denormalisePayload(
+      'meeting:updateChairs',
+      { chairs: [{ handle: 'alice' }, { provider: 'github', accountId: '2' }] },
+      meeting,
+    ) as { chairs: unknown[] };
+    expect(out.chairs).toEqual([githubUser({ id: 1, login: 'alice' }), githubUser({ id: 2, login: 'bob' })]);
   });
 
   it('replaces queue:add currentTopicSpeakerId with the current topic', () => {
@@ -143,12 +142,14 @@ describe('denormalisePayload', () => {
 describe('attributionFields', () => {
   it('nests user identity fields under a `user` key', () => {
     const fields = attributionFields({
-      ghid: 7,
-      ghUsername: 'octocat',
+      provider: 'github',
+      accountId: 'octocat',
+      handle: 'Octocat',
       name: 'Octocat',
       organisation: 'GitHub',
+      avatarUrl: 'https://github.com/Octocat.png?size=80',
       isAdmin: true,
     });
-    expect(fields).toEqual({ user: { ghid: 7, ghUsername: 'octocat', isAdmin: true } });
+    expect(fields).toEqual({ user: { provider: 'github', accountId: 'octocat', handle: 'Octocat', isAdmin: true } });
   });
 });

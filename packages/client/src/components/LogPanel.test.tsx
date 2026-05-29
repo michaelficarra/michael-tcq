@@ -17,12 +17,37 @@ import { useMeetingLog } from '../hooks/useMeetingLog.js';
 
 const mockUseMeetingLog = vi.mocked(useMeetingLog);
 
-const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
-const bob: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'ACME' };
-const carol: User = { ghid: 3, ghUsername: 'carol', name: 'Carol', organisation: 'ACME' };
+const alice: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
+const bob: User = {
+  provider: 'github',
+  accountId: 'bob',
+  handle: 'bob',
+  name: 'Bob',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/bob.png?size=80',
+};
+const carol: User = {
+  provider: 'github',
+  accountId: 'carol',
+  handle: 'carol',
+  name: 'Carol',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/carol.png?size=80',
+};
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return buildMeeting(overrides, { id: 'test', users: { alice, bob, carol }, chairIds: ['alice'] });
+  return buildMeeting(overrides, {
+    id: 'test',
+    users: { 'github:alice': alice, 'github:bob': bob, 'github:carol': carol },
+    chairIds: ['github:alice'],
+  });
 }
 
 /**
@@ -53,7 +78,7 @@ describe('LogPanel', () => {
       {
         type: 'meeting-started',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
       },
     ]);
     expect(screen.getByText('Meeting started')).toBeTruthy();
@@ -65,9 +90,9 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-started',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Proposal A',
-        itemPresenterIds: ['bob'],
+        itemPresenterIds: ['github:bob'],
       },
     ]);
     expect(screen.getByText('Started:')).toBeTruthy();
@@ -81,10 +106,10 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'carol',
+        chairId: 'github:carol',
         itemName: 'Proposal A',
         duration: 15 * 60 * 1000, // 15 min
-        participantIds: ['alice', 'bob'],
+        participantIds: ['github:alice', 'github:bob'],
       },
     ]);
     expect(screen.getByText('Finished:')).toBeTruthy();
@@ -102,7 +127,7 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Proposal A',
         duration: 5 * 60 * 1000,
         participantIds: [],
@@ -118,7 +143,7 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Proposal A',
         duration: 5 * 60 * 1000,
         participantIds: [],
@@ -132,7 +157,7 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Proposal A',
         duration: 5 * 60 * 1000,
         participantIds: [],
@@ -148,7 +173,7 @@ describe('LogPanel', () => {
       {
         type: 'agenda-item-finished',
         timestamp: new Date().toISOString(),
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Proposal A',
         duration: 5 * 60 * 1000,
         participantIds: [],
@@ -160,7 +185,7 @@ describe('LogPanel', () => {
   it('renders a compact topic-discussed entry for a single speaker', () => {
     const speakers: TopicSpeaker[] = [
       {
-        userId: 'bob',
+        userId: 'github:bob',
         type: 'topic',
         topic: 'My discussion point',
         startTime: new Date().toISOString(),
@@ -171,7 +196,7 @@ describe('LogPanel', () => {
       {
         type: 'topic-discussed',
         timestamp: speakers[0].startTime,
-        chairId: 'alice',
+        chairId: 'github:alice',
         topicName: 'My discussion point',
         speakers,
         duration: 3 * 60 * 1000,
@@ -187,9 +212,15 @@ describe('LogPanel', () => {
   it('renders an expanded topic-discussed entry without duplicating the first speaker', () => {
     const now = new Date();
     const speakers: TopicSpeaker[] = [
-      { userId: 'bob', type: 'topic', topic: 'Main point', startTime: now.toISOString(), duration: 2 * 60 * 1000 },
       {
-        userId: 'carol',
+        userId: 'github:bob',
+        type: 'topic',
+        topic: 'Main point',
+        startTime: now.toISOString(),
+        duration: 2 * 60 * 1000,
+      },
+      {
+        userId: 'github:carol',
         type: 'reply',
         topic: 'I agree',
         startTime: new Date(now.getTime() + 120000).toISOString(),
@@ -200,7 +231,7 @@ describe('LogPanel', () => {
       {
         type: 'topic-discussed',
         timestamp: speakers[0].startTime,
-        chairId: 'alice',
+        chairId: 'github:alice',
         topicName: 'Main point',
         speakers,
         duration: 3 * 60 * 1000,
@@ -222,8 +253,8 @@ describe('LogPanel', () => {
       {
         type: 'poll-ran',
         timestamp: new Date().toISOString(),
-        startChairId: 'alice',
-        endChairId: 'alice',
+        startChairId: 'github:alice',
+        endChairId: 'github:alice',
         duration: 2 * 60 * 1000,
         totalVoters: 5,
         results: [
@@ -245,8 +276,8 @@ describe('LogPanel', () => {
       {
         type: 'poll-ran',
         timestamp: new Date().toISOString(),
-        startChairId: 'alice',
-        endChairId: 'bob',
+        startChairId: 'github:alice',
+        endChairId: 'github:bob',
         duration: 60 * 1000,
         totalVoters: 1,
         results: [{ emoji: '👍', label: 'Yes', count: 1 }],
@@ -261,8 +292,8 @@ describe('LogPanel', () => {
       {
         type: 'poll-ran',
         timestamp: new Date().toISOString(),
-        startChairId: 'alice',
-        endChairId: 'alice',
+        startChairId: 'github:alice',
+        endChairId: 'github:alice',
         topic: 'Should we advance?',
         duration: 60 * 1000,
         totalVoters: 3,
@@ -275,7 +306,7 @@ describe('LogPanel', () => {
   it('renders the current topic group as ongoing', () => {
     const speakers: TopicSpeaker[] = [
       {
-        userId: 'bob',
+        userId: 'github:bob',
         type: 'topic',
         topic: 'Active discussion',
         startTime: new Date().toISOString(),
@@ -290,8 +321,14 @@ describe('LogPanel', () => {
     const t1 = '2026-01-01T10:00:00Z';
     const t2 = '2026-01-01T10:05:00Z';
     renderLog(makeMeeting(), [
-      { type: 'meeting-started', timestamp: t1, chairId: 'alice' },
-      { type: 'agenda-item-started', timestamp: t2, chairId: 'alice', itemName: 'Item 1', itemPresenterIds: ['alice'] },
+      { type: 'meeting-started', timestamp: t1, chairId: 'github:alice' },
+      {
+        type: 'agenda-item-started',
+        timestamp: t2,
+        chairId: 'github:alice',
+        itemName: 'Item 1',
+        itemPresenterIds: ['github:alice'],
+      },
     ]);
     const started = screen.getByText('Meeting started');
     const item = screen.getByText('Started:');
@@ -301,28 +338,28 @@ describe('LogPanel', () => {
 
   it('renders a separator after agenda-item-started entries', () => {
     const { container } = renderLog(makeMeeting(), [
-      { type: 'meeting-started', timestamp: '2026-01-01T10:00:00Z', chairId: 'alice' },
+      { type: 'meeting-started', timestamp: '2026-01-01T10:00:00Z', chairId: 'github:alice' },
       {
         type: 'agenda-item-started',
         timestamp: '2026-01-01T10:00:00Z',
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Item 1',
-        itemPresenterIds: ['alice'],
+        itemPresenterIds: ['github:alice'],
       },
       {
         type: 'agenda-item-finished',
         timestamp: '2026-01-01T10:10:00Z',
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Item 1',
         duration: 600000,
-        participantIds: ['alice'],
+        participantIds: ['github:alice'],
       },
       {
         type: 'agenda-item-started',
         timestamp: '2026-01-01T10:10:00Z',
-        chairId: 'alice',
+        chairId: 'github:alice',
         itemName: 'Item 2',
-        itemPresenterIds: ['bob'],
+        itemPresenterIds: ['github:bob'],
       },
     ]);
     const separators = container.querySelectorAll('hr');
@@ -335,8 +372,8 @@ describe('LogPanel', () => {
       {
         type: 'poll-ran',
         timestamp: new Date().toISOString(),
-        startChairId: 'alice',
-        endChairId: 'alice',
+        startChairId: 'github:alice',
+        endChairId: 'github:alice',
         duration: 60 * 1000,
         totalVoters: 1,
         results: [{ emoji: '👍', label: 'Yes', count: 1 }],

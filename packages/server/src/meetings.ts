@@ -11,18 +11,31 @@ import type {
   User,
   UserKey,
 } from '@tcq/shared';
-import { QUEUE_ENTRY_PRIORITY, isAgendaItem, userKey } from '@tcq/shared';
+import {
+  QUEUE_ENTRY_PRIORITY,
+  isAgendaItem,
+  userKey,
+  isLegacyMeeting,
+  upgradeMeeting,
+  upgradeLog,
+  buildKeyRemap,
+} from '@tcq/shared';
 import type { MeetingStore } from './store.js';
 import { generateMeetingId } from './meetingId.js';
 import { info, notice, error as logError, serialiseError } from './logger.js';
+import { recordUser } from './knownUsers.js';
 
 /**
  * Register a user in a meeting's users map, returning their canonical key.
  * Always updates the stored user so name/organisation changes are picked up.
+ * Also records the user in the server-wide known-users cache — this is the
+ * single central write for meeting participants, so the cache stays current
+ * with every chair add, presenter, queue entry, and reaction.
  */
 export function ensureUser(meeting: MeetingState, user: User): UserKey {
   const key = userKey(user);
   meeting.users[key] = user;
+  recordUser(user);
   return key;
 }
 
@@ -112,18 +125,36 @@ export class MeetingManager {
     const now = Date.now();
     let expired = 0;
 
-    for (const meeting of meetings) {
+    let migrated = 0;
+    for (const rawMeeting of meetings) {
+      // Lazy migration: upgrade a meeting persisted in the pre-abstraction
+      // shape (bare-login keys, `{ ghid, ghUsername }` users) to the
+      // provider-prefixed shape (`github:<ghid>`), and mark it dirty so the
+      // next 30 s sync flushes the upgraded form back to the store. The
+      // login→new-key remap (built from the legacy users, which carry ghid)
+      // is reused to re-key the separately-stored log.
+      const wasLegacy = isLegacyMeeting(rawMeeting);
+      const keyRemap = wasLegacy ? buildKeyRemap(rawMeeting.users) : null;
+      const meeting = wasLegacy ? upgradeMeeting(rawMeeting) : rawMeeting;
       if (this.isExpired(meeting, now)) {
         expired++;
         await this.store.remove(meeting.id);
       } else {
+        if (wasLegacy) {
+          migrated++;
+          this.markDirty(meeting.id);
+        }
         // Backfill `operational.version` for meetings persisted before
         // the field existed. Without this, the first `bumpVersion` would
         // compute `undefined + 1 === NaN` and emit a corrupt version.
         if (typeof meeting.operational.version !== 'number') {
           meeting.operational.version = 0;
         }
-        const meetingLogs = allLogs.get(meeting.id) ?? [];
+        // Log entries are upgraded in memory only (append-only, read through
+        // memory), reusing the meeting's key remap. We avoid expanding the
+        // store with a log-rewrite path; re-running on each boot is cheap.
+        const rawLogs = allLogs.get(meeting.id) ?? [];
+        const meetingLogs = keyRemap ? upgradeLog(rawLogs, keyRemap) : rawLogs;
         // Backfill `current.startedAt` for meetings persisted before
         // the field existed. The `meeting-started` log entry's timestamp
         // is the authoritative record of when the meeting first
@@ -136,12 +167,19 @@ export class MeetingManager {
         }
         this.meetings.set(meeting.id, meeting);
         this.logs.set(meeting.id, meetingLogs);
+        // Rebuild the known-users cache from the persisted participants, so a
+        // user referenced in any restored meeting resolves to a real name +
+        // avatar after a restart — without needing a provider lookup (which
+        // Google can't do). The only post-restart gap is users who logged in
+        // but never joined a meeting; they re-populate on their next request.
+        for (const user of Object.values(meeting.users)) recordUser(user);
       }
     }
 
     info('meetings_restored', {
       restored: this.meetings.size,
       expiredAtStartup: expired,
+      migratedToProviderKeys: migrated,
     });
   }
 
@@ -153,6 +191,9 @@ export class MeetingManager {
     const chairIds = chairs.map((c) => {
       const key = userKey(c);
       users[key] = c;
+      // The meeting object doesn't exist yet, so this bypasses `ensureUser`;
+      // record the chair in the known-users cache directly to match it.
+      recordUser(c);
       return key;
     });
 

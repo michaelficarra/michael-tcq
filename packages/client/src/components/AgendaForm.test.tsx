@@ -6,18 +6,20 @@ import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 
 const chairUser: User = {
-  ghid: 1,
-  ghUsername: 'alice',
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
   name: 'Alice',
   organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 const baseMeeting: MeetingState = buildMeeting(undefined, {
   id: 'test',
-  users: { alice: chairUser },
-  chairIds: ['alice'],
+  users: { 'github:alice': chairUser },
+  chairIds: ['github:alice'],
 });
 
 function renderForm(socket: TypedSocket | null = null, onCancel = () => {}, onSubmit = () => {}) {
@@ -90,7 +92,8 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Test Item',
-      presenterUsernames: ['alice'],
+      // Free-text entry (no suggestion picked) commits as a bare handle.
+      presenters: [{ handle: 'alice' }],
       duration: 15,
     });
     expect(onSubmit).toHaveBeenCalled();
@@ -119,7 +122,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Item',
-      presenterUsernames: ['alice', 'bob', 'charlie'],
+      presenters: [{ handle: 'alice' }, { handle: 'bob' }, { handle: 'charlie' }],
       duration: undefined,
     });
   });
@@ -142,7 +145,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'No estimate',
-      presenterUsernames: ['alice'],
+      presenters: [{ handle: 'alice' }],
       duration: undefined,
     });
   });
@@ -164,7 +167,7 @@ describe('AgendaForm', () => {
 
     expect(emit).toHaveBeenCalledWith('agenda:add', {
       name: 'Open floor',
-      presenterUsernames: [],
+      presenters: [],
       duration: undefined,
     });
     expect(onSubmit).toHaveBeenCalled();

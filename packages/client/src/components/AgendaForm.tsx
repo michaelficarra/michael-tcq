@@ -1,17 +1,16 @@
 /**
  * Form for adding a new agenda item.
  *
- * Fields: name (required), presenter GitHub username(s) — chip input
- * backed by autocomplete, zero or more (optional), estimated duration
+ * Fields: name (required), presenter(s) — chip input backed by the
+ * user-selector autocomplete, zero or more (optional), estimated duration
  * in minutes (optional). Matches the layout from the original screenshots:
  * a horizontal row of labelled inputs with Create/Cancel buttons.
  */
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { normaliseGithubUsername } from '@tcq/shared';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useMeetingState } from '../contexts/MeetingContext.js';
-import { UserCombobox } from './UserCombobox.js';
+import { UserCombobox, toUserSelection, type SelectedUser } from './UserCombobox.js';
 import { inputValidation } from '../lib/inputStyles.js';
 
 interface AgendaFormProps {
@@ -24,7 +23,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
   const { meeting } = useMeetingState();
 
   const [name, setName] = useState('');
-  const [presenters, setPresenters] = useState<string[]>([]);
+  const [presenters, setPresenters] = useState<SelectedUser[]>([]);
   const [estimate, setEstimate] = useState('');
 
   // Focus the name input when the form opens
@@ -37,7 +36,6 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
     e.preventDefault();
 
     const trimmedName = name.trim();
-    const presenterUsernames = presenters.map(normaliseGithubUsername).filter((s) => s.length > 0);
     if (!trimmedName) return;
 
     // Parse estimate: empty string or non-positive = no estimate
@@ -46,7 +44,7 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
 
     socket?.emit('agenda:add', {
       name: trimmedName,
-      presenterUsernames,
+      presenters: presenters.map(toUserSelection),
       duration: durationValue,
     });
 
@@ -85,10 +83,10 @@ export function AgendaForm({ onCancel, onSubmit }: AgendaFormProps) {
             onChange={setPresenters}
             meetingId={meeting?.id}
             ariaLabel="Presenters"
-            placeholder="GitHub username"
+            placeholder="username"
           />
           <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5">
-            Pick from suggestions, or type a name and press Enter for users without a GitHub account.
+            Pick from suggestions, or type a name and press Enter for people without an account.
           </p>
         </div>
 

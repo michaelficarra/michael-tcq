@@ -53,7 +53,10 @@
 #
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
-#     GITHUB_CALLBACK_URL
+#     ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, ORCID_BASE_URL,
+#     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#     MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT,
+#     OAUTH_CALLBACK_BASE_URL
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -666,7 +669,15 @@ $([ -n "${FIRESTORE_DATABASE_ID:-}" ] && echo "    FIRESTORE_DATABASE_ID=${FIRES
 $([ -n "${ADMIN_USERNAMES:-}" ] && echo "    ADMIN_USERNAMES=${ADMIN_USERNAMES}")
 $([ -n "${GITHUB_CLIENT_ID:-}" ] && echo "    GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}")
 $([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}")
-$([ -n "${GITHUB_CALLBACK_URL:-}" ] && echo "    GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}")
+$([ -n "${ORCID_CLIENT_ID:-}" ] && echo "    ORCID_CLIENT_ID=${ORCID_CLIENT_ID}")
+$([ -n "${ORCID_CLIENT_SECRET:-}" ] && echo "    ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}")
+$([ -n "${ORCID_BASE_URL:-}" ] && echo "    ORCID_BASE_URL=${ORCID_BASE_URL}")
+$([ -n "${GOOGLE_CLIENT_ID:-}" ] && echo "    GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
+$([ -n "${GOOGLE_CLIENT_SECRET:-}" ] && echo "    GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}")
+$([ -n "${MICROSOFT_CLIENT_ID:-}" ] && echo "    MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}")
+$([ -n "${MICROSOFT_CLIENT_SECRET:-}" ] && echo "    MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}")
+$([ -n "${MICROSOFT_TENANT:-}" ] && echo "    MICROSOFT_TENANT=${MICROSOFT_TENANT}")
+$([ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "    OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}")
 
 runcmd:
 - mkdir -p /var/lib/tcq /var/lib/caddy/data /var/lib/caddy/config
@@ -774,7 +785,15 @@ EOF
   [ -n "${ADMIN_USERNAMES:-}" ]       && echo "ADMIN_USERNAMES=${ADMIN_USERNAMES}"           >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_ID:-}" ]      && echo "GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}"         >> "$env_tmp"
   [ -n "${GITHUB_CLIENT_SECRET:-}" ]  && echo "GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}" >> "$env_tmp"
-  [ -n "${GITHUB_CALLBACK_URL:-}" ]   && echo "GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}"   >> "$env_tmp"
+  [ -n "${ORCID_CLIENT_ID:-}" ]       && echo "ORCID_CLIENT_ID=${ORCID_CLIENT_ID}"           >> "$env_tmp"
+  [ -n "${ORCID_CLIENT_SECRET:-}" ]   && echo "ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}"   >> "$env_tmp"
+  [ -n "${ORCID_BASE_URL:-}" ]        && echo "ORCID_BASE_URL=${ORCID_BASE_URL}"             >> "$env_tmp"
+  [ -n "${GOOGLE_CLIENT_ID:-}" ]      && echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${GOOGLE_CLIENT_SECRET:-}" ]  && echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${MICROSOFT_CLIENT_ID:-}" ]     && echo "MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${MICROSOFT_CLIENT_SECRET:-}" ] && echo "MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}" >> "$env_tmp"
+  [ -n "${MICROSOFT_TENANT:-}" ]        && echo "MICROSOFT_TENANT=${MICROSOFT_TENANT}"               >> "$env_tmp"
+  [ -n "${OAUTH_CALLBACK_BASE_URL:-}" ] && echo "OAUTH_CALLBACK_BASE_URL=${OAUTH_CALLBACK_BASE_URL}" >> "$env_tmp"
 
   # Wait briefly for SSH to come up on a fresh VM before the first
   # `gcloud compute scp` — fresh COS instances take ~30 s to settle.
@@ -884,7 +903,7 @@ ensure_github_oauth() {
   if ! confirm "Register the app now and paste in its credentials?" y; then
     echo ""
     echo "Skipped. To enable OAuth later, add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,"
-    echo "and GITHUB_CALLBACK_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -893,10 +912,178 @@ ensure_github_oauth() {
   read -r -s -p "Client Secret: " secret
   echo ""
   GITHUB_CLIENT_SECRET="$secret"
-  GITHUB_CALLBACK_URL="$callback"
+  # Persist the provider-agnostic callback base; the server derives GitHub's
+  # callback ($url/auth/github/callback) — the URL registered above — from it.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
   upsert_env GITHUB_CLIENT_ID "$GITHUB_CLIENT_ID"
   upsert_env GITHUB_CLIENT_SECRET "$GITHUB_CLIENT_SECRET"
-  upsert_env GITHUB_CALLBACK_URL "$GITHUB_CALLBACK_URL"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
+# Mirrors ensure_github_oauth for ORCID. ORCID has no pre-fillable
+# registration form (and no API to create a client), so instead of a deep
+# link we print the developer-tools URL plus the exact redirect URI to
+# register by hand. Independent of GitHub: enabling ORCID alone still writes
+# the shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
+ensure_orcid_oauth() {
+  if [ -n "${ORCID_CLIENT_ID:-}" ] && [ -n "${ORCID_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/orcid/callback"
+
+  echo ""
+  echo "ORCID OAuth is not configured — \"Log in with ORCID\" is disabled."
+  echo ""
+  echo "To enable ORCID sign-in, register a public-API client in your ORCID"
+  echo "account (the account needs a verified email, or Developer tools stays"
+  echo "locked). ORCID has no pre-fillable form, so register it manually:"
+  echo ""
+  echo "  1. Sign in at https://orcid.org, then open https://orcid.org/developer-tools"
+  echo "  2. Register for the public API and add this Redirect URI exactly:"
+  echo "       $callback"
+  echo "  3. Note the Client ID (APP-XXXXXXXXXXXXXXXX) and Client Secret."
+  echo ""
+  echo "(To test against the sandbox instead, register at https://sandbox.orcid.org"
+  echo "and add ORCID_BASE_URL=https://sandbox.orcid.org to $ENV_FILE.)"
+  echo ""
+
+  if ! confirm "Register the client now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable ORCID later, add ORCID_CLIENT_ID, ORCID_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  ORCID_CLIENT_ID="$(prompt_with_default "Client ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  ORCID_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives ORCID's
+  # callback ($url/auth/orcid/callback) — the URI registered above — from it.
+  # Harmless to re-set if ensure_github_oauth already wrote the same value.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env ORCID_CLIENT_ID "$ORCID_CLIENT_ID"
+  upsert_env ORCID_CLIENT_SECRET "$ORCID_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
+# Mirrors ensure_orcid_oauth for Google. Google's Cloud Console has no
+# pre-fillable form (and the client must be created in a GCP project), so we
+# print the credentials-page URL plus the exact redirect URI to register by
+# hand. Independent of GitHub/ORCID: enabling Google alone still writes the
+# shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
+ensure_google_oauth() {
+  if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/google/callback"
+
+  echo ""
+  echo "Google OAuth is not configured — \"Sign in with Google\" is disabled."
+  echo ""
+  echo "To enable Google sign-in, create an OAuth 2.0 client. Google has no"
+  echo "pre-fillable form, so create it manually:"
+  echo ""
+  echo "  1. Open https://console.cloud.google.com/apis/credentials"
+  echo "     (configure the OAuth consent screen first if prompted)."
+  echo "  2. Create Credentials → OAuth client ID → Application type: Web application."
+  echo "  3. Under \"Authorised redirect URIs\" add this URI exactly:"
+  echo "       $callback"
+  echo "  4. Note the Client ID and Client Secret."
+  echo ""
+
+  if ! confirm "Create the client now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable Google later, add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  GOOGLE_CLIENT_ID="$(prompt_with_default "Client ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  GOOGLE_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives Google's
+  # callback ($url/auth/google/callback) — the URI registered above — from it.
+  # Harmless to re-set if ensure_github_oauth/ensure_orcid_oauth wrote the same.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+  upsert_env GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
+# Mirrors ensure_google_oauth for Microsoft (Entra ID). Azure has no
+# pre-fillable form, so we print the App-registrations URL plus the exact
+# redirect URI to register by hand. Independent of the other providers:
+# enabling Microsoft alone still writes the shared OAUTH_CALLBACK_BASE_URL the
+# server needs to build callback URLs.
+ensure_microsoft_oauth() {
+  if [ -n "${MICROSOFT_CLIENT_ID:-}" ] && [ -n "${MICROSOFT_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/microsoft/callback"
+
+  echo ""
+  echo "Microsoft OAuth is not configured — \"Sign in with Microsoft\" is disabled."
+  echo ""
+  echo "To enable Microsoft sign-in, register an app. Microsoft has no"
+  echo "pre-fillable form, so register it manually:"
+  echo ""
+  echo "  1. Open https://entra.microsoft.com → Identity → Applications →"
+  echo "     App registrations → New registration."
+  echo "  2. Supported account types: \"Accounts in any organizational directory"
+  echo "     and personal Microsoft accounts\" (matches the default 'common' tenant)."
+  echo "  3. Add a platform → Web → Redirect URI, exactly:"
+  echo "       $callback"
+  echo "  4. Under Certificates & secrets, add a client secret."
+  echo "  5. Note the Application (client) ID and the secret VALUE."
+  echo ""
+  echo "(To restrict sign-in to one tenant, set MICROSOFT_TENANT in $ENV_FILE to"
+  echo "your tenant id and pick the matching account type above.)"
+  echo ""
+
+  if ! confirm "Register the app now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable Microsoft later, add MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  MICROSOFT_CLIENT_ID="$(prompt_with_default "Application (client) ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  MICROSOFT_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives Microsoft's
+  # callback ($url/auth/microsoft/callback) — the URI registered above — from it.
+  # Harmless to re-set if an earlier ensure_*_oauth wrote the same value.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env MICROSOFT_CLIENT_ID "$MICROSOFT_CLIENT_ID"
+  upsert_env MICROSOFT_CLIENT_SECRET "$MICROSOFT_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
 
   echo ""
   echo "Pushing updated env to VM and restarting tcq.service..."
@@ -949,6 +1136,9 @@ EOF
   deploy_to_vm
 
   ensure_github_oauth
+  ensure_orcid_oauth
+  ensure_google_oauth
+  ensure_microsoft_oauth
 
   echo ""
   echo "Deploy complete!"

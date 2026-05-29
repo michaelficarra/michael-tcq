@@ -24,10 +24,12 @@ function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
 }
 
 const chairUser: User = {
-  ghid: 1,
-  ghUsername: 'alice',
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
   name: 'Alice',
   organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
 /** Render the AgendaPanel with meeting context and optional socket. */
@@ -49,10 +51,10 @@ describe('AgendaPanel', () => {
 
   it('displays agenda items as a numbered list', () => {
     const meeting = makeMeeting({
-      users: { alice: chairUser },
+      users: { 'github:alice': chairUser },
       agenda: [
-        { kind: 'item', id: '1', name: 'First item', presenterIds: ['alice'], duration: 20 },
-        { kind: 'item', id: '2', name: 'Second item', presenterIds: ['alice'] },
+        { kind: 'item', id: '1', name: 'First item', presenterIds: ['github:alice'], duration: 20 },
+        { kind: 'item', id: '2', name: 'Second item', presenterIds: ['github:alice'] },
       ],
     });
     renderAgenda(meeting);
@@ -65,7 +67,7 @@ describe('AgendaPanel', () => {
   });
 
   it('shows the "New Agenda Item" button for chairs', () => {
-    const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+    const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
     renderAgenda(meeting, chairUser);
 
     expect(screen.getByText('New Agenda Item')).toBeInTheDocument();
@@ -73,8 +75,17 @@ describe('AgendaPanel', () => {
 
   it('hides the "New Agenda Item" button for non-chairs', () => {
     const meeting = makeMeeting({
-      users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
-      chairIds: ['other'],
+      users: {
+        'github:other': {
+          provider: 'github',
+          accountId: 'other',
+          handle: 'other',
+          name: 'Other',
+          organisation: '',
+          avatarUrl: 'https://github.com/other.png?size=80',
+        },
+      },
+      chairIds: ['github:other'],
     });
     renderAgenda(meeting, chairUser);
 
@@ -82,7 +93,7 @@ describe('AgendaPanel', () => {
   });
 
   it('shows the agenda form when "New Agenda Item" is clicked', () => {
-    const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+    const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
     renderAgenda(meeting, chairUser);
 
     fireEvent.click(screen.getByText('New Agenda Item'));
@@ -94,9 +105,9 @@ describe('AgendaPanel', () => {
 
   it('shows delete buttons for chairs', () => {
     const meeting = makeMeeting({
-      users: { alice: chairUser },
-      chairIds: ['alice'],
-      agenda: [{ kind: 'item', id: '1', name: 'Deletable item', presenterIds: ['alice'] }],
+      users: { 'github:alice': chairUser },
+      chairIds: ['github:alice'],
+      agenda: [{ kind: 'item', id: '1', name: 'Deletable item', presenterIds: ['github:alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -105,9 +116,19 @@ describe('AgendaPanel', () => {
 
   it('hides delete buttons for non-chairs', () => {
     const meeting = makeMeeting({
-      users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' }, alice: chairUser },
-      chairIds: ['other'],
-      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['alice'] }],
+      users: {
+        'github:other': {
+          provider: 'github',
+          accountId: 'other',
+          handle: 'other',
+          name: 'Other',
+          organisation: '',
+          avatarUrl: 'https://github.com/other.png?size=80',
+        },
+        'github:alice': chairUser,
+      },
+      chairIds: ['github:other'],
+      agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['github:alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -118,11 +139,11 @@ describe('AgendaPanel', () => {
     // The chair must advance off an item (Next Agenda Item) before it can
     // be deleted — discussion is in progress.
     const meeting = makeMeeting({
-      users: { alice: chairUser },
-      chairIds: ['alice'],
+      users: { 'github:alice': chairUser },
+      chairIds: ['github:alice'],
       agenda: [
-        { kind: 'item', id: 'item-current', name: 'Currently discussing', presenterIds: ['alice'] },
-        { kind: 'item', id: 'item-next', name: 'Next up', presenterIds: ['alice'] },
+        { kind: 'item', id: 'item-current', name: 'Currently discussing', presenterIds: ['github:alice'] },
+        { kind: 'item', id: 'item-next', name: 'Next up', presenterIds: ['github:alice'] },
       ],
       current: { topicSpeakers: [], agendaItemId: 'item-current' },
     });
@@ -140,9 +161,9 @@ describe('AgendaPanel', () => {
     const mockSocket = { emit } as unknown as TypedSocket;
 
     const meeting = makeMeeting({
-      users: { alice: chairUser },
-      chairIds: ['alice'],
-      agenda: [{ kind: 'item', id: 'item-1', name: 'To delete', presenterIds: ['alice'] }],
+      users: { 'github:alice': chairUser },
+      chairIds: ['github:alice'],
+      agenda: [{ kind: 'item', id: 'item-1', name: 'To delete', presenterIds: ['github:alice'] }],
     });
     renderAgenda(meeting, chairUser, mockSocket);
 
@@ -151,11 +172,25 @@ describe('AgendaPanel', () => {
   });
 
   it('renders a badge per presenter when an item has multiple', () => {
-    const alice = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'A Corp' };
-    const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: 'B Corp' };
+    const alice = {
+      provider: 'github',
+      accountId: 'alice',
+      handle: 'alice',
+      name: 'Alice',
+      organisation: 'A Corp',
+      avatarUrl: 'https://github.com/alice.png?size=80',
+    };
+    const bob = {
+      provider: 'github',
+      accountId: 'bob',
+      handle: 'bob',
+      name: 'Bob',
+      organisation: 'B Corp',
+      avatarUrl: 'https://github.com/bob.png?size=80',
+    };
     const meeting = makeMeeting({
-      users: { alice, bob },
-      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['alice', 'bob'] }],
+      users: { 'github:alice': alice, 'github:bob': bob },
+      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['github:alice', 'github:bob'] }],
     });
     renderAgenda(meeting);
 
@@ -165,10 +200,17 @@ describe('AgendaPanel', () => {
   });
 
   it('highlights items where the viewer is any of the presenters', () => {
-    const bob = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+    const bob = {
+      provider: 'github',
+      accountId: 'bob',
+      handle: 'bob',
+      name: 'Bob',
+      organisation: '',
+      avatarUrl: 'https://github.com/bob.png?size=80',
+    };
     const meeting = makeMeeting({
-      users: { alice: chairUser, bob },
-      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['bob', 'alice'] }],
+      users: { 'github:alice': chairUser, 'github:bob': bob },
+      agenda: [{ kind: 'item', id: '1', name: 'Joint', presenterIds: ['github:bob', 'github:alice'] }],
     });
     renderAgenda(meeting, chairUser);
 
@@ -178,13 +220,22 @@ describe('AgendaPanel', () => {
 
   it('shows presenter organisation in parentheses', () => {
     const meeting = makeMeeting({
-      users: { alice: { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME Corp' } },
+      users: {
+        'github:alice': {
+          provider: 'github',
+          accountId: 'alice',
+          handle: 'alice',
+          name: 'Alice',
+          organisation: 'ACME Corp',
+          avatarUrl: 'https://github.com/alice.png?size=80',
+        },
+      },
       agenda: [
         {
           kind: 'item',
           id: '1',
           name: 'Test',
-          presenterIds: ['alice'],
+          presenterIds: ['github:alice'],
         },
       ],
     });
@@ -194,15 +245,22 @@ describe('AgendaPanel', () => {
   });
 
   describe('Current item styling', () => {
-    const a: User = { ghid: 10, ghUsername: 'a', name: 'A', organisation: '' };
+    const a: User = {
+      provider: 'github',
+      accountId: 'a',
+      handle: 'a',
+      name: 'A',
+      organisation: '',
+      avatarUrl: 'https://github.com/a.png?size=80',
+    };
 
     it('dims items strictly before the current one and highlights the current item', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Past item', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Current item', presenterIds: ['a'] },
-          { kind: 'item', id: '3', name: 'Upcoming item', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Past item', presenterIds: ['github:a'] },
+          { kind: 'item', id: '2', name: 'Current item', presenterIds: ['github:a'] },
+          { kind: 'item', id: '3', name: 'Upcoming item', presenterIds: ['github:a'] },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -228,7 +286,7 @@ describe('AgendaPanel', () => {
     it('gives the current item emphatic, higher-contrast text', () => {
       const meeting = makeMeeting({
         users: { a },
-        agenda: [{ kind: 'item', id: '1', name: 'The current one', presenterIds: ['a'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'The current one', presenterIds: ['github:a'] }],
         current: { agendaItemId: '1', topicSpeakers: [] },
       });
       renderAgenda(meeting);
@@ -243,8 +301,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Alpha', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Beta', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Alpha', presenterIds: ['github:a'] },
+          { kind: 'item', id: '2', name: 'Beta', presenterIds: ['github:a'] },
         ],
       });
       renderAgenda(meeting);
@@ -260,8 +318,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'], conclusion: 'agreed unanimously' },
-          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['github:a'], conclusion: 'agreed unanimously' },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['github:a'] },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -279,8 +337,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'First', presenterIds: ['a'], conclusion: 'first conclusion' },
-          { kind: 'item', id: '2', name: 'Final', presenterIds: ['a'], conclusion: 'final conclusion' },
+          { kind: 'item', id: '1', name: 'First', presenterIds: ['github:a'], conclusion: 'first conclusion' },
+          { kind: 'item', id: '2', name: 'Final', presenterIds: ['github:a'], conclusion: 'final conclusion' },
         ],
         current: { topicSpeakers: [], startedAt: '2026-04-01T10:00:00.000Z' },
       });
@@ -297,9 +355,21 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'], conclusion: 'should be hidden — current' },
-          { kind: 'item', id: '3', name: 'Upcoming', presenterIds: ['a'], conclusion: 'should be hidden — upcoming' },
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['github:a'] },
+          {
+            kind: 'item',
+            id: '2',
+            name: 'Current',
+            presenterIds: ['github:a'],
+            conclusion: 'should be hidden — current',
+          },
+          {
+            kind: 'item',
+            id: '3',
+            name: 'Upcoming',
+            presenterIds: ['github:a'],
+            conclusion: 'should be hidden — upcoming',
+          },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -311,7 +381,14 @@ describe('AgendaPanel', () => {
   });
 
   describe('Auto-scroll on tab visibility', () => {
-    const a: User = { ghid: 10, ghUsername: 'a', name: 'A', organisation: '' };
+    const a: User = {
+      provider: 'github',
+      accountId: 'a',
+      handle: 'a',
+      name: 'A',
+      organisation: '',
+      avatarUrl: 'https://github.com/a.png?size=80',
+    };
 
     // jsdom doesn't implement scrollIntoView; stub on Element.prototype.
     let scrollSpy: ReturnType<typeof vi.fn>;
@@ -324,9 +401,9 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
-          { kind: 'item', id: '3', name: 'Upcoming', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['github:a'] },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['github:a'] },
+          { kind: 'item', id: '3', name: 'Upcoming', presenterIds: ['github:a'] },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -342,8 +419,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'Past', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Current', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'Past', presenterIds: ['github:a'] },
+          { kind: 'item', id: '2', name: 'Current', presenterIds: ['github:a'] },
         ],
         current: { agendaItemId: '2', topicSpeakers: [] },
       });
@@ -370,7 +447,7 @@ describe('AgendaPanel', () => {
     it('scrolls on initial mount when the panel starts visible with a current item set', () => {
       const meeting = makeMeeting({
         users: { a },
-        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['a'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['github:a'] }],
         current: { agendaItemId: '1', topicSpeakers: [] },
       });
       renderAgenda(meeting);
@@ -382,8 +459,8 @@ describe('AgendaPanel', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [
-          { kind: 'item', id: '1', name: 'First', presenterIds: ['a'] },
-          { kind: 'item', id: '2', name: 'Second', presenterIds: ['a'] },
+          { kind: 'item', id: '1', name: 'First', presenterIds: ['github:a'] },
+          { kind: 'item', id: '2', name: 'Second', presenterIds: ['github:a'] },
         ],
         current: { agendaItemId: '1', topicSpeakers: [] },
       });
@@ -414,7 +491,7 @@ describe('AgendaPanel', () => {
     it('does not scroll when there is no current item', () => {
       const meeting = makeMeeting({
         users: { a },
-        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['a'] }],
+        agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['github:a'] }],
         // No current.agendaItemId — meeting hasn't started.
       });
 
@@ -434,11 +511,21 @@ describe('AgendaPanel', () => {
   });
 
   describe('Chair management', () => {
-    const otherChair: User = { ghid: 2, ghUsername: 'bob', name: 'Bob', organisation: '' };
+    const otherChair: User = {
+      provider: 'github',
+      accountId: 'bob',
+      handle: 'bob',
+      name: 'Bob',
+      organisation: '',
+      avatarUrl: 'https://github.com/bob.png?size=80',
+    };
 
     it('shows remove buttons for chairs on other chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser, 'github:bob': otherChair },
+        chairIds: ['github:alice', 'github:bob'],
+      });
       renderAgenda(meeting, chairUser);
 
       // Should see remove button for bob but not for alice (self)
@@ -449,8 +536,8 @@ describe('AgendaPanel', () => {
     it('non-chairs do not see remove buttons', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
       const meeting = makeMeeting({
-        users: { bob: otherChair },
-        chairIds: ['bob'],
+        users: { 'github:bob': otherChair },
+        chairIds: ['github:bob'],
       });
       renderAgenda(meeting, chairUser);
 
@@ -459,7 +546,10 @@ describe('AgendaPanel', () => {
 
     it('admins see remove buttons on all chairs including themselves', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: true };
-      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser, 'github:bob': otherChair },
+        chairIds: ['github:alice', 'github:bob'],
+      });
       renderAgenda(meeting, chairUser);
 
       expect(screen.getByRole('button', { name: /remove chair alice/i })).toBeInTheDocument();
@@ -468,7 +558,10 @@ describe('AgendaPanel', () => {
 
     it('shows confirmation modal before removing a chair', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser, 'github:bob': otherChair },
+        chairIds: ['github:alice', 'github:bob'],
+      });
       renderAgenda(meeting, chairUser);
 
       fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
@@ -483,20 +576,25 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser, bob: otherChair }, chairIds: ['alice', 'bob'] });
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser, 'github:bob': otherChair },
+        chairIds: ['github:alice', 'github:bob'],
+      });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /remove chair bob/i }));
       fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
 
+      // The remaining chair is re-emitted as its concrete account identity
+      // (provider + accountId), not a handle.
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice'],
+        chairs: [{ provider: 'github', accountId: 'alice' }],
       });
     });
 
     it('shows add chair button for chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.getByRole('button', { name: /add chair/i })).toBeInTheDocument();
@@ -504,7 +602,7 @@ describe('AgendaPanel', () => {
 
     it('hides add chair button for non-chairs', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { bob: otherChair }, chairIds: ['bob'] });
+      const meeting = makeMeeting({ users: { 'github:bob': otherChair }, chairIds: ['github:bob'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.queryByRole('button', { name: /add chair/i })).not.toBeInTheDocument();
@@ -512,7 +610,7 @@ describe('AgendaPanel', () => {
 
     it('shows username input when add button is clicked', () => {
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
@@ -524,7 +622,7 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
@@ -532,26 +630,49 @@ describe('AgendaPanel', () => {
       fireEvent.change(input, { target: { value: 'newperson' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
+      // Existing chair re-emitted as identity; the typed-but-unpicked new
+      // chair commits as a bare handle (the server resolves it).
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice', 'newperson'],
+        chairs: [{ provider: 'github', accountId: 'alice' }, { handle: 'newperson' }],
       });
     });
 
-    it('does not add duplicate chair username', () => {
+    it('does not add a duplicate chair when re-picking an existing identity from suggestions', async () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
-      renderAgenda(meeting, chairUser, mockSocket);
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
 
-      fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
-      const input = screen.getByLabelText(/new chair username/i);
-      fireEvent.change(input, { target: { value: 'Alice' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
+      // Stub autocomplete to return alice's account, so picking her commits
+      // a `{user}` whose identity matches the existing chair and dedupes.
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ suggestions: [{ user: chairUser }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ) as unknown as typeof fetch;
 
-      expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice'],
-      });
+      try {
+        renderAgenda(meeting, chairUser, mockSocket);
+
+        fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
+        const input = screen.getByLabelText(/new chair username/i);
+        fireEvent.change(input, { target: { value: 'alice' } });
+
+        // Wait for the suggestion to appear, then pick it.
+        const option = await screen.findByRole('option', { name: /alice/i });
+        fireEvent.mouseDown(option, { button: 0 });
+
+        // The picked identity already exists in the chair list, so the
+        // emitted list is unchanged (just alice's identity).
+        expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
+          chairs: [{ provider: 'github', accountId: 'alice' }],
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     // Users may type or paste handles in GitHub-style `@name` form; the
@@ -561,7 +682,7 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByRole('button', { name: /add chair/i }));
@@ -570,7 +691,7 @@ describe('AgendaPanel', () => {
       fireEvent.keyDown(input, { key: 'Enter' });
 
       expect(emit).toHaveBeenCalledWith('meeting:updateChairs', {
-        usernames: ['alice', 'newperson'],
+        chairs: [{ provider: 'github', accountId: 'alice' }, { handle: 'newperson' }],
       });
     });
   });
@@ -583,9 +704,9 @@ describe('AgendaPanel', () => {
       const mockSocket = { emit } as unknown as TypedSocket;
       mockAuthState = { ...mockAuthState, user: chairUser, isAdmin: false };
       const meeting = makeMeeting({
-        users: { alice: chairUser },
-        chairIds: ['alice'],
-        agenda: [{ kind: 'item', id: '1', name: 'Topic', presenterIds: ['alice'] }],
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
+        agenda: [{ kind: 'item', id: '1', name: 'Topic', presenterIds: ['github:alice'] }],
       });
       renderAgenda(meeting, chairUser, mockSocket);
 
@@ -605,7 +726,7 @@ describe('AgendaPanel', () => {
       expect(emit).toHaveBeenCalledWith('agenda:edit', {
         id: '1',
         name: 'Topic',
-        presenterUsernames: ['alice', 'bob', 'charlie'],
+        presenters: [{ handle: 'alice' }, { handle: 'bob' }, { handle: 'charlie' }],
         duration: null,
       });
     });
@@ -613,7 +734,7 @@ describe('AgendaPanel', () => {
 
   describe('sessions', () => {
     it('shows the "New Session" button for chairs alongside "New Agenda Item"', () => {
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser);
 
       expect(screen.getByText('New Agenda Item')).toBeInTheDocument();
@@ -622,8 +743,17 @@ describe('AgendaPanel', () => {
 
     it('hides the "New Session" button for non-chairs', () => {
       const meeting = makeMeeting({
-        users: { other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
-        chairIds: ['other'],
+        users: {
+          'github:other': {
+            provider: 'github',
+            accountId: 'other',
+            handle: 'other',
+            name: 'Other',
+            organisation: '',
+            avatarUrl: 'https://github.com/other.png?size=80',
+          },
+        },
+        chairIds: ['github:other'],
       });
       renderAgenda(meeting, chairUser);
 
@@ -633,7 +763,7 @@ describe('AgendaPanel', () => {
     it('opens a session form and emits session:add on submit', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
-      const meeting = makeMeeting({ users: { alice: chairUser }, chairIds: ['alice'] });
+      const meeting = makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
       renderAgenda(meeting, chairUser, mockSocket);
 
       fireEvent.click(screen.getByText('New Session'));
@@ -646,11 +776,11 @@ describe('AgendaPanel', () => {
 
     it('renders a session header with capacity / used / remaining', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser },
+        users: { 'github:alice': chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Morning', capacity: 90 },
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 30 },
         ],
       });
       renderAgenda(meeting);
@@ -667,12 +797,12 @@ describe('AgendaPanel', () => {
 
     it('flips to "overflow" label when the run exceeds capacity', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser },
+        users: { 'github:alice': chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['github:alice'], duration: 10 },
         ],
       });
       renderAgenda(meeting);
@@ -689,12 +819,12 @@ describe('AgendaPanel', () => {
 
     it('renders an "overflow" subsection divider before the first overflowing item', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser },
+        users: { 'github:alice': chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['alice'], duration: 10 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['github:alice'], duration: 10 },
         ],
       });
       const { container } = renderAgenda(meeting);
@@ -715,11 +845,11 @@ describe('AgendaPanel', () => {
 
     it('does not render an "overflow" subsection divider when the run fits', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser },
+        users: { 'github:alice': chairUser },
         agenda: [
           { kind: 'session', id: 's1', name: 'Roomy', capacity: 60 },
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'], duration: 15 },
-          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'], duration: 15 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
         ],
       });
       const { container } = renderAgenda(meeting);
@@ -729,11 +859,11 @@ describe('AgendaPanel', () => {
 
     it('numbers agenda items sequentially, skipping session headers', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser },
+        users: { 'github:alice': chairUser },
         agenda: [
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['alice'] },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'] },
           { kind: 'session', id: 's1', name: 'Block', capacity: 30 },
-          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['alice'] },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'] },
         ],
       });
       renderAgenda(meeting);
@@ -749,8 +879,8 @@ describe('AgendaPanel', () => {
       const emit = vi.fn();
       const mockSocket = { emit } as unknown as TypedSocket;
       const meeting = makeMeeting({
-        users: { alice: chairUser },
-        chairIds: ['alice'],
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
         agenda: [{ kind: 'session', id: 's1', name: 'Block', capacity: 30 }],
       });
       renderAgenda(meeting, chairUser, mockSocket);
@@ -763,18 +893,35 @@ describe('AgendaPanel', () => {
   describe('prologue / epilogue', () => {
     function makeChairMeeting(overrides: Partial<MeetingState> = {}) {
       return makeMeeting({
-        users: { alice: chairUser },
-        chairIds: ['alice'],
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
         ...overrides,
       });
     }
 
     it('hides both sections from non-chairs when unset', () => {
       const meeting = makeMeeting({
-        users: { alice: chairUser, other: { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' } },
-        chairIds: ['alice'],
+        users: {
+          'github:alice': chairUser,
+          'github:other': {
+            provider: 'github',
+            accountId: 'other',
+            handle: 'other',
+            name: 'Other',
+            organisation: '',
+            avatarUrl: 'https://github.com/other.png?size=80',
+          },
+        },
+        chairIds: ['github:alice'],
       });
-      renderAgenda(meeting, { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' });
+      renderAgenda(meeting, {
+        provider: 'github',
+        accountId: 'other',
+        handle: 'other',
+        name: 'Other',
+        organisation: '',
+        avatarUrl: 'https://github.com/other.png?size=80',
+      });
 
       expect(screen.queryByRole('button', { name: /add an agenda prologue/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /add an agenda epilogue/i })).not.toBeInTheDocument();
@@ -870,10 +1017,17 @@ describe('AgendaPanel', () => {
     });
 
     it('non-chairs see populated content but no edit/delete buttons', () => {
-      const other: User = { ghid: 99, ghUsername: 'other', name: 'Other', organisation: '' };
+      const other: User = {
+        provider: 'github',
+        accountId: 'other',
+        handle: 'other',
+        name: 'Other',
+        organisation: '',
+        avatarUrl: 'https://github.com/other.png?size=80',
+      };
       const meeting = makeMeeting({
-        users: { alice: chairUser, other },
-        chairIds: ['alice'],
+        users: { 'github:alice': chairUser, 'github:other': other },
+        chairIds: ['github:alice'],
         prologue: 'visible to all',
       });
       renderAgenda(meeting, other);

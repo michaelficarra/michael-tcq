@@ -1,6 +1,7 @@
 export type {
   User,
   UserKey,
+  DirectorySuggestion,
   AgendaItem,
   Session,
   AgendaEntry,
@@ -48,8 +49,10 @@ export type {
   NextAgendaItemPayload,
   AdvanceResponse,
   CreateMeetingBody,
+  UserSelection,
   SwitchUserBody,
   ImportAgendaBody,
+  PremiumUser,
   PremiumUserBody,
   PremiumUsersResponse,
   ChairsUpdatedDelta,
@@ -91,6 +94,7 @@ export {
   NextSpeakerPayloadSchema,
   NextAgendaItemPayloadSchema,
   CreateMeetingBodySchema,
+  UserSelectionSchema,
   SwitchUserBodySchema,
   ImportAgendaBodySchema,
   PremiumUserBodySchema,
@@ -108,13 +112,29 @@ export {
 export {
   userKey,
   asUserKey,
+  userLabel,
+  placeholderUser,
+  PLACEHOLDER_PROVIDER,
+  canonicalUserRef,
+  buildUserRefIndex,
+  userMatchesIndex,
   isSession,
   isAgendaItem,
   formatDuration,
   formatShortDuration,
   normaliseGithubUsername,
 } from './helpers.js';
-export type { DurationStyle, DurationParts } from './helpers.js';
+export type { DurationStyle, DurationParts, UserRefIndex } from './helpers.js';
+export {
+  upgradeUser,
+  buildKeyRemap,
+  isLegacyUser,
+  isLegacyKey,
+  isLegacyMeeting,
+  upgradeMeeting,
+  upgradeLog,
+} from './migrate.js';
+export type { LegacyUser } from './migrate.js';
 export { applyDelta } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
 export { DEV_USERS } from './devUsers.js';

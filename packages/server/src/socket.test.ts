@@ -13,8 +13,10 @@ import type {
   ServerToClientEvents,
   User,
 } from '@tcq/shared';
-import { asUserKey, isAgendaItem } from '@tcq/shared';
+import { isAgendaItem, userKey } from '@tcq/shared';
 import { MeetingManager } from './meetings.js';
+import { githubUser } from './auth/githubUser.js';
+import { googleUser } from './auth/googleUser.js';
 import { registerSocketHandlers } from './socket.js';
 import { toSessionUser } from './session.js';
 import { InMemoryStore } from './test/inMemoryStore.js';
@@ -43,7 +45,7 @@ interface TestContext {
 }
 
 /** The default test user — used by most socket tests as the session identity. */
-const TEST_USER: User = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+const TEST_USER: User = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
 /** Middleware that sets a specific user on the session. */
 function sessionAs(user: User): express.RequestHandler {
@@ -181,12 +183,7 @@ describe('Socket.IO integration', () => {
   it('receives full meeting state after joining', async () => {
     // Create a meeting via the manager
     const meeting = ctx.meetingManager.create([
-      {
-        ghid: 1,
-        ghUsername: 'testuser',
-        name: 'Test User',
-        organisation: 'Test Org',
-      },
+      githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
     ]);
 
     // Connect a client and join the meeting
@@ -203,19 +200,14 @@ describe('Socket.IO integration', () => {
     const state = await statePromise;
     expect(state.id).toBe(meeting.id);
     expect(state.chairIds).toHaveLength(1);
-    expect(state.users[state.chairIds[0]].ghUsername).toBe('testuser');
+    expect(state.users[state.chairIds[0]].handle).toBe('testuser');
     expect(state.agenda).toEqual([]);
     expect(state.queue.orderedIds).toEqual([]);
   });
 
   it('two clients in the same meeting both receive state', async () => {
     const meeting = ctx.meetingManager.create([
-      {
-        ghid: 1,
-        ghUsername: 'testuser',
-        name: 'Test User',
-        organisation: 'Test Org',
-      },
+      githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
     ]);
 
     const client1 = makeClient();
@@ -246,9 +238,9 @@ describe('Socket.IO integration', () => {
     // After the socket joins, the join handler must surface them in
     // `users` so the username-autocomplete tier-1 (people in this
     // meeting) includes passive observers.
-    const chairUser: User = { ghid: 999, ghUsername: 'chair', name: 'Chair', organisation: '' };
+    const chairUser: User = githubUser({ id: 998, login: 'chair', name: 'Chair', organisation: '' });
     const meeting = ctx.meetingManager.create([chairUser]);
-    expect(Object.keys(meeting.users)).toEqual([asUserKey('chair')]);
+    expect(Object.keys(meeting.users)).toEqual([userKey(chairUser)]);
 
     const client = makeClient();
     const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
@@ -257,9 +249,10 @@ describe('Socket.IO integration', () => {
     await statePromise;
 
     const updated = ctx.meetingManager.get(meeting.id)!;
-    expect(updated.users[asUserKey('testuser')]).toMatchObject({
-      ghid: TEST_USER.ghid,
-      ghUsername: TEST_USER.ghUsername,
+    expect(updated.users[userKey(TEST_USER)]).toMatchObject({
+      provider: TEST_USER.provider,
+      accountId: TEST_USER.accountId,
+      handle: TEST_USER.handle,
       name: TEST_USER.name,
       organisation: TEST_USER.organisation,
     });
@@ -364,36 +357,26 @@ describe('Socket.IO integration', () => {
     it('adds an agenda item and broadcasts updated state', async () => {
       // Mock user (ghid: 1, ghUsername: testuser) is a chair
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       // Listen for the state update after adding
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'First item', presenterUsernames: ['testuser'], duration: 15 });
+      client.emit('agenda:add', { name: 'First item', presenters: [{ handle: 'testuser' }], duration: 15 });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
       const first = asItem(state.agenda[0]);
       expect(first.name).toBe('First item');
-      expect(state.users[first.presenterIds[0]].ghUsername).toBe('testuser');
+      expect(state.users[first.presenterIds[0]].handle).toBe('testuser');
       expect(first.duration).toBe(15);
     });
 
     it('broadcasts to all clients in the meeting', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
 
       const client1 = await joinMeeting(meeting.id);
@@ -401,7 +384,7 @@ describe('Socket.IO integration', () => {
 
       // Client 2 waits for the broadcast (now a delta, not a full state)
       const state2Promise = waitForChange(client2, ctx.meetingManager, meeting.id);
-      client1.emit('agenda:add', { name: 'Broadcast test', presenterUsernames: ['testuser'] });
+      client1.emit('agenda:add', { name: 'Broadcast test', presenters: [{ handle: 'testuser' }] });
       const state2 = await state2Promise;
 
       expect(state2.agenda).toHaveLength(1);
@@ -413,24 +396,22 @@ describe('Socket.IO integration', () => {
     // before the handler resolves the presenter to a user.
     it('strips a leading @ and surrounding whitespace from presenter usernames', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'Presenter cleanup', presenterUsernames: [' @testuser ', '@ alice'] });
+      client.emit('agenda:add', {
+        name: 'Presenter cleanup',
+        presenters: [{ handle: ' @testuser ' }, { handle: '@ alice' }],
+      });
       const state = await statePromise;
 
       const first = asItem(state.agenda[0]);
       expect(first.presenterIds).toHaveLength(2);
-      expect(state.users[first.presenterIds[0]].ghUsername).toBe('testuser');
-      expect(state.users[first.presenterIds[1]].ghUsername).toBe('alice');
+      expect(state.users[first.presenterIds[0]].handle).toBe('testuser');
+      expect(state.users[first.presenterIds[1]].handle).toBe('alice');
     });
 
     it('enriches an unknown presenter via the mock-user seed in mock-auth mode', async () => {
@@ -446,16 +427,19 @@ describe('Socket.IO integration', () => {
       const newPresenter = enriched ?? DEV_USERS[0];
 
       const meeting = ctx.meetingManager.create([
-        { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'Joint', presenterUsernames: ['testuser', newPresenter.login] });
+      client.emit('agenda:add', {
+        name: 'Joint',
+        presenters: [{ handle: 'testuser' }, { handle: newPresenter.login }],
+      });
       const state = await statePromise;
 
       const item = asItem(state.agenda[0]);
-      const presenterKey = item.presenterIds.find((id) => state.users[id].ghUsername === newPresenter.login)!;
+      const presenterKey = item.presenterIds.find((id) => state.users[id].handle === newPresenter.login)!;
       expect(presenterKey).toBeDefined();
       expect(state.users[presenterKey]?.name).toBe(enriched?.name ?? newPresenter.login);
       expect(state.users[presenterKey]?.organisation).toBe(enriched?.organisation ?? '');
@@ -463,18 +447,13 @@ describe('Socket.IO integration', () => {
 
     it('accepts an empty presenters list', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('agenda:add', { name: 'No presenter', presenterUsernames: [] });
+      client.emit('agenda:add', { name: 'No presenter', presenters: [] });
       const state = await statePromise;
 
       expect(state.agenda).toHaveLength(1);
@@ -486,19 +465,14 @@ describe('Socket.IO integration', () => {
     it('rejects add from non-chair', async () => {
       // Create meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       // Listen for error
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('agenda:add', { name: 'Should fail', presenterUsernames: ['testuser'] });
+      client.emit('agenda:add', { name: 'Should fail', presenters: [{ handle: 'testuser' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
@@ -507,7 +481,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('auto-activates the new item when the meeting is in the past-final state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Original', [owner]);
       // Start, then advance past the last item — meeting is now past-final.
@@ -528,7 +502,7 @@ describe('Socket.IO integration', () => {
         queue?: { closed: boolean };
         lastAdvancementBy?: string;
       }>(client, 'agenda:added');
-      client.emit('agenda:add', { name: 'Follow-up', presenterUsernames: ['testuser'] });
+      client.emit('agenda:add', { name: 'Follow-up', presenters: [{ handle: 'testuser' }] });
       const delta = await deltaPromise;
 
       expect(delta.entry.name).toBe('Follow-up');
@@ -558,7 +532,7 @@ describe('Socket.IO integration', () => {
       // Session adds go through a separate handler — covered for
       // completeness: even in past-final, a session should not become
       // the "current" item (sessions are never current).
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
       ctx.meetingManager.nextAgendaItem(meeting.id);
@@ -574,20 +548,10 @@ describe('Socket.IO integration', () => {
   describe('agenda:delete', () => {
     it('deletes an agenda item and broadcasts updated state', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
       const item = ctx.meetingManager.addAgendaItem(meeting.id, 'To delete', [
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ])!;
 
       const client = await joinMeeting(meeting.id);
@@ -600,7 +564,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('refuses to delete the current agenda item and emits an error', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const first = ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner])!;
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -627,14 +591,9 @@ describe('Socket.IO integration', () => {
   describe('agenda:reorder', () => {
     it('reorders agenda items and broadcasts updated state', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: 'Test Org',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
       ]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       ctx.meetingManager.addAgendaItem(meeting.id, 'A', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'B', [owner]);
       const itemC = ctx.meetingManager.addAgendaItem(meeting.id, 'C', [owner])!;
@@ -650,7 +609,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('reorders a session entry through the same protocol', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const itemA = ctx.meetingManager.addAgendaItem(meeting.id, 'A', [owner])!;
       const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
@@ -667,7 +626,7 @@ describe('Socket.IO integration', () => {
 
   describe('agenda:edit', () => {
     it('edits an agenda item and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Old name', [owner])!;
 
@@ -683,20 +642,10 @@ describe('Socket.IO integration', () => {
     it('rejects edit from non-chair', async () => {
       // Meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       const item = ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ])!;
 
       const client = await joinMeeting(meeting.id);
@@ -715,7 +664,7 @@ describe('Socket.IO integration', () => {
 
   describe('session:add', () => {
     it('adds a session header and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -729,7 +678,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects non-positive capacity', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -740,7 +689,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects empty name', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -752,7 +701,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects add from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -767,7 +716,7 @@ describe('Socket.IO integration', () => {
 
   describe('session:edit', () => {
     it('updates name and capacity', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const session = ctx.meetingManager.addSession(meeting.id, 'Old', 30)!;
 
@@ -781,7 +730,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects edit from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
 
@@ -797,7 +746,7 @@ describe('Socket.IO integration', () => {
 
   describe('session:delete', () => {
     it('removes the session but keeps contained items', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
       ctx.meetingManager.addAgendaItem(meeting.id, 'Contained', [owner]);
@@ -813,7 +762,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects delete from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
 
@@ -831,7 +780,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:add', () => {
     it('adds an entry and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -844,11 +793,11 @@ describe('Socket.IO integration', () => {
       const entry = state.queue.entries[state.queue.orderedIds[0]];
       expect(entry.type).toBe('topic');
       expect(entry.topic).toBe('My topic');
-      expect(state.users[entry.userId].ghUsername).toBe('testuser');
+      expect(state.users[entry.userId].handle).toBe('testuser');
     });
 
     it('inserts entries in priority order', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -874,7 +823,7 @@ describe('Socket.IO integration', () => {
      * Returns the client and the current state (with `current.topic` populated).
      */
     async function setupWithCurrentTopic() {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [owner]);
 
@@ -961,7 +910,7 @@ describe('Socket.IO integration', () => {
       // current.topic is null. A client that sends `currentTopicSpeakerId: null`
       // in this state must not be allowed to add a reply (matches with null
       // would pass the equality check on its own).
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -998,7 +947,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:add with asUsername', () => {
     it('allows a chair to add an entry as another user', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -1009,21 +958,16 @@ describe('Socket.IO integration', () => {
 
       expect(state.queue.orderedIds).toHaveLength(1);
       const entry = state.queue.entries[state.queue.orderedIds[0]];
-      expect(state.users[entry.userId].ghUsername).toBe('alice');
+      expect(state.users[entry.userId].handle).toBe('alice');
       expect(entry.topic).toBe('Their topic');
     });
 
     it('resolves known users from the meeting when using asUsername', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Add an agenda item owned by a known user with a full profile
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
-        {
-          ghid: 42,
-          ghUsername: 'knownuser',
-          name: 'Known User',
-          organisation: 'ACME',
-        },
+        githubUser({ id: 3, login: 'knownuser', name: 'Known User', organisation: 'ACME' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -1038,8 +982,32 @@ describe('Socket.IO integration', () => {
       expect(state.users[entry.userId].organisation).toBe('ACME');
     });
 
+    it('resolves a provider-qualified key (handle-less user) via asUsername', async () => {
+      // Regression: Copy serialises a handle-less author (Google/Microsoft/
+      // ORCID) as their `provider:accountId` key, since they have no handle.
+      // Restore must resolve that key back to the real account, not degrade to
+      // a machine-key placeholder via the handle path.
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const meeting = ctx.meetingManager.create([owner]);
+      // A Google user (no handle) present in the meeting as an agenda presenter.
+      const googleAuthor = googleUser({ sub: '110169484476', name: 'Ada Lovelace', email: 'ada@example.com' });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [googleAuthor]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', topic: 'Restored', asUsername: 'google:110169484476' });
+      const state = await statePromise;
+
+      const entry = state.queue.entries[state.queue.orderedIds[0]];
+      // Resolved to the real Google identity (keyed by sub), not a placeholder.
+      expect(entry.userId).toBe('google:110169484476');
+      expect(state.users[entry.userId].provider).toBe('google');
+      expect(state.users[entry.userId].name).toBe('Ada Lovelace');
+    });
+
     it('creates a placeholder user for unknown asUsername', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -1049,19 +1017,14 @@ describe('Socket.IO integration', () => {
       const state = await statePromise;
 
       const entry = state.queue.entries[state.queue.orderedIds[0]];
-      expect(state.users[entry.userId].ghUsername).toBe('unknownperson');
+      expect(state.users[entry.userId].handle).toBe('unknownperson');
       expect(state.users[entry.userId].name).toBe('unknownperson');
     });
 
     it('rejects asUsername from non-chair', async () => {
       // Meeting where chair is someone else
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Open the queue so the test reaches the asUsername check
       ctx.meetingManager.setQueueClosed(meeting.id, false);
@@ -1080,7 +1043,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:add pending', () => {
     it('stamps pending=true and the default-for-type topic when topic is omitted', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -1095,7 +1058,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('uses the default-for-type topic appropriate to each type', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -1113,7 +1076,7 @@ describe('Socket.IO integration', () => {
       // Bulk restore is an admin operation that re-adds already-finished
       // entries — it must never produce a pending row that would render as
       // bouncing dots for every participant.
-      const chair = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const chair = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([chair]);
       const client = await joinMeeting(meeting.id);
 
@@ -1127,7 +1090,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects a non-pending add that omits the topic', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -1142,7 +1105,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:edit clears pending', () => {
     it('clears the pending flag when the author edits a pending entry', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -1167,7 +1130,7 @@ describe('Socket.IO integration', () => {
     it('removes the pending entry on owner-initiated cancel', async () => {
       // The cancel/Escape path: the author's client emits queue:remove
       // against its own pending entry.
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
@@ -1184,7 +1147,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('on author disconnect, pending entries are deleted', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       // Author opens a socket and adds a pending entry, then disconnects
@@ -1215,7 +1178,7 @@ describe('Socket.IO integration', () => {
       // disconnects. The entry must stay in the queue — disconnect-delete
       // only fires for entries that are still pending at the moment of
       // disconnect.
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const viewer = await joinMeeting(meeting.id);
@@ -1247,7 +1210,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:remove', () => {
     it('removes own entry from the queue', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -1269,20 +1232,15 @@ describe('Socket.IO integration', () => {
     it("rejects removal of another user's entry by non-chair", async () => {
       // Meeting where chair is someone else
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Add an entry by a different user
-      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Not yours', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      })!;
+      const entry = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'Not yours',
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1296,7 +1254,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:reorder', () => {
     it('reorders queue entries and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', owner);
@@ -1313,7 +1271,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('changes entry type when crossing a type boundary', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'question', 'Q', owner);
       const t = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'T', owner)!;
@@ -1331,20 +1289,15 @@ describe('Socket.IO integration', () => {
 
     it('rejects non-owner non-chair from reordering', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Entry owned by the chair, not the mock test user
-      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      })!;
+      const entry = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'A',
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1358,21 +1311,16 @@ describe('Socket.IO integration', () => {
     it('allows owner to move their entry down but not up', async () => {
       // Meeting where testuser is NOT a chair
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner)!;
-      const b = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      })!;
+      const b = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'B',
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1386,9 +1334,9 @@ describe('Socket.IO integration', () => {
 
     it('rejects owner moving up over a non-owner directly above', async () => {
       // Meeting where testuser is NOT a chair
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       // [A:chair, B:testuser] — B's only neighbour above is the chair's
       // entry, so testuser cannot move B up at all.
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', chair);
@@ -1408,7 +1356,7 @@ describe('Socket.IO integration', () => {
       // any entry across any other entry. Set up [A:other, B:other, C:other]
       // and move C to the position right after A.
       const meeting = ctx.meetingManager.create([TEST_USER]);
-      const other = { ghid: 42, ghUsername: 'someone-else', name: 'Other', organisation: '' };
+      const other = githubUser({ id: 4, login: 'someone-else', name: 'Other', organisation: '' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', other)!;
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', other);
       const c = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', other)!;
@@ -1425,9 +1373,9 @@ describe('Socket.IO integration', () => {
     it('allows owner to move their entry up within their own block', async () => {
       // [A:chair, B:testuser, C:testuser] — testuser may move C above B
       // (their own contiguous block) but no further.
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', chair)!;
       const b = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', owner)!;
       const c = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', owner)!;
@@ -1445,9 +1393,9 @@ describe('Socket.IO integration', () => {
       // [A:testuser, B:testuser, C:testuser] in a meeting chaired by
       // someone else — testuser may freely reorder among their block, all
       // the way to the top.
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner)!;
       const b = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', owner)!;
       const c = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', owner)!;
@@ -1465,9 +1413,9 @@ describe('Socket.IO integration', () => {
       // [A:testuser, B:chair, C:testuser] — testuser tries to move C past
       // B (the chair's entry) to the top. The slice being jumped over
       // contains B, so the move is rejected.
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', chair);
       const c = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', owner)!;
@@ -1486,9 +1434,9 @@ describe('Socket.IO integration', () => {
       // move D to the position after A (target index 1). The slice being
       // jumped over is [B, C], which contains B (non-owner), so the move
       // is rejected even though D is moving past one of its own entries.
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner)!;
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'B', chair);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'C', owner);
@@ -1523,9 +1471,9 @@ describe('Socket.IO integration', () => {
       // Use an owner-non-chair to also cover the path where the owner
       // validation falls through to reorderQueueEntry's failure path with
       // an unknown afterId (not no-op, not upward).
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const a = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'A', owner)!;
 
       const client = await joinMeeting(meeting.id);
@@ -1543,7 +1491,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:edit', () => {
     it('edits a queue entry topic and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Old topic', owner)!;
 
@@ -1559,20 +1507,15 @@ describe('Socket.IO integration', () => {
     it('rejects edit from non-owner non-chair', async () => {
       // Meeting where chair is someone else (ghid: 99)
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Queue entry created by the chair, not the mock test user
-      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Not yours', {
-        ghid: 99,
-        ghUsername: 'chairperson',
-        name: 'Chair',
-        organisation: '',
-      })!;
+      const entry = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'Not yours',
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1587,8 +1530,8 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects type change from non-chair owner', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
       const meeting = ctx.meetingManager.create([chair]);
       const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'My topic', owner)!;
 
@@ -1604,14 +1547,14 @@ describe('Socket.IO integration', () => {
     });
 
     it('allows chair to change entry type', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
-      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Test', {
-        ghid: 99,
-        ghUsername: 'other',
-        name: 'Other',
-        organisation: '',
-      })!;
+      const entry = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'Test',
+        githubUser({ id: 2, login: 'other', name: 'Other', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1623,15 +1566,15 @@ describe('Socket.IO integration', () => {
     });
 
     it('allows chair to edit any entry', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Entry created by someone else
-      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Other topic', {
-        ghid: 99,
-        ghUsername: 'other',
-        name: 'Other',
-        organisation: '',
-      })!;
+      const entry = ctx.meetingManager.addQueueEntry(
+        meeting.id,
+        'topic',
+        'Other topic',
+        githubUser({ id: 2, login: 'other', name: 'Other', organisation: '' }),
+      )!;
 
       const client = await joinMeeting(meeting.id);
 
@@ -1645,7 +1588,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:next', () => {
     it('advances to the next speaker and broadcasts', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
@@ -1662,7 +1605,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('sets currentTopic when advancing a topic-type entry', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'New discussion', owner);
 
@@ -1676,10 +1619,10 @@ describe('Socket.IO integration', () => {
     });
 
     it('clears the speaker when queue is empty', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Set a current speaker and topic but leave queue empty
-      const ownerKey = asUserKey('testuser');
+      const ownerKey = userKey(owner);
       meeting.current.speaker = {
         id: 'old-speaker',
         type: 'topic',
@@ -1706,7 +1649,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects conflicting advance when currentSpeakerEntryId does not match', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Only entry', owner);
 
@@ -1726,7 +1669,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('returns ok: true via ack on success', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Entry', owner);
 
@@ -1742,12 +1685,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects from non-chair via ack', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -1762,8 +1700,8 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects the current speaker (non-chair) from advancing', async () => {
-      const chair = { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' };
-      const speaker = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const speaker = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([chair]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'My topic', speaker);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Next topic', chair);
@@ -1782,7 +1720,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('accepts advancement after unrelated mutations (queue edit)', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
@@ -1810,7 +1748,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects when another chair already advanced the speaker', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'First', owner);
       ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'Second', owner);
@@ -1842,86 +1780,76 @@ describe('Socket.IO integration', () => {
 
   describe('meeting:updateChairs', () => {
     it('updates the chair list and broadcasts', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', 'newchair'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'newchair' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(2);
-      const chairUsernames = state.chairIds.map((id) => state.users[id].ghUsername);
+      const chairUsernames = state.chairIds.map((id) => state.users[id].handle);
       expect(chairUsernames).toContain('testuser');
       expect(chairUsernames).toContain('newchair');
     });
 
     it('rejects from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: ['testuser'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/only chairs/i);
     });
 
     it('rejects empty chair list', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: [] });
+      client.emit('meeting:updateChairs', { chairs: [] });
       const error = await errorPromise;
 
       expect(error).toMatch(/at least one/i);
     });
 
     it('rejects when the acting chair removes themselves', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
-      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'someone-else' }] });
       const error = await errorPromise;
 
       expect(error).toMatch(/cannot remove yourself/i);
     });
 
     it('resolves known users from the meeting', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Add a known user via the agenda
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
-        {
-          ghid: 42,
-          ghUsername: 'knownuser',
-          name: 'Known User',
-          organisation: 'ACME',
-        },
+        githubUser({ id: 3, login: 'knownuser', name: 'Known User', organisation: 'ACME' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', 'knownuser'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'knownuser' }] });
       const state = await statePromise;
 
-      const knownKey = state.chairIds.find((id) => state.users[id].ghUsername === 'knownuser')!;
+      const knownKey = state.chairIds.find((id) => state.users[id].handle === 'knownuser')!;
       expect(state.users[knownKey]?.name).toBe('Known User');
       expect(state.users[knownKey]?.organisation).toBe('ACME');
     });
@@ -1939,15 +1867,15 @@ describe('Socket.IO integration', () => {
       const enriched = DEV_USERS.find((u) => u.name !== u.login && (u.organisation ?? '') !== '');
       const newChair = enriched ?? DEV_USERS[0];
 
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['testuser', newChair.login] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: newChair.login }] });
       const state = await statePromise;
 
-      const newChairKey = state.chairIds.find((id) => state.users[id].ghUsername === newChair.login)!;
+      const newChairKey = state.chairIds.find((id) => state.users[id].handle === newChair.login)!;
       expect(newChairKey).toBeDefined();
       expect(state.users[newChairKey]?.name).toBe(enriched?.name ?? newChair.login);
       expect(state.users[newChairKey]?.organisation).toBe(enriched?.organisation ?? '');
@@ -1961,22 +1889,17 @@ describe('Socket.IO integration', () => {
 
       // Meeting where testuser is NOT a chair
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['newchair'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'newchair' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(1);
-      expect(state.users[state.chairIds[0]].ghUsername).toBe('newchair');
+      expect(state.users[state.chairIds[0]].handle).toBe('newchair');
 
       vi.unstubAllEnvs();
     });
@@ -1985,22 +1908,17 @@ describe('Socket.IO integration', () => {
       vi.stubEnv('ADMIN_USERNAMES', 'testuser');
 
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: '',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: ['someone-else'] });
+      client.emit('meeting:updateChairs', { chairs: [{ handle: 'someone-else' }] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(1);
-      expect(state.users[state.chairIds[0]].ghUsername).toBe('someone-else');
+      expect(state.users[state.chairIds[0]].handle).toBe('someone-else');
 
       vi.unstubAllEnvs();
     });
@@ -2009,18 +1927,13 @@ describe('Socket.IO integration', () => {
       vi.stubEnv('ADMIN_USERNAMES', 'testuser');
 
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 1,
-          ghUsername: 'testuser',
-          name: 'Test User',
-          organisation: '',
-        },
+        githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
-      client.emit('meeting:updateChairs', { usernames: [] });
+      client.emit('meeting:updateChairs', { chairs: [] });
       const state = await statePromise;
 
       expect(state.chairIds).toHaveLength(0);
@@ -2039,7 +1952,7 @@ describe('Socket.IO integration', () => {
 
   describe('poll:start', () => {
     it('starts a poll with custom options and broadcasts', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -2056,7 +1969,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects with fewer than 2 options', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -2070,12 +1983,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -2090,9 +1998,9 @@ describe('Socket.IO integration', () => {
 
   describe('poll:stop', () => {
     it('stops a poll by clearing meeting.poll', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, userKey(owner), undefined, true);
 
       const client = await joinMeeting(meeting.id);
 
@@ -2106,9 +2014,9 @@ describe('Socket.IO integration', () => {
 
   describe('poll:react', () => {
     it('adds a reaction and broadcasts', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, userKey(owner), undefined, true);
       const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);
@@ -2119,13 +2027,13 @@ describe('Socket.IO integration', () => {
 
       expect(state.poll!.reactions).toHaveLength(1);
       expect(state.poll!.reactions[0].optionId).toBe(optionId);
-      expect(state.users[state.poll!.reactions[0].userId].ghUsername).toBe('testuser');
+      expect(state.users[state.poll!.reactions[0].userId].handle).toBe('testuser');
     });
 
     it('toggles off an existing reaction', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
-      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, asUserKey('testuser'), undefined, true);
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, userKey(owner), undefined, true);
       const optionId = meeting.poll!.options[0].id;
 
       const client = await joinMeeting(meeting.id);
@@ -2144,7 +2052,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects when poll is not active', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -2161,7 +2069,7 @@ describe('Socket.IO integration', () => {
 
   describe('meeting:nextAgendaItem', () => {
     it('starts the meeting and broadcasts updated state', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First topic', [owner]);
 
@@ -2173,13 +2081,13 @@ describe('Socket.IO integration', () => {
 
       expect(state.agenda.find((i) => i.id === state.current.agendaItemId)?.name).toBe('First topic');
       const speaker = state.current.speaker!;
-      expect(state.users[speaker.userId].ghUsername).toBe('testuser');
+      expect(state.users[speaker.userId].handle).toBe('testuser');
       expect(speaker.topic).toBe('Introducing: First topic');
       expect(speaker.source).toBe('agenda');
     });
 
     it('advances to the next agenda item', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -2201,20 +2109,10 @@ describe('Socket.IO integration', () => {
 
     it('rejects from non-chair via ack', async () => {
       const meeting = ctx.meetingManager.create([
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
-        {
-          ghid: 99,
-          ghUsername: 'chairperson',
-          name: 'Chair',
-          organisation: '',
-        },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -2229,7 +2127,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('concludes the meeting when advancing past the final item (records conclusion, clears current)', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Only item', [owner]);
 
@@ -2275,7 +2173,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('returns error via ack when no items have ever been added (none branch)', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -2290,7 +2188,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects conflicting advance when currentAgendaItemId does not match', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -2313,7 +2211,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('accepts advancement after unrelated mutations (queue add)', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -2339,7 +2237,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects when another chair already advanced the agenda item', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
@@ -2367,7 +2265,7 @@ describe('Socket.IO integration', () => {
     });
 
     it("replaces the completed item's duration with the elapsed time rounded up to the nearest minute", async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Seed an obviously-wrong duration so we can verify it was overwritten,
       // not merely left alone.
@@ -2405,7 +2303,7 @@ describe('Socket.IO integration', () => {
     });
 
     it("sets a duration on completion even if the item didn't have one", async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // No duration on First.
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
@@ -2434,20 +2332,10 @@ describe('Socket.IO integration', () => {
 
   it('client can switch meetings by joining a different one', async () => {
     const meeting1 = ctx.meetingManager.create([
-      {
-        ghid: 1,
-        ghUsername: 'testuser',
-        name: 'Test User',
-        organisation: 'Test Org',
-      },
+      githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' }),
     ]);
     const meeting2 = ctx.meetingManager.create([
-      {
-        ghid: 2,
-        ghUsername: 'other',
-        name: 'Other User',
-        organisation: 'Other Org',
-      },
+      githubUser({ id: 2, login: 'other', name: 'Other User', organisation: 'Other Org' }),
     ]);
 
     const client = makeClient();
@@ -2469,7 +2357,7 @@ describe('Socket.IO integration', () => {
   // -- Meeting log tests --
 
   describe('meeting log', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     it('logs meeting-started and agenda-item-started on first agenda advancement', async () => {
       const meeting = ctx.meetingManager.create([owner]);
@@ -2674,6 +2562,39 @@ describe('Socket.IO integration', () => {
       }
     });
 
+    it('serialises a handle-less author in remainingQueue as the full provider key', async () => {
+      // Parity with the client's "Copy queue": a handle-less author (Google/
+      // Microsoft/ORCID) must be written as the full `provider:accountId` key,
+      // not the bare accountId — so the log text round-trips through "Restore
+      // Queue" (the colon routes `resolveUserRef` down the key path).
+      const meeting = ctx.meetingManager.create([owner]);
+      const googleAuthor = googleUser({ sub: '110169484476', name: 'Ada Lovelace', email: 'ada@example.com' });
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', [googleAuthor]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', [owner]);
+
+      const client = await joinMeeting(meeting.id);
+
+      let statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
+      await statePromise;
+
+      // Chair adds a queue entry on behalf of the handle-less Google author.
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'topic', topic: 'Ada topic', asUsername: 'google:110169484476' });
+      const state = await statePromise;
+
+      // Advance, leaving the queue non-empty so it gets serialised.
+      statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: state.current.agendaItemId ?? null }, () => {});
+      await statePromise;
+
+      const finished = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'agenda-item-finished');
+      expect(finished?.type).toBe('agenda-item-finished');
+      if (finished?.type === 'agenda-item-finished') {
+        expect(finished.remainingQueue).toContain('(google:110169484476)');
+      }
+    });
+
     it('does not include remainingQueue when queue is empty at advancement', async () => {
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'First', [owner]);
@@ -2773,7 +2694,7 @@ describe('Socket.IO integration', () => {
 
   describe('queue:setClosed', () => {
     it('chair can close and open the queue', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       const client = await joinMeeting(meeting.id);
@@ -2793,7 +2714,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
 
       const client = await joinMeeting(meeting.id);
@@ -2807,7 +2728,7 @@ describe('Socket.IO integration', () => {
 
     it('non-chair queue:add rejected when queue is closed', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Close the queue
       ctx.meetingManager.setQueueClosed(meeting.id, true);
@@ -2824,7 +2745,7 @@ describe('Socket.IO integration', () => {
 
     it('non-chair can add a Point of Order when queue is closed', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Close the queue — the joining user (testuser, ghid: 1) is not a chair
       ctx.meetingManager.setQueueClosed(meeting.id, true);
@@ -2843,7 +2764,7 @@ describe('Socket.IO integration', () => {
 
     it('non-chair queue:add still rejected for non-POO types when queue is closed', async () => {
       const meeting = ctx.meetingManager.create([
-        { ghid: 99, ghUsername: 'chairperson', name: 'Chair', organisation: '' },
+        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       ctx.meetingManager.setQueueClosed(meeting.id, true);
 
@@ -2859,7 +2780,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('chair can add entries when queue is closed', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       // Close the queue
       ctx.meetingManager.setQueueClosed(meeting.id, true);
@@ -2875,7 +2796,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('meeting:nextAgendaItem reopens the queue', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item 1', [owner]);
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item 2', [owner]);
@@ -2902,7 +2823,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('queue is closed by default before meeting starts', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
 
       await joinMeeting(meeting.id);
@@ -2919,7 +2840,7 @@ describe('Socket.IO integration', () => {
   // The surrogate tests below force a drop on the wire and then make
   // assertions about both halves.
   describe('delta gap detection and resync', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     /**
      * Attach a surrogate *before* the join handshake so the bootstrap
@@ -2945,13 +2866,13 @@ describe('Socket.IO integration', () => {
       const { socket: observer, surrogate } = await joinWithSurrogate(meeting.id);
 
       // First mutation lands normally — surrogate applies it.
-      driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'First', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForVersion(1);
       expect(surrogate.state?.agenda).toHaveLength(1);
 
       // Force the surrogate to silently drop the *next* delta.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Second', presenters: [{ handle: 'testuser' }] });
       // Wait until the drop has been recorded (events.length grows even
       // though no version is applied — the surrogate logs `[dropped]`).
       await surrogate.waitForNextEvent();
@@ -2961,7 +2882,7 @@ describe('Socket.IO integration', () => {
       // A subsequent mutation triggers gap detection — version is now
       // lastSeen+2, surrogate emits state:resync, server replies with
       // a fresh state and the surrogate re-seeds.
-      driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Third', presenters: [{ handle: 'testuser' }] });
       // Convergence: the resync replays the full state with version 3.
       await surrogate.waitForVersion(3);
 
@@ -2984,9 +2905,9 @@ describe('Socket.IO integration', () => {
 
       // Drop one and provoke a gap.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForVersion(2);
 
       expect(getSocketCounters().stateResyncs).toBeGreaterThanOrEqual(1);
@@ -3002,12 +2923,12 @@ describe('Socket.IO integration', () => {
 
       // Drop the next two deltas in a row, then make a third mutation.
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
       surrogate.options.dropNext = true;
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await surrogate.waitForNextEvent();
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
 
       // The third delta triggers gap detection (expected v2, got v3),
       // and the resync replays the full state with version 3 — both
@@ -3024,7 +2945,7 @@ describe('Socket.IO integration', () => {
       const driver = await joinMeeting(meeting.id);
       // Apply a mutation before the observer joins, so the post-join
       // state is non-trivially different from the initial empty meeting.
-      driver.emit('agenda:add', { name: 'Pre-join', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Pre-join', presenters: [{ handle: 'testuser' }] });
       // Wait for the server-side mutation to land (emit is async).
       await new Promise<void>((resolve) => {
         const check = () => {
@@ -3040,7 +2961,7 @@ describe('Socket.IO integration', () => {
 
       // Disconnect and apply more mutations while away.
       observer.disconnect();
-      driver.emit('agenda:add', { name: 'During disconnect', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'During disconnect', presenters: [{ handle: 'testuser' }] });
       await new Promise<void>((resolve) => {
         const check = () => {
           if ((ctx.meetingManager.get(meeting.id)?.agenda.length ?? 0) === 2) resolve();
@@ -3072,7 +2993,7 @@ describe('Socket.IO integration', () => {
   // a reducer bug for any single delta type fails this test
   // immediately and pinpoints which step diverged.
   describe('reducer/server equivalence', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     /**
      * Strip the one field that's intentionally divergent. The server's
@@ -3135,7 +3056,7 @@ describe('Socket.IO integration', () => {
 
       // --- agenda:added (chair-only) ---
       await runStep('agenda:added (item)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'First', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'First', presenters: [{ handle: 'testuser' }] });
       });
       itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
 
@@ -3147,7 +3068,7 @@ describe('Socket.IO integration', () => {
 
       // --- agenda:added (item, used later for reorder/delete) ---
       await runStep('agenda:added (item 2)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'Second', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'Second', presenters: [{ handle: 'testuser' }] });
       });
       itemIds.push(ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id);
 
@@ -3174,7 +3095,7 @@ describe('Socket.IO integration', () => {
       // --- chairs:updated (admin path is not exercised — non-admin
       // chair must keep themselves; the test user is the chair). ---
       await runStep('chairs:updated', driver, surrogate, meeting.id, () => {
-        driver.emit('meeting:updateChairs', { usernames: ['testuser', 'other'] });
+        driver.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'other' }] });
       });
 
       // --- agenda:advanced (start the meeting → first item is current) ---
@@ -3256,7 +3177,7 @@ describe('Socket.IO integration', () => {
       // Add a third item then delete it so we exercise the
       // `currentCleared: false` branch (deleting a non-current item).
       await runStep('agenda:added (item 3)', driver, surrogate, meeting.id, () => {
-        driver.emit('agenda:add', { name: 'Third', presenterUsernames: ['testuser'] });
+        driver.emit('agenda:add', { name: 'Third', presenters: [{ handle: 'testuser' }] });
       });
       const thirdItemId = ctx.meetingManager.get(meeting.id)!.agenda.at(-1)!.id;
       await runStep('agenda:deleted (item)', driver, surrogate, meeting.id, () => {
@@ -3300,7 +3221,7 @@ describe('Socket.IO integration', () => {
   // client, and assert every observer ends up byte-equal to the
   // server's state and to each other.
   describe('multi-client convergence', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     /**
      * Same `joinWithSurrogate` shape as the gap-detection block, but
@@ -3342,8 +3263,8 @@ describe('Socket.IO integration', () => {
       const c = await joinWithSurrogate(meeting.id);
 
       // Drive a sequence of mutations of different types.
-      driver.emit('agenda:add', { name: 'Item 1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'Item 2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Item 1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'Item 2', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       driver.emit('queue:setClosed', { closed: false });
 
@@ -3373,7 +3294,7 @@ describe('Socket.IO integration', () => {
       // normally and never need a resync.
       a.surrogate.options.dropNext = true;
 
-      driver.emit('agenda:add', { name: 'Skipped on a', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Skipped on a', presenters: [{ handle: 'testuser' }] });
       // `a` records the drop; `b` records the apply.
       await Promise.all([a.surrogate.waitForNextEvent(), b.surrogate.waitForVersion(1)]);
       expect(b.surrogate.state?.agenda).toHaveLength(1);
@@ -3381,7 +3302,7 @@ describe('Socket.IO integration', () => {
 
       // Subsequent mutation: `a` detects a gap and resyncs; `b` applies
       // the delta normally. Both end up at version 2 and equivalent.
-      driver.emit('agenda:add', { name: 'Triggers a resync', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Triggers a resync', presenters: [{ handle: 'testuser' }] });
       await Promise.all([a.surrogate.waitForVersion(2), b.surrogate.waitForVersion(2)]);
 
       expect(a.surrogate.resyncRequestCount).toBe(1);
@@ -3402,8 +3323,8 @@ describe('Socket.IO integration', () => {
       const driver = await joinMeeting(meeting.id);
 
       // Apply some mutations before the late observer joins.
-      driver.emit('agenda:add', { name: 'Pre-join 1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'Pre-join 2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Pre-join 1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'Pre-join 2', presenters: [{ handle: 'testuser' }] });
       // Wait for the second mutation to land on the server before the
       // late observer joins, otherwise the bootstrap state would be
       // empty and any incoming delta would arrive in-flight.
@@ -3421,7 +3342,7 @@ describe('Socket.IO integration', () => {
 
       // After joining, a further mutation arrives as a delta and applies
       // on top of the bootstrapped state.
-      driver.emit('agenda:add', { name: 'Post-join', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'Post-join', presenters: [{ handle: 'testuser' }] });
       await late.surrogate.waitForVersion(3);
       expect(late.surrogate.state?.agenda).toHaveLength(3);
 
@@ -3444,7 +3365,7 @@ describe('Socket.IO integration', () => {
   // exact resync count is part of the assertion where it pins down a
   // useful invariant (e.g. only the gapped deltas trigger resync).
   describe('out-of-order delivery', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     /** Same join-with-surrogate shape as the convergence block above. */
     async function joinWithSurrogate(meetingId: string) {
@@ -3474,9 +3395,9 @@ describe('Socket.IO integration', () => {
       const a = await joinWithSurrogate(meeting.id);
 
       // Build up a 3-item agenda that the observer can apply normally.
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(3);
       const idB = ctx.meetingManager.get(meeting.id)!.agenda[1].id;
       const idC = ctx.meetingManager.get(meeting.id)!.agenda[2].id;
@@ -3530,8 +3451,10 @@ describe('Socket.IO integration', () => {
       // Two chair updates back-to-back, with the second strictly
       // larger so the wrong order would visibly diverge state.
       a.surrogate.reorderNext(2);
-      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second'] });
-      driver.emit('meeting:updateChairs', { usernames: ['testuser', 'second', 'third'] });
+      driver.emit('meeting:updateChairs', { chairs: [{ handle: 'testuser' }, { handle: 'second' }] });
+      driver.emit('meeting:updateChairs', {
+        chairs: [{ handle: 'testuser' }, { handle: 'second' }, { handle: 'third' }],
+      });
 
       await a.surrogate.waitForVersion(2);
       expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
@@ -3572,8 +3495,8 @@ describe('Socket.IO integration', () => {
 
       // Step 1: induce a resync via reorder.
       a.surrogate.reorderNext(2);
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(2);
       expect(a.surrogate.resyncRequestCount).toBe(1);
 
@@ -3582,7 +3505,7 @@ describe('Socket.IO integration', () => {
       // in a clean state — `lastSeenVersion` matches the server's, so
       // the next delta lands on `expected` rather than producing yet
       // another gap.
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       await a.surrogate.waitForVersion(3);
       expect(a.surrogate.resyncRequestCount).toBe(1); // unchanged
       expect(normalise(a.surrogate.state)).toEqual(normalise(ctx.meetingManager.get(meeting.id)));
@@ -3636,8 +3559,8 @@ describe('Socket.IO integration', () => {
       b.surrogate.reorderNext(4, [1, 3, 0, 2]);
       c.surrogate.reorderNext(4, [0, 2, 1, 3]);
 
-      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I1', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'I2', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       driver.emit('queue:setClosed', { closed: false });
 
@@ -3666,13 +3589,13 @@ describe('Socket.IO integration', () => {
       const meeting = ctx.meetingManager.create([owner]);
       const driver = await joinMeeting(meeting.id);
       // Create an initial agenda item the meeting can advance into.
-      driver.emit('agenda:add', { name: 'I1', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I1', presenters: [{ handle: 'testuser' }] });
 
       const a = await joinWithSurrogate(meeting.id);
       // Surrogate joined after the first add — bootstrap seeds at v1.
       // Reorder the next two deltas (a second add and an advance).
       a.surrogate.reorderNext(2);
-      driver.emit('agenda:add', { name: 'I2', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'I2', presenters: [{ handle: 'testuser' }] });
       driver.emit('meeting:nextAgendaItem', { currentAgendaItemId: null }, () => {});
 
       await a.surrogate.waitForVersion(3);
@@ -3718,7 +3641,7 @@ describe('Socket.IO integration', () => {
       // on the premium user and have no isPremium key at all on the other,
       // so absence stays the bandwidth-saving default.
       await ctx.appSettings.addPremiumUsername('testuser');
-      const otherChair: User = { ghid: 2, ghUsername: 'plainuser', name: 'Plain User', organisation: '' };
+      const otherChair: User = githubUser({ id: 5, login: 'plainuser', name: 'Plain User', organisation: '' });
       const meeting = ctx.meetingManager.create([TEST_USER, otherChair]);
 
       const client = makeClient();
@@ -3727,8 +3650,8 @@ describe('Socket.IO integration', () => {
       client.emit('join', meeting.id);
       const state = await statePromise;
 
-      expect(state.users[asUserKey('testuser')].isPremium).toBe(true);
-      expect('isPremium' in state.users[asUserKey('plainuser')]).toBe(false);
+      expect(state.users[userKey(TEST_USER)].isPremium).toBe(true);
+      expect('isPremium' in state.users[userKey(otherChair)]).toBe(false);
     });
 
     it('stamps isPremium on delta-piggybacked user records too', async () => {
@@ -3747,7 +3670,7 @@ describe('Socket.IO integration', () => {
       const deltaPromise = waitForEvent<{ users?: Record<string, User> }>(client, 'queue:added');
       client.emit('queue:add', { type: 'topic', topic: 'Hello' });
       const delta = await deltaPromise;
-      const piggybacked = delta.users?.[asUserKey('testuser')];
+      const piggybacked = delta.users?.[userKey(TEST_USER)];
       expect(piggybacked?.isPremium).toBe(true);
     });
 
@@ -3757,7 +3680,7 @@ describe('Socket.IO integration', () => {
       // fresh `state` event. We hook the io.to(...).emit machinery so we
       // can count emissions per room without depending on a second
       // connected client per meeting.
-      const otherUser: User = { ghid: 7, ghUsername: 'about-to-be-premium', name: 'P', organisation: '' };
+      const otherUser: User = githubUser({ id: 6, login: 'about-to-be-premium', name: 'P', organisation: '' });
       const containingMeeting = ctx.meetingManager.create([TEST_USER, otherUser]);
       const unrelatedMeeting = ctx.meetingManager.create([TEST_USER]);
 
@@ -3783,7 +3706,10 @@ describe('Socket.IO integration', () => {
       });
 
       const { broadcastPremiumChange } = await import('./socket.js');
-      broadcastPremiumChange(ctx.io, ctx.meetingManager, ctx.appSettings, 'about-to-be-premium');
+      // broadcastPremiumChange takes a bare GitHub handle (what
+      // AppSettingsManager.add/removePremiumUsername returns), since premium
+      // membership is matched by handle.
+      broadcastPremiumChange(ctx.io, ctx.meetingManager, ctx.appSettings, otherUser.handle!);
 
       expect(emitsPerRoom.get(containingMeeting.id) ?? 0).toBe(1);
       expect(emitsPerRoom.get(unrelatedMeeting.id) ?? 0).toBe(0);
@@ -3791,7 +3717,7 @@ describe('Socket.IO integration', () => {
   });
 
   describe('delay and partition', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     async function joinWithSurrogate(meetingId: string) {
       const socket = makeClient();
@@ -3819,7 +3745,7 @@ describe('Socket.IO integration', () => {
       const a = await joinWithSurrogate(meeting.id);
 
       a.surrogate.delayNext('agenda:added', 100);
-      driver.emit('agenda:add', { name: 'late but only one', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'late but only one', presenters: [{ handle: 'testuser' }] });
 
       // Synchronously after the emit, the surrogate hasn't processed
       // the broadcast yet — the delta is parked in the delay timer.
@@ -3844,7 +3770,7 @@ describe('Socket.IO integration', () => {
       // Hold the next agenda:added for long enough that the follow-up
       // mutation arrives first and forces a resync.
       a.surrogate.delayNext('agenda:added', 200);
-      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'held', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
 
       // The closed-changed delta is processed immediately and gaps
@@ -3878,10 +3804,10 @@ describe('Socket.IO integration', () => {
       // in version order — the partition holds them while they pile
       // up.
       a.surrogate.partition(150);
-      driver.emit('agenda:add', { name: 'A', presenterUsernames: ['testuser'] });
-      driver.emit('agenda:add', { name: 'B', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'A', presenters: [{ handle: 'testuser' }] });
+      driver.emit('agenda:add', { name: 'B', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
-      driver.emit('agenda:add', { name: 'C', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'C', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: false });
 
       // Mid-partition: buffer is filling but nothing has been processed.
@@ -3911,7 +3837,7 @@ describe('Socket.IO integration', () => {
       // bumped to >= 2 by the resync, so v1 must be treated as a
       // late duplicate.
       a.surrogate.delayNext('agenda:added', 200);
-      driver.emit('agenda:add', { name: 'held', presenterUsernames: ['testuser'] });
+      driver.emit('agenda:add', { name: 'held', presenters: [{ handle: 'testuser' }] });
       driver.emit('queue:setClosed', { closed: true });
       await a.surrogate.waitForVersion(2);
 
@@ -3956,7 +3882,7 @@ describe('Socket.IO integration', () => {
   //     duplicate per-event permission checks already covered
   //     elsewhere. Left out deliberately.
   describe('concurrent emits', () => {
-    const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+    const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
 
     async function joinWithSurrogate(meetingId: string) {
       const socket = makeClient();
@@ -4256,7 +4182,7 @@ describe('Socket.IO integration', () => {
   // celebrating.
   describe('at-least-once emit semantics', () => {
     it('two queue:add emits on the same socket create two distinct entries', async () => {
-      const owner = { ghid: 1, ghUsername: 'testuser', name: 'Test User', organisation: 'Test Org' };
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
       const driver = await joinMeeting(meeting.id);
 

@@ -7,11 +7,25 @@ import { MeetingStateContext, MeetingDispatchContext, type MeetingContextState }
 import { SocketContext, type TypedSocket } from '../contexts/SocketContext.js';
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
-const alice: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
+const alice: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
 
 /** Build a minimal CurrentSpeaker struct with the given turn id. */
 function speakerWith(id: string): CurrentSpeaker {
-  return { id, userId: 'alice', type: 'topic', topic: 't', source: 'queue', startTime: '2026-01-01T00:00:00.000Z' };
+  return {
+    id,
+    userId: 'github:alice',
+    type: 'topic',
+    topic: 't',
+    source: 'queue',
+    startTime: '2026-01-01T00:00:00.000Z',
+  };
 }
 
 interface MakeMeetingOverrides {
@@ -24,7 +38,7 @@ interface MakeMeetingOverrides {
 }
 
 function entryWith(id: string): QueueEntry {
-  return { id, type: 'topic', topic: id, userId: 'alice' };
+  return { id, type: 'topic', topic: id, userId: 'github:alice' };
 }
 
 /** Create a minimal meeting state for testing. */
@@ -142,7 +156,7 @@ describe('useAdvanceAction', () => {
 
     // Another chair (bob) advanced — triggers cooldown
     stateRef.current = {
-      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'github:bob' }),
       user: alice,
     };
     rerender();
@@ -167,7 +181,7 @@ describe('useAdvanceAction', () => {
 
     // Server responds with speaker change attributed to us
     stateRef.current = {
-      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'alice' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'github:alice' }),
       user: alice,
     };
     rerender();
@@ -188,7 +202,7 @@ describe('useAdvanceAction', () => {
     });
 
     stateRef.current = {
-      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'github:bob' }),
       user: alice,
     };
     rerender();
@@ -228,7 +242,7 @@ describe('useAdvanceAction', () => {
     });
 
     stateRef.current = {
-      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'bob' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', lastAdvancementBy: 'github:bob' }),
       user: alice,
     };
     rerender();
@@ -393,7 +407,7 @@ describe('useAdvanceAction', () => {
 
     // Self-advances: entry-2 becomes the speaker, entry-3 becomes next.
     stateRef.current = {
-      meeting: makeMeeting({ speakerId: 'entry-2', queueIds: ['entry-3'], lastAdvancementBy: 'alice' }),
+      meeting: makeMeeting({ speakerId: 'entry-2', queueIds: ['entry-3'], lastAdvancementBy: 'github:alice' }),
       user: alice,
     };
     rerender();

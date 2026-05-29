@@ -1,13 +1,40 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { UserCombobox } from './UserCombobox.js';
+import type { User } from '@tcq/shared';
+import { UserCombobox, type SelectedUser } from './UserCombobox.js';
 
-/** Stub /api/users/autocomplete with an in-test fetch. Returns the canned users. */
-function stubFetch(users: Array<{ ghid: number; login: string; name: string; avatarUrl: string }>) {
+/** Build a directory `User` for a GitHub-style account. */
+function ghUser(handle: string, name = handle, avatarUrl = `${handle}.png`): User {
+  return {
+    provider: 'github',
+    // GitHub's accountId is a numeric id string; derive a stable fake one
+    // from the handle so userKey() values stay distinct per handle.
+    accountId: `id-${handle}`,
+    handle,
+    name,
+    organisation: '',
+    avatarUrl,
+  };
+}
+
+/** A committed `{ user }` selection wrapping a GitHub account. */
+function userSel(handle: string): SelectedUser {
+  return { user: ghUser(handle) };
+}
+
+/**
+ * Stub /api/users/autocomplete. Accepts plain GitHub-style users and wraps
+ * each in a `DirectorySuggestion` ({ user }), returning the new
+ * `{ suggestions }` response shape.
+ */
+function stubSuggestions(users: User[]) {
   return vi.fn(
     async () =>
-      new Response(JSON.stringify({ users }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      new Response(JSON.stringify({ suggestions: users.map((user) => ({ user })) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
   );
 }
 
@@ -25,8 +52,8 @@ describe('UserCombobox (single)', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('commits the typed value on Enter even with no suggestion match (free-text fallback)', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+  it('commits the typed value as a handle on Enter even with no suggestion match (free-text fallback)', () => {
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
     const onCommit = vi.fn();
 
     render(<UserCombobox mode="single" onCommit={onCommit} ariaLabel="Username" />);
@@ -34,11 +61,11 @@ describe('UserCombobox (single)', () => {
     fireEvent.change(input, { target: { value: 'no-such-user' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(onCommit).toHaveBeenCalledWith('no-such-user');
+    expect(onCommit).toHaveBeenCalledWith({ handle: 'no-such-user' });
   });
 
   it('debounces fetches by 250ms', async () => {
-    const fetchMock = stubFetch([]);
+    const fetchMock = stubSuggestions([]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     render(<UserCombobox mode="single" onCommit={vi.fn()} ariaLabel="Username" />);
@@ -67,10 +94,7 @@ describe('UserCombobox (single)', () => {
 
   it('does NOT auto-select the first suggestion — Enter without ArrowDown commits the typed text', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([
-      { ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
-      { ghid: 2, login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
-    ]);
+    const fetchMock = stubSuggestions([ghUser('alice', 'Alice'), ghUser('allison', 'Allison')]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();
 
@@ -81,13 +105,13 @@ describe('UserCombobox (single)', () => {
     await waitFor(() => screen.getByRole('option', { name: /alice/i }));
 
     // Even though suggestions are visible, Enter alone commits the typed
-    // text — no suggestion is highlighted yet.
+    // text as a free-text handle — no suggestion is highlighted yet.
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCommit).toHaveBeenCalledWith('al');
+    expect(onCommit).toHaveBeenCalledWith({ handle: 'al' });
   });
 
   it('does not fetch suggestions until the user types at least one character', async () => {
-    const fetchMock = stubFetch([]);
+    const fetchMock = stubSuggestions([]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     render(<UserCombobox mode="single" onCommit={vi.fn()} ariaLabel="Username" autoFocus />);
@@ -108,7 +132,7 @@ describe('UserCombobox (single)', () => {
   });
 
   it('does not fetch suggestions when an initialValue pre-fills the input', () => {
-    const fetchMock = stubFetch([]);
+    const fetchMock = stubSuggestions([]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     render(<UserCombobox mode="single" onCommit={vi.fn()} ariaLabel="Username" initialValue="admin" autoFocus />);
@@ -123,7 +147,7 @@ describe('UserCombobox (single)', () => {
 
   it('does not show the dropdown when the input is empty (focus alone is not a query)', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([{ ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
+    const fetchMock = stubSuggestions([ghUser('alice', 'Alice')]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     render(<UserCombobox mode="single" onCommit={vi.fn()} ariaLabel="Username" autoFocus />);
@@ -136,7 +160,7 @@ describe('UserCombobox (single)', () => {
 
   it('only commits a suggestion on a primary-button click', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([{ ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' }]);
+    const fetchMock = stubSuggestions([ghUser('alice', 'Alice')]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();
 
@@ -151,17 +175,14 @@ describe('UserCombobox (single)', () => {
     fireEvent.mouseDown(option, { button: 1 });
     expect(onCommit).not.toHaveBeenCalled();
 
-    // Primary click (button 0) commits.
+    // Primary click (button 0) commits the picked user.
     fireEvent.mouseDown(option, { button: 0 });
-    expect(onCommit).toHaveBeenCalledWith('alice');
+    expect(onCommit).toHaveBeenCalledWith({ user: ghUser('alice', 'Alice') });
   });
 
   it('selects the first suggestion after ArrowDown + Enter', async () => {
     vi.useRealTimers();
-    const fetchMock = stubFetch([
-      { ghid: 1, login: 'alice', name: 'Alice', avatarUrl: 'a.png' },
-      { ghid: 2, login: 'allison', name: 'Allison', avatarUrl: 'b.png' },
-    ]);
+    const fetchMock = stubSuggestions([ghUser('alice', 'Alice'), ghUser('allison', 'Allison')]);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const onCommit = vi.fn();
 
@@ -172,10 +193,10 @@ describe('UserCombobox (single)', () => {
     await waitFor(() => screen.getByRole('option', { name: /alice/i }));
 
     // ArrowDown moves the highlight from "nothing" to the first suggestion;
-    // Enter then commits it.
+    // Enter then commits it as a picked user.
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCommit).toHaveBeenCalledWith('alice');
+    expect(onCommit).toHaveBeenCalledWith({ user: ghUser('alice', 'Alice') });
   });
 });
 
@@ -193,10 +214,10 @@ describe('UserCombobox (multi)', () => {
   });
 
   it('commits a free-text token on Enter when no suggestion is selected', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
 
     function Host() {
-      const [values, setValues] = useState<string[]>([]);
+      const [values, setValues] = useState<SelectedUser[]>([]);
       return <UserCombobox mode="multi" values={values} onChange={setValues} ariaLabel="Tokens" />;
     }
     render(<Host />);
@@ -208,10 +229,10 @@ describe('UserCombobox (multi)', () => {
   });
 
   it('treats comma as a commit key for tokens', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
 
     function Host() {
-      const [values, setValues] = useState<string[]>([]);
+      const [values, setValues] = useState<SelectedUser[]>([]);
       return <UserCombobox mode="multi" values={values} onChange={setValues} ariaLabel="Tokens" />;
     }
     render(<Host />);
@@ -224,10 +245,10 @@ describe('UserCombobox (multi)', () => {
   });
 
   it('does not duplicate an existing token', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
     const onChange = vi.fn();
 
-    render(<UserCombobox mode="multi" values={['alice']} onChange={onChange} ariaLabel="Tokens" />);
+    render(<UserCombobox mode="multi" values={[{ handle: 'alice' }]} onChange={onChange} ariaLabel="Tokens" />);
     const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'Alice' } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -237,7 +258,7 @@ describe('UserCombobox (multi)', () => {
 
   it('does NOT commit on blur — typed draft stays put for the user to commit explicitly', () => {
     vi.useRealTimers();
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
     const onChange = vi.fn();
 
     render(<UserCombobox mode="multi" values={[]} onChange={onChange} ariaLabel="Tokens" />);
@@ -255,32 +276,46 @@ describe('UserCombobox (multi)', () => {
     );
   });
 
-  it('renders an avatar inside each chip', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+  it('renders a picked user chip with that user’s avatar', () => {
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
 
     const { container } = render(
-      <UserCombobox mode="multi" values={['alice', 'bob']} onChange={vi.fn()} ariaLabel="Tokens" />,
+      <UserCombobox
+        mode="multi"
+        values={[{ user: ghUser('alice', 'Alice', 'https://example.test/alice.png') }]}
+        onChange={vi.fn()}
+        ariaLabel="Tokens"
+      />,
     );
 
-    // Each chip carries an <img> pointing at the GitHub-served avatar for
-    // its login. The img has alt="" (decorative), so it's not exposed as
-    // role="img" — query the DOM directly. The fallback silhouette only
-    // shows on load error; unit tests don't load images so we just check
-    // the `src` pattern.
+    // The chip's <img> renders the picked user's own avatarUrl — never a
+    // synthesised github.com/<login>.png URL.
     const sources = Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src'));
-    expect(sources).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('github.com/alice.png'),
-        expect.stringContaining('github.com/bob.png'),
-      ]),
+    expect(sources).toContain('https://example.test/alice.png');
+    expect(sources.some((s) => s?.includes('github.com/'))).toBe(false);
+    // The chip shows the handle.
+    expect(screen.getByText('alice')).toBeInTheDocument();
+  });
+
+  it('renders a free-text handle chip with the fallback silhouette (no GitHub URL)', () => {
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
+
+    const { container } = render(
+      <UserCombobox mode="multi" values={[{ handle: 'someone' }]} onChange={vi.fn()} ariaLabel="Tokens" />,
     );
+
+    const sources = Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src') ?? '');
+    // The silhouette fallback is a data: URI; never a github.com URL.
+    expect(sources.some((s) => s.startsWith('data:'))).toBe(true);
+    expect(sources.some((s) => s.includes('github.com/'))).toBe(false);
+    expect(screen.getByText('someone')).toBeInTheDocument();
   });
 
   it('removes the last token on Backspace into an empty input', () => {
-    globalThis.fetch = stubFetch([]) as unknown as typeof fetch;
+    globalThis.fetch = stubSuggestions([]) as unknown as typeof fetch;
 
     function Host() {
-      const [values, setValues] = useState<string[]>(['alice', 'bob']);
+      const [values, setValues] = useState<SelectedUser[]>([userSel('alice'), userSel('bob')]);
       return <UserCombobox mode="multi" values={values} onChange={setValues} ariaLabel="Tokens" />;
     }
     render(<Host />);

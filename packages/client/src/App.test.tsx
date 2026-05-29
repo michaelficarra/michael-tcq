@@ -50,7 +50,15 @@ function renderHomePage() {
   // covered by the URL-routed default ([]).
   queueResponse('/api/me', {
     ok: true,
-    json: () => Promise.resolve({ ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' }),
+    json: () =>
+      Promise.resolve({
+        provider: 'github',
+        accountId: 'alice',
+        handle: 'alice',
+        name: 'Alice',
+        organisation: 'ACME',
+        avatarUrl: 'https://github.com/alice.png?size=80',
+      }),
   });
 
   return render(
@@ -82,18 +90,93 @@ describe('LoginPage', () => {
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
-  it('renders a "Log in with GitHub" link without returnTo on the root path', () => {
+  it('renders a "Sign in with GitHub" link without returnTo on the root path', async () => {
+    // The login page renders a button per configured provider, fetched
+    // from /api/auth/providers.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
+    });
     renderAt('/');
-    const link = screen.getByText('Log in with GitHub');
+    const link = await screen.findByText('Sign in with GitHub');
     expect(link).toBeInTheDocument();
     // No returnTo param: "/" is already the default post-login redirect.
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github');
   });
 
-  it('includes a returnTo param when rendered at a non-root deep link', () => {
+  it('includes a returnTo param when rendered at a non-root deep link', async () => {
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
+    });
     renderAt('/meeting/foo');
-    const link = screen.getByText('Log in with GitHub');
+    const link = await screen.findByText('Sign in with GitHub');
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github?returnTo=%2Fmeeting%2Ffoo');
+  });
+
+  it('renders a branded, logo-bearing button per configured provider', async () => {
+    // All four providers enabled — the page renders one button each, in
+    // provider order (GitHub → ORCID → Google → Microsoft), each linking to its
+    // own /auth/:id route and carrying its brand colour + an inline SVG logo.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          providers: [
+            { id: 'github', label: 'GitHub' },
+            { id: 'orcid', label: 'ORCID' },
+            { id: 'google', label: 'Google' },
+            { id: 'microsoft', label: 'Microsoft' },
+          ],
+        }),
+    });
+    renderAt('/');
+
+    const githubLink = (await screen.findByText('Sign in with GitHub')).closest('a');
+    const orcidLink = screen.getByText('Sign in with ORCID').closest('a');
+    // Every provider button reads "Sign in with {label}" — GitHub and ORCID via
+    // the default template, Google and Microsoft via their mandated `text`
+    // override (whose copy happens to match the default).
+    const googleLink = screen.getByText('Sign in with Google').closest('a');
+    const microsoftLink = screen.getByText('Sign in with Microsoft').closest('a');
+
+    expect(githubLink).toHaveAttribute('href', '/auth/github');
+    expect(orcidLink).toHaveAttribute('href', '/auth/orcid');
+    expect(googleLink).toHaveAttribute('href', '/auth/google');
+    expect(microsoftLink).toHaveAttribute('href', '/auth/microsoft');
+
+    // Each uses its official brand colour (GitHub charcoal, ORCID green; Google
+    // and Microsoft both use a white variant). All four carry a grey border for
+    // a consistent edge — Google keeps its mandated #747775, the rest #8c8c8c.
+    expect(githubLink).toHaveClass('bg-[#24292f]', 'border-[#8c8c8c]');
+    expect(orcidLink).toHaveClass('bg-[#a6ce39]', 'border-[#8c8c8c]');
+    expect(googleLink).toHaveClass('bg-white', 'border-[#747775]');
+    expect(microsoftLink).toHaveClass('bg-white', 'border-[#8c8c8c]');
+
+    // Each button carries an inline brand SVG mark.
+    expect(githubLink?.querySelector('svg')).toBeInTheDocument();
+    expect(orcidLink?.querySelector('svg')).toBeInTheDocument();
+    expect(googleLink?.querySelector('svg')).toBeInTheDocument();
+    expect(microsoftLink?.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('renders the mock pseudo-provider as a distinct dev-mode button', async () => {
+    // In dev (mock-auth) mode the providers endpoint returns the `mock`
+    // pseudo-provider. The button must read "Enter dev mode" (not "Sign in
+    // with …"), use TCQ teal, and carry a caption flagging it as mock auth.
+    queueResponse('/api/auth/providers', {
+      ok: true,
+      json: () => Promise.resolve({ providers: [{ id: 'mock', label: 'Dev Mode' }], mockAuth: true }),
+    });
+    renderAt('/');
+
+    const link = (await screen.findByText('Enter dev mode')).closest('a');
+    expect(link).toHaveAttribute('href', '/auth/mock');
+    expect(link).toHaveClass('bg-teal-700');
+    // No "Sign in with …" phrasing for the dev button.
+    expect(screen.queryByText(/Sign in with/)).not.toBeInTheDocument();
+    // The mock-auth caption is shown beneath the button.
+    expect(screen.getByText('Mock authentication — no OAuth provider is configured.')).toBeInTheDocument();
   });
 });
 
@@ -173,7 +256,7 @@ describe('HomePage', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chairs: ['alice'] }),
+        body: JSON.stringify({ chairs: [{ provider: 'github', accountId: 'alice' }] }),
       });
       expect(mockNavigate).toHaveBeenCalledWith('/meeting/calm-wave-fox#agenda');
     });

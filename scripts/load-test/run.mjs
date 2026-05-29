@@ -195,7 +195,7 @@ async function provisionFixtureMeeting() {
   const createRes = await fetch(`${SERVER}/api/meetings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ chairs: [ADMIN_USERNAME] }),
+    body: JSON.stringify({ chairs: [{ handle: ADMIN_USERNAME }] }),
   });
   if (!createRes.ok) {
     throw new Error(`create meeting failed: ${createRes.status} ${await createRes.text()}`);
@@ -213,7 +213,7 @@ async function provisionFixtureMeeting() {
     const actions = [];
 
     for (const name of AGENDA_NAMES) {
-      actions.push(() => socket.emit('agenda:add', { name, presenterUsernames: [ADMIN_USERNAME], duration: 15 }));
+      actions.push(() => socket.emit('agenda:add', { name, presenters: [{ handle: ADMIN_USERNAME }], duration: 15 }));
     }
     let sessionTargets = null;
     SESSION_BLOCKS.forEach((session, k) => {

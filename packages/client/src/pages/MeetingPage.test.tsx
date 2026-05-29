@@ -8,7 +8,14 @@ import { ToastProvider } from '../contexts/ToastContext.js';
 
 // -- Mocks --
 
-const chairUser: User = { ghid: 1, ghUsername: 'alice', name: 'Alice', organisation: 'ACME' };
+const chairUser: User = {
+  provider: 'github',
+  accountId: 'alice',
+  handle: 'alice',
+  name: 'Alice',
+  organisation: 'ACME',
+  avatarUrl: 'https://github.com/alice.png?size=80',
+};
 
 vi.mock('../contexts/AuthContext.js', () => ({
   useAuth: () => ({
@@ -27,7 +34,11 @@ vi.mock('../hooks/useSocketConnection.js', () => ({
 import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
 
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return buildMeeting(overrides, { id: 'test-meeting', users: { alice: chairUser }, chairIds: ['alice'] });
+  return buildMeeting(overrides, {
+    id: 'test-meeting',
+    users: { 'github:alice': chairUser },
+    chairIds: ['github:alice'],
+  });
 }
 
 // Inject meeting state into the MeetingContext by dispatching a 'state' action

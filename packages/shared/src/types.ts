@@ -1,10 +1,50 @@
 import { z } from 'zod';
 
 export interface User {
-  ghid: number;
-  ghUsername: string;
+  /**
+   * The authentication provider this account belongs to — equal to the
+   * `id` of the `AuthenticationProvider` that produced it (one of
+   * `'github'`, `'orcid'`, `'google'`, `'microsoft'`; plus `'placeholder'`
+   * for unresolved free-text names). Together with `accountId` it forms the
+   * canonical `UserKey` (`userKey(user)`).
+   */
+  provider: string;
+  /**
+   * Provider-defined stable account identifier. The provider decides what
+   * this is: GitHub uses the numeric user id, Google and Microsoft the OIDC
+   * `sub`, ORCID the iD. Opaque to everything outside the provider — never
+   * parse it, only compare and key on it.
+   */
+  accountId: string;
+  /**
+   * Human-readable login / handle, when the provider has one distinct from
+   * `accountId` (GitHub does; ORCID, Google, and Microsoft do not). Display-
+   * and entry-only — never used to compute the key. Optional precisely
+   * because not every provider exposes a handle.
+   */
+  handle?: string;
   name: string;
   organisation: string;
+  /**
+   * Provider-supplied avatar URL. Required: the client renders it directly
+   * (falling back to a generic silhouette when empty or on load error)
+   * rather than synthesising a provider-specific URL, since avatars are not
+   * uniformly derivable across providers (GitHub's is derivable from the
+   * handle, Google's is an opaque URL, ORCID has none). May be the empty
+   * string for a provider/account with no avatar.
+   */
+  avatarUrl: string;
+  /**
+   * Provider-supplied email address, when the provider exposes one and it's
+   * useful as a human-readable identifier. Optional and display-only: it is
+   * surfaced in the user-badge hover tooltip (via `userLabel`) for handle-less
+   * providers like Google, whose `accountId` is an opaque numeric `sub` that
+   * means nothing to a human. Currently populated only for Google. Note this
+   * rides in broadcast meeting state and is therefore visible to every
+   * participant who hovers the badge — only set it where that exposure is
+   * acceptable. Never used to key or match a user (`userKey` ignores it).
+   */
+  email?: string;
   /**
    * Whether this user belongs to the premium tier — server-stamped at
    * broadcast time from the admin-managed premium list (persisted in
@@ -20,12 +60,27 @@ export interface User {
 
 /**
  * Nominal (branded) string type for a canonical user key — the
- * lowercased `ghUsername`. Produced by `userKey(user)` or `asUserKey(s)`;
- * consumed as a Record key and as cross-references throughout
- * `MeetingState`. The brand prevents a plain `string` or a non-lowercased
- * `ghUsername` from being passed where a user key is expected.
+ * `${provider}:${accountId}` pair (e.g. `github:12345`). Produced by
+ * `userKey(user)` or `asUserKey(s)`; consumed as a Record key and as
+ * cross-references throughout `MeetingState`. The provider prefix lets
+ * accounts from different providers coexist in one meeting without
+ * colliding. The brand prevents a plain `string` (or a bare, unprefixed
+ * handle) from being passed where a user key is expected.
  */
 export type UserKey = string & { readonly __brand: 'UserKey' };
+
+/**
+ * One result from the username-autocomplete directory: a provider-neutral
+ * `User` (carrying its own provider, accountId, handle, name, organisation,
+ * and avatar) plus an optional source badge for the dropdown. Returned by
+ * `GET /api/users/autocomplete`. The fuzzy matcher scores handle / name /
+ * organisation only — never the opaque `accountId`.
+ */
+export interface DirectorySuggestion {
+  user: User;
+  /** Source tier — lets the client render an "in this meeting" / "org" badge. */
+  badge?: 'meeting' | 'org';
+}
 
 export interface AgendaItem {
   kind: 'item';
@@ -374,7 +429,7 @@ export interface MeetingState {
    * participant summary.
    */
   participantIds: UserKey[];
-  /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (lowercase ghUsername). */
+  /** Lookup map of all users who have participated in this meeting, keyed by their canonical UserKey (`${provider}:${accountId}`). */
   users: Record<UserKey, User>;
   chairIds: UserKey[];
   /**

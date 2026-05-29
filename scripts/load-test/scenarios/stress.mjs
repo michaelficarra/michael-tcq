@@ -101,7 +101,7 @@ export function startChairBehavior(chair, opts, metrics) {
     if (currentIdx === items.length - 1) {
       chair.emit('agenda:add', {
         name: `Auto-added item ${Date.now().toString(36)}`,
-        presenterUsernames: [],
+        presenters: [],
         duration: 5,
       });
     }

@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { User } from '@tcq/shared';
 import { AppSettingsManager } from './appSettingsManager.js';
 import { InMemoryAppSettingsStore } from './test/inMemoryAppSettingsStore.js';
+import { githubUser } from './auth/githubUser.js';
 
-function user(ghUsername: string): User {
-  return { ghid: 0, ghUsername, name: ghUsername, organisation: '' };
-}
+const user = (login: string) => githubUser({ id: 1, login });
 
 describe('AppSettingsManager', () => {
   let store: InMemoryAppSettingsStore;
@@ -26,6 +24,7 @@ describe('AppSettingsManager', () => {
       await store.save({ premiumUsernames: ['alice', 'bob'] });
       const fresh = new AppSettingsManager(store);
       await fresh.restore();
+      // The premium list stores bare GitHub handles.
       expect(fresh.getPremiumUsernames()).toEqual(['alice', 'bob']);
     });
 
@@ -40,10 +39,11 @@ describe('AppSettingsManager', () => {
   });
 
   describe('isPremium', () => {
-    it('returns true for a user whose lowercased ghUsername is in the list', async () => {
+    it('returns true for a user whose lowercased handle is in the list', async () => {
       await manager.addPremiumUsername('Alice');
       expect(manager.isPremium(user('Alice'))).toBe(true);
-      // Case-insensitive: the on-wire ghUsername might preserve case.
+      // Case-insensitive: the handle preserves case, but isPremium
+      // matches on the lowercased handle.
       expect(manager.isPremium(user('alice'))).toBe(true);
       expect(manager.isPremium(user('ALICE'))).toBe(true);
     });
@@ -89,24 +89,24 @@ describe('AppSettingsManager', () => {
   });
 
   describe('removePremiumUsername', () => {
-    it('returns true and removes the username', async () => {
+    it('returns the canonical ref and removes the username', async () => {
       await manager.addPremiumUsername('alice');
-      expect(await manager.removePremiumUsername('alice')).toBe(true);
+      expect(await manager.removePremiumUsername('alice')).toBe('alice');
       expect(manager.getPremiumUsernames()).toEqual([]);
     });
 
     it('matches case-insensitively', async () => {
       await manager.addPremiumUsername('alice');
-      expect(await manager.removePremiumUsername('ALICE')).toBe(true);
+      expect(await manager.removePremiumUsername('ALICE')).toBe('alice');
       expect(manager.getPremiumUsernames()).toEqual([]);
     });
 
-    it('returns false when the username is not present (idempotent)', async () => {
-      expect(await manager.removePremiumUsername('never-was-here')).toBe(false);
+    it('returns null when the username is not present (idempotent)', async () => {
+      expect(await manager.removePremiumUsername('never-was-here')).toBeNull();
     });
 
-    it('returns false for empty/whitespace input', async () => {
-      expect(await manager.removePremiumUsername('   ')).toBe(false);
+    it('returns null for empty/whitespace input', async () => {
+      expect(await manager.removePremiumUsername('   ')).toBeNull();
     });
   });
 
