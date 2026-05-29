@@ -3,23 +3,24 @@ import { z } from 'zod';
 export interface User {
   /**
    * The authentication provider this account belongs to — equal to the
-   * `id` of the `AuthenticationProvider` that produced it (e.g. `'github'`,
-   * and in future `'google'` / `'orcid'`). Together with `accountId` it
-   * forms the canonical `UserKey` (`userKey(user)`).
+   * `id` of the `AuthenticationProvider` that produced it (one of
+   * `'github'`, `'orcid'`, `'google'`, `'microsoft'`; plus `'placeholder'`
+   * for unresolved free-text names). Together with `accountId` it forms the
+   * canonical `UserKey` (`userKey(user)`).
    */
   provider: string;
   /**
    * Provider-defined stable account identifier. The provider decides what
-   * this is: GitHub uses the numeric user id, a future Google provider
-   * would use the OIDC `sub`, ORCID the iD. Opaque to everything outside
-   * the provider — never parse it, only compare and key on it.
+   * this is: GitHub uses the numeric user id, Google and Microsoft the OIDC
+   * `sub`, ORCID the iD. Opaque to everything outside the provider — never
+   * parse it, only compare and key on it.
    */
   accountId: string;
   /**
    * Human-readable login / handle, when the provider has one distinct from
-   * `accountId` (GitHub does; Google and ORCID do not). Display- and
-   * entry-only — never used to compute the key. Optional precisely because
-   * not every provider exposes a handle.
+   * `accountId` (GitHub does; ORCID, Google, and Microsoft do not). Display-
+   * and entry-only — never used to compute the key. Optional precisely
+   * because not every provider exposes a handle.
    */
   handle?: string;
   name: string;
