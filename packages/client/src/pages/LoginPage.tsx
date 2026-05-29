@@ -13,7 +13,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Logo } from '../components/Logo.js';
-import { GitHubMark, OrcidMark, GoogleMark, MicrosoftMark, DevMark } from '../components/BrandLogos.js';
+import { GitHubMark, OrcidMark, DiscordMark, GoogleMark, MicrosoftMark, DevMark } from '../components/BrandLogos.js';
 
 interface AuthProvider {
   id: string;
@@ -32,8 +32,8 @@ interface Brand {
 /**
  * Per-provider button styling. Real providers use their official brand colour
  * with a contrasting mark (white on GitHub's charcoal; dark on ORCID's green,
- * since white on `#a6ce39` fails contrast; dark text on Google's mandated white
- * variant). The dev `mock` pseudo-provider deliberately looks *unlike* a real
+ * since white on `#a6ce39` fails contrast; white on Discord's Blurple; dark text
+ * on Google's mandated white variant). The dev `mock` pseudo-provider deliberately looks *unlike* a real
  * provider: TCQ teal, a code-bracket glyph, and explicit "dev mode" wording so
  * nobody mistakes it for a production login.
  */
@@ -47,6 +47,14 @@ const PROVIDER_BRAND: Record<string, Brand> = {
     className:
       'bg-[#a6ce39] text-[#1f2328] border border-[#8c8c8c] hover:bg-[#99be33] focus-visible:ring-[#a6ce39] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
     logo: <OrcidMark />,
+  },
+  discord: {
+    // Discord's Blurple (#5865F2) brand button: white text and white Clyde
+    // mark (via currentColor), sharing the common neutral border. White-on-
+    // Blurple is a sanctioned Discord logo variant, so no hard-coded fill.
+    className:
+      'bg-[#5865F2] text-white border border-[#8c8c8c] hover:bg-[#4752c4] focus-visible:ring-[#5865F2] focus-visible:ring-offset-stone-50 dark:focus-visible:ring-offset-stone-900',
+    logo: <DiscordMark />,
   },
   google: {
     // Google's "Sign in with Google" white variant: white background, dark

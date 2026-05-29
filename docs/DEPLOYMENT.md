@@ -259,7 +259,15 @@ _Why:_ enables "Sign in with ORCID". In your ORCID account → **Developer tools
 For testing, register a separate client on the [ORCID Sandbox](https://sandbox.orcid.org) and
 set `ORCID_BASE_URL=https://sandbox.orcid.org`.
 
-### 14c. (Optional) Register a Google OAuth client
+### 14c. (Optional) Register a Discord OAuth application
+
+_Why:_ enables "Sign in with Discord". Open the
+[Discord Developer Portal](https://discord.com/developers/applications) → **New Application**.
+In the **OAuth2** section, note the **Client ID** and copy the **Client Secret**, then under
+**OAuth2 → Redirects** add `https://<your-domain>/auth/discord/callback` exactly. Only the
+`identify` scope is used (the email is not requested).
+
+### 14d. (Optional) Register a Google OAuth client
 
 _Why:_ enables "Sign in with Google". Open
 [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
@@ -269,7 +277,7 @@ client ID → Application type: Web application**. Under **Authorised redirect U
 Secret**. Only the OpenID Connect `openid email profile` scopes are used — no extra APIs to
 enable.
 
-### 14d. (Optional) Register a Microsoft (Entra ID) OAuth client
+### 14e. (Optional) Register a Microsoft (Entra ID) OAuth client
 
 _Why:_ enables "Sign in with Microsoft". Open the
 [Microsoft Entra admin centre](https://entra.microsoft.com) → **Identity → Applications →
@@ -297,6 +305,10 @@ ORCID_CLIENT_ID=<client-id>
 ORCID_CLIENT_SECRET=<client-secret>
 # ORCID_BASE_URL defaults to https://orcid.org; set to the sandbox for testing.
 
+# Discord OAuth (optional)
+DISCORD_CLIENT_ID=<client-id>
+DISCORD_CLIENT_SECRET=<client-secret>
+
 # Google OAuth (optional)
 GOOGLE_CLIENT_ID=<client-id>
 GOOGLE_CLIENT_SECRET=<client-secret>
@@ -308,7 +320,8 @@ MICROSOFT_CLIENT_SECRET=<client-secret>
 
 # OAuth callback base — each provider's callback is ${base}/<provider>/callback,
 # so GitHub's is https://<your-domain>/auth/github/callback, ORCID's is
-# https://<your-domain>/auth/orcid/callback, Google's is
+# https://<your-domain>/auth/orcid/callback, Discord's is
+# https://<your-domain>/auth/discord/callback, Google's is
 # https://<your-domain>/auth/google/callback, and Microsoft's is
 # https://<your-domain>/auth/microsoft/callback (register those with each provider).
 # Defaults to http://localhost:3000/auth in dev.

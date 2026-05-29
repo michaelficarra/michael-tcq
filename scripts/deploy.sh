@@ -54,6 +54,7 @@
 #   Optional:
 #     FIRESTORE_DATABASE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
 #     ORCID_CLIENT_ID, ORCID_CLIENT_SECRET, ORCID_BASE_URL,
+#     DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET,
 #     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 #     MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT,
 #     OAUTH_CALLBACK_BASE_URL
@@ -672,6 +673,8 @@ $([ -n "${GITHUB_CLIENT_SECRET:-}" ] && echo "    GITHUB_CLIENT_SECRET=${GITHUB_
 $([ -n "${ORCID_CLIENT_ID:-}" ] && echo "    ORCID_CLIENT_ID=${ORCID_CLIENT_ID}")
 $([ -n "${ORCID_CLIENT_SECRET:-}" ] && echo "    ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}")
 $([ -n "${ORCID_BASE_URL:-}" ] && echo "    ORCID_BASE_URL=${ORCID_BASE_URL}")
+$([ -n "${DISCORD_CLIENT_ID:-}" ] && echo "    DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}")
+$([ -n "${DISCORD_CLIENT_SECRET:-}" ] && echo "    DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}")
 $([ -n "${GOOGLE_CLIENT_ID:-}" ] && echo "    GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}")
 $([ -n "${GOOGLE_CLIENT_SECRET:-}" ] && echo "    GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}")
 $([ -n "${MICROSOFT_CLIENT_ID:-}" ] && echo "    MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}")
@@ -788,6 +791,8 @@ EOF
   [ -n "${ORCID_CLIENT_ID:-}" ]       && echo "ORCID_CLIENT_ID=${ORCID_CLIENT_ID}"           >> "$env_tmp"
   [ -n "${ORCID_CLIENT_SECRET:-}" ]   && echo "ORCID_CLIENT_SECRET=${ORCID_CLIENT_SECRET}"   >> "$env_tmp"
   [ -n "${ORCID_BASE_URL:-}" ]        && echo "ORCID_BASE_URL=${ORCID_BASE_URL}"             >> "$env_tmp"
+  [ -n "${DISCORD_CLIENT_ID:-}" ]     && echo "DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}"         >> "$env_tmp"
+  [ -n "${DISCORD_CLIENT_SECRET:-}" ] && echo "DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}" >> "$env_tmp"
   [ -n "${GOOGLE_CLIENT_ID:-}" ]      && echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"         >> "$env_tmp"
   [ -n "${GOOGLE_CLIENT_SECRET:-}" ]  && echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" >> "$env_tmp"
   [ -n "${MICROSOFT_CLIENT_ID:-}" ]     && echo "MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}"         >> "$env_tmp"
@@ -979,6 +984,57 @@ ensure_orcid_oauth() {
   deploy_to_vm
 }
 
+# Mirrors ensure_orcid_oauth for Discord. Discord's developer portal has no
+# pre-fillable form, so we print the portal URL plus the exact redirect URI to
+# register by hand. Independent of the other providers: enabling Discord alone
+# still writes the shared OAUTH_CALLBACK_BASE_URL the server needs to build
+# callback URLs.
+ensure_discord_oauth() {
+  if [ -n "${DISCORD_CLIENT_ID:-}" ] && [ -n "${DISCORD_CLIENT_SECRET:-}" ]; then
+    return 0
+  fi
+
+  local url callback
+  url="https://${CUSTOM_DOMAIN}"
+  callback="$url/auth/discord/callback"
+
+  echo ""
+  echo "Discord OAuth is not configured — \"Sign in with Discord\" is disabled."
+  echo ""
+  echo "To enable Discord sign-in, register an application. Discord has no"
+  echo "pre-fillable form, so register it manually:"
+  echo ""
+  echo "  1. Open https://discord.com/developers/applications → New Application."
+  echo "  2. Open the OAuth2 section; note the Client ID and copy the Client Secret."
+  echo "  3. Under OAuth2 → Redirects, add this redirect URI exactly:"
+  echo "       $callback"
+  echo ""
+
+  if ! confirm "Register the application now and paste in its credentials?" y; then
+    echo ""
+    echo "Skipped. To enable Discord later, add DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET,"
+    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    return 0
+  fi
+
+  DISCORD_CLIENT_ID="$(prompt_with_default "Client ID")"
+  local secret
+  read -r -s -p "Client Secret: " secret
+  echo ""
+  DISCORD_CLIENT_SECRET="$secret"
+  # Persist the provider-agnostic callback base; the server derives Discord's
+  # callback ($url/auth/discord/callback) — the URI registered above — from it.
+  # Harmless to re-set if an earlier ensure_*_oauth wrote the same value.
+  OAUTH_CALLBACK_BASE_URL="$url/auth"
+  upsert_env DISCORD_CLIENT_ID "$DISCORD_CLIENT_ID"
+  upsert_env DISCORD_CLIENT_SECRET "$DISCORD_CLIENT_SECRET"
+  upsert_env OAUTH_CALLBACK_BASE_URL "$OAUTH_CALLBACK_BASE_URL"
+
+  echo ""
+  echo "Pushing updated env to VM and restarting tcq.service..."
+  deploy_to_vm
+}
+
 # Mirrors ensure_orcid_oauth for Google. Google's Cloud Console has no
 # pre-fillable form (and the client must be created in a GCP project), so we
 # print the credentials-page URL plus the exact redirect URI to register by
@@ -1137,6 +1193,7 @@ EOF
 
   ensure_github_oauth
   ensure_orcid_oauth
+  ensure_discord_oauth
   ensure_google_oauth
   ensure_microsoft_oauth
 
