@@ -43,7 +43,11 @@
 #     with real GitHub auth enabled.
 #
 # Re-runs with a fully populated .env.production skip every prompt and
-# behave as a straight build + push + restart.
+# behave as a straight build + push + restart. Declining an OAuth provider's
+# prompt writes its CLIENT_ID/CLIENT_SECRET as empty lines, recording the
+# decision so later runs treat the provider as deliberately disabled and don't
+# prompt again (delete the empty lines to be re-prompted) — only providers
+# whose keys are absent entirely are still asked about.
 #
 # Fields read from .env.production:
 #
@@ -89,6 +93,14 @@ upsert_env() {
   else
     printf '%s=%s\n' "$key" "$val" >> "$ENV_FILE"
   fi
+}
+
+# True if KEY is declared in .env.production with any value, including empty.
+# Mirrors the presence test upsert_env uses (^KEY=), so a bare "KEY=" line
+# counts as present — that's how we tell a deliberately-declined provider
+# (key present but empty) apart from one that's never been set up (key absent).
+env_has_key() {
+  [ -f "$ENV_FILE" ] && grep -q "^$1=" "$ENV_FILE"
 }
 
 # Prompt with an optional default. With a default, Enter accepts it.
@@ -878,8 +890,28 @@ get_service_url() {
 # Post-deploy: prompt for GitHub OAuth App credentials if missing.
 # ---------------------------------------------------------------------------
 
+# Decide whether an OAuth provider still needs a setup prompt. Returns 0 (no
+# prompt) when it's already resolved, which is true in two cases:
+#   - configured: both vars are populated (non-empty); or
+#   - declined: both keys are present in .env.production but left empty — the
+#     state we write when the user says "no", so we never nag about it again.
+# Returns non-zero only when the keys are absent entirely, i.e. the user has
+# not been asked yet. Args are the variable *names*, resolved indirectly.
+oauth_resolved() {
+  local id_var="$1" secret_var="$2"
+  # Already configured — both populated.
+  if [ -n "${!id_var:-}" ] && [ -n "${!secret_var:-}" ]; then
+    return 0
+  fi
+  # Previously declined — both keys present in the file (even if empty).
+  if env_has_key "$id_var" && env_has_key "$secret_var"; then
+    return 0
+  fi
+  return 1
+}
+
 ensure_github_oauth() {
-  if [ -n "${GITHUB_CLIENT_ID:-}" ] && [ -n "${GITHUB_CLIENT_SECRET:-}" ]; then
+  if oauth_resolved GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET; then
     return 0
   fi
 
@@ -906,9 +938,14 @@ ensure_github_oauth() {
   echo ""
 
   if ! confirm "Register the app now and paste in its credentials?" y; then
+    # Record the decision so future runs don't prompt again: writing the keys
+    # empty makes this provider 'present but empty' rather than missing.
+    upsert_env GITHUB_CLIENT_ID ""
+    upsert_env GITHUB_CLIENT_SECRET ""
     echo ""
-    echo "Skipped. To enable OAuth later, add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,"
-    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "Skipped — future runs won't ask again. To enable GitHub later, set"
+    echo "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in $ENV_FILE (or delete those"
+    echo "empty lines to be prompted again) and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -935,7 +972,7 @@ ensure_github_oauth() {
 # register by hand. Independent of GitHub: enabling ORCID alone still writes
 # the shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
 ensure_orcid_oauth() {
-  if [ -n "${ORCID_CLIENT_ID:-}" ] && [ -n "${ORCID_CLIENT_SECRET:-}" ]; then
+  if oauth_resolved ORCID_CLIENT_ID ORCID_CLIENT_SECRET; then
     return 0
   fi
 
@@ -960,9 +997,14 @@ ensure_orcid_oauth() {
   echo ""
 
   if ! confirm "Register the client now and paste in its credentials?" y; then
+    # Record the decision so future runs don't prompt again: writing the keys
+    # empty makes this provider 'present but empty' rather than missing.
+    upsert_env ORCID_CLIENT_ID ""
+    upsert_env ORCID_CLIENT_SECRET ""
     echo ""
-    echo "Skipped. To enable ORCID later, add ORCID_CLIENT_ID, ORCID_CLIENT_SECRET,"
-    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "Skipped — future runs won't ask again. To enable ORCID later, set"
+    echo "ORCID_CLIENT_ID and ORCID_CLIENT_SECRET in $ENV_FILE (or delete those"
+    echo "empty lines to be prompted again) and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -990,7 +1032,7 @@ ensure_orcid_oauth() {
 # still writes the shared OAUTH_CALLBACK_BASE_URL the server needs to build
 # callback URLs.
 ensure_discord_oauth() {
-  if [ -n "${DISCORD_CLIENT_ID:-}" ] && [ -n "${DISCORD_CLIENT_SECRET:-}" ]; then
+  if oauth_resolved DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET; then
     return 0
   fi
 
@@ -1011,9 +1053,14 @@ ensure_discord_oauth() {
   echo ""
 
   if ! confirm "Register the application now and paste in its credentials?" y; then
+    # Record the decision so future runs don't prompt again: writing the keys
+    # empty makes this provider 'present but empty' rather than missing.
+    upsert_env DISCORD_CLIENT_ID ""
+    upsert_env DISCORD_CLIENT_SECRET ""
     echo ""
-    echo "Skipped. To enable Discord later, add DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET,"
-    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "Skipped — future runs won't ask again. To enable Discord later, set"
+    echo "DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in $ENV_FILE (or delete those"
+    echo "empty lines to be prompted again) and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -1041,7 +1088,7 @@ ensure_discord_oauth() {
 # hand. Independent of GitHub/ORCID: enabling Google alone still writes the
 # shared OAUTH_CALLBACK_BASE_URL the server needs to build callback URLs.
 ensure_google_oauth() {
-  if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+  if oauth_resolved GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; then
     return 0
   fi
 
@@ -1064,9 +1111,14 @@ ensure_google_oauth() {
   echo ""
 
   if ! confirm "Create the client now and paste in its credentials?" y; then
+    # Record the decision so future runs don't prompt again: writing the keys
+    # empty makes this provider 'present but empty' rather than missing.
+    upsert_env GOOGLE_CLIENT_ID ""
+    upsert_env GOOGLE_CLIENT_SECRET ""
     echo ""
-    echo "Skipped. To enable Google later, add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,"
-    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "Skipped — future runs won't ask again. To enable Google later, set"
+    echo "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in $ENV_FILE (or delete those"
+    echo "empty lines to be prompted again) and re-run ./scripts/deploy.sh."
     return 0
   fi
 
@@ -1094,7 +1146,7 @@ ensure_google_oauth() {
 # enabling Microsoft alone still writes the shared OAUTH_CALLBACK_BASE_URL the
 # server needs to build callback URLs.
 ensure_microsoft_oauth() {
-  if [ -n "${MICROSOFT_CLIENT_ID:-}" ] && [ -n "${MICROSOFT_CLIENT_SECRET:-}" ]; then
+  if oauth_resolved MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET; then
     return 0
   fi
 
@@ -1122,9 +1174,14 @@ ensure_microsoft_oauth() {
   echo ""
 
   if ! confirm "Register the app now and paste in its credentials?" y; then
+    # Record the decision so future runs don't prompt again: writing the keys
+    # empty makes this provider 'present but empty' rather than missing.
+    upsert_env MICROSOFT_CLIENT_ID ""
+    upsert_env MICROSOFT_CLIENT_SECRET ""
     echo ""
-    echo "Skipped. To enable Microsoft later, add MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,"
-    echo "and OAUTH_CALLBACK_BASE_URL to $ENV_FILE and re-run ./scripts/deploy.sh."
+    echo "Skipped — future runs won't ask again. To enable Microsoft later, set"
+    echo "MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET in $ENV_FILE (or delete"
+    echo "those empty lines to be prompted again) and re-run ./scripts/deploy.sh."
     return 0
   fi
 

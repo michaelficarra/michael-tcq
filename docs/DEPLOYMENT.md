@@ -49,7 +49,7 @@ The script will:
 - Build the Docker image, push it, provision the VM with cloud-init that installs both systemd units (`tcq` and `caddy`) on first boot, copy a fresh env file to the VM via `gcloud compute scp`, and restart the `tcq` unit.
 - Print the static IP so you can configure your DNS A record.
 - Once the first deploy finishes, print a pre-filled GitHub OAuth App registration URL. Click it, hit **Register application**, copy the Client ID and Client Secret back into the prompt, and the script copies the new env to the VM and restarts.
-- Then offer the same for **ORCID**, **Google**, and **Microsoft**: none has a pre-fillable form, so the script prints the registration URL (ORCID developer tools / Google Cloud credentials page / Microsoft Entra app registrations) and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping any provider just leaves it disabled. All prompts are skipped on later runs once the credentials are in `.env.production`.
+- Then offer the same for **ORCID**, **Google**, and **Microsoft**: none has a pre-fillable form, so the script prints the registration URL (ORCID developer tools / Google Cloud credentials page / Microsoft Entra app registrations) and the exact redirect URI to register, then accepts the Client ID and Client Secret at the prompt. Skipping any provider just leaves it disabled, and the script records the choice by writing that provider's `CLIENT_ID`/`CLIENT_SECRET` to `.env.production` as empty lines — so later runs won't re-prompt for it. (Delete those empty lines to be asked again.) All prompts are skipped on later runs once a provider's keys are either populated or present-but-empty in `.env.production`.
 
 Every step is idempotent. Re-running the script with a fully populated `.env.production` skips every prompt and behaves as a plain build + push + redeploy.
 
@@ -293,7 +293,7 @@ pick the matching account type.
 
 _Why:_ the server reads provider credentials at boot, so they have to be in the env file the systemd unit passes to the container. The deploy script rewrites `/etc/tcq/env` and restarts the unit on every run.
 
-Add to `.env.production` (omit a provider's block to leave it disabled):
+Add to `.env.production` (omit a provider's block, or leave both its keys empty, to keep it disabled — the deploy script writes the keys empty for any provider you decline at the prompt, and treats empty keys as "deliberately disabled, don't ask again"; delete those empty lines to be re-prompted):
 
 ```
 # GitHub OAuth
