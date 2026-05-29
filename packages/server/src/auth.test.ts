@@ -102,6 +102,50 @@ describe('Auth routes', () => {
     });
   });
 
+  describe('OAuth state (CSRF defence)', () => {
+    // State generation + validation only happen for a *configured* provider
+    // (the mock-auth branch never round-trips through a real callback).
+    const original = process.env.GITHUB_CLIENT_ID;
+    beforeEach(() => {
+      process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.GITHUB_CLIENT_ID;
+      else process.env.GITHUB_CLIENT_ID = original;
+    });
+
+    it('mints a state nonce on the authorize redirect and stores it on the session', async () => {
+      const res = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      expect(res.status).toBe(302);
+      const location = res.headers.get('location') ?? '';
+      // The provider's authorize URL must carry our generated state...
+      const state = new URL(location).searchParams.get('state');
+      expect(state).toBeTruthy();
+      // ...and the session (holding the same nonce) must be persisted.
+      expect(res.headers.get('set-cookie')).toBeTruthy();
+    });
+
+    it('rejects a callback with no state (defends against an unsolicited code)', async () => {
+      // Code present, but no state and no prior session → cannot have been
+      // initiated by us, so the code is never exchanged.
+      const res = await fetch(`${baseUrl}/auth/github/callback?code=x`, { redirect: 'manual' });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a callback whose state does not match the session', async () => {
+      // Establish a session carrying a freshly-minted nonce...
+      const start = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+      const cookie = (start.headers.get('set-cookie') ?? '').split(';')[0];
+      expect(cookie).toBeTruthy();
+      // ...then replay the callback with a *different* state on that session.
+      const res = await fetch(`${baseUrl}/auth/github/callback?code=x&state=not-the-real-nonce`, {
+        headers: { cookie },
+        redirect: 'manual',
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('GET /auth/logout', () => {
     it('redirects to home page', async () => {
       const res = await fetch(`${baseUrl}/auth/logout`, { redirect: 'manual' });

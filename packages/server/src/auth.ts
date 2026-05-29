@@ -16,6 +16,7 @@
  * identify the account throughout the app.
  */
 
+import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { toSessionUser } from './session.js';
@@ -91,6 +92,18 @@ export function createAuthRoutes(): Router {
       res.status(400).send('Missing authorisation code');
       return;
     }
+    // CSRF defence: the `state` nonce we generated on GET /auth/:providerId and
+    // stored in the session must round-trip back unchanged. Validate (and
+    // single-use clear) it before exchanging the code, so an attacker can't
+    // drive a victim's browser through a callback the victim never initiated
+    // and silently log them in as the attacker (login CSRF).
+    const state = typeof req.query.state === 'string' ? req.query.state : undefined;
+    const expectedState = req.session.oauthState;
+    delete req.session.oauthState;
+    if (!state || !expectedState || state !== expectedState) {
+      res.status(400).send('Invalid OAuth state');
+      return;
+    }
     try {
       const profile = await provider.exchangeCode(code, callbackUrl(provider.id));
       if (!profile) {
@@ -161,7 +174,17 @@ export function createAuthRoutes(): Router {
 
     // Stash the requested URL so the callback can redirect back to it.
     if (returnTo) req.session.returnTo = returnTo;
-    res.redirect(provider.authorizationUrl({ redirectUri: callbackUrl(provider.id) }));
+
+    // CSRF defence: mint a single-use random `state`, persist it on the
+    // session, and hand it to the provider. The callback rejects any response
+    // whose `state` doesn't match this value. Save explicitly before
+    // redirecting — the session store is async in production, so the nonce
+    // must be durably written before the provider bounces the user back.
+    const state = randomBytes(16).toString('hex');
+    req.session.oauthState = state;
+    req.session.save(() => {
+      res.redirect(provider.authorizationUrl({ state, redirectUri: callbackUrl(provider.id) }));
+    });
   });
 
   return router;

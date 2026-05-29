@@ -93,5 +93,15 @@ declare module 'express-session' {
      * Set by /auth/logout in mock auth mode to allow testing the logged-out state.
      */
     mockLoggedOut?: boolean;
+
+    /**
+     * Single-use CSRF token for the OAuth round-trip. Generated and stored
+     * when `GET /auth/:providerId` redirects to the provider, then required to
+     * match the `state` query param on the callback before the code is
+     * exchanged. Defends against login CSRF — an attacker can't complete a
+     * sign-in the user never initiated. Cleared on the callback (success or
+     * failure) so each value is used at most once.
+     */
+    oauthState?: string;
   }
 }
