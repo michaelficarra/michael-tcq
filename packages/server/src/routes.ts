@@ -445,7 +445,13 @@ export function createMeetingRoutes(
       meetings.push({
         id: meeting.id,
         createdAt: meeting.createdAt,
-        participantUsernames: meeting.participantIds.map((key) => meeting.users[key]?.handle ?? key),
+        // Handle for GitHub users; display name for handle-less providers
+        // (Google/Microsoft/ORCID), so the admin tooltip never shows an opaque
+        // `provider:accountId` key. Key only as a last resort if unresolved.
+        participantUsernames: meeting.participantIds.map((key) => {
+          const u = meeting.users[key];
+          return u?.handle ?? u?.name ?? key;
+        }),
         currentConnections: current,
         lastConnection: current > 0 ? 'now' : meeting.operational.lastConnectionTime,
         deletedAt: meeting.deletedAt ?? null,
