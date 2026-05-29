@@ -135,6 +135,11 @@ const sessionMiddleware = session({
     // NODE_ENV is set to 'production' in the Dockerfile.
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    // Secondary CSRF defence behind the OAuth `state` nonce: the browser won't
+    // attach the session cookie to cross-site requests. `lax` (not `strict`)
+    // still sends it on the top-level navigation back from the OAuth provider's
+    // callback redirect, which is exactly the flow we need to keep working.
+    sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 });

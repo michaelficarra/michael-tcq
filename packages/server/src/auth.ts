@@ -115,13 +115,13 @@ export function createAuthRoutes(): Router {
       // GitHub directory refreshes). `toClientUser` strips it before any
       // response is shaped.
       if (profile.accessToken) sessionUser.accessToken = profile.accessToken;
-      req.session.user = sessionUser;
 
       // Seed the server-wide known-users cache so this account resolves to a
       // real name + avatar wherever it's later referenced — covering users who
       // log in but haven't yet joined any meeting (the meeting-user write path
       // and boot restore cover the rest). Crucial for Google, which has no
-      // public lookup-by-id to re-resolve a stored reference.
+      // public lookup-by-id to re-resolve a stored reference. Independent of
+      // the session, so it runs before the regenerate below.
       recordUser(profile.user);
 
       // Fire-and-forget directory warm (no-op for providers without one).
@@ -129,9 +129,34 @@ export function createAuthRoutes(): Router {
         warning('directory_warm_failed', { error: serialiseError(err), provider: provider.id });
       });
 
+      // Capture the post-login landing spot before regenerating — regenerate
+      // discards all existing session data (including `returnTo`).
       const redirectTo = req.session.returnTo ?? '/';
-      delete req.session.returnTo;
-      res.redirect(redirectTo);
+
+      // Rotate the session id on login. A privilege change (anonymous →
+      // authenticated) should never keep the pre-login id: if an attacker has
+      // fixed a known session id in the victim's browser, regenerating here
+      // swaps it for a fresh one the attacker never saw — closing the
+      // session-fixation gap the `state` nonce (login CSRF) doesn't cover.
+      req.session.regenerate((regenErr) => {
+        if (regenErr) {
+          logError('session_regenerate_failed', { error: serialiseError(regenErr), provider: provider.id });
+          res.status(500).send('Authentication failed');
+          return;
+        }
+        req.session.user = sessionUser;
+        // Persist the authenticated session before redirecting, so a request
+        // that immediately hits a protected route sees it (the store is async
+        // in production).
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            logError('session_save_failed', { error: serialiseError(saveErr), provider: provider.id });
+            res.status(500).send('Authentication failed');
+            return;
+          }
+          res.redirect(redirectTo);
+        });
+      });
     } catch (err) {
       logError('oauth_error', { error: serialiseError(err), provider: provider.id });
       res.status(500).send('Authentication failed');

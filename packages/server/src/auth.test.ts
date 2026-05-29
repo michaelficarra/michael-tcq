@@ -144,6 +144,53 @@ describe('Auth routes', () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it('rotates the session id on a successful login (session-fixation defence)', async () => {
+      // Pull the `connect.sid` value out of a Set-Cookie header.
+      const sidFrom = (setCookie: string | null) => /connect\.sid=([^;]+)/.exec(setCookie ?? '')?.[1] ?? null;
+
+      // Stub GitHub's token + profile endpoints so the callback reaches a
+      // successful exchange; everything else (incl. the test server) falls
+      // through to the real fetch. The catch-all api.github.com branch keeps
+      // the fire-and-forget directory warm off the network.
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : (input as URL | Request).toString();
+        if (url === 'https://github.com/login/oauth/access_token') {
+          return Promise.resolve(Response.json({ access_token: 'gh-token' }));
+        }
+        if (url === 'https://api.github.com/user') {
+          return Promise.resolve(Response.json({ id: 4242, login: 'octocat', name: 'The Octocat', company: 'GitHub' }));
+        }
+        if (url.startsWith('https://api.github.com/')) return Promise.resolve(Response.json([]));
+        return realFetch(input as never, init);
+      }) as typeof fetch;
+
+      try {
+        // Start login: establishes a session (id #1) and mints the state.
+        const start = await fetch(`${baseUrl}/auth/github`, { redirect: 'manual' });
+        const startCookie = start.headers.get('set-cookie') ?? '';
+        const sidBefore = sidFrom(startCookie);
+        const state = new URL(start.headers.get('location') ?? '').searchParams.get('state');
+        expect(sidBefore).toBeTruthy();
+        expect(state).toBeTruthy();
+
+        // Complete the callback on that same session with the matching state.
+        const cb = await fetch(`${baseUrl}/auth/github/callback?code=x&state=${state}`, {
+          headers: { cookie: startCookie.split(';')[0] },
+          redirect: 'manual',
+        });
+        expect(cb.status).toBe(302);
+        expect(cb.headers.get('location')).toBe('/');
+
+        // The authenticated response must carry a *new* session id (id #2).
+        const sidAfter = sidFrom(cb.headers.get('set-cookie'));
+        expect(sidAfter).toBeTruthy();
+        expect(sidAfter).not.toBe(sidBefore);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    });
   });
 
   describe('GET /auth/logout', () => {
