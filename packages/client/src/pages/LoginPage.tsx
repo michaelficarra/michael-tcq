@@ -1,7 +1,7 @@
 /**
  * Login page — shown when the user is not authenticated.
  *
- * Displays the TCQ branding and a "Log in with …" button per configured
+ * Displays the TCQ branding and a "Sign in with …" button per configured
  * authentication provider (fetched from `/api/auth/providers`), each
  * redirecting to `/auth/:id` to start that provider's OAuth flow. In
  * mock-auth (dev) mode the endpoint returns a single `mock` pseudo-provider,
@@ -23,7 +23,7 @@ interface AuthProvider {
 interface Brand {
   className: string;
   logo: ReactNode;
-  /** Full button text. When omitted the button reads "Log in with {label}". */
+  /** Full button text. When omitted the button reads "Sign in with {label}". */
   text?: string;
   /** Small caption rendered beneath the button (e.g. the dev-mode warning). */
   caption?: string;
@@ -129,7 +129,7 @@ export function LoginPage() {
                                transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${brand.className}`}
                   >
                     {brand.logo}
-                    {brand.text ?? `Log in with ${provider.label}`}
+                    {brand.text ?? `Sign in with ${provider.label}`}
                   </a>
                   {brand.caption ? <p className="text-xs text-stone-500 dark:text-stone-400">{brand.caption}</p> : null}
                 </div>

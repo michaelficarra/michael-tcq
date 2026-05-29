@@ -1,6 +1,6 @@
 /**
  * Brand marks for the login buttons, used solely for the sanctioned
- * "Log in with <provider>" affordance. Mostly single-path monochrome SVGs
+ * "Sign in with <provider>" affordance. Mostly single-path monochrome SVGs
  * (24×24) that inherit the button's text colour via `fill="currentColor"`, so
  * each button sets the appropriate contrasting fill. The Google and Microsoft
  * marks are the exceptions: their multi-colour logos carry hard-coded brand

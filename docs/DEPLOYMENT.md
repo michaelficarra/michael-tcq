@@ -253,7 +253,7 @@ If the pre-fill link doesn't work for you, register manually at [GitHub Develope
 
 ### 14b. (Optional) Register an ORCID public-API client
 
-_Why:_ enables "Log in with ORCID". In your ORCID account → **Developer tools**, register a
+_Why:_ enables "Sign in with ORCID". In your ORCID account → **Developer tools**, register a
 **public API** client (free; requires a verified email). Set the redirect URI to
 `https://<your-domain>/auth/orcid/callback`. Note the **Client ID** and **Client Secret**.
 For testing, register a separate client on the [ORCID Sandbox](https://sandbox.orcid.org) and

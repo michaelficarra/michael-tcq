@@ -90,7 +90,7 @@ describe('LoginPage', () => {
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
-  it('renders a "Log in with GitHub" link without returnTo on the root path', async () => {
+  it('renders a "Sign in with GitHub" link without returnTo on the root path', async () => {
     // The login page renders a button per configured provider, fetched
     // from /api/auth/providers.
     queueResponse('/api/auth/providers', {
@@ -98,7 +98,7 @@ describe('LoginPage', () => {
       json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
     });
     renderAt('/');
-    const link = await screen.findByText('Log in with GitHub');
+    const link = await screen.findByText('Sign in with GitHub');
     expect(link).toBeInTheDocument();
     // No returnTo param: "/" is already the default post-login redirect.
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github');
@@ -110,7 +110,7 @@ describe('LoginPage', () => {
       json: () => Promise.resolve({ providers: [{ id: 'github', label: 'GitHub' }] }),
     });
     renderAt('/meeting/foo');
-    const link = await screen.findByText('Log in with GitHub');
+    const link = await screen.findByText('Sign in with GitHub');
     expect(link.closest('a')).toHaveAttribute('href', '/auth/github?returnTo=%2Fmeeting%2Ffoo');
   });
 
@@ -132,10 +132,11 @@ describe('LoginPage', () => {
     });
     renderAt('/');
 
-    const githubLink = (await screen.findByText('Log in with GitHub')).closest('a');
-    const orcidLink = screen.getByText('Log in with ORCID').closest('a');
-    // Google and Microsoft mandate their own button text ("Sign in with …"), so
-    // they use the brand `text` override rather than the default "Log in with".
+    const githubLink = (await screen.findByText('Sign in with GitHub')).closest('a');
+    const orcidLink = screen.getByText('Sign in with ORCID').closest('a');
+    // Every provider button reads "Sign in with {label}" — GitHub and ORCID via
+    // the default template, Google and Microsoft via their mandated `text`
+    // override (whose copy happens to match the default).
     const googleLink = screen.getByText('Sign in with Google').closest('a');
     const microsoftLink = screen.getByText('Sign in with Microsoft').closest('a');
 
@@ -160,7 +161,7 @@ describe('LoginPage', () => {
 
   it('renders the mock pseudo-provider as a distinct dev-mode button', async () => {
     // In dev (mock-auth) mode the providers endpoint returns the `mock`
-    // pseudo-provider. The button must read "Enter dev mode" (not "Log in
+    // pseudo-provider. The button must read "Enter dev mode" (not "Sign in
     // with …"), use TCQ teal, and carry a caption flagging it as mock auth.
     queueResponse('/api/auth/providers', {
       ok: true,
@@ -171,8 +172,8 @@ describe('LoginPage', () => {
     const link = (await screen.findByText('Enter dev mode')).closest('a');
     expect(link).toHaveAttribute('href', '/auth/mock');
     expect(link).toHaveClass('bg-teal-700');
-    // No "Log in with …" phrasing for the dev button.
-    expect(screen.queryByText(/Log in with/)).not.toBeInTheDocument();
+    // No "Sign in with …" phrasing for the dev button.
+    expect(screen.queryByText(/Sign in with/)).not.toBeInTheDocument();
     // The mock-auth caption is shown beneath the button.
     expect(screen.getByText('Mock authentication — no OAuth provider is configured.')).toBeInTheDocument();
   });
