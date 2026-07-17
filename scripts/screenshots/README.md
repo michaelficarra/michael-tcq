@@ -81,9 +81,7 @@ const { serverUrl, clientUrl } = getUrls();
 
 const { meetingId, chairSocket } = await populate(serverUrl, {
   chairs: ['bakkot' /* …other TC39 usernames… */],
-  agenda: [
-    /* … */
-  ],
+  agenda: [/* … */],
   // start, queue, sessions, runPoll, advance*, etc.
 });
 

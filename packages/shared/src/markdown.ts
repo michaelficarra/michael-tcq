@@ -356,10 +356,7 @@ function checkBlockHtml(value: string): HtmlCheck {
 // -- HTML-token classification ------------------------------------------
 
 type HtmlTokenClassification =
-  | { kind: 'open'; tag: string }
-  | { kind: 'close'; tag: string }
-  | { kind: 'void'; tag: string }
-  | { kind: 'other' };
+  { kind: 'open'; tag: string } | { kind: 'close'; tag: string } | { kind: 'void'; tag: string } | { kind: 'other' };
 
 // Tags on either allowlist that have no end tag in HTML. Used so a bare
 // `<br>` / `<hr>` (no explicit `/>`) is classified as void rather than

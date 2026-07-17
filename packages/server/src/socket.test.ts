@@ -523,8 +523,7 @@ describe('Socket.IO integration', () => {
       // log only contains the entry the auto-activation just added.
       const log = ctx.meetingManager.getLog(meeting.id);
       const lastStarted = log.filter((e) => e.type === 'agenda-item-started').at(-1) as
-        | Extract<(typeof log)[number], { type: 'agenda-item-started' }>
-        | undefined;
+        Extract<(typeof log)[number], { type: 'agenda-item-started' }> | undefined;
       expect(lastStarted?.itemName).toBe('Follow-up');
     });
 
