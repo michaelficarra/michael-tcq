@@ -184,7 +184,9 @@ test.describe('Log Tab', () => {
     expect(download.suggestedFilename()).toMatch(/-\d+\.md$/);
 
     // Read the downloaded file and verify content
-    const content = await (await download.createReadStream())
+    const content = await (
+      await download.createReadStream()
+    )
       .toArray()
       .then((chunks) => Buffer.concat(chunks).toString('utf-8'));
     expect(content).toContain('Meeting Log');

@@ -259,11 +259,7 @@ export interface PollRanLog extends LogEntryBase {
 }
 
 export type LogEntry =
-  | MeetingStartedLog
-  | AgendaItemStartedLog
-  | AgendaItemFinishedLog
-  | TopicDiscussedLog
-  | PollRanLog;
+  MeetingStartedLog | AgendaItemStartedLog | AgendaItemFinishedLog | TopicDiscussedLog | PollRanLog;
 
 /**
  * The active poll for a meeting. Present when a poll is running;

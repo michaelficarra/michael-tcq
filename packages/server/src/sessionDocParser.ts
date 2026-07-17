@@ -46,8 +46,7 @@ function asDate(raw: unknown): Date | null {
  */
 function deriveExpiry(session: unknown): Date {
   const cookie = (session as { cookie?: unknown }).cookie as
-    | { expires?: unknown; originalMaxAge?: unknown }
-    | undefined;
+    { expires?: unknown; originalMaxAge?: unknown } | undefined;
   const explicit = asDate(cookie?.expires);
   if (explicit !== null) return explicit;
   const maxAge = cookie?.originalMaxAge;
