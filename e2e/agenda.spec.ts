@@ -628,7 +628,7 @@ test.describe('Agenda tab', () => {
       // non-existent TC39 agenda document. The server fetches it and surfaces
       // the failure as a 502 error which the form renders in an alert.
       await urlInput.fill('https://github.com/tc39/agendas/blob/main/1900/01.md');
-      await page.getByRole('button', { name: 'Import' }).click();
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
 
       // The error message bubbles up to the form's alert region. We only
       // assert that *some* error is shown — the exact wording depends on
