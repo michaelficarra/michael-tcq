@@ -23,10 +23,10 @@
     "typecheck": "npm run typecheck -w packages/server -w packages/client"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "concurrently": "^9.1.0",
+    "@playwright/test": "^1.61.1",
+    "concurrently": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
-    "oxipng-bin": "^1.0.0",
-    "prettier": "^3.8.3"
+    "oxipng": "^1.0.1",
+    "prettier": "^3.9.5"
   }
 }
