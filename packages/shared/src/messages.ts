@@ -351,11 +351,12 @@ export type SessionAddPayload = z.infer<typeof SessionAddPayloadSchema>;
 /**
  * Payload for editing an existing session header (chair only). All fields
  * are optional; omitted fields leave that attribute unchanged.
+ * Pass `capacity: null` to clear capacity.
  */
 export const SessionEditPayloadSchema = z.object({
   id: z.string(),
   name: optionalMarkdownString('Session name'),
-  capacity: z.number().int().positive().optional(),
+  capacity: z.number().int().positive().nullable().optional(),
 });
 export type SessionEditPayload = z.infer<typeof SessionEditPayloadSchema>;
 
@@ -530,8 +531,20 @@ export type SwitchUserBody = z.infer<typeof SwitchUserBodySchema>;
 /** POST /api/meetings/:id/import-agenda — import an agenda from a URL. */
 export const ImportAgendaBodySchema = z.object({
   url: requiredTrimmed('URL'),
+  /** When true, place imported items into existing sessions that still have capacity. */
+  slotIntoSessions: z.boolean().optional(),
 });
 export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
+
+/** POST /api/meetings/:id/import-agenda-file — import an agenda from a JSON file. */
+export const ImportAgendaFileBodySchema = z.object({
+  source: z
+    .string()
+    .trim()
+    .min(1, 'Agenda file source is required')
+    .max(1024 * 1024, 'Document is too large (limit: 1 MB)'),
+});
+export type ImportAgendaFileBody = z.infer<typeof ImportAgendaFileBodySchema>;
 
 /**
  * An admin/premium user reference. Accepts either:

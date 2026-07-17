@@ -219,24 +219,24 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.getByText('Delete me')).not.toBeVisible();
     });
 
-    test('empty agenda shows "Import Agenda from URL" button for chairs', async ({ page }) => {
+    test('empty agenda shows import buttons for chairs', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      // The agenda is empty by default, so the import button should be visible
+      // The agenda is empty by default, so the import buttons should be visible
       await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import from File' })).toBeVisible();
       await expect(page.getByText('No agenda items yet.')).toBeVisible();
     });
 
-    test('import button is hidden after adding an item', async ({ page }) => {
+    test('import buttons remain visible after adding an item', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
-
       await addAgendaItem(page, 'First item');
 
-      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).not.toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import from File' })).toBeVisible();
     });
   });
 
@@ -647,6 +647,27 @@ test.describe('Agenda tab', () => {
       // Back to the empty state with the trigger button visible.
       await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
       await expect(page.getByText('No agenda items yet.')).toBeVisible();
+    });
+
+    test('chair imports a JSON file and the items appear in the agenda', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      const agendaJson = JSON.stringify([
+        { type: 'topic', name: 'Imported topic', timebox: 10 },
+        { type: 'topic', name: 'Second import', timebox: 5 },
+      ]);
+
+      await page.getByLabel('Agenda file').setInputFiles({
+        name: 'agenda.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(agendaJson),
+      });
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Imported topic')).toBeVisible({ timeout: 15_000 });
+      await expect(agendaPanel.getByText('Second import')).toBeVisible();
+      await expect(agendaPanel.getByText('10m', { exact: true })).toBeVisible();
     });
   });
 

@@ -888,6 +888,148 @@ describe('AgendaPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /delete session block/i }));
       expect(emit).toHaveBeenCalledWith('session:delete', { id: 's1' });
     });
+
+    it('renders a session header without capacity stats when capacity is unset', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Morning' },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+        ],
+      });
+      renderAgenda(meeting);
+
+      expect(screen.getByText('Morning')).toBeInTheDocument();
+      expect(screen.queryByText(/^capacity$/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/remaining/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/overflow/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('agenda file import', () => {
+    const chairMeeting = () =>
+      makeMeeting({ id: 'meet-123', users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
+
+    it('shows import controls when the agenda already has items', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
+        agenda: [{ kind: 'item', id: '1', name: 'Existing', presenterIds: ['github:alice'] }],
+      });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByRole('button', { name: 'Import Agenda from URL' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Import from File' })).toBeInTheDocument();
+    });
+
+    it('posts file source to import-agenda-file on success', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1, sessions: 0 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+
+        const source = JSON.stringify([{ type: 'topic', name: 'Imported' }]);
+        const file = new File([source], 'agenda.json', { type: 'application/json' });
+        const input = screen.getByLabelText('Agenda file');
+
+        await act(async () => {
+          fireEvent.change(input, { target: { files: [file] } });
+        });
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('shows an error alert when file import fails', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ error: 'Invalid agenda file' }, { status: 400 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+
+        const file = new File(['[]'], 'agenda.json', { type: 'application/json' });
+        await act(async () => {
+          fireEvent.change(screen.getByLabelText('Agenda file'), { target: { files: [file] } });
+          await Promise.resolve();
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Invalid agenda file');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  describe('agenda URL import', () => {
+    const chairMeeting = () =>
+      makeMeeting({ id: 'meet-123', users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
+
+    it('posts slotIntoSessions when the checkbox is checked', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1 }, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Import Agenda from URL' }));
+        fireEvent.change(screen.getByLabelText('Agenda markdown URL'), {
+          target: { value: 'https://github.com/tc39/agendas/blob/main/2026/03.md' },
+        });
+        fireEvent.click(screen.getByLabelText('Slot into sessions with available capacity'));
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: 'https://github.com/tc39/agendas/blob/main/2026/03.md',
+            slotIntoSessions: true,
+          }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('omits slotIntoSessions from the request when the checkbox is unchecked', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1 }, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Import Agenda from URL' }));
+        fireEvent.change(screen.getByLabelText('Agenda markdown URL'), {
+          target: { value: 'https://github.com/tc39/agendas/blob/main/2026/03.md' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: 'https://github.com/tc39/agendas/blob/main/2026/03.md' }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   describe('prologue / epilogue', () => {

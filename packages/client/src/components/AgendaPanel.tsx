@@ -84,8 +84,10 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   const [showSessionForm, setShowSessionForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState('');
+  const [importSlotIntoSessions, setImportSlotIntoSessions] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Drag-and-drop sensors with keyboard support for accessibility.
   // Options are hoisted to module scope so useSensor's internal useMemo
@@ -211,6 +213,34 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     socket?.emit('agenda:reorder', { id: active.id as string, afterId });
   }
 
+  async function handleFileImport(file: File) {
+    if (!meeting || importing) return;
+    setImportError(null);
+    setImporting(true);
+    try {
+      const source = await file.text();
+
+      const res = await fetch(`/api/meetings/${meeting.id}/import-agenda-file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setImportError(body.error || 'Import failed');
+      } else {
+        setShowImport(false);
+        setImportUrl('');
+        setImportSlotIntoSessions(false);
+      }
+    } catch {
+      setImportError('Network error');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
   return (
     <div id="panel-agenda" role="tabpanel" aria-label="Agenda" className="p-6">
       {/* Chairs list with inline edit for chairs */}
@@ -229,94 +259,10 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
       />
 
       {/* Agenda item list */}
-      {meeting.agenda.length === 0 && !showForm && !showSessionForm ? (
-        <div className="mb-4">
-          <p className="text-stone-600 dark:text-stone-300 italic mb-2">No agenda items yet.</p>
-          {isChair && !showImport && (
-            <button
-              onClick={() => {
-                setShowImport(true);
-                setImportError(null);
-              }}
-              className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
-                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
-                         cursor-pointer presentation-hidden"
-            >
-              Import Agenda from URL
-            </button>
-          )}
-          {isChair && showImport && (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const trimmed = importUrl.trim();
-                if (!trimmed || importing) return;
-                setImporting(true);
-                setImportError(null);
-                try {
-                  const res = await fetch(`/api/meetings/${meeting.id}/import-agenda`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: trimmed }),
-                  });
-                  const body = await res.json();
-                  if (!res.ok) {
-                    setImportError(body.error || 'Import failed');
-                  } else {
-                    setShowImport(false);
-                    setImportUrl('');
-                  }
-                } catch {
-                  setImportError('Network error');
-                } finally {
-                  setImporting(false);
-                }
-              }}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input
-                type="url"
-                value={importUrl}
-                onChange={(e) => setImportUrl(e.target.value)}
-                placeholder="https://github.com/tc39/agendas/blob/main/YYYY/MM.md"
-                pattern="https://(github\.com/tc39/agendas/blob/main|raw\.githubusercontent\.com/tc39/agendas/refs/heads/main)/\d{4}/\d{2}\.md"
-                title="URL must point to a TC39 agenda markdown file, e.g. https://github.com/tc39/agendas/blob/main/2026/03.md"
-                required
-                autoFocus
-                aria-label="Agenda markdown URL"
-                className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
-                           dark:bg-stone-700 dark:text-stone-100
-                           focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
-              />
-              <button
-                type="submit"
-                disabled={importing}
-                className="bg-teal-700 text-white px-3 py-1 rounded text-sm font-medium
-                           enabled:hover:bg-teal-800 transition-colors cursor-pointer
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {importing ? 'Importing…' : 'Import'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowImport(false);
-                  setImportUrl('');
-                  setImportError(null);
-                }}
-                className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              {importError && (
-                <p className="text-red-700 dark:text-red-400 text-sm w-full" role="alert">
-                  {importError}
-                </p>
-              )}
-            </form>
-          )}
-        </div>
-      ) : (
+      {meeting.agenda.length === 0 && !showForm && !showSessionForm && (
+        <p className="text-stone-600 dark:text-stone-300 italic mb-4">No agenda items yet.</p>
+      )}
+      {meeting.agenda.length > 0 && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -383,6 +329,97 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
         </DndContext>
       )}
 
+      {isChair && showImport && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const trimmed = importUrl.trim();
+            if (!trimmed || importing) return;
+            setImporting(true);
+            setImportError(null);
+            try {
+              const res = await fetch(`/api/meetings/${meeting.id}/import-agenda`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  url: trimmed,
+                  ...(importSlotIntoSessions ? { slotIntoSessions: true } : {}),
+                }),
+              });
+              const body = await res.json();
+              if (!res.ok) {
+                setImportError(body.error || 'Import failed');
+              } else {
+                setShowImport(false);
+                setImportUrl('');
+                setImportSlotIntoSessions(false);
+              }
+            } catch {
+              setImportError('Network error');
+            } finally {
+              setImporting(false);
+            }
+          }}
+          className="flex flex-wrap items-center gap-2 mb-4 presentation-hidden"
+        >
+          <input
+            type="url"
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            placeholder="https://github.com/tc39/agendas/blob/main/YYYY/MM.md"
+            pattern="https://(github\.com/tc39/agendas/blob/main|raw\.githubusercontent\.com/tc39/agendas/refs/heads/main)/\d{4}/\d{2}\.md"
+            title="URL must point to a TC39 agenda markdown file, e.g. https://github.com/tc39/agendas/blob/main/2026/03.md"
+            required
+            autoFocus
+            aria-label="Agenda markdown URL"
+            className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-1 text-sm flex-1 min-w-[200px]
+                       dark:bg-stone-700 dark:text-stone-100
+                       focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputValidation}`}
+          />
+          <button
+            type="submit"
+            disabled={importing}
+            className="bg-teal-700 text-white px-3 py-1 rounded text-sm font-medium
+                       enabled:hover:bg-teal-800 transition-colors cursor-pointer
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowImport(false);
+              setImportUrl('');
+              setImportSlotIntoSessions(false);
+              setImportError(null);
+            }}
+            className="text-sm text-stone-600 dark:text-stone-300 hover:text-stone-600 dark:hover:text-stone-300 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 w-full">
+            <input
+              type="checkbox"
+              checked={importSlotIntoSessions}
+              onChange={(e) => setImportSlotIntoSessions(e.target.checked)}
+              className="rounded border-stone-300 dark:border-stone-600"
+            />
+            Slot into sessions with available capacity
+          </label>
+          {importError && (
+            <p className="text-red-700 dark:text-red-400 text-sm w-full" role="alert">
+              {importError}
+            </p>
+          )}
+        </form>
+      )}
+
+      {importError && !showImport && isChair && (
+        <p className="text-red-700 dark:text-red-400 text-sm mb-4 presentation-hidden" role="alert">
+          {importError}
+        </p>
+      )}
+
       {/* Add agenda item / session — chairs only. Only one form is shown
           at a time: opening one closes the other. */}
       {isChair && showForm && <AgendaForm onCancel={() => setShowForm(false)} onSubmit={() => setShowForm(false)} />}
@@ -407,6 +444,46 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
           >
             New Session
           </button>
+          {!showImport && (
+            <button
+              onClick={() => {
+                setShowImport(true);
+                setImportError(null);
+              }}
+              disabled={importing}
+              className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
+                         cursor-pointer
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {importing ? 'Importing…' : 'Import Agenda from URL'}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => {
+              setImportError(null);
+              fileInputRef.current?.click();
+            }}
+            className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                       text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
+                       cursor-pointer
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {importing ? 'Importing…' : 'Import from File'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="sr-only"
+            aria-label="Agenda file"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFileImport(file);
+            }}
+          />
         </div>
       )}
 
@@ -795,22 +872,35 @@ const SortableSession = memo(function SortableSession({
 
   function startEditing() {
     setEditName(session.name);
-    setEditCapacity(String(session.capacity));
+    setEditCapacity(session.capacity != null ? String(session.capacity) : '');
     setEditing(true);
   }
 
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmedName = editName.trim();
-    const capacity = parseInt(editCapacity, 10);
-    if (!trimmedName || !(capacity > 0)) return;
-    socket?.emit('session:edit', { id: session.id, name: trimmedName, capacity });
+    const trimmedCapacity = editCapacity.trim();
+    if (!trimmedName) return;
+
+    const payload: { id: string; name: string; capacity?: number | null } = {
+      id: session.id,
+      name: trimmedName,
+    };
+    if (trimmedCapacity === '') {
+      payload.capacity = null;
+    } else {
+      const parsed = parseInt(trimmedCapacity, 10);
+      if (parsed > 0) payload.capacity = parsed;
+    }
+
+    socket?.emit('session:edit', payload);
     setEditing(false);
   }
 
-  const overflowing = runTotal > session.capacity;
-  const remaining = session.capacity - used;
-  const overflowAmount = runTotal - session.capacity;
+  const hasCapacity = session.capacity != null;
+  const overflowing = hasCapacity && runTotal > session.capacity!;
+  const remaining = hasCapacity ? session.capacity! - used : 0;
+  const overflowAmount = hasCapacity ? runTotal - session.capacity! : 0;
 
   const baseClasses =
     'flex flex-wrap items-center gap-3 border-y border-stone-300 dark:border-stone-600 px-2 py-1.5 bg-stone-100 dark:bg-stone-800';
@@ -836,7 +926,7 @@ const SortableSession = memo(function SortableSession({
             onChange={(e) => setEditCapacity(e.target.value)}
             min="1"
             max="9999"
-            required
+            placeholder="min"
             aria-label="Session capacity in minutes"
             className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-20
                        dark:bg-stone-700 dark:text-stone-100
@@ -878,24 +968,28 @@ const SortableSession = memo(function SortableSession({
       </span>
 
       <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-stone-600 dark:text-stone-400 tabular-nums">
-        <span>
-          capacity{' '}
-          <span className="font-medium text-stone-700 dark:text-stone-300">
-            {formatShortDuration(session.capacity)}
-          </span>
-        </span>
-        <span>
-          used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
-        </span>
-        {overflowing ? (
-          <span className="text-red-700 dark:text-red-400">
-            overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
-          </span>
-        ) : (
-          <span>
-            remaining{' '}
-            <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(remaining)}</span>
-          </span>
+        {hasCapacity && (
+          <>
+            <span>
+              capacity{' '}
+              <span className="font-medium text-stone-700 dark:text-stone-300">
+                {formatShortDuration(session.capacity!)}
+              </span>
+            </span>
+            <span>
+              used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
+            </span>
+            {overflowing ? (
+              <span className="text-red-700 dark:text-red-400">
+                overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
+              </span>
+            ) : (
+              <span>
+                remaining{' '}
+                <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(remaining)}</span>
+              </span>
+            )}
+          </>
         )}
       </span>
 

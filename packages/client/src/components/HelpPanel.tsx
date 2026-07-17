@@ -181,7 +181,11 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           </p>
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             You can <strong>import an agenda</strong> from a URL to a markdown document (e.g. a TC39 meeting agenda on
-            GitHub). The parser extracts items from both numbered lists and markdown tables.
+            GitHub) or from a local <code>.json</code> file. Imports append to the existing agenda. URL import can
+            optionally slot each imported item into the first session with enough remaining capacity (existing entries
+            are not reordered); file import always appends in source order. The markdown parser extracts items from both
+            numbered lists and markdown tables; the file format supports sessions with optional nested topics, plus
+            standalone topics, each with an optional presenter and timebox.
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Grouping Items into Sessions</h4>

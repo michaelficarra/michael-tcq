@@ -1322,6 +1322,15 @@ describe('MeetingManager', () => {
     it('returns null for non-existent meeting', () => {
       expect(manager.addSession('no-such-meeting', 'x', 10)).toBeNull();
     });
+
+    it('creates a session without capacity when omitted', () => {
+      const meeting = manager.create([testUser]);
+      const session = manager.addSession(meeting.id, 'Unbounded block')!;
+
+      expect(session).toMatchObject({ kind: 'session', name: 'Unbounded block' });
+      expect(session.capacity).toBeUndefined();
+      expect(meeting.agenda[0]).toEqual(session);
+    });
   });
 
   describe('editSession', () => {
@@ -1333,6 +1342,16 @@ describe('MeetingManager', () => {
       expect(ok).toBe(true);
       const updated = meeting.agenda[0];
       expect(updated).toMatchObject({ kind: 'session', name: 'New', capacity: 60 });
+    });
+
+    it('clears capacity when null is passed', () => {
+      const meeting = manager.create([testUser]);
+      const session = manager.addSession(meeting.id, 'Block', 30)!;
+
+      const ok = manager.editSession(meeting.id, session.id, { capacity: null });
+      expect(ok).toBe(true);
+      expect(meeting.agenda[0]).toMatchObject({ kind: 'session', name: 'Block' });
+      expect((meeting.agenda[0] as { capacity?: number }).capacity).toBeUndefined();
     });
 
     it('does not match an agenda item id', () => {

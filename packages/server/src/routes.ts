@@ -1,19 +1,13 @@
 import { Router } from 'express';
 import type { Server } from 'socket.io';
-import type {
-  PremiumUsersResponse,
-  User,
-  DirectorySuggestion,
-  ClientToServerEvents,
-  ServerToClientEvents,
-} from '@tcq/shared';
+import type { PremiumUsersResponse, ClientToServerEvents, ServerToClientEvents } from '@tcq/shared';
 import {
   CreateMeetingBodySchema,
   ImportAgendaBodySchema,
+  ImportAgendaFileBodySchema,
   PremiumUserBodySchema,
   SwitchUserBodySchema,
   userKey,
-  placeholderUser,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { isMockAuthEnabled } from './mockAuth.js';
@@ -24,6 +18,9 @@ import { resolvePremiumUsers } from './premiumDirectory.js';
 import { mockUserFromLogin } from './mockUser.js';
 import { getActiveConnectionCount, emitFullState, broadcastPremiumChange } from './socket.js';
 import { parseAgendaMarkdown } from './parseAgenda.js';
+import { loadAgendaJson } from './parseAgendaImport.js';
+import { applyImportedAgendaEntries, resolveImportedPresenters } from './importAgendaEntries.js';
+import { applyUrlImport } from './slotImportedItems.js';
 import { toSessionUser, toClientUser } from './session.js';
 import { getRecentErrors, getErrorCount } from './errorBuffer.js';
 import { getHttpCounters } from './httpCounters.js';
@@ -37,6 +34,7 @@ import type { AppSettingsManager } from './appSettingsManager.js';
  * GET  /api/meetings/:id — Get a meeting's current state
  * GET  /api/me          — Get the current authenticated user
  * POST /api/meetings/:id/import-agenda — Import agenda from a markdown URL
+ * POST /api/meetings/:id/import-agenda-file — Import agenda from a JSON file
  */
 export function createMeetingRoutes(
   meetingManager: MeetingManager,
@@ -357,54 +355,17 @@ export function createMeetingRoutes(
       return;
     }
 
-    // Resolve presenter names through the importer's provider directory,
-    // dispatched via the same `providerById` path as the autocomplete handler
-    // so import resolution matches what the dropdown would show for the same
-    // searcher (enabled-agnostic, so the GitHub seed directory still answers in
-    // mock-auth mode). A provider with no directory resolves nothing and every
-    // presenter falls through to a placeholder.
-    const directory = providerById(user.provider)?.directory;
+    // Presenter resolution and item placement: see resolveImportedPresenters
+    // and applyUrlImport in importAgendaEntries.ts / slotImportedItems.ts.
+    const flatItems = items.map((item) => ({
+      kind: 'item' as const,
+      name: item.name,
+      presenters: item.presenters,
+      duration: item.duration,
+    }));
+    const resolved = await resolveImportedPresenters(user, meeting, flatItems);
 
-    // Make sure the importer's org directory is in cache before resolving.
-    // `warmDirectory` is fire-and-forget at OAuth login, and the org-members
-    // cache is in-process only — so a restarted instance, a login from this
-    // morning paired with an import this afternoon (cache TTL elapsed), or
-    // simply an import seconds after first login can all leave tier 2 empty
-    // when resolution runs. Awaiting here guarantees tier 2 is populated and
-    // matches what the autocomplete dropdown would see. The helper coalesces
-    // concurrent refreshes and is a no-op in mock-auth mode (no access token),
-    // so this is cheap when the cache is already warm.
-    await directory?.warmDirectory(user);
-
-    // Resolve unique presenter names against the local directory (tier 1
-    // + tier 2 only — meeting users and the importer's org members). When
-    // a name yields exactly one match, bind the imported item to that
-    // real user; otherwise (0 or 2+ matches) keep today's free-text
-    // placeholder behaviour. Resolution is per-name, so the comma-split
-    // presenters of a single cell can be a mix of resolved and placeholder
-    // entries. Names appearing across multiple items are resolved once.
-    const resolved = new Map<string, DirectorySuggestion>();
-    const seenKeys = new Set<string>();
-    for (const item of items) {
-      for (const raw of item.presenters) {
-        const dedupKey = raw.trim().toLowerCase();
-        if (dedupKey.length === 0 || seenKeys.has(dedupKey)) continue;
-        seenKeys.add(dedupKey);
-        const hit = directory?.resolvePresenterFromDirectory(user, raw, meeting) ?? null;
-        if (hit) resolved.set(dedupKey, hit);
-      }
-    }
-
-    // Add each item to the meeting. Items with no parsed presenters are
-    // created with an empty presenter list; the chair can edit one in
-    // afterwards if desired.
-    for (const item of items) {
-      const presenters: User[] = item.presenters.map((name) => {
-        const hit = resolved.get(name.trim().toLowerCase());
-        return hit ? hit.user : placeholderUser(name);
-      });
-      meetingManager.addAgendaItem(meetingId, item.name, presenters, item.duration);
-    }
+    applyUrlImport(meetingManager, meetingId, items, resolved, bodyParse.data.slotIntoSessions === true);
 
     // Broadcast the updated state to all connected clients
     // Bulk import — a single full-state emit is cheaper than firing an
@@ -412,6 +373,56 @@ export function createMeetingRoutes(
     emitFullState(io, meetingManager, meetingId, appSettings);
 
     res.json({ imported: items.length });
+  });
+
+  router.post('/meetings/:id/import-agenda-file', async (req, res) => {
+    const user = req.session.user;
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const meetingId = req.params.id;
+    const meeting = meetingManager.get(meetingId);
+    if (!meeting || meeting.deletedAt !== undefined) {
+      res.status(404).json({ error: 'Meeting not found' });
+      return;
+    }
+
+    if (!meetingManager.isChair(meetingId, user) && !user.isAdmin) {
+      res.status(403).json({
+        error: 'Only chairs can import an agenda',
+        user: userKey(user),
+        chairs: meeting.chairIds,
+      });
+      return;
+    }
+
+    const bodyParse = ImportAgendaFileBodySchema.safeParse(req.body);
+    if (!bodyParse.success) {
+      res.status(400).json({ error: bodyParse.error.issues[0]?.message ?? 'Invalid request' });
+      return;
+    }
+
+    const parsed = loadAgendaJson(bodyParse.data.source);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+
+    // Presenter resolution and append: resolveImportedPresenters /
+    // applyImportedAgendaEntries (importAgendaEntries.ts).
+    const resolved = await resolveImportedPresenters(user, meeting, parsed.data.entries);
+    const counts = applyImportedAgendaEntries(meetingManager, meetingId, parsed.data.entries, resolved);
+
+    // Bulk import — a single full-state emit is cheaper than firing an
+    // `agenda:added` delta per imported entry.
+    emitFullState(io, meetingManager, meetingId, appSettings);
+
+    res.json({
+      imported: counts.items,
+      sessions: counts.sessions,
+    });
   });
 
   // --- Admin endpoints ---

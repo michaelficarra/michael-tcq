@@ -118,8 +118,8 @@ export interface Session {
   kind: 'session';
   id: string;
   name: string;
-  /** Capacity in minutes — a positive integer. */
-  capacity: number;
+  /** Capacity in minutes — a positive integer. Omitted when imported without a timebox. */
+  capacity?: number;
 }
 
 /**

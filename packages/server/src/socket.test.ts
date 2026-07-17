@@ -727,6 +727,20 @@ describe('Socket.IO integration', () => {
       expect(state.agenda[0]).toMatchObject({ kind: 'session', name: 'New', capacity: 45 });
     });
 
+    it('clears capacity when null is passed', async () => {
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const meeting = ctx.meetingManager.create([owner]);
+      const session = ctx.meetingManager.addSession(meeting.id, 'Block', 30)!;
+
+      const client = await joinMeeting(meeting.id);
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('session:edit', { id: session.id, capacity: null });
+      const state = await statePromise;
+
+      expect(state.agenda[0]).toMatchObject({ kind: 'session', name: 'Block' });
+      expect((state.agenda[0] as { capacity?: number }).capacity).toBeUndefined();
+    });
+
     it('rejects edit from non-chair', async () => {
       const meeting = ctx.meetingManager.create([
         githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),

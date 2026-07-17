@@ -10,6 +10,9 @@ function item(id: string, duration?: number): AgendaEntry {
 function session(id: string, capacity: number): AgendaEntry {
   return { kind: 'session', id, name: id, capacity };
 }
+function sessionWithoutCapacity(id: string): AgendaEntry {
+  return { kind: 'session', id, name: id };
+}
 
 describe('computeContainment', () => {
   it('returns empty maps for an empty agenda', () => {
@@ -148,5 +151,15 @@ describe('computeContainment', () => {
     expect(containedBy.has('b')).toBe(false);
     expect(used.get('s')).toBe(15);
     expect(runTotal.get('s')).toBe(25);
+  });
+
+  it('contains every item in the run when the session has no capacity (never overflows)', () => {
+    const entries: AgendaEntry[] = [sessionWithoutCapacity('s'), item('a', 50), item('b', 50)];
+    const { containedBy, overflowBy, used, runTotal } = computeContainment(entries);
+    expect(containedBy.get('a')).toBe('s');
+    expect(containedBy.get('b')).toBe('s');
+    expect(overflowBy.size).toBe(0);
+    expect(used.get('s')).toBe(100);
+    expect(runTotal.get('s')).toBe(100);
   });
 });

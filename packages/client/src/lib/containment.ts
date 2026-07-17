@@ -69,7 +69,7 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
   for (const entry of entries) {
     if (isSession(entry)) {
       activeSessionId = entry.id;
-      activeCapacity = entry.capacity;
+      activeCapacity = entry.capacity ?? Number.POSITIVE_INFINITY;
       activeUsed = 0;
       activeRunTotal = 0;
       prefixClosed = false;
