@@ -44,7 +44,7 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(dialog.getByText('Toggle presentation mode')).toBeVisible();
     await expect(dialog.getByText('Switch to Agenda tab')).toBeVisible();
     await expect(dialog.getByText('Switch to Queue tab')).toBeVisible();
-    await expect(dialog.getByText('Switch to Logs tab')).toBeVisible();
+    await expect(dialog.getByText('Switch to Log tab')).toBeVisible();
     await expect(dialog.getByText('Switch to Help tab')).toBeVisible();
   });
 
