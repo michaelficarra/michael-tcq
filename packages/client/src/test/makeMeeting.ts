@@ -38,6 +38,21 @@ export function makeMeeting(overrides?: Partial<MeetingState>, defaults: MakeMee
   };
 }
 
+/**
+ * A `current` context for a meeting that is under way — an agenda item is
+ * active. The `makeMeeting` default is the pre-start state, in which Point of
+ * Order is the only addable queue entry type, so tests exercising the ordinary
+ * queue controls need to opt into this instead.
+ *
+ * Spread it when adding fields (e.g. a current topic) so `agendaItemId`
+ * survives: `current: { ...RUNNING_CURRENT, topic: … }`.
+ */
+export const RUNNING_CURRENT: MeetingState['current'] = {
+  topicSpeakers: [],
+  startedAt: '2026-01-01T00:00:00.000Z',
+  agendaItemId: 'item-1',
+};
+
 /** Convenience: construct an ActivePoll with sensible defaults. */
 export function makePoll(overrides?: Partial<ActivePoll>): ActivePoll {
   return {

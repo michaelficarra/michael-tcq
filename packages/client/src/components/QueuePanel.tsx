@@ -35,6 +35,7 @@ import {
   QUEUE_ENTRY_PRIORITY,
   formatShortDuration,
   isAgendaItem,
+  meetingNotRunningReason,
   normaliseGithubUsername,
   userKey,
 } from '@tcq/shared';
@@ -89,6 +90,11 @@ export function QueuePanel({
   const currentAgendaItem = meeting?.agenda.find(
     (entry): entry is AgendaItem => isAgendaItem(entry) && entry.id === meeting.current.agendaItemId,
   );
+
+  // Set while no agenda item is current (pre-start or concluded), in which
+  // state Point of Order is the only addable entry type — for everyone — and
+  // Restore Queue is unavailable altogether.
+  const notRunningReason = meeting && meetingNotRunningReason(meeting.current);
 
   // Current speaker / topic are first-class structs on meeting.current
   const currentSpeaker = meeting?.current.speaker;
@@ -286,6 +292,12 @@ export function QueuePanel({
   const [showRestore, setShowRestore] = useState(false);
   const [restoreText, setRestoreText] = useState('');
 
+  // Restore Queue is chair-only and unavailable while no agenda item is
+  // current. Deriving this (rather than clearing `showRestore`) means a panel
+  // left open when the meeting concludes collapses on its own, and reappears
+  // with its draft intact if a new item is activated.
+  const restoreOpen = isChair && showRestore && !notRunningReason;
+
   /**
    * Remove a queue entry (own entry, or any entry if chair). Stable across
    * renders so memo'd SortableQueueEntry children don't invalidate.
@@ -326,6 +338,9 @@ export function QueuePanel({
    */
   function handleRestoreQueue() {
     if (!socket || !restoreText.trim()) return;
+    // Defensive: the affordance is hidden in these states, but a concurrent
+    // conclusion could land between render and click.
+    if (notRunningReason) return;
 
     const lines = restoreText.trim().split('\n');
     for (const line of lines) {
@@ -624,19 +639,24 @@ export function QueuePanel({
                   Copy Queue
                 </button>
               )}
-              <button
-                onClick={() => setShowRestore(!showRestore)}
-                className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
-                           text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
-              >
-                {showRestore ? 'Cancel' : 'Restore Queue'}
-              </button>
+              {/* Restoring a queue only makes sense against the agenda item it
+                  was captured from, so the affordance goes away entirely while
+                  no item is current (matching Close/Open Queue above). */}
+              {!notRunningReason && (
+                <button
+                  onClick={() => setShowRestore(!showRestore)}
+                  className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                             text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+                >
+                  {showRestore ? 'Cancel' : 'Restore Queue'}
+                </button>
+              )}
             </>
           )}
         </div>
 
-        {/* Restore queue textarea — chairs only */}
-        {isChair && showRestore && (
+        {/* Restore queue textarea — chairs only. */}
+        {restoreOpen && (
           <div className="mb-3 border border-stone-200 dark:border-stone-700 rounded-lg p-3 bg-white dark:bg-stone-900">
             <label
               htmlFor="restore-queue"
@@ -670,7 +690,7 @@ export function QueuePanel({
           </div>
         )}
 
-        {queuedSpeakers.length === 0 && !showRestore ? (
+        {queuedSpeakers.length === 0 && !restoreOpen ? (
           <p className="text-stone-600 dark:text-stone-300 italic text-sm">The queue is empty.</p>
         ) : (
           <DndContext
@@ -712,10 +732,20 @@ export function QueuePanel({
           </DndContext>
         )}
 
-        {meeting.queue.closed && !isChair && (
+        {/* Why non-Point-of-Order entries are unavailable, when they are. The
+            no-agenda-item reason wins: it's the more fundamental one, and it
+            applies to chairs too, so it isn't gated on `!isChair`. */}
+        {notRunningReason ? (
           <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">
-            The queue is closed. You can still raise a Point of Order.
+            {notRunningReason}. You can still raise a Point of Order.
           </p>
+        ) : (
+          meeting.queue.closed &&
+          !isChair && (
+            <p className="text-stone-500 dark:text-stone-400 italic text-sm mt-3">
+              The queue is closed. You can still raise a Point of Order.
+            </p>
+          )
         )}
       </section>
 

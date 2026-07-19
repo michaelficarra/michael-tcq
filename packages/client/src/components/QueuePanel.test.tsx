@@ -1043,15 +1043,63 @@ describe('QueuePanel', () => {
   });
 
   // -- Queue closed message --
+  //
+  // These run against a started meeting: with no agenda item current the
+  // no-agenda-item notice takes precedence, so a pre-start fixture would
+  // exercise the wrong rule (see the "no current agenda item" tests below).
+
+  const runningCurrent = currentOf({ startedAt: TEST_TIME, agendaItemId: 'item-1' });
 
   it('shows the queue-closed message at the bottom of the speaker queue for non-chairs', () => {
-    renderQueue(makeMeeting({ queue: queueOf({}, [], true) }), otherUser);
+    renderQueue(makeMeeting({ queue: queueOf({}, [], true), current: runningCurrent }), otherUser);
     expect(screen.getByText('The queue is closed. You can still raise a Point of Order.')).toBeInTheDocument();
   });
 
   it('does not show closed message when user is a chair', () => {
-    renderQueue(makeMeeting({ queue: queueOf({}, [], true), chairIds: ['github:alice'] }), chairUser);
+    renderQueue(
+      makeMeeting({ queue: queueOf({}, [], true), chairIds: ['github:alice'], current: runningCurrent }),
+      chairUser,
+    );
     expect(screen.queryByText(/queue is closed/i)).not.toBeInTheDocument();
+  });
+
+  // -- No current agenda item: Point of Order only --
+  //
+  // Before the meeting starts and after it concludes there's nothing to
+  // discuss, so only a Point of Order can be added — by anyone, chairs
+  // included — and Restore Queue disappears. See issue #54.
+
+  it('shows the not-started message to a non-chair, superseding the queue-closed one', () => {
+    // Queue closed too, so this also pins the precedence between the two.
+    renderQueue(makeMeeting({ queue: queueOf({}, [], true) }), otherUser);
+    expect(screen.getByText('The meeting has not started. You can still raise a Point of Order.')).toBeInTheDocument();
+    expect(screen.queryByText(/queue is closed/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the not-started message to a chair as well', () => {
+    // Unlike the queue-closed notice, this rule binds chairs, so they see it.
+    renderQueue(makeMeeting({ chairIds: ['github:alice'] }), chairUser);
+    expect(screen.getByText('The meeting has not started. You can still raise a Point of Order.')).toBeInTheDocument();
+  });
+
+  it('shows the concluded message once the meeting has been advanced past its last item', () => {
+    renderQueue(makeMeeting({ current: currentOf({ startedAt: TEST_TIME }) }), otherUser);
+    expect(screen.getByText('The meeting has concluded. You can still raise a Point of Order.')).toBeInTheDocument();
+  });
+
+  it('shows neither message while an agenda item is current and the queue is open', () => {
+    renderQueue(makeMeeting({ current: runningCurrent }), otherUser);
+    expect(screen.queryByText(/You can still raise a Point of Order/i)).not.toBeInTheDocument();
+  });
+
+  it('hides Restore Queue from chairs while no agenda item is current', () => {
+    renderQueue(makeMeeting({ chairIds: ['github:alice'] }), chairUser);
+    expect(screen.queryByRole('button', { name: 'Restore Queue' })).not.toBeInTheDocument();
+  });
+
+  it('offers Restore Queue to chairs once an agenda item is current', () => {
+    renderQueue(makeMeeting({ chairIds: ['github:alice'], current: runningCurrent }), chairUser);
+    expect(screen.getByRole('button', { name: 'Restore Queue' })).toBeInTheDocument();
   });
 
   // -- Premium-tier border --

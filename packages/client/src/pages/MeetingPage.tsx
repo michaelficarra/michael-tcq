@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { userKey } from '@tcq/shared';
+import { meetingNotRunningReason, userKey } from '@tcq/shared';
 import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
@@ -154,8 +154,12 @@ function MeetingPageInner() {
       // to reply to.
       if (type === 'reply' && !meeting.current.topic) return;
       // Point of Order is always permitted — procedural interruptions bypass
-      // the queue-closed gate for non-chairs.
-      if (meeting.queue.closed && !isChair && type !== 'point-of-order') return;
+      // both the no-agenda-item gate (which binds chairs too) and the
+      // queue-closed gate for non-chairs.
+      if (type !== 'point-of-order') {
+        if (meetingNotRunningReason(meeting.current)) return;
+        if (meeting.queue.closed && !isChair) return;
+      }
       setActiveTab('queue');
 
       const currentTopicSpeakerId = type === 'reply' ? (meeting.current.topic?.speakerId ?? null) : undefined;
@@ -205,10 +209,19 @@ function MeetingPageInner() {
         showToast({ message: 'No topic is currently active - you can not reply' });
         return;
       }
-      // A closed queue blocks everything but a Point of Order for non-chairs.
-      if (meeting.queue.closed && !isChair && type !== 'point-of-order') {
-        showToast({ message: 'The queue is closed' });
-        return;
+      if (type !== 'point-of-order') {
+        // With no agenda item current, nothing but a Point of Order is
+        // addable — by anyone, chairs included.
+        const notRunning = meetingNotRunningReason(meeting.current);
+        if (notRunning) {
+          showToast({ message: notRunning });
+          return;
+        }
+        // A closed queue blocks everything but a Point of Order for non-chairs.
+        if (meeting.queue.closed && !isChair) {
+          showToast({ message: 'The queue is closed' });
+          return;
+        }
       }
       setActiveTab('queue');
       // Replies carry the precondition the server checks against the live topic.

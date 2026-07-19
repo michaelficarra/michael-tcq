@@ -21,7 +21,7 @@
 
 import { useRef, useState } from 'react';
 import type { QueueEntryType, MeetingState } from '@tcq/shared';
-import { QUEUE_ENTRY_EMOJI } from '@tcq/shared';
+import { QUEUE_ENTRY_EMOJI, meetingNotRunningReason } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { ChevronDownIcon } from './icons.js';
 import { usePreferences } from '../contexts/PreferencesContext.js';
@@ -74,8 +74,9 @@ const ENTRY_TYPES: {
 /**
  * Whether a saved-topic of `type` can currently be added, and if not, a short
  * reason for the dropdown's tooltip. Mirrors the gates in `addQueueEntry` /
- * `addSavedTopic`: Point of Order is always permitted; a closed queue blocks
- * everything else for non-chairs; a Reply needs an active topic.
+ * `addSavedTopic`: Point of Order is always permitted; nothing else is addable
+ * while no agenda item is current; a closed queue blocks the rest for
+ * non-chairs; a Reply needs an active topic.
  */
 function savedTopicTypeBlock(
   type: QueueEntryType,
@@ -83,6 +84,8 @@ function savedTopicTypeBlock(
   isChair: boolean,
 ): { disabled: boolean; reason?: string } {
   if (type === 'point-of-order') return { disabled: false };
+  const notRunning = meetingNotRunningReason(meeting.current);
+  if (notRunning) return { disabled: true, reason: notRunning };
   if (meeting.queue.closed && !isChair) return { disabled: true, reason: 'The queue is closed' };
   if (type === 'reply' && !meeting.current.topic) return { disabled: true, reason: 'No active topic to reply to' };
   return { disabled: false };
@@ -112,8 +115,12 @@ export function SpeakerControls({ onAddEntry, onSavedTopic }: SpeakerControlsPro
           if (config.requiresTopic && !meeting.current.topic) return null;
 
           // Point of Order is a procedural interruption and is always
-          // permitted, even when the queue is closed to non-chairs.
-          const disabled = meeting.queue.closed && !isChair && config.type !== 'point-of-order';
+          // permitted — even when the queue is closed to non-chairs, and even
+          // when no agenda item is current (which blocks everyone, chairs
+          // included).
+          const disabled =
+            config.type !== 'point-of-order' &&
+            (meetingNotRunningReason(meeting.current) !== undefined || (meeting.queue.closed && !isChair));
 
           return (
             <button

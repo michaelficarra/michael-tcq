@@ -88,6 +88,11 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           to stop accepting new entries — when this happens, the entry type buttons will be disabled. You will be able
           to add entries again once the chair reopens the queue or advances to the next agenda item.
         </p>
+        <p className="text-sm text-stone-600 dark:text-stone-400 mb-2">
+          While no agenda item is being discussed — before the meeting starts, and once it has concluded —{' '}
+          <strong>Point of Order</strong> is the only entry type available, since there is nothing yet to discuss. The
+          other buttons are disabled until a chair starts the meeting or moves on to the next agenda item.
+        </p>
         <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
           You can <strong>edit</strong> or <strong>delete</strong> your own queue entries at any time. You can also drag
           your own entries <em>downward</em> to defer your position in the queue (e.g. to let someone else speak first).
@@ -292,6 +297,13 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
             The queue is closed by default before the meeting starts. It automatically reopens when advancing to a new
             agenda item. Click <strong>Open Queue</strong> to reopen it manually at any time.
+          </p>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-3">
+            Separately, while no agenda item is current — before the meeting has started, and after it has concluded — a{' '}
+            <strong>Point of Order</strong> is the only entry anyone can add. There is no topic under discussion, so New
+            Topic, Clarifying Question, and Reply are unavailable to chairs and participants alike, even with the queue
+            open. <strong>Restore Queue</strong> is unavailable in those states too, since a restored queue only makes
+            sense against the agenda item it was captured from.
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Polls</h4>

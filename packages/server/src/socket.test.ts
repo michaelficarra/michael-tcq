@@ -310,6 +310,23 @@ describe('Socket.IO integration', () => {
     return client;
   }
 
+  /**
+   * Helper: create a meeting that is already under way — a first agenda item
+   * exists and is current. That's the precondition for adding anything but a
+   * Point of Order to the queue, so queue tests that are exercising queue
+   * behaviour (rather than the meeting lifecycle) start from here.
+   *
+   * The item deliberately has no presenters, so `current.speaker` stays unset
+   * and the resulting state differs from a freshly-created meeting only in
+   * having an agenda item current.
+   */
+  function createRunningMeeting(chairs: Parameters<MeetingManager['create']>[0]) {
+    const meeting = ctx.meetingManager.create(chairs);
+    ctx.meetingManager.addAgendaItem(meeting.id, 'Queue test item', []);
+    ctx.meetingManager.nextAgendaItem(meeting.id);
+    return meeting;
+  }
+
   describe('activeConnections broadcast', () => {
     it('reports 1 to the first client that joins', async () => {
       const meeting = ctx.meetingManager.create([TEST_USER]);
@@ -780,7 +797,7 @@ describe('Socket.IO integration', () => {
   describe('queue:add', () => {
     it('adds an entry and broadcasts updated state', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -797,7 +814,7 @@ describe('Socket.IO integration', () => {
 
     it('inserts entries in priority order', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -905,12 +922,13 @@ describe('Socket.IO integration', () => {
     });
 
     it('rejects a reply when there is no current topic at all', async () => {
-      // Don't drive to a current.topic state — just join a fresh meeting so
-      // current.topic is null. A client that sends `currentTopicSpeakerId: null`
-      // in this state must not be allowed to add a reply (matches with null
-      // would pass the equality check on its own).
+      // Don't drive to a current.topic state — start the meeting (so the
+      // no-agenda-item gate doesn't reject first, which would test the wrong
+      // rule) but leave current.topic null. A client that sends
+      // `currentTopicSpeakerId: null` in this state must not be allowed to add
+      // a reply (null matches null, so the equality check alone would pass).
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
@@ -947,7 +965,7 @@ describe('Socket.IO integration', () => {
   describe('queue:add with asUsername', () => {
     it('allows a chair to add an entry as another user', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -963,7 +981,7 @@ describe('Socket.IO integration', () => {
 
     it('resolves known users from the meeting when using asUsername', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       // Add an agenda item owned by a known user with a full profile
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [
         githubUser({ id: 3, login: 'knownuser', name: 'Known User', organisation: 'ACME' }),
@@ -987,7 +1005,7 @@ describe('Socket.IO integration', () => {
       // Restore must resolve that key back to the real account, not degrade to
       // a machine-key placeholder via the handle path.
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       // A Google user (no handle) present in the meeting as an agenda presenter.
       const googleAuthor = googleUser({ sub: '110169484476', name: 'Ada Lovelace', email: 'ada@example.com' });
       ctx.meetingManager.addAgendaItem(meeting.id, 'Item', [googleAuthor]);
@@ -1007,7 +1025,7 @@ describe('Socket.IO integration', () => {
 
     it('creates a placeholder user for unknown asUsername', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       const client = await joinMeeting(meeting.id);
 
@@ -1022,7 +1040,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects asUsername from non-chair', async () => {
       // Meeting where chair is someone else
-      const meeting = ctx.meetingManager.create([
+      const meeting = createRunningMeeting([
         githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
       ]);
       // Open the queue so the test reaches the asUsername check
@@ -1043,7 +1061,7 @@ describe('Socket.IO integration', () => {
   describe('queue:add pending', () => {
     it('stamps pending=true and the default-for-type topic when topic is omitted', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
@@ -1058,7 +1076,7 @@ describe('Socket.IO integration', () => {
 
     it('uses the default-for-type topic appropriate to each type', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
@@ -1076,7 +1094,7 @@ describe('Socket.IO integration', () => {
       // entries — it must never produce a pending row that would render as
       // bouncing dots for every participant.
       const chair = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([chair]);
+      const meeting = createRunningMeeting([chair]);
       const client = await joinMeeting(meeting.id);
 
       const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
@@ -1090,7 +1108,7 @@ describe('Socket.IO integration', () => {
 
     it('rejects a non-pending add that omits the topic', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const client = await joinMeeting(meeting.id);
 
       const errorPromise = waitForEvent<string>(client, 'error');
@@ -1105,7 +1123,7 @@ describe('Socket.IO integration', () => {
   describe('queue:edit clears pending', () => {
     it('clears the pending flag when the author edits a pending entry', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const client = await joinMeeting(meeting.id);
 
       // Add a pending entry, then edit it with the author's topic.
@@ -1147,7 +1165,7 @@ describe('Socket.IO integration', () => {
 
     it('on author disconnect, pending entries are deleted', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       // Author opens a socket and adds a pending entry, then disconnects
       // without finalising. A separate viewer socket observes the
@@ -1178,7 +1196,7 @@ describe('Socket.IO integration', () => {
       // only fires for entries that are still pending at the moment of
       // disconnect.
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
 
       const viewer = await joinMeeting(meeting.id);
       const author = await joinMeeting(meeting.id);
@@ -1547,7 +1565,7 @@ describe('Socket.IO integration', () => {
 
     it('allows chair to change entry type', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const entry = ctx.meetingManager.addQueueEntry(
         meeting.id,
         'topic',
@@ -2692,6 +2710,17 @@ describe('Socket.IO integration', () => {
   });
 
   describe('queue:setClosed', () => {
+    /**
+     * Put the meeting into the in-progress state (an agenda item is current)
+     * so that the closed-queue rule is what's under test. Without this, the
+     * stricter no-agenda-item rule rejects first and these tests would pass
+     * for the wrong reason (or, for the chair case, not pass at all).
+     */
+    function startMeeting(meetingId: string, presenter: ReturnType<typeof githubUser>) {
+      ctx.meetingManager.addAgendaItem(meetingId, 'Item 1', [presenter]);
+      ctx.meetingManager.nextAgendaItem(meetingId);
+    }
+
     it('chair can close and open the queue', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
@@ -2726,10 +2755,10 @@ describe('Socket.IO integration', () => {
     });
 
     it('non-chair queue:add rejected when queue is closed', async () => {
-      const meeting = ctx.meetingManager.create([
-        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
-      ]);
-      // Close the queue
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chair]);
+      startMeeting(meeting.id, chair);
+      // Close the queue (starting the meeting reopens it)
       ctx.meetingManager.setQueueClosed(meeting.id, true);
 
       const client = await joinMeeting(meeting.id);
@@ -2743,9 +2772,9 @@ describe('Socket.IO integration', () => {
     });
 
     it('non-chair can add a Point of Order when queue is closed', async () => {
-      const meeting = ctx.meetingManager.create([
-        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
-      ]);
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chair]);
+      startMeeting(meeting.id, chair);
       // Close the queue — the joining user (testuser, ghid: 1) is not a chair
       ctx.meetingManager.setQueueClosed(meeting.id, true);
 
@@ -2762,9 +2791,9 @@ describe('Socket.IO integration', () => {
     });
 
     it('non-chair queue:add still rejected for non-POO types when queue is closed', async () => {
-      const meeting = ctx.meetingManager.create([
-        githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' }),
-      ]);
+      const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chair]);
+      startMeeting(meeting.id, chair);
       ctx.meetingManager.setQueueClosed(meeting.id, true);
 
       const client = await joinMeeting(meeting.id);
@@ -2781,7 +2810,8 @@ describe('Socket.IO integration', () => {
     it('chair can add entries when queue is closed', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
       const meeting = ctx.meetingManager.create([owner]);
-      // Close the queue
+      startMeeting(meeting.id, owner);
+      // Close the queue (starting the meeting reopens it)
       ctx.meetingManager.setQueueClosed(meeting.id, true);
 
       const client = await joinMeeting(meeting.id);
@@ -2828,6 +2858,126 @@ describe('Socket.IO integration', () => {
       await joinMeeting(meeting.id);
       const state = ctx.meetingManager.get(meeting.id)!;
       expect(state.queue.closed).toBe(true);
+    });
+  });
+
+  // -- Point of Order only while no agenda item is current ----------------
+  // New Topic / Clarifying Question / Reply presuppose something to discuss,
+  // so they're rejected both before the meeting starts and after it has
+  // concluded. Unlike the closed-queue rule this binds chairs too, and it
+  // has no `asUsername` (Restore Queue) escape hatch. See issue #54.
+  describe('queue:add with no current agenda item', () => {
+    const OWNER = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+    const OTHER_CHAIR = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+
+    /** A meeting that has been started and then advanced past its only item. */
+    function concludedMeeting(chairs: ReturnType<typeof githubUser>[]) {
+      const meeting = ctx.meetingManager.create(chairs);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Item 1', [chairs[0]]);
+      ctx.meetingManager.nextAgendaItem(meeting.id); // start
+      ctx.meetingManager.nextAgendaItem(meeting.id); // conclude
+      return meeting;
+    }
+
+    // The joining user (testuser, ghid: 1) is a chair in the OWNER meetings
+    // and a plain participant in the OTHER_CHAIR ones, so each case below
+    // covers both roles.
+    const scenarios = [
+      { role: 'chair', chairs: [OWNER] },
+      { role: 'non-chair', chairs: [OTHER_CHAIR] },
+    ] as const;
+
+    for (const { role, chairs } of scenarios) {
+      it(`rejects discussion entries from a ${role} before the meeting starts`, async () => {
+        const meeting = ctx.meetingManager.create([...chairs]);
+        // Explicitly open the queue: the rule must hold on its own, not as a
+        // side effect of the created-closed default. This is the hole #54
+        // reports — a chair opening the queue before starting.
+        ctx.meetingManager.setQueueClosed(meeting.id, false);
+
+        const client = await joinMeeting(meeting.id);
+
+        for (const type of ['topic', 'reply', 'question'] as const) {
+          const errorPromise = waitForEvent<string>(client, 'error');
+          client.emit('queue:add', { type, topic: 'Should fail' });
+          expect(await errorPromise).toMatch(/meeting has not started/i);
+        }
+        expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
+      });
+
+      it(`rejects discussion entries from a ${role} once the meeting has concluded`, async () => {
+        const meeting = concludedMeeting([...chairs]);
+
+        const client = await joinMeeting(meeting.id);
+
+        for (const type of ['topic', 'reply', 'question'] as const) {
+          const errorPromise = waitForEvent<string>(client, 'error');
+          client.emit('queue:add', { type, topic: 'Should fail' });
+          expect(await errorPromise).toMatch(/meeting has concluded/i);
+        }
+        expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
+      });
+    }
+
+    it('allows a Point of Order before the meeting starts', async () => {
+      const meeting = ctx.meetingManager.create([OTHER_CHAIR]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'point-of-order', topic: 'Nobody can hear the chair' });
+      const state = await statePromise;
+
+      expect(state.queue.orderedIds).toHaveLength(1);
+      expect(state.queue.entries[state.queue.orderedIds[0]].type).toBe('point-of-order');
+    });
+
+    it('allows a Point of Order once the meeting has concluded', async () => {
+      const meeting = concludedMeeting([OTHER_CHAIR]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'point-of-order', topic: 'We skipped an item' });
+      const state = await statePromise;
+
+      expect(state.queue.orderedIds).toHaveLength(1);
+      expect(state.queue.entries[state.queue.orderedIds[0]].type).toBe('point-of-order');
+    });
+
+    it('rejects the chair Restore Queue path (asUsername) entirely, Points of Order included', async () => {
+      // testuser (the joining user) is the chair here, so the only thing
+      // standing between these adds and the queue is the no-agenda-item rule.
+      // Restore is disabled wholesale in this state, so unlike a first-person
+      // add, even a Point of Order is refused.
+      const meeting = ctx.meetingManager.create([OWNER]);
+
+      const client = await joinMeeting(meeting.id);
+
+      for (const type of ['topic', 'point-of-order'] as const) {
+        const errorPromise = waitForEvent<string>(client, 'error');
+        client.emit('queue:add', { type, topic: 'Restored entry', asUsername: 'someoneelse' });
+        expect(await errorPromise).toMatch(/meeting has not started/i);
+      }
+      expect(ctx.meetingManager.get(meeting.id)!.queue.orderedIds).toHaveLength(0);
+    });
+
+    it('rejects retyping a Point of Order into a discussion entry', async () => {
+      // The retype path is chair-only, and a chair could otherwise use it to
+      // launder a Point of Order into a New Topic while nothing is current.
+      const meeting = ctx.meetingManager.create([OWNER]);
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:add', { type: 'point-of-order', topic: 'Procedural' });
+      const added = await statePromise;
+      const entryId = added.queue.orderedIds[0];
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('queue:edit', { id: entryId, type: 'topic' });
+      expect(await errorPromise).toMatch(/meeting has not started/i);
+      expect(ctx.meetingManager.getQueueEntry(meeting.id, entryId)!.type).toBe('point-of-order');
     });
   });
 
@@ -3420,7 +3570,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('stale queue:reorder applied after newer one — converges via resync', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
       const a = await joinWithSurrogate(meeting.id);
 
@@ -3465,7 +3615,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('queue:next arrives before its prerequisite queue:add — converges via resync', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
       const a = await joinWithSurrogate(meeting.id);
 
@@ -3514,7 +3664,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('reorder around a precondition-protected event — converges via resync', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
       const a = await joinWithSurrogate(meeting.id);
 
@@ -4004,7 +4154,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('two concurrent queue:add emits — both entries land and observers converge', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const a = await joinMeeting(meeting.id);
       const b = await joinMeeting(meeting.id);
       const observer = await joinWithSurrogate(meeting.id);
@@ -4047,7 +4197,7 @@ describe('Socket.IO integration', () => {
     }
 
     it('concurrent queue:add and queue:next — final state is internally consistent', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
       // Seed via real emit so the user record on `meeting.users` matches
       // what the session-driven mutations below will produce.
@@ -4086,7 +4236,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('concurrent queue:next and queue:edit on a non-head entry — both succeed, no lost edit', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
       await seedQueue(driver, meeting.id, ['head', 'second']);
       const seedQueueIds = ctx.meetingManager.get(meeting.id)!.queue.orderedIds;
@@ -4126,7 +4276,7 @@ describe('Socket.IO integration', () => {
     });
 
     it('storm: ten concurrent queue:add emits — all land, version sequence is contiguous', async () => {
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const observer = await joinWithSurrogate(meeting.id);
 
       // Ten distinct sockets, each firing a queue:add at the same
@@ -4182,7 +4332,7 @@ describe('Socket.IO integration', () => {
   describe('at-least-once emit semantics', () => {
     it('two queue:add emits on the same socket create two distinct entries', async () => {
       const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
-      const meeting = ctx.meetingManager.create([owner]);
+      const meeting = createRunningMeeting([owner]);
       const driver = await joinMeeting(meeting.id);
 
       // Same socket, same payload, fired back-to-back without any

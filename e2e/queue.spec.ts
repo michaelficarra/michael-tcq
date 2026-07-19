@@ -532,7 +532,7 @@ test.describe('Agenda timer — timebox annotation', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Queue Close / Open', () => {
-  test('queue is closed before meeting starts for non-chairs, open after starting', async ({ page }) => {
+  test('non-chair entry buttons are disabled before the meeting starts, enabled after', async ({ page }) => {
     await createMeeting(page);
     await goToAgendaTab(page);
     await addAgendaItem(page, 'Item 1');
@@ -541,9 +541,11 @@ test.describe('Queue Close / Open', () => {
     await switchUser(page, 'bob');
     await goToQueueTab(page);
 
-    // Before starting: entry buttons should be disabled for non-chair
+    // Before starting: entry buttons are disabled. The reason shown is the
+    // no-agenda-item one, which supersedes the closed-queue message.
     await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
-    await expect(page.getByText('The queue is closed.')).toBeVisible();
+    await expect(page.getByText('The meeting has not started.')).toBeVisible();
+    await expect(page.getByText('The queue is closed.')).not.toBeVisible();
 
     // Switch back to chair and start the meeting
     await switchUser(page, 'admin');
@@ -555,6 +557,7 @@ test.describe('Queue Close / Open', () => {
     await goToQueueTab(page);
     await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
     await expect(page.getByText('The queue is closed.')).not.toBeVisible();
+    await expect(page.getByText('The meeting has not started.')).not.toBeVisible();
   });
 
   test('chair can close and reopen the queue', async ({ page }) => {
@@ -650,6 +653,74 @@ test.describe('Queue Close / Open', () => {
 
     // Queue remains closed after adding the Point of Order
     await expect(page.getByText('The queue is closed. You can still raise a Point of Order.')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Point of Order only while no agenda item is current (issue #54)
+// ---------------------------------------------------------------------------
+
+test.describe('Point of Order only when no agenda item is current', () => {
+  test('a chair cannot add a discussion entry before starting, even with the queue open', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item 1');
+    await goToQueueTab(page);
+
+    // The chair is not exempt from this rule, unlike the closed-queue one.
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+    await expect(page.getByText('The meeting has not started. You can still raise a Point of Order.')).toBeVisible();
+
+    // Open Queue is not offered before the meeting starts, so the queue-closed
+    // default can't be lifted to work around the rule — the pre-start hole
+    // reported in #54.
+    await expect(page.getByRole('button', { name: 'Open Queue' })).not.toBeVisible();
+
+    // The `n` shortcut is a no-op too, so the buttons aren't the only guard.
+    await page.locator('body').press('n');
+    await expect(page.getByLabel('Topic description')).not.toBeVisible();
+  });
+
+  test('a Point of Order can be raised before the meeting starts', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item 1');
+    await switchUser(page, 'bob');
+    await goToQueueTab(page);
+
+    await addQueueEntry(page, 'Point of Order', 'Nobody can hear the chair');
+    await expect(page.getByText('Nobody can hear the chair')).toBeVisible();
+  });
+
+  test('Restore Queue is unavailable to chairs until an agenda item is current', async ({ page }) => {
+    await createMeeting(page);
+    await goToAgendaTab(page);
+    await addAgendaItem(page, 'Item 1');
+    await goToQueueTab(page);
+
+    // A restored queue only makes sense against the item it was captured from.
+    await expect(page.getByRole('button', { name: 'Restore Queue' })).not.toBeVisible();
+
+    await page.getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(page.getByRole('button', { name: 'Restore Queue' })).toBeVisible();
+  });
+
+  test('the rule applies again once the meeting has concluded', async ({ page }) => {
+    await setupStartedMeeting(page);
+
+    // Entries are addable while the single item is current…
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeEnabled();
+
+    // …then advance past the final item to conclude the meeting.
+    await advanceAgenda(page);
+    await expect(page.getByText('Meeting concluded')).toBeVisible();
+
+    await expect(page.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+    await expect(page.getByText('The meeting has concluded. You can still raise a Point of Order.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Restore Queue' })).not.toBeVisible();
   });
 });
 

@@ -122,6 +122,7 @@ export {
   userMatchesIndex,
   isSession,
   isAgendaItem,
+  meetingNotRunningReason,
   formatDuration,
   formatShortDuration,
   normaliseGithubUsername,

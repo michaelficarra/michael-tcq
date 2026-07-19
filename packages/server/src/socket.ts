@@ -35,6 +35,7 @@ import {
   QueueReorderPayloadSchema,
   QueueSetClosedPayloadSchema,
   QUEUE_ENTRY_DEFAULT_TOPICS,
+  meetingNotRunningReason,
 } from '@tcq/shared';
 import type { MeetingManager } from './meetings.js';
 import { ensureUser } from './meetings.js';
@@ -857,10 +858,32 @@ export function registerSocketHandlers(
         return;
       }
 
+      const addMeeting = meetingManager.get(joinedMeetingId);
+
+      // Reject discussion entries while no agenda item is current — before the
+      // meeting starts, or after it has concluded. There's nothing to raise a
+      // topic, question, or reply about. Point of Order is exempt.
+      //
+      // This gate sits above every other check on purpose. It has NO chair
+      // exemption (unlike the queue-closed gate below) and NO `asUsername`
+      // exemption (unlike the reply precondition further down): the reason is
+      // semantic rather than a permission.
+      //
+      // The Point of Order exemption does not extend to `asUsername`, because
+      // Restore Queue is disabled wholesale in these states — restoring a
+      // queue only makes sense against the item it was captured from, and a
+      // Point of Order raised on someone else's behalf is not a live
+      // procedural interruption. The UI hides the affordance; this backs it.
+      const notRunning = addMeeting && meetingNotRunningReason(addMeeting.current);
+      if (notRunning && (parsed.type !== 'point-of-order' || parsed.asUsername)) {
+        socket.emit('error', notRunning);
+        respond({ ok: false, error: notRunning });
+        return;
+      }
+
       // Reject if queue is closed and user is not a chair. Point of Order is
       // exempt — procedural interruptions are always permitted regardless of
       // queue state.
-      const addMeeting = meetingManager.get(joinedMeetingId);
       if (
         addMeeting?.queue.closed &&
         !meetingManager.isChair(joinedMeetingId, user) &&
@@ -984,6 +1007,15 @@ export function registerSocketHandlers(
       if (parsed.type !== undefined) {
         if (!isChairUser) {
           socket.emit('error', 'Only chairs can change entry types');
+          return;
+        }
+        // Retyping is the back door around the queue:add gate — a Point of
+        // Order is the only entry that can exist while no agenda item is
+        // current, so it must not be convertible into a discussion entry there.
+        const editMeeting = meetingManager.get(joinedMeetingId);
+        const notRunning = editMeeting && meetingNotRunningReason(editMeeting.current);
+        if (notRunning && parsed.type !== 'point-of-order') {
+          socket.emit('error', notRunning);
           return;
         }
         updates.type = parsed.type;

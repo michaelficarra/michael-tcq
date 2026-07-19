@@ -1,7 +1,7 @@
 // Pull in the ES2025 Intl type slice for `Intl.DurationFormat` (used below)
 // without changing the emit target. Types only — no runtime polyfill.
 /// <reference lib="es2025.intl" />
-import type { AgendaEntry, AgendaItem, Session, User, UserKey } from './types.js';
+import type { AgendaEntry, AgendaItem, CurrentContext, Session, User, UserKey } from './types.js';
 
 /**
  * Derive the canonical user key from a User-like object: the
@@ -171,6 +171,27 @@ export function isSession(entry: AgendaEntry): entry is Session {
 /** Type guard: is this agenda entry a regular agenda item? */
 export function isAgendaItem(entry: AgendaEntry): entry is AgendaItem {
   return entry.kind === 'item';
+}
+
+/**
+ * Why the queue is not accepting discussion entries right now, or `undefined`
+ * when it is. New Topic / Clarifying Question / Reply all presuppose an agenda
+ * item to discuss, so none of them are addable while no item is current —
+ * before the meeting starts, or after the chair has advanced past the final
+ * item. Point of Order is a procedural interruption and is exempt, so callers
+ * check the entry type before consulting this.
+ *
+ * Unlike the queue-closed rule, this one has no chair exemption: the reason is
+ * semantic (there's nothing to discuss), not a matter of permission.
+ *
+ * The two messages are phrased to compose with a trailing
+ * ". You can still raise a Point of Order."
+ */
+export function meetingNotRunningReason(current: CurrentContext): string | undefined {
+  if (current.agendaItemId !== undefined) return undefined;
+  // `startedAt` is never cleared once stamped, so it's what separates the
+  // pre-start state from the concluded (past-final) one.
+  return current.startedAt === undefined ? 'The meeting has not started' : 'The meeting has concluded';
 }
 
 export type DurationStyle = 'long' | 'short' | 'narrow';

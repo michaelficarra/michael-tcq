@@ -128,7 +128,7 @@ If a user navigates to a non-existent meeting, a clear error page is shown with 
 6. When discussion on an agenda item is complete, the chair clicks **Next Agenda Item**. A confirmation dialogue always opens (regardless of queue state) so the chair can record a free-form conclusion for the outgoing item; if entries remain in the queue, the dialogue also warns that they will be cleared and shows the entry count. The conclusion textarea is focused automatically when the dialogue opens, and Ctrl/Cmd+Enter inside it submits the dialogue (equivalent to clicking **Advance**) so chairs can advance without leaving the keyboard. On confirming, the next item's first presenter (if any) becomes the current speaker (see **Agenda → Presenters**), the queue and current topic are cleared, the conclusion is saved on the outgoing item, and a snapshot of the conclusion appears in the meeting log for that "Finished" entry. On the final agenda item the advance button instead concludes the meeting: confirming advances past the final item so a conclusion can still be recorded for it, and the meeting enters a "concluded" state — no current agenda item, but distinct from the pre-start state. The queue view shows "Meeting concluded — add a new agenda item to continue." Adding a new agenda item while in the concluded state auto-activates it (no separate Start Meeting click needed); adding a session header does not — sessions are never the current item.
 7. This repeats until the agenda is exhausted.
 
-Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs). On every agenda item the chair sees an advance button; it reads **Next Agenda Item** when more items remain and **Conclude meeting** when on the final item.
+Before the meeting is started, the queue view displays "Waiting for the meeting to start..." with a **Start Meeting** button (visible to chairs), and only Points of Order can be added to the queue (see **Queue → Point of Order Only When No Agenda Item Is Current**). On every agenda item the chair sees an advance button; it reads **Next Agenda Item** when more items remain and **Conclude meeting** when on the final item.
 
 ## Navigation
 
@@ -327,11 +327,21 @@ There are four types of queue entry, listed here from highest to lowest priority
 
 When a participant enters the queue, their entry is automatically inserted at the correct position based on type priority. Within the same type, entries are ordered FIFO (first in, first out). Duplicate entries by the same user are allowed.
 
+### Point of Order Only When No Agenda Item Is Current
+
+New Topic, Clarifying Question, and Reply all presuppose an agenda item under discussion, so none of them can be added while no agenda item is current — both before the meeting has started and after it has concluded. **Point of Order** is the only entry type available in those states, because a procedural interruption is meaningful whether or not discussion is under way.
+
+Unlike the queue open / close rule below, this restriction has **no chair exemption** — the reason is that there is nothing to discuss, not that permission is being withheld. It applies to chairs and participants alike. Its message takes precedence over the closed-queue message when both would apply.
+
+The chair-only **Restore Queue** feature is likewise unavailable in these states — its button is hidden (alongside **Close Queue** / **Open Queue**, which is already hidden when no item is current) and the server rejects restore adds, including Points of Order. A restored queue only makes sense against the agenda item it was captured from.
+
+In these states the non-Point-of-Order entry type buttons are disabled and a message is shown reading "The meeting has not started. You can still raise a Point of Order." before the meeting starts, or "The meeting has concluded. You can still raise a Point of Order." once it has concluded. The corresponding keyboard shortcuts (`n`, `c`, `r`) are no-ops; `p` remains active. A chair cannot circumvent the rule by changing an existing Point of Order entry's type — such a change is rejected.
+
 ### Queue Open / Close
 
 The queue can be open or closed. When the queue is closed, non-chair participants cannot add new New Topic, Reply, or Clarifying Question entries — those entry type buttons are disabled and a "The queue is closed. You can still raise a Point of Order." message is shown. Point of Order entries remain available to all participants even when the queue is closed, because they are procedural interruptions that must never be suppressed. Chairs can still add any entry type when the queue is closed (e.g. via Restore Queue or on behalf of others).
 
-The queue is closed by default when a meeting is created (before the meeting starts). When a chair advances to a new agenda item, the queue is automatically reopened, even if a chair had manually closed it during the previous item. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries are also blocked for non-chairs when the queue is closed, with the exception of `p` (Point of Order), which remains active.
+The queue is closed by default when a meeting is created; before the meeting starts this is belt-and-braces, since the stricter rule above already limits everyone to Points of Order. When a chair advances to a new agenda item, the queue is automatically reopened, even if a chair had manually closed it during the previous item. Chairs can manually close and reopen the queue at any time via the **Close Queue** / **Open Queue** button in the Speaker Queue section header. Keyboard shortcuts for adding queue entries are also blocked for non-chairs when the queue is closed, with the exception of `p` (Point of Order), which remains active.
 
 ### Entering the Queue
 
@@ -349,7 +359,7 @@ The bouncing-dots animation respects the viewer's reduced-motion preference: whe
 
 Beside the entry-type buttons sits a "Saved topics" button — a recycle emoji (♻️) with a downward-pointing triangle indicating it opens a dropdown. The dropdown lists the user's saved queue topics (each prefixed with the emoji of its configured priority and truncated with ellipsis to fit, with the full text on hover) followed by an **Edit saved topics…** entry. Clicking a saved topic immediately adds an entry to the queue with the chosen text as its topic, at the saved topic's **configured priority** (one of New Topic, Reply, Clarifying Question, or Point of Order), skipping the composing state entirely — the entry appears as a finished entry on every viewer's screen the moment the server processes it, with no typing indicator and no inline editor on the author's side.
 
-Each saved topic only makes sense when its priority is currently addable, so the dropdown disables any entry whose priority is not valid right now: a **Reply** entry is disabled when no topic is active, and every entry except **Point of Order** is disabled for non-chairs while the queue is closed (Point of Order, a procedural interruption, is always permitted). A disabled entry shows the reason on hover and cannot be selected. The **Saved topics** button itself is always openable — in any meeting state — so that Point of Order entries and the **Edit saved topics…** link stay reachable. In the rare case a saved topic's priority becomes invalid between opening the dropdown and clicking it (for example, the chair advances past the active topic), the selection is rejected: an error is shown and nothing is added to the queue.
+Each saved topic only makes sense when its priority is currently addable, so the dropdown disables any entry whose priority is not valid right now: a **Reply** entry is disabled when no topic is active, every entry except **Point of Order** is disabled for everyone while no agenda item is current, and every entry except **Point of Order** is disabled for non-chairs while the queue is closed (Point of Order, a procedural interruption, is always permitted). A disabled entry shows the reason on hover and cannot be selected. The **Saved topics** button itself is always openable — in any meeting state — so that Point of Order entries and the **Edit saved topics…** link stay reachable. In the rare case a saved topic's priority becomes invalid between opening the dropdown and clicking it (for example, the chair advances past the active topic), the selection is rejected: an error is shown and nothing is added to the queue.
 
 Each user has their own list of saved topics, persisted to the browser's local storage keyed by their account (provider and identifier), so two accounts sharing a browser do not see each other's list. A user with no stored list (the first time they open the dropdown) is automatically seeded with a single default entry: "👍 I support this. (EOM)". A user who has explicitly emptied their list is not re-seeded; the dropdown shows only the **Edit saved topics…** entry.
 
@@ -405,6 +415,8 @@ Clarifying Question: How does this work? (bob)
 ```
 
 Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(reference)`, the entry is added on behalf of that user, preserving the original author. The reference is whatever Copy emitted: a GitHub handle for GitHub users, or a provider-qualified `provider:accountId` (e.g. `google:1234…`) for users without a handle (Google, Microsoft, ORCID). It is resolved against known meeting participants (chairs, existing queue entries, agenda presenters) and the server's known-users cache; an unresolvable reference creates a placeholder user. Non-chairs cannot add entries on behalf of other users.
+
+Restore is only offered while an agenda item is current: before the meeting starts and after it has concluded the **Restore Queue** button is hidden and restore adds are rejected (see **Queue → Point of Order Only When No Agenda Item Is Current**). Copy remains available whenever there are entries to copy.
 
 ### Current Speaker
 
@@ -547,6 +559,8 @@ Pressing `?` opens a dialog listing the keyboard shortcuts. The dialog includes 
 | `4` | Switch to Help tab          |
 | `?` | Toggle shortcuts dialogue   |
 | `,` | Toggle preferences dialogue |
+
+The queue-entry shortcuts are subject to the same gates as the buttons they mirror: `n`, `r`, and `c` are no-ops whenever the corresponding entry type is not currently addable (while no agenda item is current, while the queue is closed to a non-chair, or — for `r` — when there is no active topic). `p` always works.
 
 Context-specific editing shortcuts are documented with their features: Ctrl/Cmd+Enter submits a dialog or editor (the agenda-advance confirmation, the prologue/epilogue editor), Backspace removes the most recent chip in a presenters input, and Esc dismisses an open dialog.
 

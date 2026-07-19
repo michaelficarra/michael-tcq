@@ -5,7 +5,7 @@ import { SpeakerControls } from './SpeakerControls.js';
 import { TestMeetingProvider } from '../test/TestMeetingProvider.js';
 import { PreferencesProvider } from '../contexts/PreferencesContext.js';
 import { AuthProvider } from '../contexts/AuthContext.js';
-import { makeMeeting as buildMeeting } from '../test/makeMeeting.js';
+import { makeMeeting as buildMeeting, RUNNING_CURRENT } from '../test/makeMeeting.js';
 import { __resetSavedTopicsCacheForTests } from '../hooks/useSavedTopics.js';
 
 const testUser: User = {
@@ -17,8 +17,14 @@ const testUser: User = {
   avatarUrl: 'https://github.com/alice.png?size=80',
 };
 
+/**
+ * Meetings here default to being under way — with no agenda item current,
+ * Point of Order is the only addable type and every other control is disabled,
+ * which is its own rule (covered in the "no current agenda item" describe at
+ * the bottom) rather than what most of these tests are about.
+ */
 function makeMeeting(overrides?: Partial<MeetingState>): MeetingState {
-  return buildMeeting(overrides);
+  return buildMeeting({ ...overrides, current: { ...RUNNING_CURRENT, ...overrides?.current } });
 }
 
 function renderControls(meeting: MeetingState, onAddEntry = vi.fn(), onSavedTopic = vi.fn()) {
@@ -122,6 +128,37 @@ describe('SpeakerControls', () => {
     // The button only opens the menu; Point of Order saved topics and the
     // Edit link must stay reachable even when the queue is closed.
     expect(screen.getByRole('button', { name: 'Saved topics' })).toBeEnabled();
+  });
+
+  // -- No current agenda item: Point of Order only (issue #54) --
+  //
+  // `buildMeeting` (rather than the local `makeMeeting`) is used here so the
+  // fixture keeps its pre-start `current`.
+
+  it('disables every button but Point of Order before the meeting starts', () => {
+    // Queue explicitly open, so this can only be the no-agenda-item rule.
+    renderControls(buildMeeting({ queue: { entries: {}, orderedIds: [], closed: false } }));
+
+    expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+  });
+
+  it('disables them for a chair too — unlike the closed-queue rule', () => {
+    renderControls(buildMeeting({ chairIds: ['github:alice'] }));
+
+    expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
+  });
+
+  it('disables every button but Point of Order once the meeting has concluded', () => {
+    // Past-final: `startedAt` set, no agenda item current.
+    renderControls(buildMeeting({ current: { topicSpeakers: [], startedAt: '2026-01-01T00:00:00.000Z' } }));
+
+    expect(screen.getByRole('button', { name: 'New Topic' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clarifying Question' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Point of Order' })).toBeEnabled();
   });
 });
 
@@ -261,6 +298,27 @@ describe('SpeakerControls — saved topics dropdown', () => {
     expect(topicItem).toBeDisabled();
     expect(topicItem).toHaveAttribute('title', 'The queue is closed');
     // Point of Order bypasses the closed-queue gate.
+    expect(screen.getByRole('menuitem', { name: /Out of order!/ })).toBeEnabled();
+  });
+
+  it('when no agenda item is current, disables non-Point-of-Order saved topics', async () => {
+    localStorage.setItem(
+      'tcq:saved-topics:github:alice',
+      JSON.stringify([
+        { id: 't', text: 'A new topic', type: 'topic' },
+        { id: 'p', text: 'Out of order!', type: 'point-of-order' },
+      ]),
+    );
+    stubMe();
+    // Chair, with the queue explicitly open — neither exempts this rule.
+    await renderControlsWithAuth(
+      buildMeeting({ chairIds: ['github:alice'], queue: { entries: {}, orderedIds: [], closed: false } }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Saved topics' }));
+
+    const topicItem = screen.getByRole('menuitem', { name: /A new topic/ });
+    expect(topicItem).toBeDisabled();
+    expect(topicItem).toHaveAttribute('title', 'The meeting has not started');
     expect(screen.getByRole('menuitem', { name: /Out of order!/ })).toBeEnabled();
   });
 
