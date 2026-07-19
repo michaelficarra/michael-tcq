@@ -261,7 +261,7 @@ function MeetingPageInner() {
       { key: 'f', description: 'Toggle presentation mode', action: togglePresentationMode, category: 'Display' },
       { key: '1', description: 'Switch to Agenda tab', action: () => setActiveTab('agenda'), category: 'Navigation' },
       { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue'), category: 'Navigation' },
-      { key: '3', description: 'Switch to Logs tab', action: () => setActiveTab('log'), category: 'Navigation' },
+      { key: '3', description: 'Switch to Log tab', action: () => setActiveTab('log'), category: 'Navigation' },
       { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help'), category: 'Navigation' },
       {
         key: '?',
