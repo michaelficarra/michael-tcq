@@ -219,24 +219,24 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.getByText('Delete me')).not.toBeVisible();
     });
 
-    test('empty agenda shows "Import Agenda from URL" button for chairs', async ({ page }) => {
+    test('empty agenda shows import buttons for chairs', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      // The agenda is empty by default, so the import button should be visible
+      // The agenda is empty by default, so the import buttons should be visible
       await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import from File' })).toBeVisible();
       await expect(page.getByText('No agenda items yet.')).toBeVisible();
     });
 
-    test('import button is hidden after adding an item', async ({ page }) => {
+    test('import buttons remain visible after adding an item', async ({ page }) => {
       await createMeeting(page);
       await goToAgendaTab(page);
 
-      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
-
       await addAgendaItem(page, 'First item');
 
-      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).not.toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import from File' })).toBeVisible();
     });
   });
 
@@ -628,7 +628,7 @@ test.describe('Agenda tab', () => {
       // non-existent TC39 agenda document. The server fetches it and surfaces
       // the failure as a 502 error which the form renders in an alert.
       await urlInput.fill('https://github.com/tc39/agendas/blob/main/1900/01.md');
-      await page.getByRole('button', { name: 'Import' }).click();
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
 
       // The error message bubbles up to the form's alert region. We only
       // assert that *some* error is shown — the exact wording depends on
@@ -647,6 +647,65 @@ test.describe('Agenda tab', () => {
       // Back to the empty state with the trigger button visible.
       await expect(page.getByRole('button', { name: 'Import Agenda from URL' })).toBeVisible();
       await expect(page.getByText('No agenda items yet.')).toBeVisible();
+    });
+
+    test('chair imports a JSON file and the items appear in the agenda', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      const agendaJson = JSON.stringify([
+        { type: 'topic', name: 'Imported topic', duration: 10 },
+        { type: 'topic', name: 'Second import', duration: 5 },
+      ]);
+
+      await page.getByLabel('Agenda file').setInputFiles({
+        name: 'agenda.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(agendaJson),
+      });
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Imported topic')).toBeVisible({ timeout: 15_000 });
+      await expect(agendaPanel.getByText('Second import')).toBeVisible();
+      await expect(agendaPanel.getByText('10m', { exact: true })).toBeVisible();
+    });
+
+    test('chair exports the agenda to a flat JSON file that round-trips', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // Seed an agenda by importing a flat document, then export it back out.
+      const agendaJson = JSON.stringify([
+        { type: 'session', name: 'Morning', capacity: 60 },
+        { type: 'topic', name: 'Welcome', duration: 5 },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
+      ]);
+      await page.getByLabel('Agenda file').setInputFiles({
+        name: 'agenda.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(agendaJson),
+      });
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Welcome')).toBeVisible({ timeout: 15_000 });
+
+      // Clicking "Export to File" triggers a browser download; capture it and
+      // assert the payload is the flat session/topic array we imported.
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export to File' }).click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe('agenda.json');
+
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk as Buffer);
+      const exported = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+
+      expect(exported).toEqual([
+        { type: 'session', name: 'Morning', capacity: 60 },
+        { type: 'topic', name: 'Welcome', duration: 5 },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
+      ]);
     });
   });
 

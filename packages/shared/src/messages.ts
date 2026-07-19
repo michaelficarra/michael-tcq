@@ -530,8 +530,20 @@ export type SwitchUserBody = z.infer<typeof SwitchUserBodySchema>;
 /** POST /api/meetings/:id/import-agenda — import an agenda from a URL. */
 export const ImportAgendaBodySchema = z.object({
   url: requiredTrimmed('URL'),
+  /** When true, place imported items into existing sessions that still have capacity. */
+  slotIntoSessions: z.boolean().optional(),
 });
 export type ImportAgendaBody = z.infer<typeof ImportAgendaBodySchema>;
+
+/** POST /api/meetings/:id/import-agenda-file — import an agenda from a JSON file. */
+export const ImportAgendaFileBodySchema = z.object({
+  source: z
+    .string()
+    .trim()
+    .min(1, 'Agenda file source is required')
+    .max(1024 * 1024, 'Document is too large (limit: 1 MB)'),
+});
+export type ImportAgendaFileBody = z.infer<typeof ImportAgendaFileBodySchema>;
 
 /**
  * An admin/premium user reference. Accepts either:

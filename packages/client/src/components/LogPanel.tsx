@@ -15,6 +15,7 @@ import { useMeetingLog } from '../hooks/useMeetingLog.js';
 import { UserBadge } from './UserBadge.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { RelativeTime as SharedRelativeTime } from '../lib/RelativeTime.js';
+import { downloadFile } from '../lib/download.js';
 
 // -- Time formatting helpers --
 
@@ -505,16 +506,6 @@ function serialiseLog(meeting: MeetingState, log: LogEntry[]): string {
   return lines.join('\n');
 }
 
-function downloadFile(text: string, filename: string) {
-  const blob = new Blob([text], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // -- Main component --
 
 export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
@@ -549,7 +540,13 @@ export function LogPanel({ hidden = false }: { hidden?: boolean } = {}) {
 
       {!isEmpty && (
         <button
-          onClick={() => downloadFile(serialiseLog(meeting, log), `${meeting.id}-${Math.floor(Date.now() / 1000)}.md`)}
+          onClick={() =>
+            downloadFile(
+              serialiseLog(meeting, log),
+              `${meeting.id}-${Math.floor(Date.now() / 1000)}.md`,
+              'text/markdown',
+            )
+          }
           className="float-right ml-4 mb-2 text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                      text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
         >

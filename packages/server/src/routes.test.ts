@@ -464,12 +464,15 @@ describe('Meeting REST routes', () => {
       return meeting.id;
     }
 
-    async function importAgenda(meetingId: string, body: string) {
+    async function importAgenda(meetingId: string, body: string, options: { slotIntoSessions?: boolean } = {}) {
       fixtureBody = body;
       const res = await fetch(`${baseUrl}/api/meetings/${meetingId}/import-agenda`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: fixtureUrl }),
+        body: JSON.stringify({
+          url: fixtureUrl,
+          ...(options.slotIntoSessions ? { slotIntoSessions: true } : {}),
+        }),
       });
       return res;
     }
@@ -745,6 +748,200 @@ describe('Meeting REST routes', () => {
       const secondKey = meeting.agenda[1].presenterIds[0];
       expect(firstKey).toBe(secondKey);
       expect(meeting.users[firstKey].avatarUrl).not.toBe('');
+    });
+
+    it('slots imported items into sessions with available capacity without reordering existing entries', async () => {
+      const meetingId = createMeetingWith();
+      manager.addSession(meetingId, 'Morning', 60);
+      manager.addAgendaItem(meetingId, 'Existing', [TEST_USER], 40);
+      manager.addSession(meetingId, 'Afternoon', 30);
+
+      const md = [
+        '## Agenda Items',
+        '',
+        '1. Fits morning (15m)',
+        '1. Fits afternoon (10m)',
+        '1. Too big for afternoon (35m)',
+      ].join('\n');
+
+      const res = await importAgenda(meetingId, md, { slotIntoSessions: true });
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda.map((entry: { kind: string; name: string }) => `${entry.kind}:${entry.name}`)).toEqual([
+        'session:Morning',
+        'item:Existing',
+        'item:Fits morning',
+        'session:Afternoon',
+        'item:Fits afternoon',
+        'item:Too big for afternoon',
+      ]);
+    });
+  });
+
+  describe('POST /api/meetings/:id/import-agenda-file', () => {
+    function createMeetingWith(extraUsers: User[] = []): string {
+      const meeting = manager.create([TEST_USER, ...extraUsers]);
+      manager.updateChairs(meeting.id, [TEST_USER]);
+      return meeting.id;
+    }
+
+    async function importAgendaFile(meetingId: string, source: string) {
+      return fetch(`${baseUrl}/api/meetings/${meetingId}/import-agenda-file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source }),
+      });
+    }
+
+    async function getMeeting(meetingId: string) {
+      const res = await fetch(`${baseUrl}/api/meetings/${meetingId}`);
+      expect(res.status).toBe(200);
+      return res.json();
+    }
+
+    function firstPresenter(
+      meeting: { agenda: { presenterIds: string[] }[]; users: Record<string, User> },
+      itemIndex: number,
+    ): User {
+      const item = meeting.agenda[itemIndex];
+      const key = item.presenterIds[0];
+      return meeting.users[key];
+    }
+
+    it('imports sessions and topics in document order', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(
+        meetingId,
+        JSON.stringify([
+          { type: 'session', name: 'Morning', capacity: 60 },
+          { type: 'topic', name: 'Welcome', presenters: ['Daniel Ehrenberg'], duration: 5 },
+          { type: 'topic', name: 'Updates', duration: 15 },
+        ]),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ imported: 2, sessions: 1 });
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda).toHaveLength(3);
+      expect(meeting.agenda[0].kind).toBe('session');
+      expect(meeting.agenda[0].name).toBe('Morning');
+      expect(meeting.agenda[1].name).toBe('Welcome');
+      expect(meeting.agenda[2].name).toBe('Updates');
+    });
+
+    it('imports a session followed by its topics in order', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(
+        meetingId,
+        JSON.stringify([
+          { type: 'session', name: 'Block A', capacity: 60 },
+          { type: 'topic', name: 'First', duration: 10 },
+          { type: 'topic', name: 'Second', duration: 20 },
+        ]),
+      );
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda.map((entry: { kind: string; name: string }) => `${entry.kind}:${entry.name}`)).toEqual([
+        'session:Block A',
+        'item:First',
+        'item:Second',
+      ]);
+      expect(meeting.agenda[0].capacity).toBe(60);
+    });
+
+    it('returns 400 for invalid agenda files', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(meetingId, JSON.stringify([{ type: 'topic', name: 'Item', extra: true }]));
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when a session omits its capacity', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(meetingId, JSON.stringify([{ type: 'session', name: 'No capacity' }]));
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for invalid JSON', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(meetingId, `export default [{ type: 'topic', name: 'Hello' }];`);
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/^Invalid JSON:/);
+    });
+
+    it('returns 413 when the file exceeds the size limit', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(meetingId, 'x'.repeat(1024 * 1024 + 1));
+      expect(res.status).toBe(413);
+    });
+
+    it('returns 404 for a soft-deleted meeting', async () => {
+      const id = createMeetingWith();
+      await manager.softDelete(id);
+
+      const res = await importAgendaFile(id, JSON.stringify([{ type: 'topic', name: 'Hello' }]));
+      expect(res.status).toBe(404);
+    });
+
+    it('appends imported entries to an existing agenda', async () => {
+      const meetingId = createMeetingWith();
+      manager.addAgendaItem(meetingId, 'Existing item', [TEST_USER]);
+
+      const res = await importAgendaFile(
+        meetingId,
+        JSON.stringify([{ type: 'topic', name: 'Imported', duration: 10 }]),
+      );
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda).toHaveLength(2);
+      expect(meeting.agenda[0].name).toBe('Existing item');
+      expect(meeting.agenda[1].name).toBe('Imported');
+      expect(meeting.agenda[1].duration).toBe(10);
+    });
+
+    it('resolves a unique tier-2 (DEV_USERS) presenter name to the real user', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(
+        meetingId,
+        JSON.stringify([{ type: 'topic', name: 'Temporal Update', presenters: ['Daniel Ehrenberg'], duration: 30 }]),
+      );
+      expect(res.status).toBe(200);
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda).toHaveLength(1);
+      const presenter = firstPresenter(meeting, 0);
+      expect(presenter.avatarUrl).not.toBe('');
+      expect(presenter.handle).toBe('littledan');
+      expect(presenter.name).toBe('Daniel Ehrenberg');
+    });
+
+    it('re-imports a document in the shape the client export produces', async () => {
+      const meetingId = createMeetingWith();
+      // Mirrors serializeAgenda's output (packages/client/src/lib/agendaExport.ts):
+      // a flat array with `capacity` on sessions and `presenters`/`duration` on topics.
+      const exported = [
+        { type: 'session', name: 'Morning', capacity: 90 },
+        { type: 'topic', name: 'Welcome', presenters: ['Daniel Ehrenberg'], duration: 5 },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
+        { type: 'topic', name: 'Wrap up' },
+      ];
+      const res = await importAgendaFile(meetingId, JSON.stringify(exported));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ imported: 2, sessions: 2 });
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda.map((entry: { kind: string; name: string }) => `${entry.kind}:${entry.name}`)).toEqual([
+        'session:Morning',
+        'item:Welcome',
+        'session:Afternoon',
+        'item:Wrap up',
+      ]);
+      expect(meeting.agenda[0].capacity).toBe(90);
+      expect(meeting.agenda[2].capacity).toBe(120);
     });
   });
 

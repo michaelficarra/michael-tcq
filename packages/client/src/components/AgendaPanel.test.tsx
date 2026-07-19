@@ -890,6 +890,190 @@ describe('AgendaPanel', () => {
     });
   });
 
+  describe('agenda file import', () => {
+    const chairMeeting = () =>
+      makeMeeting({ id: 'meet-123', users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
+
+    it('shows import controls when the agenda already has items', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
+        agenda: [{ kind: 'item', id: '1', name: 'Existing', presenterIds: ['github:alice'] }],
+      });
+      renderAgenda(meeting, chairUser);
+
+      expect(screen.getByRole('button', { name: 'Import Agenda from URL' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Import from File' })).toBeInTheDocument();
+    });
+
+    it('posts file source to import-agenda-file on success', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1, sessions: 0 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+
+        const source = JSON.stringify([{ type: 'topic', name: 'Imported' }]);
+        const file = new File([source], 'agenda.json', { type: 'application/json' });
+        const input = screen.getByLabelText('Agenda file');
+
+        await act(async () => {
+          fireEvent.change(input, { target: { files: [file] } });
+        });
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('shows an error alert when file import fails', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ error: 'Invalid agenda file' }, { status: 400 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+
+        const file = new File(['[]'], 'agenda.json', { type: 'application/json' });
+        await act(async () => {
+          fireEvent.change(screen.getByLabelText('Agenda file'), { target: { files: [file] } });
+          await Promise.resolve();
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Invalid agenda file');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  describe('agenda URL import', () => {
+    const chairMeeting = () =>
+      makeMeeting({ id: 'meet-123', users: { 'github:alice': chairUser }, chairIds: ['github:alice'] });
+
+    it('posts slotIntoSessions when the checkbox is checked', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1 }, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Import Agenda from URL' }));
+        fireEvent.change(screen.getByLabelText('Agenda markdown URL'), {
+          target: { value: 'https://github.com/tc39/agendas/blob/main/2026/03.md' },
+        });
+        fireEvent.click(screen.getByLabelText('Slot into sessions with available capacity'));
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: 'https://github.com/tc39/agendas/blob/main/2026/03.md',
+            slotIntoSessions: true,
+          }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('omits slotIntoSessions from the request when the checkbox is unchecked', async () => {
+      const fetchMock = vi.fn(async () => Response.json({ imported: 1 }, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        renderAgenda(chairMeeting(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Import Agenda from URL' }));
+        fireEvent.change(screen.getByLabelText('Agenda markdown URL'), {
+          target: { value: 'https://github.com/tc39/agendas/blob/main/2026/03.md' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/meetings/meet-123/import-agenda', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: 'https://github.com/tc39/agendas/blob/main/2026/03.md' }),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  describe('agenda export', () => {
+    const chairMeetingWithAgenda = () =>
+      makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Morning', capacity: 60 },
+          { kind: 'item', id: 'a', name: 'Welcome', presenterIds: ['github:alice'], duration: 5 },
+        ],
+      });
+
+    it('does not show Export to File when the agenda is empty', () => {
+      renderAgenda(makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] }), chairUser);
+      expect(screen.queryByRole('button', { name: 'Export to File' })).not.toBeInTheDocument();
+    });
+
+    it('does not show Export to File to non-chairs', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: [],
+        agenda: [{ kind: 'item', id: 'a', name: 'Welcome', presenterIds: ['github:alice'] }],
+      });
+      renderAgenda(meeting, chairUser);
+      expect(screen.queryByRole('button', { name: 'Export to File' })).not.toBeInTheDocument();
+    });
+
+    it('downloads the current agenda as a flat JSON document', async () => {
+      // jsdom implements neither URL.createObjectURL nor a navigating anchor
+      // click; stub both so downloadFile runs and we can inspect the Blob.
+      let captured: Blob | undefined;
+      const originalCreate = URL.createObjectURL;
+      const originalRevoke = URL.revokeObjectURL;
+      URL.createObjectURL = vi.fn((blob: Blob) => {
+        captured = blob;
+        return 'blob:mock';
+      });
+      URL.revokeObjectURL = vi.fn();
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+      try {
+        renderAgenda(chairMeetingWithAgenda(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Export to File' }));
+
+        expect(clickSpy).toHaveBeenCalledTimes(1);
+        expect(captured).toBeInstanceOf(Blob);
+        expect(captured?.type).toBe('application/json');
+        expect(JSON.parse(await captured!.text())).toEqual([
+          { type: 'session', name: 'Morning', capacity: 60 },
+          { type: 'topic', name: 'Welcome', presenters: ['Alice'], duration: 5 },
+        ]);
+      } finally {
+        clickSpy.mockRestore();
+        URL.createObjectURL = originalCreate;
+        URL.revokeObjectURL = originalRevoke;
+      }
+    });
+  });
+
   describe('prologue / epilogue', () => {
     function makeChairMeeting(overrides: Partial<MeetingState> = {}) {
       return makeMeeting({

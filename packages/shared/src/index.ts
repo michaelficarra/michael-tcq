@@ -52,6 +52,7 @@ export type {
   UserSelection,
   SwitchUserBody,
   ImportAgendaBody,
+  ImportAgendaFileBody,
   PremiumUser,
   PremiumUserBody,
   PremiumUsersResponse,
@@ -97,6 +98,7 @@ export {
   UserSelectionSchema,
   SwitchUserBodySchema,
   ImportAgendaBodySchema,
+  ImportAgendaFileBodySchema,
   PremiumUserBodySchema,
 } from './messages.js';
 export type { AppSettings } from './appSettings.js';
