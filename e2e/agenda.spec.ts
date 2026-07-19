@@ -682,8 +682,8 @@ test.describe('Agenda tab', () => {
       await goToAgendaTab(page);
 
       const agendaJson = JSON.stringify([
-        { type: 'topic', name: 'Imported topic', timebox: 10 },
-        { type: 'topic', name: 'Second import', timebox: 5 },
+        { type: 'topic', name: 'Imported topic', duration: 10 },
+        { type: 'topic', name: 'Second import', duration: 5 },
       ]);
 
       await page.getByLabel('Agenda file').setInputFiles({
@@ -696,6 +696,44 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.getByText('Imported topic')).toBeVisible({ timeout: 15_000 });
       await expect(agendaPanel.getByText('Second import')).toBeVisible();
       await expect(agendaPanel.getByText('10m', { exact: true })).toBeVisible();
+    });
+
+    test('chair exports the agenda to a flat JSON file that round-trips', async ({ page }) => {
+      await createMeeting(page);
+      await goToAgendaTab(page);
+
+      // Seed an agenda by importing a flat document, then export it back out.
+      const agendaJson = JSON.stringify([
+        { type: 'session', name: 'Morning', capacity: 60 },
+        { type: 'topic', name: 'Welcome', duration: 5 },
+        { type: 'session', name: 'Open block' },
+      ]);
+      await page.getByLabel('Agenda file').setInputFiles({
+        name: 'agenda.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(agendaJson),
+      });
+
+      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
+      await expect(agendaPanel.getByText('Welcome')).toBeVisible({ timeout: 15_000 });
+
+      // Clicking "Export to File" triggers a browser download; capture it and
+      // assert the payload is the flat session/topic array we imported.
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export to File' }).click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe('agenda.json');
+
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk as Buffer);
+      const exported = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+
+      expect(exported).toEqual([
+        { type: 'session', name: 'Morning', capacity: 60 },
+        { type: 'topic', name: 'Welcome', duration: 5 },
+        { type: 'session', name: 'Open block' },
+      ]);
     });
   });
 

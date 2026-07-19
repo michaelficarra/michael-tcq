@@ -48,6 +48,8 @@ import { useSocket } from '../contexts/SocketContext.js';
 import { useToast } from '../contexts/ToastContext.js';
 import { computeContainment } from '../lib/containment.js';
 import { inputValidation } from '../lib/inputStyles.js';
+import { serializeAgenda } from '../lib/agendaExport.js';
+import { downloadFile } from '../lib/download.js';
 import { AgendaForm } from './AgendaForm.js';
 import { SessionForm } from './SessionForm.js';
 import { useNow } from '../lib/secondClock.js';
@@ -484,6 +486,23 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
               if (file) void handleFileImport(file);
             }}
           />
+          {meeting.agenda.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                downloadFile(
+                  JSON.stringify(serializeAgenda(meeting.agenda, meeting.users), null, 2),
+                  'agenda.json',
+                  'application/json',
+                )
+              }
+              className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm font-medium
+                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors
+                         cursor-pointer"
+            >
+              Export to File
+            </button>
+          )}
         </div>
       )}
 

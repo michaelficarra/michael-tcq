@@ -69,8 +69,8 @@ export async function resolveImportedPresenters(
 
 /**
  * Append parsed import entries to a meeting's agenda. Sessions and topics
- * are added in document order; nested session topics immediately follow
- * their session header.
+ * are added in document order — the import document is flat, so entries land
+ * in exactly the order they appear.
  *
  * Items with no parsed presenters are created with an empty presenter list;
  * the chair can edit one in afterwards if desired.

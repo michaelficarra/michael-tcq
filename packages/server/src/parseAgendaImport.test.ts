@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { loadAgendaJson, parseAgendaDocument } from './parseAgendaImport.js';
 
 describe('parseAgendaDocument', () => {
-  it('parses a top-level array of topics and sessions', () => {
+  it('parses a flat top-level array of sessions and topics', () => {
     const result = parseAgendaDocument([
-      { type: 'session', name: 'Morning', timebox: 60 },
-      { type: 'topic', name: 'Welcome', presenter: 'Alice', timebox: 5 },
-      { type: 'topic', name: 'Updates', timebox: 15 },
+      { type: 'session', name: 'Morning', capacity: 60 },
+      { type: 'topic', name: 'Welcome', presenters: ['Alice'], duration: 5 },
+      { type: 'topic', name: 'Updates', duration: 15 },
     ]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -17,26 +17,13 @@ describe('parseAgendaDocument', () => {
     ]);
   });
 
-  it('accepts an object wrapper with entries', () => {
-    const result = parseAgendaDocument({
-      entries: [{ type: 'topic', name: 'Standalone' }],
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.entries).toEqual([{ kind: 'item', name: 'Standalone', presenters: [] }]);
-  });
-
-  it('flattens nested session topics immediately after the session', () => {
+  it('keeps sessions and topics in document order', () => {
     const result = parseAgendaDocument([
-      {
-        type: 'session',
-        name: 'Block A',
-        topics: [
-          { name: 'First', presenter: 'Bob', timebox: 10 },
-          { name: 'Second', timebox: 20 },
-        ],
-      },
-      { type: 'topic', name: 'After session', timebox: 5 },
+      { type: 'session', name: 'Block A' },
+      { type: 'topic', name: 'First', presenters: ['Bob'], duration: 10 },
+      { type: 'topic', name: 'Second', duration: 20 },
+      { type: 'session', name: 'Block B' },
+      { type: 'topic', name: 'After session', duration: 5 },
     ]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -44,11 +31,12 @@ describe('parseAgendaDocument', () => {
       { kind: 'session', name: 'Block A' },
       { kind: 'item', name: 'First', presenters: ['Bob'], duration: 10 },
       { kind: 'item', name: 'Second', presenters: [], duration: 20 },
+      { kind: 'session', name: 'Block B' },
       { kind: 'item', name: 'After session', presenters: [], duration: 5 },
     ]);
   });
 
-  it('leaves session capacity unset when timebox is omitted', () => {
+  it('leaves session capacity unset when omitted', () => {
     const result = parseAgendaDocument([{ type: 'session', name: 'Empty block' }]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -58,16 +46,31 @@ describe('parseAgendaDocument', () => {
     });
   });
 
-  it('accepts duration as an alias for timebox', () => {
-    const result = parseAgendaDocument([{ type: 'topic', name: 'Item', duration: 12 }]);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.entries[0]).toEqual({
-      kind: 'item',
-      name: 'Item',
-      presenters: [],
-      duration: 12,
-    });
+  it('rejects the legacy object wrapper (top-level array only)', () => {
+    const result = parseAgendaDocument({ entries: [{ type: 'topic', name: 'Standalone' }] });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects nested session topics (flat entries only)', () => {
+    const result = parseAgendaDocument([
+      { type: 'session', name: 'Block A', topics: [{ type: 'topic', name: 'First' }] },
+    ]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects the timebox alias on a session', () => {
+    const result = parseAgendaDocument([{ type: 'session', name: 'Morning', timebox: 60 }]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects the timebox alias on a topic', () => {
+    const result = parseAgendaDocument([{ type: 'topic', name: 'Item', timebox: 12 }]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects the singular presenter alias on a topic', () => {
+    const result = parseAgendaDocument([{ type: 'topic', name: 'Item', presenter: 'Alice' }]);
+    expect(result.ok).toBe(false);
   });
 
   it('rejects unknown fields', () => {
@@ -83,7 +86,7 @@ describe('parseAgendaDocument', () => {
 describe('loadAgendaJson', () => {
   it('loads a JSON array from source text', () => {
     const result = loadAgendaJson(`[
-      { "type": "topic", "name": "From file", "timebox": 10 }
+      { "type": "topic", "name": "From file", "duration": 10 }
     ]`);
     expect(result.ok).toBe(true);
     if (!result.ok) return;

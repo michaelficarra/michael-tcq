@@ -22,26 +22,20 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 
 ### Agenda and meeting structure
 
-- **Agenda import** — chairs can import an agenda from a URL to a markdown document (e.g. a TC39 meeting agenda on GitHub) or from a local `.json` file. Imports append to the existing agenda. URL import can optionally slot items into sessions that still have capacity; file import always appends in source order. The markdown parser extracts items from both numbered lists and markdown tables, preserving markdown formatting in item names.
+- **Agenda import / export** — chairs can import an agenda from a URL to a markdown document (e.g. a TC39 meeting agenda on GitHub) or from a local `.json` file, and export the current agenda back out to a `.json` file. Imports append to the existing agenda. URL import can optionally slot items into sessions that still have capacity; file import always appends in source order. The markdown parser extracts items from both numbered lists and markdown tables, preserving markdown formatting in item names. Export produces the same flat JSON format the file import accepts, so an exported agenda re-imports cleanly.
 - **Sessions** — chairs can interleave named session headers (with a capacity in minutes) among agenda items. Each session visually groups the contiguous run of items that follow it and shows used / remaining capacity, flipping to an "overflow" indicator when the run exceeds its budget.
 - **Editable chair list** — chairs can edit the list of chairs from the Agenda tab during a meeting, adding or removing others (but not themselves).
 - **Agenda item conclusions** — when advancing past an agenda item, chairs are prompted to record a free-form conclusion describing what was decided. Conclusions are saved on the item, snapshotted into the meeting log, and shown under past items in the agenda list. Revisiting a previously-concluded item pre-populates the dialogue with the saved conclusion so it can be edited or replaced.
 - **Agenda prologue and epilogue** — chairs can attach free-form, sanitised-markdown sections above and below the agenda list for welcome notes, links, action items, or post-meeting reminders.
 
-**Agenda file import (JSON)** — use **Import from File** on the Agenda tab. The file must be a JSON array, or an object with an `entries` array. Each entry is a `session` (optionally with nested `topics`) or a standalone `topic`. `timebox` and `duration` are equivalent (minutes). Presenter fields are optional; a session without a timebox is created without a capacity limit.
+**Agenda file format (JSON)** — used by both **Import from File** and **Export to File** on the Agenda tab. The document is a flat, top-level JSON array of entries that mirrors the flat agenda data model. Each entry is a `session` (with an optional `capacity` in minutes) or a `topic` (with optional `presenters` names and a `duration` in minutes); every entry needs a `name`. A session without a `capacity` has no capacity limit. There are no field aliases and no nesting — unknown fields are rejected.
 
 ```json
 [
-  {
-    "type": "session",
-    "name": "Tuesday morning",
-    "timebox": 90,
-    "topics": [
-      { "name": "Welcome", "presenter": "Chair", "timebox": 5 },
-      { "name": "Secretary's report", "presenters": ["Samina Husain"], "timebox": 15 }
-    ]
-  },
-  { "type": "topic", "name": "Temporal update", "presenter": "Philip Chimento", "timebox": 30 },
+  { "type": "session", "name": "Tuesday morning", "capacity": 90 },
+  { "type": "topic", "name": "Welcome", "presenters": ["Chair"], "duration": 5 },
+  { "type": "topic", "name": "Secretary's report", "presenters": ["Samina Husain"], "duration": 15 },
+  { "type": "topic", "name": "Temporal update", "presenters": ["Philip Chimento"], "duration": 30 },
   { "type": "session", "name": "Open-ended block" }
 ]
 ```

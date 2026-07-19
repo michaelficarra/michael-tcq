@@ -1032,6 +1032,64 @@ describe('AgendaPanel', () => {
     });
   });
 
+  describe('agenda export', () => {
+    const chairMeetingWithAgenda = () =>
+      makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: ['github:alice'],
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Morning', capacity: 60 },
+          { kind: 'item', id: 'a', name: 'Welcome', presenterIds: ['github:alice'], duration: 5 },
+        ],
+      });
+
+    it('does not show Export to File when the agenda is empty', () => {
+      renderAgenda(makeMeeting({ users: { 'github:alice': chairUser }, chairIds: ['github:alice'] }), chairUser);
+      expect(screen.queryByRole('button', { name: 'Export to File' })).not.toBeInTheDocument();
+    });
+
+    it('does not show Export to File to non-chairs', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        chairIds: [],
+        agenda: [{ kind: 'item', id: 'a', name: 'Welcome', presenterIds: ['github:alice'] }],
+      });
+      renderAgenda(meeting, chairUser);
+      expect(screen.queryByRole('button', { name: 'Export to File' })).not.toBeInTheDocument();
+    });
+
+    it('downloads the current agenda as a flat JSON document', async () => {
+      // jsdom implements neither URL.createObjectURL nor a navigating anchor
+      // click; stub both so downloadFile runs and we can inspect the Blob.
+      let captured: Blob | undefined;
+      const originalCreate = URL.createObjectURL;
+      const originalRevoke = URL.revokeObjectURL;
+      URL.createObjectURL = vi.fn((blob: Blob) => {
+        captured = blob;
+        return 'blob:mock';
+      });
+      URL.revokeObjectURL = vi.fn();
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+      try {
+        renderAgenda(chairMeetingWithAgenda(), chairUser);
+        fireEvent.click(screen.getByRole('button', { name: 'Export to File' }));
+
+        expect(clickSpy).toHaveBeenCalledTimes(1);
+        expect(captured).toBeInstanceOf(Blob);
+        expect(captured?.type).toBe('application/json');
+        expect(JSON.parse(await captured!.text())).toEqual([
+          { type: 'session', name: 'Morning', capacity: 60 },
+          { type: 'topic', name: 'Welcome', presenters: ['Alice'], duration: 5 },
+        ]);
+      } finally {
+        clickSpy.mockRestore();
+        URL.createObjectURL = originalCreate;
+        URL.revokeObjectURL = originalRevoke;
+      }
+    });
+  });
+
   describe('prologue / epilogue', () => {
     function makeChairMeeting(overrides: Partial<MeetingState> = {}) {
       return makeMeeting({

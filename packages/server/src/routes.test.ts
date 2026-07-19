@@ -814,9 +814,9 @@ describe('Meeting REST routes', () => {
       const res = await importAgendaFile(
         meetingId,
         JSON.stringify([
-          { type: 'session', name: 'Morning', timebox: 60 },
-          { type: 'topic', name: 'Welcome', presenter: 'Daniel Ehrenberg', timebox: 5 },
-          { type: 'topic', name: 'Updates', timebox: 15 },
+          { type: 'session', name: 'Morning', capacity: 60 },
+          { type: 'topic', name: 'Welcome', presenters: ['Daniel Ehrenberg'], duration: 5 },
+          { type: 'topic', name: 'Updates', duration: 15 },
         ]),
       );
       expect(res.status).toBe(200);
@@ -831,19 +831,14 @@ describe('Meeting REST routes', () => {
       expect(meeting.agenda[2].name).toBe('Updates');
     });
 
-    it('imports nested session topics immediately after the session header', async () => {
+    it('imports a capacity-less session followed by its topics in order', async () => {
       const meetingId = createMeetingWith();
       const res = await importAgendaFile(
         meetingId,
         JSON.stringify([
-          {
-            type: 'session',
-            name: 'Block A',
-            topics: [
-              { name: 'First', timebox: 10 },
-              { name: 'Second', timebox: 20 },
-            ],
-          },
+          { type: 'session', name: 'Block A' },
+          { type: 'topic', name: 'First', duration: 10 },
+          { type: 'topic', name: 'Second', duration: 20 },
         ]),
       );
       expect(res.status).toBe(200);
@@ -889,7 +884,10 @@ describe('Meeting REST routes', () => {
       const meetingId = createMeetingWith();
       manager.addAgendaItem(meetingId, 'Existing item', [TEST_USER]);
 
-      const res = await importAgendaFile(meetingId, JSON.stringify([{ type: 'topic', name: 'Imported', timebox: 10 }]));
+      const res = await importAgendaFile(
+        meetingId,
+        JSON.stringify([{ type: 'topic', name: 'Imported', duration: 10 }]),
+      );
       expect(res.status).toBe(200);
 
       const meeting = await getMeeting(meetingId);
@@ -903,7 +901,7 @@ describe('Meeting REST routes', () => {
       const meetingId = createMeetingWith();
       const res = await importAgendaFile(
         meetingId,
-        JSON.stringify([{ type: 'topic', name: 'Temporal Update', presenter: 'Daniel Ehrenberg', timebox: 30 }]),
+        JSON.stringify([{ type: 'topic', name: 'Temporal Update', presenters: ['Daniel Ehrenberg'], duration: 30 }]),
       );
       expect(res.status).toBe(200);
 
@@ -913,6 +911,31 @@ describe('Meeting REST routes', () => {
       expect(presenter.avatarUrl).not.toBe('');
       expect(presenter.handle).toBe('littledan');
       expect(presenter.name).toBe('Daniel Ehrenberg');
+    });
+
+    it('re-imports a document in the shape the client export produces', async () => {
+      const meetingId = createMeetingWith();
+      // Mirrors serializeAgenda's output (packages/client/src/lib/agendaExport.ts):
+      // a flat array with `capacity` on sessions and `presenters`/`duration` on topics.
+      const exported = [
+        { type: 'session', name: 'Morning', capacity: 90 },
+        { type: 'topic', name: 'Welcome', presenters: ['Daniel Ehrenberg'], duration: 5 },
+        { type: 'session', name: 'Open-ended block' },
+        { type: 'topic', name: 'Wrap up' },
+      ];
+      const res = await importAgendaFile(meetingId, JSON.stringify(exported));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ imported: 2, sessions: 2 });
+
+      const meeting = await getMeeting(meetingId);
+      expect(meeting.agenda.map((entry: { kind: string; name: string }) => `${entry.kind}:${entry.name}`)).toEqual([
+        'session:Morning',
+        'item:Welcome',
+        'session:Open-ended block',
+        'item:Wrap up',
+      ]);
+      expect(meeting.agenda[0].capacity).toBe(90);
+      expect(meeting.agenda[2].capacity).toBeUndefined();
     });
   });
 
