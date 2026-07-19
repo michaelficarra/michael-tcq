@@ -725,7 +725,7 @@ export function QueuePanel({
       <dialog
         ref={advanceDialogRef}
         aria-label="Confirm agenda advancement"
-        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
                    border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
                    shadow-lg dark:shadow-stone-950/50"
       >
@@ -791,7 +791,7 @@ export function QueuePanel({
       <dialog
         ref={pollSetupDialogRef}
         aria-label="Create poll"
-        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+        className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
                    border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-left
                    shadow-lg dark:shadow-stone-950/50"
       >
@@ -807,7 +807,7 @@ export function QueuePanel({
       <dialog
         ref={activePollDialogRef}
         aria-label="Active poll"
-        className="tcq-dialog w-fit max-w-[80vw] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+        className="tcq-dialog w-fit max-w-[80vw] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
                    border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
                    shadow-lg dark:shadow-stone-950/50"
       >

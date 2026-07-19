@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { waitForHomePage, createMeeting, switchUser, goToAgendaTab, openSecondContext } from './helpers.js';
 
 test.describe('Authentication / Login', () => {
@@ -51,6 +51,98 @@ test.describe('Authentication / Login', () => {
     await page.waitForURL(`**/meeting/${encodeURIComponent(id)}`);
     // The meeting page renders (Queue tab is the default).
     await expect(page.getByRole('tab', { name: 'Queue' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+/**
+ * Regression coverage for #57 — "dual y scroll".
+ *
+ * The app is a fixed-height shell: <html>, <body> and #root are all pinned,
+ * and each page owns exactly one internal <main> scroller. When a page sized
+ * itself with `min-h-screen` (100vh) it exceeded #root's 100dvh on any browser
+ * with retracting chrome, spilled out, and produced a second document-level
+ * scrollbar alongside the inner one.
+ *
+ * jsdom performs no layout, so these invariants can only be checked in a real
+ * browser — the unit suite in packages/client/src/App.test.tsx guards the
+ * classes, and these guard the actual behaviour.
+ *
+ * Caveat worth knowing before trusting these: the 100vh/100dvh divergence
+ * itself is NOT reproducible here. It needs retracting browser chrome, which
+ * no Playwright engine emulates — headless, the two units always resolve
+ * equal. So what these cover is the *consequences* that are reproducible: the
+ * shell pins overflow so the document can never scroll, and each page keeps a
+ * working internal scroller. The "root uses h-dvh, not min-h-screen" half of
+ * the fix is guarded by the unit test instead.
+ */
+test.describe('Full-height page scrolling', () => {
+  // True when the document itself has somewhere to scroll — i.e. a
+  // document-level scrollbar, which this app must never produce.
+  const documentScrolls = (page: Page) =>
+    page.evaluate(() => {
+      const root = document.documentElement;
+      return root.scrollHeight > root.clientHeight || document.body.scrollHeight > document.body.clientHeight;
+    });
+
+  test('the shell pins overflow so the document can never scroll', async ({ page }) => {
+    await page.goto('/auth/logout');
+    await page.waitForURL('/');
+    await page.setViewportSize({ width: 600, height: 400 });
+    await expect(page.getByText('Welcome to TCQ')).toBeVisible();
+
+    // Previously <html> set only `overflow-x: hidden`, leaving overflow-y at
+    // `visible` — which the spec then computes to `auto`, making the document
+    // a scroll container and letting any spill become a second scrollbar.
+    // All three levels must now be pinned on both axes.
+    const overflow = await page.evaluate(() => {
+      const read = (el: Element) => {
+        const s = getComputedStyle(el);
+        return `${s.overflowX}/${s.overflowY}`;
+      };
+      return {
+        html: read(document.documentElement),
+        body: read(document.body),
+        root: read(document.getElementById('root')!),
+      };
+    });
+    expect(overflow).toEqual({ html: 'hidden/hidden', body: 'hidden/hidden', root: 'hidden/hidden' });
+
+    expect(await documentScrolls(page)).toBe(false);
+  });
+
+  test('the login card stays reachable when it overflows a short viewport', async ({ page }) => {
+    await page.goto('/auth/logout');
+    await page.waitForURL('/');
+    // Short enough that the card genuinely exceeds the available height, so
+    // the internal scroller has to engage.
+    await page.setViewportSize({ width: 600, height: 200 });
+    await expect(page.getByText('Welcome to TCQ')).toBeVisible();
+
+    const main = page.getByRole('main');
+    // The <main> — not the document — absorbs the overflow.
+    const overflows = await main.evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(overflows).toBe(true);
+    expect(await documentScrolls(page)).toBe(false);
+
+    // And the overflow is actually reachable. This is what `m-auto` buys over
+    // `justify-center`, which would strand the top of the card above the
+    // scrollport's origin where scrollTop can never reach it.
+    const scrolledTo = await main.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    expect(scrolledTo).toBeGreaterThan(0);
+    // The sign-in button is the bottom-most content — scrolling must expose it.
+    await expect(page.getByRole('link', { name: 'Enter dev mode' })).toBeInViewport();
+  });
+
+  test('the home page does not produce a document-level scrollbar', async ({ page }) => {
+    // Same shell invariant on an authenticated route.
+    await waitForHomePage(page);
+    await page.setViewportSize({ width: 600, height: 400 });
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
+
+    expect(await documentScrolls(page)).toBe(false);
   });
 });
 

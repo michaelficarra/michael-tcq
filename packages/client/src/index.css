@@ -24,8 +24,16 @@
   accent-color: var(--color-teal-500);
 }
 
-html {
-  overflow-x: hidden;
+/*
+ * The app is a fixed-height shell: the document itself must never scroll —
+ * each page owns a single internal `<main>` scroller instead. Pinning overflow
+ * here (rather than leaving <html> at the UA default) is what stops a page that
+ * overflows #root from producing a second, document-level scrollbar.
+ */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -38,6 +46,7 @@ abbr {
 
 #root {
   height: 100dvh;
+  overflow: hidden;
   background-color: var(--color-white);
 }
 

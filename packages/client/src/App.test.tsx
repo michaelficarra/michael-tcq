@@ -90,6 +90,25 @@ describe('LoginPage', () => {
     expect(screen.getByText('TCQ')).toBeInTheDocument();
   });
 
+  it('sizes its shell to the dynamic viewport and scrolls internally', () => {
+    // Regression (#57): the page root used `min-h-screen` (100vh), which on
+    // mobile exceeds #root's 100dvh and spills out into a second,
+    // document-level scrollbar. The shell must track the *visible* viewport
+    // and keep its own scroller so the document never scrolls.
+    // jsdom does no layout, so this can only assert the classes; the real
+    // no-double-scrollbar behaviour is covered in e2e/auth-and-home.spec.ts.
+    const { container } = renderAt('/');
+
+    const shell = container.firstElementChild!;
+    expect(shell).toHaveClass('h-dvh');
+    expect(shell).not.toHaveClass('min-h-screen');
+
+    // `min-h-0` is what lets the flex child actually shrink below its content
+    // size — without it `overflow-y-auto` never engages.
+    const main = screen.getByRole('main');
+    expect(main).toHaveClass('overflow-y-auto', 'min-h-0');
+  });
+
   it('renders a "Sign in with GitHub" link without returnTo on the root path', async () => {
     // The login page renders a button per configured provider, fetched
     // from /api/auth/providers.

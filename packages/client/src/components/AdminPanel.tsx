@@ -186,7 +186,7 @@ export function AdminPanel({ refreshTick }: { refreshTick: number }) {
       <dialog
         ref={deleteDialogRef}
         aria-label="Confirm deletion"
-        className="tcq-dialog w-[min(24rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg
+        className="tcq-dialog w-[min(24rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
                    border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-6 text-left
                    shadow-lg dark:shadow-stone-950/50"
       >

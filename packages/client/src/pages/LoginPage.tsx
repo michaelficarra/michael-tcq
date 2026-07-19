@@ -117,13 +117,21 @@ export function LoginPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100 flex flex-col">
-      <header className="border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-6 py-3">
+    <div className="h-dvh bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100 flex flex-col">
+      <header className="shrink-0 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-6 py-3">
         <Logo className="text-2xl" />
       </header>
 
-      <main className="flex-1 flex items-center justify-center">
-        <div className="text-center">
+      {/*
+       * The page's single scroll container. The card is centred with `m-auto`
+       * rather than `justify-center`: in a scroll container, centring via
+       * justify-content pushes overflow above the scrollport's origin, where
+       * scrolling can't reach it. Auto margins collapse to 0 once free space
+       * runs out, so centring degrades into top-alignment and the whole card
+       * stays reachable on a short viewport.
+       */}
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+        <div className="text-center m-auto px-6 py-8">
           <h1 className="text-2xl font-semibold text-stone-800 dark:text-stone-200 mb-2">Welcome to TCQ</h1>
           <p className="text-stone-500 dark:text-stone-400 mb-6">A structured meeting discussion queue.</p>
           <div className="flex flex-col items-stretch gap-3">

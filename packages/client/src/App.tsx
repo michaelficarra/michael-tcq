@@ -17,7 +17,7 @@ const MeetingPage = lazy(() => import('./pages/MeetingPage.js').then((m) => ({ d
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+    <div className="h-dvh bg-stone-50 dark:bg-stone-900 flex items-center justify-center">
       <p className="text-stone-400">Loading&hellip;</p>
     </div>
   );
