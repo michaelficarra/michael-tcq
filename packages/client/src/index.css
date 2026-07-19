@@ -25,12 +25,11 @@
 }
 
 html {
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
-  overflow: hidden;
 }
 
 abbr {
@@ -39,7 +38,6 @@ abbr {
 
 #root {
   height: 100dvh;
-  overflow: hidden;
   background-color: var(--color-white);
 }
 
