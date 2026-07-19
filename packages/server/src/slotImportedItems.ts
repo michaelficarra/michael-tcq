@@ -7,7 +7,7 @@ import type { MeetingManager } from './meetings.js';
 /** Mutable placement state for one session header's contiguous run. */
 export interface SessionSlotState {
   sessionId: string;
-  /** Minutes of capacity left in this session's run (Infinity when unset). */
+  /** Minutes of capacity left in this session's run. */
   remaining: number;
   /** Agenda entry id after which the next slotted item should be inserted. */
   insertAfterId: string;
@@ -23,11 +23,11 @@ export function buildSessionSlotStates(agenda: AgendaEntry[]): SessionSlotState[
   const slots: SessionSlotState[] = [];
   let current: SessionSlotState | null = null;
   let runTotal = 0;
-  let capacity = Number.POSITIVE_INFINITY;
+  let capacity = 0;
 
   for (const entry of agenda) {
     if (isSession(entry)) {
-      capacity = entry.capacity ?? Number.POSITIVE_INFINITY;
+      capacity = entry.capacity;
       current = {
         sessionId: entry.id,
         remaining: capacity,
@@ -37,9 +37,7 @@ export function buildSessionSlotStates(agenda: AgendaEntry[]): SessionSlotState[
       runTotal = 0;
     } else if (isAgendaItem(entry) && current) {
       runTotal += entry.duration ?? 0;
-      if (capacity !== Number.POSITIVE_INFINITY) {
-        current.remaining = capacity - runTotal;
-      }
+      current.remaining = capacity - runTotal;
       current.insertAfterId = entry.id;
     }
   }
@@ -99,9 +97,7 @@ export function applyUrlImport(
     if (slot) {
       meetingManager.reorderAgendaItem(meetingId, created.id, slot.insertAfterId);
       slot.insertAfterId = created.id;
-      if (slot.remaining !== Number.POSITIVE_INFINITY) {
-        slot.remaining -= duration;
-      }
+      slot.remaining -= duration;
     } else if (tailAfterId !== null) {
       meetingManager.reorderAgendaItem(meetingId, created.id, tailAfterId);
     }

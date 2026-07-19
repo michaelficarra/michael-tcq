@@ -19,31 +19,26 @@ describe('parseAgendaDocument', () => {
 
   it('keeps sessions and topics in document order', () => {
     const result = parseAgendaDocument([
-      { type: 'session', name: 'Block A' },
+      { type: 'session', name: 'Block A', capacity: 30 },
       { type: 'topic', name: 'First', presenters: ['Bob'], duration: 10 },
       { type: 'topic', name: 'Second', duration: 20 },
-      { type: 'session', name: 'Block B' },
+      { type: 'session', name: 'Block B', capacity: 45 },
       { type: 'topic', name: 'After session', duration: 5 },
     ]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.entries).toEqual([
-      { kind: 'session', name: 'Block A' },
+      { kind: 'session', name: 'Block A', capacity: 30 },
       { kind: 'item', name: 'First', presenters: ['Bob'], duration: 10 },
       { kind: 'item', name: 'Second', presenters: [], duration: 20 },
-      { kind: 'session', name: 'Block B' },
+      { kind: 'session', name: 'Block B', capacity: 45 },
       { kind: 'item', name: 'After session', presenters: [], duration: 5 },
     ]);
   });
 
-  it('leaves session capacity unset when omitted', () => {
-    const result = parseAgendaDocument([{ type: 'session', name: 'Empty block' }]);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.entries[0]).toEqual({
-      kind: 'session',
-      name: 'Empty block',
-    });
+  it('rejects a session without a capacity', () => {
+    const result = parseAgendaDocument([{ type: 'session', name: 'No capacity' }]);
+    expect(result.ok).toBe(false);
   });
 
   it('rejects the legacy object wrapper (top-level array only)', () => {

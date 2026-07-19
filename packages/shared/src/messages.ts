@@ -351,12 +351,11 @@ export type SessionAddPayload = z.infer<typeof SessionAddPayloadSchema>;
 /**
  * Payload for editing an existing session header (chair only). All fields
  * are optional; omitted fields leave that attribute unchanged.
- * Pass `capacity: null` to clear capacity.
  */
 export const SessionEditPayloadSchema = z.object({
   id: z.string(),
   name: optionalMarkdownString('Session name'),
-  capacity: z.number().int().positive().nullable().optional(),
+  capacity: z.number().int().positive().optional(),
 });
 export type SessionEditPayload = z.infer<typeof SessionEditPayloadSchema>;
 

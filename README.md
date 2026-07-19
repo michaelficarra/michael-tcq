@@ -28,7 +28,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
 - **Agenda item conclusions** — when advancing past an agenda item, chairs are prompted to record a free-form conclusion describing what was decided. Conclusions are saved on the item, snapshotted into the meeting log, and shown under past items in the agenda list. Revisiting a previously-concluded item pre-populates the dialogue with the saved conclusion so it can be edited or replaced.
 - **Agenda prologue and epilogue** — chairs can attach free-form, sanitised-markdown sections above and below the agenda list for welcome notes, links, action items, or post-meeting reminders.
 
-**Agenda file format (JSON)** — used by both **Import from File** and **Export to File** on the Agenda tab. The document is a flat, top-level JSON array of entries that mirrors the flat agenda data model. Each entry is a `session` (with an optional `capacity` in minutes) or a `topic` (with optional `presenters` names and a `duration` in minutes); every entry needs a `name`. A session without a `capacity` has no capacity limit. There are no field aliases and no nesting — unknown fields are rejected.
+**Agenda file format (JSON)** — used by both **Import from File** and **Export to File** on the Agenda tab. The document is a flat, top-level JSON array of entries that mirrors the flat agenda data model. Each entry is a `session` (with a `capacity` in minutes) or a `topic` (with optional `presenters` names and a `duration` in minutes); every entry needs a `name`. There are no field aliases and no nesting — unknown fields are rejected.
 
 ```json
 [
@@ -36,7 +36,7 @@ This project is a clean-room reimplementation inspired by [the original TCQ](htt
   { "type": "topic", "name": "Welcome", "presenters": ["Chair"], "duration": 5 },
   { "type": "topic", "name": "Secretary's report", "presenters": ["Samina Husain"], "duration": 15 },
   { "type": "topic", "name": "Temporal update", "presenters": ["Philip Chimento"], "duration": 30 },
-  { "type": "session", "name": "Open-ended block" }
+  { "type": "session", "name": "Afternoon", "capacity": 120 }
 ]
 ```
 

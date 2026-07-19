@@ -601,34 +601,6 @@ test.describe('Agenda tab', () => {
       await expect(agendaPanel.locator('li', { hasText: 'Afternoon' })).toContainText('capacity 1h 30m');
       await expect(agendaPanel.getByText('Morning')).not.toBeVisible();
     });
-
-    test('clearing the capacity field on edit removes capacity stats from the session header', async ({ page }) => {
-      await createMeeting(page);
-      await goToAgendaTab(page);
-
-      await page.getByRole('button', { name: 'New Session' }).click();
-      await page.getByLabel('Session Name').fill('Morning');
-      await page.getByLabel('Capacity').fill('45');
-      await page.getByRole('button', { name: 'Create' }).click();
-
-      await addAgendaItem(page, 'First item', undefined, 15);
-
-      const agendaPanel = page.getByRole('tabpanel', { name: 'Agenda' });
-      const sessionRow = agendaPanel.locator('li', { hasText: 'Morning' });
-      await expect(sessionRow).toContainText('capacity 45m');
-      await expect(sessionRow).toContainText('used 15m');
-      await expect(sessionRow).toContainText('remaining 30m');
-
-      await page.getByRole('button', { name: 'Edit session Morning' }).click();
-      await page.getByLabel('Session capacity in minutes').fill('');
-      await page.getByRole('button', { name: 'Save', exact: true }).click();
-
-      await expect(sessionRow).toBeVisible();
-      await expect(sessionRow).not.toContainText(/capacity/i);
-      await expect(sessionRow).not.toContainText(/remaining/i);
-      await expect(sessionRow).not.toContainText(/used/i);
-      await expect(sessionRow).not.toContainText(/overflow/i);
-    });
   });
 
   test.describe('Agenda import', () => {
@@ -706,7 +678,7 @@ test.describe('Agenda tab', () => {
       const agendaJson = JSON.stringify([
         { type: 'session', name: 'Morning', capacity: 60 },
         { type: 'topic', name: 'Welcome', duration: 5 },
-        { type: 'session', name: 'Open block' },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
       ]);
       await page.getByLabel('Agenda file').setInputFiles({
         name: 'agenda.json',
@@ -732,7 +704,7 @@ test.describe('Agenda tab', () => {
       expect(exported).toEqual([
         { type: 'session', name: 'Morning', capacity: 60 },
         { type: 'topic', name: 'Welcome', duration: 5 },
-        { type: 'session', name: 'Open block' },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
       ]);
     });
   });

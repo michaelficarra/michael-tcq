@@ -592,7 +592,7 @@ export class MeetingManager {
    * list; callers reposition it via `reorderAgendaItem`. Returns the
    * created session, or null if the meeting doesn't exist.
    */
-  addSession(meetingId: string, name: string, capacity?: number): Session | null {
+  addSession(meetingId: string, name: string, capacity: number): Session | null {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return null;
 
@@ -600,7 +600,7 @@ export class MeetingManager {
       kind: 'session',
       id: randomUUID(),
       name,
-      ...(capacity !== undefined ? { capacity } : {}),
+      capacity,
     };
 
     meeting.agenda.push(session);
@@ -612,7 +612,7 @@ export class MeetingManager {
    * Edit an existing session header. Only the provided fields are updated.
    * Returns true if the session was found and updated.
    */
-  editSession(meetingId: string, sessionId: string, updates: { name?: string; capacity?: number | null }): boolean {
+  editSession(meetingId: string, sessionId: string, updates: { name?: string; capacity?: number }): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
@@ -620,11 +620,7 @@ export class MeetingManager {
     if (!session) return false;
 
     if (updates.name !== undefined) session.name = updates.name;
-    if (updates.capacity === null) {
-      delete session.capacity;
-    } else if (updates.capacity !== undefined) {
-      session.capacity = updates.capacity;
-    }
+    if (updates.capacity !== undefined) session.capacity = updates.capacity;
 
     this.markDirty(meetingId);
     return true;

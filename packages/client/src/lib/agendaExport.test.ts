@@ -21,7 +21,7 @@ describe('serializeAgenda', () => {
       users: { [userKey(alice)]: alice, [userKey(bob)]: bob },
       agenda: [
         { kind: 'session', id: 's1', name: 'Morning', capacity: 60 },
-        { kind: 'session', id: 's2', name: 'Open block' },
+        { kind: 'session', id: 's2', name: 'Afternoon', capacity: 120 },
         { kind: 'item', id: 'a', name: 'Welcome', presenterIds: [userKey(alice)], duration: 5 },
         { kind: 'item', id: 'b', name: 'Two presenters', presenterIds: [userKey(alice), userKey(bob)] },
         { kind: 'item', id: 'c', name: 'No presenter', presenterIds: [] },
@@ -30,7 +30,7 @@ describe('serializeAgenda', () => {
 
     expect(serializeAgenda(meeting.agenda, meeting.users)).toEqual([
       { type: 'session', name: 'Morning', capacity: 60 },
-      { type: 'session', name: 'Open block' },
+      { type: 'session', name: 'Afternoon', capacity: 120 },
       { type: 'topic', name: 'Welcome', presenters: ['Alice Anderson'], duration: 5 },
       { type: 'topic', name: 'Two presenters', presenters: ['Alice Anderson', 'Bob the Builder'] },
       { type: 'topic', name: 'No presenter' },

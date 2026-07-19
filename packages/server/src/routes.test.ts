@@ -831,12 +831,12 @@ describe('Meeting REST routes', () => {
       expect(meeting.agenda[2].name).toBe('Updates');
     });
 
-    it('imports a capacity-less session followed by its topics in order', async () => {
+    it('imports a session followed by its topics in order', async () => {
       const meetingId = createMeetingWith();
       const res = await importAgendaFile(
         meetingId,
         JSON.stringify([
-          { type: 'session', name: 'Block A' },
+          { type: 'session', name: 'Block A', capacity: 60 },
           { type: 'topic', name: 'First', duration: 10 },
           { type: 'topic', name: 'Second', duration: 20 },
         ]),
@@ -849,12 +849,18 @@ describe('Meeting REST routes', () => {
         'item:First',
         'item:Second',
       ]);
-      expect(meeting.agenda[0].capacity).toBeUndefined();
+      expect(meeting.agenda[0].capacity).toBe(60);
     });
 
     it('returns 400 for invalid agenda files', async () => {
       const meetingId = createMeetingWith();
       const res = await importAgendaFile(meetingId, JSON.stringify([{ type: 'topic', name: 'Item', extra: true }]));
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when a session omits its capacity', async () => {
+      const meetingId = createMeetingWith();
+      const res = await importAgendaFile(meetingId, JSON.stringify([{ type: 'session', name: 'No capacity' }]));
       expect(res.status).toBe(400);
     });
 
@@ -920,7 +926,7 @@ describe('Meeting REST routes', () => {
       const exported = [
         { type: 'session', name: 'Morning', capacity: 90 },
         { type: 'topic', name: 'Welcome', presenters: ['Daniel Ehrenberg'], duration: 5 },
-        { type: 'session', name: 'Open-ended block' },
+        { type: 'session', name: 'Afternoon', capacity: 120 },
         { type: 'topic', name: 'Wrap up' },
       ];
       const res = await importAgendaFile(meetingId, JSON.stringify(exported));
@@ -931,11 +937,11 @@ describe('Meeting REST routes', () => {
       expect(meeting.agenda.map((entry: { kind: string; name: string }) => `${entry.kind}:${entry.name}`)).toEqual([
         'session:Morning',
         'item:Welcome',
-        'session:Open-ended block',
+        'session:Afternoon',
         'item:Wrap up',
       ]);
       expect(meeting.agenda[0].capacity).toBe(90);
-      expect(meeting.agenda[2].capacity).toBeUndefined();
+      expect(meeting.agenda[2].capacity).toBe(120);
     });
   });
 

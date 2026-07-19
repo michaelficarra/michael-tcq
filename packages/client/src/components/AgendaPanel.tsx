@@ -891,35 +891,22 @@ const SortableSession = memo(function SortableSession({
 
   function startEditing() {
     setEditName(session.name);
-    setEditCapacity(session.capacity != null ? String(session.capacity) : '');
+    setEditCapacity(String(session.capacity));
     setEditing(true);
   }
 
   function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmedName = editName.trim();
-    const trimmedCapacity = editCapacity.trim();
-    if (!trimmedName) return;
-
-    const payload: { id: string; name: string; capacity?: number | null } = {
-      id: session.id,
-      name: trimmedName,
-    };
-    if (trimmedCapacity === '') {
-      payload.capacity = null;
-    } else {
-      const parsed = parseInt(trimmedCapacity, 10);
-      if (parsed > 0) payload.capacity = parsed;
-    }
-
-    socket?.emit('session:edit', payload);
+    const capacity = parseInt(editCapacity, 10);
+    if (!trimmedName || !(capacity > 0)) return;
+    socket?.emit('session:edit', { id: session.id, name: trimmedName, capacity });
     setEditing(false);
   }
 
-  const hasCapacity = session.capacity != null;
-  const overflowing = hasCapacity && runTotal > session.capacity!;
-  const remaining = hasCapacity ? session.capacity! - used : 0;
-  const overflowAmount = hasCapacity ? runTotal - session.capacity! : 0;
+  const overflowing = runTotal > session.capacity;
+  const remaining = session.capacity - used;
+  const overflowAmount = runTotal - session.capacity;
 
   const baseClasses =
     'flex flex-wrap items-center gap-3 border-y border-stone-300 dark:border-stone-600 px-2 py-1.5 bg-stone-100 dark:bg-stone-800';
@@ -945,7 +932,7 @@ const SortableSession = memo(function SortableSession({
             onChange={(e) => setEditCapacity(e.target.value)}
             min="1"
             max="9999"
-            placeholder="min"
+            required
             aria-label="Session capacity in minutes"
             className={`border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 text-sm w-20
                        dark:bg-stone-700 dark:text-stone-100
@@ -987,28 +974,24 @@ const SortableSession = memo(function SortableSession({
       </span>
 
       <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-stone-600 dark:text-stone-400 tabular-nums">
-        {hasCapacity && (
-          <>
-            <span>
-              capacity{' '}
-              <span className="font-medium text-stone-700 dark:text-stone-300">
-                {formatShortDuration(session.capacity!)}
-              </span>
-            </span>
-            <span>
-              used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
-            </span>
-            {overflowing ? (
-              <span className="text-red-700 dark:text-red-400">
-                overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
-              </span>
-            ) : (
-              <span>
-                remaining{' '}
-                <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(remaining)}</span>
-              </span>
-            )}
-          </>
+        <span>
+          capacity{' '}
+          <span className="font-medium text-stone-700 dark:text-stone-300">
+            {formatShortDuration(session.capacity)}
+          </span>
+        </span>
+        <span>
+          used <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(used)}</span>
+        </span>
+        {overflowing ? (
+          <span className="text-red-700 dark:text-red-400">
+            overflow <span className="font-semibold">{formatShortDuration(overflowAmount)}</span>
+          </span>
+        ) : (
+          <span>
+            remaining{' '}
+            <span className="font-medium text-stone-700 dark:text-stone-300">{formatShortDuration(remaining)}</span>
+          </span>
         )}
       </span>
 

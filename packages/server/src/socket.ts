@@ -792,7 +792,7 @@ export function registerSocketHandlers(
       const parsed = parsePayload(SessionEditPayloadSchema, payload, socket);
       if (!parsed) return;
 
-      const updates: { name?: string; capacity?: number | null } = {};
+      const updates: { name?: string; capacity?: number } = {};
       if (parsed.name !== undefined) updates.name = parsed.name;
       if (parsed.capacity !== undefined) updates.capacity = parsed.capacity;
 

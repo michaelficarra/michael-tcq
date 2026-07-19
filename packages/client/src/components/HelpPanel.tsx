@@ -185,8 +185,8 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
             JSON file you can re-import. Imports append to the existing agenda. URL import can optionally slot each
             imported item into the first session with enough remaining capacity (existing entries are not reordered);
             file import always appends in source order. The markdown parser extracts items from both numbered lists and
-            markdown tables; the JSON file format is a flat array of sessions (each with an optional capacity) and
-            topics (each with optional presenters and a duration).
+            markdown tables; the JSON file format is a flat array of sessions (each with a capacity) and topics (each
+            with optional presenters and a duration).
           </p>
 
           <h4 className="font-medium text-stone-700 dark:text-stone-300 mt-4 mb-1">Grouping Items into Sessions</h4>

@@ -888,22 +888,6 @@ describe('AgendaPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /delete session block/i }));
       expect(emit).toHaveBeenCalledWith('session:delete', { id: 's1' });
     });
-
-    it('renders a session header without capacity stats when capacity is unset', () => {
-      const meeting = makeMeeting({
-        users: { 'github:alice': chairUser },
-        agenda: [
-          { kind: 'session', id: 's1', name: 'Morning' },
-          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
-        ],
-      });
-      renderAgenda(meeting);
-
-      expect(screen.getByText('Morning')).toBeInTheDocument();
-      expect(screen.queryByText(/^capacity$/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/remaining/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/overflow/i)).not.toBeInTheDocument();
-    });
   });
 
   describe('agenda file import', () => {

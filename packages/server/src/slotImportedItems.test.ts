@@ -7,8 +7,8 @@ import { buildSessionSlotStates, findSessionSlotForDuration, applyUrlImport } fr
 
 const testUser = githubUser({ id: 1, login: 'chair', name: 'Chair', organisation: '' });
 
-function session(id: string, capacity?: number): AgendaEntry {
-  return { kind: 'session', id, name: id, ...(capacity !== undefined ? { capacity } : {}) };
+function session(id: string, capacity: number): AgendaEntry {
+  return { kind: 'session', id, name: id, capacity };
 }
 
 function item(id: string, duration?: number): AgendaEntry {
@@ -21,11 +21,6 @@ describe('buildSessionSlotStates', () => {
     expect(slots).toHaveLength(1);
     expect(slots[0].remaining).toBe(20);
     expect(slots[0].insertAfterId).toBe('a');
-  });
-
-  it('treats sessions without capacity as always having room', () => {
-    const slots = buildSessionSlotStates([session('s1'), item('a', 999)]);
-    expect(slots[0].remaining).toBe(Number.POSITIVE_INFINITY);
   });
 });
 

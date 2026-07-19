@@ -5,14 +5,15 @@ const durationMinutes = z.number().int().positive();
 
 // The import document mirrors the flat agenda data model: a top-level array of
 // entries, each discriminated by `type` as either a session header or a topic.
-// There is no nesting and no field aliasing — sessions carry `capacity`, topics
-// carry `presenters` and `duration`. `.strict()` rejects unknown fields.
+// There is no nesting and no field aliasing — sessions carry a required
+// `capacity`, topics carry `presenters` and an optional `duration`. `.strict()`
+// rejects unknown fields.
 
 const importSessionSchema = z
   .object({
     type: z.literal('session'),
     name: z.string().trim().min(1, 'Session name is required'),
-    capacity: durationMinutes.optional(),
+    capacity: durationMinutes,
   })
   .strict();
 
@@ -30,7 +31,7 @@ const importEntrySchema = z.discriminatedUnion('type', [importSessionSchema, imp
 const importDocumentSchema = z.array(importEntrySchema).min(1, 'At least one entry is required');
 
 export type ParsedAgendaImportEntry =
-  | { kind: 'session'; name: string; capacity?: number }
+  | { kind: 'session'; name: string; capacity: number }
   | { kind: 'item'; name: string; presenters: string[]; duration?: number };
 
 export interface ParseAgendaImportResult {
@@ -40,7 +41,7 @@ export interface ParseAgendaImportResult {
 /** Map one validated document entry to its internal agenda representation. */
 function mapEntry(entry: z.infer<typeof importEntrySchema>): ParsedAgendaImportEntry {
   if (entry.type === 'session') {
-    return { kind: 'session', name: entry.name, ...(entry.capacity !== undefined ? { capacity: entry.capacity } : {}) };
+    return { kind: 'session', name: entry.name, capacity: entry.capacity };
   }
 
   return {
