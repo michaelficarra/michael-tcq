@@ -328,6 +328,14 @@ abbr {
     border: 0;
     padding: 0;
   }
+
+  /* The copy-confirmation tooltip (CopyButton) is a `popover="manual"` too —
+     neutralise the same UA box so the JS-measured `top`/`left` (set inline,
+     below) and the Tailwind chrome on the element win. */
+  .tcq-copied-tooltip {
+    inset: auto;
+    margin: 0;
+  }
 }
 
 /*
@@ -391,6 +399,18 @@ abbr {
   .tcq-toast {
     transition-duration: 0.01s;
   }
+}
+
+/*
+ * Copy-confirmation tooltip — the transient "Copied" / "Copy failed" popover
+ * raised by CopyButton, promoted to the top layer via `popover="manual"`. Its
+ * `top`/`left` are measured in JS and set inline from the button's rect (the
+ * top-centre); this block lifts the box fully above that point and centres it
+ * horizontally. Colour/border/padding ride on Tailwind utilities.
+ */
+.tcq-copied-tooltip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 6px));
 }
 
 /*

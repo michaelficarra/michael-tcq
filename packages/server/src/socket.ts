@@ -1427,7 +1427,7 @@ export function registerSocketHandlers(
         const participantIds = collectParticipantIds(meetingManager, meeting, outgoingStartTime);
 
         // Serialise the remaining queue if non-empty. The author ref must match
-        // what the client's "Copy queue" emits (`QueuePanel.handleCopyQueue`)
+        // what the client's "Copy Queue" emits (`QueuePanel.queueAsText`)
         // so this text round-trips through "Restore Queue": a handle when the
         // user has one, otherwise the full `provider:accountId` key (`e.userId`
         // is exactly that key). Falling back to the bare `accountId` would drop

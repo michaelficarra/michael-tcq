@@ -12,6 +12,7 @@ import {
   dragAndDrop,
   openSecondContext,
 } from './helpers.js';
+import { installClipboardMock, getClipboard } from './mocks.js';
 
 /**
  * Helper: create a meeting with one agenda item and start it.
@@ -384,6 +385,37 @@ test.describe('Copy and Restore Queue', () => {
     // Clarifying Question has higher priority, should be first
     await expect(queue.getByRole('listitem').nth(0)).toContainText('Restored question');
     await expect(queue.getByRole('listitem').nth(1)).toContainText('Restored topic');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Copy Queue — clipboard contents + confirmation feedback
+// ---------------------------------------------------------------------------
+
+test.describe('Copy Queue confirmation', () => {
+  // The clipboard mock is an addInitScript, so it must be installed *before*
+  // the page navigates in setupStartedMeeting — otherwise navigator.clipboard
+  // isn't stubbed on the loaded page and the write never resolves.
+  test.beforeEach(async ({ page }) => {
+    await installClipboardMock(page);
+    await setupStartedMeeting(page);
+  });
+
+  test('"Copy Queue" copies the queue text and shows a self-dismissing confirmation', async ({ page }) => {
+    await addQueueEntry(page, 'New Topic', 'Copy test');
+
+    await page.getByRole('button', { name: 'Copy Queue' }).click();
+
+    // A brief "Copied" tooltip confirms the write happened.
+    await expect(page.getByText('Copied')).toBeVisible();
+
+    const writes = await getClipboard(page);
+    expect(writes.length).toBeGreaterThan(0);
+    // One entry per line, "Type: topic (username)".
+    expect(writes.at(-1)!).toMatch(/^New Topic: Copy test \(.+\)$/m);
+
+    // The confirmation disappears on its own, with no dismissal action.
+    await expect(page.getByText('Copied')).toBeHidden();
   });
 });
 

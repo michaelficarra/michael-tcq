@@ -268,7 +268,7 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
           <ul className="text-sm text-stone-600 dark:text-stone-400 ml-4 mb-3 space-y-1 list-disc">
             <li>
               <strong>Copy Queue</strong> copies the queue to your clipboard in a text format (one entry per line,
-              including the author's username).
+              including the author's username), and shows a brief confirmation above the button.
             </li>
             <li>
               <strong>Restore Queue</strong> lets you paste entries in the same format to bulk-add them. Entries that
@@ -321,7 +321,8 @@ export function HelpPanel({ showChairHelp, hidden = false }: { showChairHelp: bo
               Click <strong>Start Poll</strong>. All participants see the reaction buttons and can respond.
             </li>
             <li>
-              Click <strong>Copy Results</strong> to copy a summary to your clipboard.
+              Click <strong>Copy Results</strong> to copy a summary to your clipboard; a brief confirmation appears
+              above the button.
             </li>
             <li>
               Click <strong>Stop Poll</strong> when done. The results will be recorded in the meeting log.

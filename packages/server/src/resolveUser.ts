@@ -151,7 +151,7 @@ export async function resolveHandle(
 /**
  * Resolve a queue-restore "user ref" — the text inside the trailing `(…)` of a
  * copied queue line — to a `User`. The ref is one of two shapes, mirroring how
- * `handleCopyQueue` serialises an entry's author (`user.handle ?? userKey`):
+ * `QueuePanel.queueAsText` serialises an entry's author (`user.handle ?? userKey`):
  *   - a bare GitHub handle / free-text name (no colon) — resolved via the
  *     handle path (known participant → provider handle lookup → placeholder), or
  *   - a provider-qualified `provider:accountId` key (what Copy writes for a

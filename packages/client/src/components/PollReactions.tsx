@@ -13,6 +13,7 @@ import { userKey } from '@tcq/shared';
 import { useMeetingState, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { CountUpTimer } from './CountUpTimer.js';
+import { CopyButton } from './CopyButton.js';
 
 export function PollReactions() {
   const { meeting, user } = useMeetingState();
@@ -30,11 +31,11 @@ export function PollReactions() {
   }
 
   /**
-   * Copy the poll results to the clipboard.
-   * Each option is listed on a separate line with its emoji, label,
-   * and count, sorted by count descending.
+   * The poll results as text — each option on its own line with its emoji,
+   * label, and count, sorted by count descending. Fed to {@link CopyButton},
+   * which owns the clipboard write and the "Copied" confirmation.
    */
-  function handleCopyResults() {
+  function resultsAsText(): string {
     // Build a sorted summary: count reactions per option, sort descending
     const results = poll.options
       .map((option) => {
@@ -43,11 +44,7 @@ export function PollReactions() {
       })
       .sort((a, b) => b.count - a.count);
 
-    const text = results.map((r) => `${r.emoji} ${r.label}: ${r.count}`).join('\n');
-
-    navigator.clipboard.writeText(text).catch(() => {
-      // Silently fail if clipboard access is denied
-    });
+    return results.map((r) => `${r.emoji} ${r.label}: ${r.count}`).join('\n');
   }
 
   return (
@@ -103,13 +100,13 @@ export function PollReactions() {
       {/* Chair actions — Copy Results and Stop Poll */}
       {isChair && (
         <div className="flex gap-2 mt-5 justify-center">
-          <button
-            onClick={handleCopyResults}
+          <CopyButton
+            getText={resultsAsText}
             className="border border-stone-300 dark:border-stone-600 rounded px-3 py-1 text-sm
                        text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
           >
             Copy Results
-          </button>
+          </CopyButton>
           <button
             onClick={() => socket?.emit('poll:stop')}
             className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white rounded px-3 py-1 text-sm

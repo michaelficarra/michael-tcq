@@ -49,6 +49,7 @@ import { UserBadge } from './UserBadge.js';
 import { PollReactions } from './PollReactions.js';
 const PollSetup = lazy(() => import('./PollSetup.js').then((m) => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
+import { CopyButton } from './CopyButton.js';
 import { inputValidation } from '../lib/inputStyles.js';
 
 // Stable references so useSensor's internal useMemo doesn't invalidate every render.
@@ -319,15 +320,15 @@ export function QueuePanel({
   }
 
   /**
-   * Copy the queue to the clipboard in a human-readable text format.
-   * Each line: "Type: topic (username)"
+   * The queue as human-readable text — one line per entry,
+   * "Type: topic (username)". Fed to {@link CopyButton}, which owns the
+   * clipboard write and the "Copied" confirmation.
    */
-  function handleCopyQueue() {
-    if (!meeting) return;
-    const text = queuedSpeakers
+  function queueAsText(): string {
+    if (!meeting) return '';
+    return queuedSpeakers
       .map((e) => `${entryTypeLabel(e.type)}: ${e.topic} (${meeting.users[e.userId]?.handle ?? e.userId})`)
       .join('\n');
-    navigator.clipboard.writeText(text).catch(() => {});
   }
 
   /**
@@ -631,13 +632,13 @@ export function QueuePanel({
                 </button>
               )}
               {queuedSpeakers.length > 0 && (
-                <button
-                  onClick={handleCopyQueue}
+                <CopyButton
+                  getText={queueAsText}
                   className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
                              text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
                 >
                   Copy Queue
-                </button>
+                </CopyButton>
               )}
               {/* Restoring a queue only makes sense against the agenda item it
                   was captured from, so the affordance goes away entirely while

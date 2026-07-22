@@ -336,12 +336,18 @@ test.describe('Copy Results', () => {
 
     await active.getByRole('button', { name: 'Copy Results' }).click();
 
+    // The copy is confirmed with a brief, self-dismissing "Copied" tooltip.
+    await expect(page.getByText('Copied')).toBeVisible();
+
     const writes = await getClipboard(page);
     expect(writes.length).toBeGreaterThan(0);
     const summary = writes.at(-1)!;
     // The first non-zero line should be the reacted option.
     const firstLine = summary.split('\n').find((l) => /\b1\b/.test(l));
     expect(firstLine).toMatch(/Positive/);
+
+    // …and the confirmation clears itself without any dismissal action.
+    await expect(page.getByText('Copied')).toBeHidden();
   });
 });
 

@@ -415,6 +415,8 @@ New Topic: My discussion point (alice)
 Clarifying Question: How does this work? (bob)
 ```
 
+Activating **Copy Queue** shows a brief confirmation (a small "Copied" tooltip) just above the button, which disappears on its own after a moment; if the clipboard write is denied, the confirmation instead reads "Copy failed". The same confirmation behaviour applies to every copy-to-clipboard button (see **Polls → Copy Results**).
+
 Chairs can also restore a queue by pasting entries in this format. When a line includes a trailing `(reference)`, the entry is added on behalf of that user, preserving the original author. The reference is whatever Copy emitted: a GitHub handle for GitHub users, or a provider-qualified `provider:accountId` (e.g. `google:1234…`) for users without a handle (Google, Microsoft, ORCID). It is resolved against known meeting participants (chairs, existing queue entries, agenda presenters) and the server's known-users cache; an unresolvable reference creates a placeholder user. Non-chairs cannot add entries on behalf of other users.
 
 Restore is only offered while an agenda item is current: before the meeting starts and after it has concluded the **Restore Queue** button is hidden and restore adds are rejected (see **Queue → Point of Order Only When No Agenda Item Is Current**). Copy remains available whenever there are entries to copy.
@@ -464,7 +466,7 @@ During an active poll, all participants see a modal with the poll topic (if prov
 
 ### Results
 
-Chairs see a **Copy Results** button that copies a summary to the clipboard: each option's emoji, label, and count on a separate line, sorted by count descending.
+Chairs see a **Copy Results** button that copies a summary to the clipboard: each option's emoji, label, and count on a separate line, sorted by count descending. As with **Copy Queue**, activating it shows a brief "Copied" confirmation above the button (or "Copy failed" if the clipboard write is denied).
 
 ### Termination (Chair Only)
 
