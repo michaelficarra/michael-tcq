@@ -401,6 +401,15 @@ test.describe('Agenda tab', () => {
       await expect(panel.getByText('Block')).not.toBeVisible();
       await expect(panel.getByText('Kept item')).toBeVisible();
     });
+
+    // Note on coverage: hiding the in-list overflow indicators for *past*
+    // sessions (issue #59) is verified with component tests in
+    // `AgendaPanel.test.tsx`, not here. A past session's items carry their
+    // *actual elapsed* durations rather than their estimates, so advancing a
+    // deliberately-overflowing session to conclusion (the only way to make it
+    // "past" in an e2e run) collapses its run well under capacity — the
+    // overflow simply disappears, leaving nothing to assert. The component
+    // tests build the concluded/overflowing state directly instead.
   });
 
   test.describe('Conclusions', () => {

@@ -110,3 +110,54 @@ export function computeContainment(entries: AgendaEntry[]): Containment {
 
   return { containedBy, overflowBy, overflowAmount, used, runTotal };
 }
+
+/**
+ * The set of session IDs whose entire run is in the past — the meeting has
+ * advanced beyond every item the session contains. Used to suppress the
+ * in-agenda overflow indicators (the "↓ overflow ↓" divider and the
+ * "(overflows Xm)" badge) for concluded sessions, whose overflow total is
+ * already summarised in the session header. Sessions that are *current*
+ * (the current item sits within their run) or *upcoming* (the current item
+ * precedes their run, or the meeting hasn't started) keep their indicators.
+ *
+ * `currentIndex` is the index of the current agenda item within `entries`
+ * (`-1` when there is no current item — pre-start or concluded); `isPastFinal`
+ * is true once the chair has advanced past the last item so the whole meeting
+ * is concluded and every session is therefore past.
+ *
+ * Pure, like `computeContainment` — the server doesn't model session status.
+ */
+export function computePastSessions(entries: AgendaEntry[], currentIndex: number, isPastFinal: boolean): Set<string> {
+  const past = new Set<string>();
+
+  // Concluded meeting: every existing session is behind us.
+  if (isPastFinal) {
+    for (const entry of entries) if (isSession(entry)) past.add(entry.id);
+    return past;
+  }
+  // Not started / nothing current: no session has been passed yet.
+  if (currentIndex < 0) return past;
+
+  // Walk runs, tracking the index of the last item in the active session's
+  // run. A session is past once the current item lies strictly beyond that
+  // last item; if the current item is inside the run (or the run is still
+  // open at the current item) the session is current, not past.
+  let activeSessionId: string | null = null;
+  let runEndIndex = -1;
+  const finalizeRun = () => {
+    if (activeSessionId !== null && currentIndex > runEndIndex) past.add(activeSessionId);
+  };
+
+  entries.forEach((entry, index) => {
+    if (isSession(entry)) {
+      finalizeRun();
+      activeSessionId = entry.id;
+      runEndIndex = index; // run has no items yet; extends as items follow
+    } else if (isAgendaItem(entry) && activeSessionId !== null) {
+      runEndIndex = index;
+    }
+  });
+  finalizeRun();
+
+  return past;
+}

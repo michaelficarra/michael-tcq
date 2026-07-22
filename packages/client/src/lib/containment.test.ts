@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { AgendaEntry } from '@tcq/shared';
 import { asUserKey } from '@tcq/shared';
-import { computeContainment } from './containment.js';
+import { computeContainment, computePastSessions } from './containment.js';
 
 /** Concise agenda-entry builders for test fixtures. */
 function item(id: string, duration?: number): AgendaEntry {
@@ -148,5 +148,69 @@ describe('computeContainment', () => {
     expect(containedBy.has('b')).toBe(false);
     expect(used.get('s')).toBe(15);
     expect(runTotal.get('s')).toBe(25);
+  });
+});
+
+describe('computePastSessions', () => {
+  // Fixture: two sessions, s1 covering items a,b (indices 1,2) and s2
+  // covering items c,d (indices 4,5).
+  const twoSessions: AgendaEntry[] = [
+    session('s1', 30),
+    item('a', 15),
+    item('b', 15),
+    session('s2', 30),
+    item('c', 15),
+    item('d', 15),
+  ];
+
+  it('returns an empty set for an empty agenda', () => {
+    expect(computePastSessions([], -1, false).size).toBe(0);
+  });
+
+  it('marks every session past when the meeting has concluded (past-final)', () => {
+    // currentIndex is irrelevant once isPastFinal is set.
+    const past = computePastSessions(twoSessions, -1, true);
+    expect(past).toEqual(new Set(['s1', 's2']));
+  });
+
+  it('marks no session past before the meeting starts (no current item)', () => {
+    expect(computePastSessions(twoSessions, -1, false).size).toBe(0);
+  });
+
+  it('does not mark a session past while the current item sits within its run', () => {
+    // Current item is 'b' (index 2), inside s1's run.
+    const past = computePastSessions(twoSessions, 2, false);
+    expect(past.has('s1')).toBe(false);
+    expect(past.has('s2')).toBe(false);
+  });
+
+  it('marks a session past once the current item lies beyond its whole run', () => {
+    // Current item is 'c' (index 4), in s2's run — so s1 is entirely behind us.
+    const past = computePastSessions(twoSessions, 4, false);
+    expect(past.has('s1')).toBe(true);
+    expect(past.has('s2')).toBe(false);
+  });
+
+  it('does not mark an upcoming session past when the current item precedes its run', () => {
+    // Current item is 'a' (index 1), before s2's run — s2 is upcoming.
+    const past = computePastSessions(twoSessions, 1, false);
+    expect(past.has('s1')).toBe(false);
+    expect(past.has('s2')).toBe(false);
+  });
+
+  it('treats a session as current (not past) when the current item is in its overflow tail', () => {
+    // Capacity 20 with items 15 + 15: 'a' is contained, 'b' overflows. The
+    // current item is the overflowing 'b' (index 2) — still within s's run,
+    // so the session is current and keeps its indicators.
+    const entries: AgendaEntry[] = [session('s', 20), item('a', 15), item('b', 15)];
+    expect(computePastSessions(entries, 2, false).has('s')).toBe(false);
+  });
+
+  it('marks the last session past once the meeting advances to its final overflow item', () => {
+    // Both sessions overflow; current item is the very last item (index 5),
+    // which is inside s2's run, so only s1 is past.
+    const past = computePastSessions(twoSessions, 5, false);
+    expect(past.has('s1')).toBe(true);
+    expect(past.has('s2')).toBe(false);
   });
 });

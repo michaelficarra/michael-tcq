@@ -46,7 +46,7 @@ import { formatShortDuration, isAgendaItem, isSession, userKey } from '@tcq/shar
 import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { useSocket } from '../contexts/SocketContext.js';
 import { useToast } from '../contexts/ToastContext.js';
-import { computeContainment } from '../lib/containment.js';
+import { computeContainment, computePastSessions } from '../lib/containment.js';
 import { inputValidation } from '../lib/inputStyles.js';
 import { serializeAgenda } from '../lib/agendaExport.js';
 import { downloadFile } from '../lib/download.js';
@@ -184,6 +184,14 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
   // item would not show anywhere on the agenda.
   const isPastFinal = meeting.current.agendaItemId === undefined && meeting.current.startedAt !== undefined;
 
+  // Sessions whose entire run has concluded. Their overflow is already
+  // summarised in the session header, so the in-list overflow indicators
+  // (divider + "(overflows Xm)" badge) are suppressed for them (issue #59).
+  // Computed as a plain const, not memoised: it depends on `currentIndex` /
+  // `isPastFinal` (derived after the early-return guard above) and the render
+  // already walks the agenda O(n) just below.
+  const pastSessionIds = computePastSessions(meeting.agenda, currentIndex, isPastFinal);
+
   /** Handle the end of a drag-and-drop reorder. */
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -301,9 +309,14 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
                 // The overflow header marks the boundary where the
                 // contained prefix ends and the overflow tail begins.
                 // Render it once per run, immediately before the first
-                // overflow item.
+                // overflow item — but not for past sessions, whose overflow
+                // total is already shown in the session header (issue #59).
+                // Since `isFirstOverflow={showOverflowHeader}` below, this one
+                // gate hides both the divider and the "(overflows Xm)" badge.
                 const showOverflowHeader =
-                  overflowSessionId !== undefined && overflowSessionId !== prevOverflowSessionId;
+                  overflowSessionId !== undefined &&
+                  overflowSessionId !== prevOverflowSessionId &&
+                  !pastSessionIds.has(overflowSessionId);
                 const isContained = containment.containedBy.has(entry.id);
                 const isOverflow = overflowSessionId !== undefined;
                 return (

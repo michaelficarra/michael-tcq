@@ -857,6 +857,66 @@ describe('AgendaPanel', () => {
       expect(container.querySelector('[aria-label="Overflow"]')).toBeNull();
     });
 
+    it('hides the in-list overflow indicators for a concluded (past-final) session but keeps the header count', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['github:alice'], duration: 10 },
+        ],
+        // Concluded: chair advanced past the last item, so every session is past.
+        current: { topicSpeakers: [], startedAt: '2026-04-01T10:00:00.000Z' },
+      });
+      const { container } = renderAgenda(meeting);
+
+      // The session-header overflow count still summarises the excess…
+      expect(screen.getByText(/overflow/i)).toBeInTheDocument();
+      // …but the auto-inserted divider and the per-item badge are gone.
+      expect(container.querySelector('[aria-label="Overflow"]')).toBeNull();
+      expect(screen.queryByLabelText(/overflows by/i)).toBeNull();
+    });
+
+    it('hides the in-list overflow indicators once the meeting advances past the session run', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['github:alice'], duration: 10 },
+          { kind: 'session', id: 's2', name: 'Later', capacity: 60 },
+          { kind: 'item', id: 'd', name: 'Fourth', presenterIds: ['github:alice'], duration: 5 },
+        ],
+        // Current item sits in the later session's run, so 'Tight' is fully past.
+        current: { agendaItemId: 'd', topicSpeakers: [] },
+      });
+      const { container } = renderAgenda(meeting);
+
+      expect(screen.getByText(/overflow/i)).toBeInTheDocument();
+      expect(container.querySelector('[aria-label="Overflow"]')).toBeNull();
+      expect(screen.queryByLabelText(/overflows by/i)).toBeNull();
+    });
+
+    it('keeps the in-list overflow indicators while the session is current', () => {
+      const meeting = makeMeeting({
+        users: { 'github:alice': chairUser },
+        agenda: [
+          { kind: 'session', id: 's1', name: 'Tight', capacity: 30 },
+          { kind: 'item', id: 'a', name: 'First', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'b', name: 'Second', presenterIds: ['github:alice'], duration: 15 },
+          { kind: 'item', id: 'c', name: 'Third', presenterIds: ['github:alice'], duration: 10 },
+        ],
+        // Current item is inside the run, so the session is current, not past.
+        current: { agendaItemId: 'b', topicSpeakers: [] },
+      });
+      const { container } = renderAgenda(meeting);
+
+      expect(container.querySelector('[aria-label="Overflow"]')).not.toBeNull();
+      expect(screen.getByLabelText(/overflows by/i)).toBeInTheDocument();
+    });
+
     it('numbers agenda items sequentially, skipping session headers', () => {
       const meeting = makeMeeting({
         users: { 'github:alice': chairUser },
