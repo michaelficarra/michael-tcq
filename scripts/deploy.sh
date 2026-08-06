@@ -260,6 +260,56 @@ ensure_auth() {
     echo "  gcloud auth login" >&2
     exit 1
   fi
+
+  # An ACTIVE account is not necessarily a working one: `gcloud auth list` only
+  # reads the local credential store, so a session that has aged out or hit an
+  # org reauth policy still shows up here. Force an actual token refresh.
+  #
+  # The redirections are the point, not incidental tidiness. gcloud runs its
+  # reauth challenge only when stdin and stderr are both TTYs, so muting stderr
+  # and closing stdin turns "block on a prompt" into "exit non-zero", and we get
+  # to ask the question ourselves instead of leaving the user staring at a
+  # half-rendered challenge. stdout is dropped so the token is never printed.
+  if gcloud auth print-access-token >/dev/null 2>&1 </dev/null; then
+    return 0
+  fi
+
+  echo "" >&2
+  echo "gcloud credentials for $ACTIVE_ACCOUNT need re-authentication" >&2
+  echo "(expired session, revoked grant, or an organisation reauth policy)." >&2
+  echo "" >&2
+
+  # Don't even offer when stdin isn't a terminal. `gcloud auth login` needs a
+  # browser and a human, so an unattended run (CI, cron, `< /dev/null`) can
+  # never finish it — and confirm() reads EOF as its default, which would
+  # otherwise start that unfinishable login without anyone asking for it.
+  if [ ! -t 0 ]; then
+    echo "Not running interactively — cannot re-authenticate here." >&2
+    echo "Run this and then re-invoke ./scripts/deploy.sh:" >&2
+    echo "  gcloud auth login" >&2
+    exit 1
+  fi
+
+  if ! confirm "Run 'gcloud auth login' now?" y; then
+    echo "Run this and then re-invoke ./scripts/deploy.sh:" >&2
+    echo "  gcloud auth login" >&2
+    exit 1
+  fi
+
+  # Deliberately unredirected: `auth login` needs the terminal for its browser
+  # handoff and for whatever challenge the account's reauth policy demands.
+  if ! gcloud auth login; then
+    echo "gcloud auth login failed." >&2
+    exit 1
+  fi
+
+  # Re-read the account — the login may have landed on a different one.
+  ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
+  if ! gcloud auth print-access-token >/dev/null 2>&1 </dev/null; then
+    echo "Still unable to obtain a token for ${ACTIVE_ACCOUNT:-<none>}." >&2
+    exit 1
+  fi
+  echo "Re-authenticated as $ACTIVE_ACCOUNT."
 }
 
 # ---------------------------------------------------------------------------
@@ -352,8 +402,39 @@ ensure_custom_domain() {
 # GCP provisioning (idempotent)
 # ---------------------------------------------------------------------------
 
+# Does the resource named by `gcloud "$@"` (always a `describe`) exist?
+#
+# A describe exits non-zero for two very different reasons: the resource is
+# absent, or the call never got far enough to find out (expired token, missing
+# permission, wrong project, network). The provisioning steps below are all
+# "describe, else create", so conflating the two turns a bad token into an
+# attempt to re-create infrastructure that already exists. Return 1 only for a
+# genuine not-found; anything else prints gcloud's own diagnostics and aborts.
+#
+# Capturing stderr also means it isn't a TTY, which stops gcloud from launching
+# an interactive reauth challenge here — see the note in ensure_auth.
+gcloud_exists() {
+  local err status=0
+  # `2>&1 >/dev/null`, in that order, captures stderr and discards stdout.
+  err="$(gcloud "$@" 2>&1 >/dev/null </dev/null)" || status=$?
+  if [ "$status" -eq 0 ]; then
+    return 0
+  fi
+
+  # Covers "not found", "NOT_FOUND", "was not found", "does not exist", and the
+  # "(or it may not exist)" that projects.describe returns when it won't
+  # distinguish absence from lack of access.
+  if grep -qiE 'not[ _]found|not exist|404' <<<"$err"; then
+    return 1
+  fi
+
+  echo "gcloud $* failed:" >&2
+  echo "$err" >&2
+  exit 1
+}
+
 ensure_project_exists() {
-  if ! gcloud projects describe "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+  if ! gcloud_exists projects describe "$GCP_PROJECT_ID"; then
     echo "Creating GCP project $GCP_PROJECT_ID..."
     gcloud projects create "$GCP_PROJECT_ID" --name=TCQ
   fi
@@ -361,6 +442,9 @@ ensure_project_exists() {
 }
 
 ensure_billing_linked() {
+  # Deliberately tolerant of failure, unlike the queries below: on a
+  # just-created project the Billing API may not answer yet, and an empty
+  # result correctly falls through to the account-selection menu.
   local status
   status="$(gcloud billing projects describe "$GCP_PROJECT_ID" --format='value(billingEnabled)' 2>/dev/null || echo "")"
   if [ "$status" = "True" ]; then
@@ -374,8 +458,16 @@ ensure_billing_linked() {
   echo "always-free tier (744 hours/month per region)."
   echo ""
 
-  local accounts
-  accounts="$(gcloud billing accounts list --filter=open=true --format='value(name,displayName)' 2>/dev/null || true)"
+  # `2>/dev/null || true` here would be a lie: any failure yields an empty list,
+  # and the script would then assert the one thing it cannot know — that the
+  # user has no billing accounts. Keep the failure and the empty-result cases
+  # apart, and let stderr through so gcloud explains itself.
+  local accounts accounts_status=0
+  accounts="$(gcloud billing accounts list --filter=open=true --format='value(name,displayName)')" || accounts_status=$?
+  if [ "$accounts_status" -ne 0 ]; then
+    echo "Could not list billing accounts (gcloud exited $accounts_status)." >&2
+    exit 1
+  fi
   if [ -z "$accounts" ]; then
     echo "No open billing accounts found on your gcloud account." >&2
     echo "Create one at https://console.cloud.google.com/billing, then re-run." >&2
@@ -418,8 +510,15 @@ ensure_apis() {
     logging.googleapis.com
     monitoring.googleapis.com
   )
-  local enabled
-  enabled="$(gcloud services list --enabled --project="$GCP_PROJECT_ID" --format='value(config.name)' 2>/dev/null || true)"
+  # A masked failure here reads as "nothing is enabled", which silently turns
+  # this into a blind re-enable of every API on every run — and hides whatever
+  # actually went wrong. Fail loudly instead.
+  local enabled enabled_status=0
+  enabled="$(gcloud services list --enabled --project="$GCP_PROJECT_ID" --format='value(config.name)')" || enabled_status=$?
+  if [ "$enabled_status" -ne 0 ]; then
+    echo "Could not list enabled APIs for $GCP_PROJECT_ID (gcloud exited $enabled_status)." >&2
+    exit 1
+  fi
   local to_enable=() api
   for api in "${needed[@]}"; do
     if ! grep -qx "$api" <<<"$enabled"; then
@@ -434,10 +533,9 @@ ensure_apis() {
 
 ensure_firestore() {
   local db_id="${FIRESTORE_DATABASE_ID:-(default)}"
-  if gcloud firestore databases describe \
+  if gcloud_exists firestore databases describe \
        --database="$db_id" \
-       --project="$GCP_PROJECT_ID" \
-       >/dev/null 2>&1; then
+       --project="$GCP_PROJECT_ID"; then
     return 0
   fi
   echo "Creating Firestore database '$db_id' in $GCP_REGION..."
@@ -464,8 +562,8 @@ ensure_session_ttl_policy() {
 }
 
 ensure_service_account() {
-  if ! gcloud iam service-accounts describe "$GCP_SERVICE_ACCOUNT" \
-         --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
+  if ! gcloud_exists iam service-accounts describe "$GCP_SERVICE_ACCOUNT" \
+         --project="$GCP_PROJECT_ID"; then
     echo "Creating service account tcq-vm..."
     gcloud iam service-accounts create tcq-vm \
       --display-name="TCQ VM" \
@@ -499,10 +597,9 @@ ensure_service_account() {
 }
 
 ensure_artifact_registry() {
-  if ! gcloud artifacts repositories describe tcq \
+  if ! gcloud_exists artifacts repositories describe tcq \
          --location="$GCP_REGION" \
-         --project="$GCP_PROJECT_ID" \
-         >/dev/null 2>&1; then
+         --project="$GCP_PROJECT_ID"; then
     echo "Creating Artifact Registry repository 'tcq' in $GCP_REGION..."
     gcloud artifacts repositories create tcq \
       --repository-format=docker \
@@ -517,10 +614,9 @@ ensure_artifact_registry() {
 # while attached to a running VM.
 ensure_static_ip() {
   STATIC_IP_NAME="${VM_NAME}-ip"
-  if ! gcloud compute addresses describe "$STATIC_IP_NAME" \
+  if ! gcloud_exists compute addresses describe "$STATIC_IP_NAME" \
          --region="$GCP_REGION" \
-         --project="$GCP_PROJECT_ID" \
-         >/dev/null 2>&1; then
+         --project="$GCP_PROJECT_ID"; then
     echo "Reserving static external IP $STATIC_IP_NAME..."
     gcloud compute addresses create "$STATIC_IP_NAME" \
       --region="$GCP_REGION" \
@@ -537,8 +633,8 @@ ensure_static_ip() {
 # only on VMs tagged `tcq-server`. The VM is created with that tag below.
 ensure_firewall_rules() {
   local rule="tcq-allow-http-https"
-  if ! gcloud compute firewall-rules describe "$rule" \
-         --project="$GCP_PROJECT_ID" >/dev/null 2>&1; then
+  if ! gcloud_exists compute firewall-rules describe "$rule" \
+         --project="$GCP_PROJECT_ID"; then
     echo "Creating firewall rule $rule..."
     gcloud compute firewall-rules create "$rule" \
       --project="$GCP_PROJECT_ID" \
@@ -707,10 +803,9 @@ EOF
 # instance type (744 hours/month per region). Container-Optimized OS
 # (\`cos-stable\`) auto-updates the OS and Docker on a managed schedule.
 ensure_vm() {
-  if gcloud compute instances describe "$VM_NAME" \
+  if gcloud_exists compute instances describe "$VM_NAME" \
        --zone="$GCP_ZONE" \
-       --project="$GCP_PROJECT_ID" \
-       >/dev/null 2>&1; then
+       --project="$GCP_PROJECT_ID"; then
     echo "VM $VM_NAME already exists in $GCP_ZONE — skipping provisioning."
     return 0
   fi
