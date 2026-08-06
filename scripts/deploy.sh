@@ -152,7 +152,7 @@ load_env_file() {
 }
 
 # ---------------------------------------------------------------------------
-# Install / auth: gcloud
+# Install / auth: gcloud and docker
 # ---------------------------------------------------------------------------
 
 install_gcloud_tarball() {
@@ -232,6 +232,66 @@ ensure_gcloud() {
     echo "Restart your shell and re-run ./scripts/deploy.sh." >&2
     exit 1
   fi
+}
+
+# Docker isn't touched until build_and_push, two-thirds of the way through a
+# deploy — by which point every GCP resource has already been provisioned. A
+# stopped daemon should cost a second at startup, not a full provisioning run,
+# so check it here and say what to do about it.
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is not installed." >&2
+    echo "It's required to build the TCQ image and push it to Artifact Registry." >&2
+    echo "Install it from https://docs.docker.com/get-docker/ and re-run." >&2
+    exit 1
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # The CLI is present but nothing is listening. Name the endpoint it tried:
+  # the usual non-obvious cause is a context pointing at a runtime that isn't
+  # the one currently running.
+  echo ""
+  echo "Docker is installed but no daemon is reachable."
+  local endpoint
+  endpoint="$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null || true)"
+  if [ -n "$endpoint" ]; then
+    echo "The '$(docker context show 2>/dev/null || echo default)' context points at $endpoint."
+  fi
+  echo ""
+
+  # On macOS this is almost always Docker Desktop installed but not started.
+  # Offer to start it rather than making the user go and find the app.
+  if [ "$(uname -s)" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
+    if [ -t 0 ] && confirm "Start Docker Desktop now?" y; then
+      open -a Docker
+      printf 'Waiting for the Docker daemon'
+      local waited=0
+      while [ "$waited" -lt 120 ]; do
+        if docker info >/dev/null 2>&1; then
+          printf ' ready.\n\n'
+          return 0
+        fi
+        printf '.'
+        sleep 2
+        waited=$((waited + 2))
+      done
+      printf '\n'
+      echo "Docker Desktop hasn't come up after 120s." >&2
+      echo "Check whether it finished starting, then re-run ./scripts/deploy.sh." >&2
+      exit 1
+    fi
+    echo "Start Docker Desktop, wait for it to finish starting, then re-run:" >&2
+    echo "  open -a Docker && ./scripts/deploy.sh" >&2
+    exit 1
+  fi
+
+  echo "Start the Docker daemon and re-run ./scripts/deploy.sh." >&2
+  echo "If you use a non-Desktop runtime (colima, podman, OrbStack), start that" >&2
+  echo "and check 'docker context ls' points at its socket." >&2
+  exit 1
 }
 
 # Refuse to deploy from a dirty tree: the image is always tagged :latest,
@@ -1306,6 +1366,7 @@ main() {
   ensure_clean_working_tree
   ensure_gcloud
   ensure_auth
+  ensure_docker
 
   if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" <<'EOF'

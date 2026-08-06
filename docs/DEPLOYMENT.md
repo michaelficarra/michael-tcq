@@ -29,7 +29,7 @@ The server loads `.env.development` or `.env.production` based on `NODE_ENV`. In
 
 - A [Google Cloud](https://cloud.google.com/) account.
 - A domain name you can point at the VM via an A record. **Required** — Caddy uses it to obtain a TLS certificate; the deploy can't complete without one. The script asks for it up front and will let you set up DNS while it provisions; HTTPS starts working once both DNS and the VM are in place.
-- [Docker](https://docs.docker.com/get-docker/) installed locally.
+- [Docker](https://docs.docker.com/get-docker/) installed locally, with the daemon running — the image is built and pushed from your machine. The deploy script checks this up front and, on macOS, offers to start Docker Desktop for you.
 - The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) — the deploy script offers to install it if it's missing. Deploying is interactive: it needs a terminal both for its own prompts and in case your gcloud session has expired and needs re-authenticating.
 - A clean git working tree — the deploy script refuses to run with uncommitted or untracked changes, since the deployed image is always tagged `:latest` and a dirty deploy leaves no record of what actually shipped. Commit or stash before running.
 
@@ -42,6 +42,7 @@ The script will:
 
 - Offer to install `gcloud` via Homebrew (if available) or the official tarball, when it isn't already on your PATH.
 - Check that your gcloud credentials actually work, not merely that an account is signed in. A session that has expired or hit an organisation reauth policy still shows as active in `gcloud auth list`, so the script forces a token refresh up front and offers to run `gcloud auth login` for you when it fails. When it isn't running interactively it prints the instruction and exits instead, since a browser login can't be completed unattended.
+- Check that a Docker daemon is actually reachable before doing any provisioning, since the image build happens near the end of the deploy and a stopped daemon would otherwise surface only after every GCP resource had been created. On macOS it offers to launch Docker Desktop and waits for it; otherwise it names the endpoint the current context points at, which is the usual culprit when a non-Desktop runtime is in play.
 - Prompt for the values it needs — GCP project ID, region/zone, VM name, custom domain, admin GitHub usernames.
 - Let you pick a billing account from a menu of those attached to your gcloud account.
 - Create the GCP project (if new), link billing, enable the required APIs, create the Firestore database, the VM service account (with the right IAM bindings), and the Artifact Registry repository.
