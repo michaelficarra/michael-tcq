@@ -5,11 +5,11 @@ import { installMatchMediaMock, setSystemDark } from './mocks.js';
 /**
  * Preferences modal: opened via the hamburger menu or the `,` shortcut.
  * Exposes the keyboard-shortcut toggle, notification toggles, and the
- * Colour scheme select. Choices persist immediately to localStorage.
+ * Theme select. Choices persist immediately to localStorage.
  *
- * The colour-scheme `system` branch reads `prefers-color-scheme`, so we
- * stub `matchMedia` via `installMatchMediaMock` and flip it with
- * `setSystemDark` for deterministic assertions.
+ * The `system` theme reads `prefers-color-scheme`, so we stub `matchMedia`
+ * via `installMatchMediaMock` and flip it with `setSystemDark` for
+ * deterministic assertions.
  */
 
 test.describe('Preferences modal', () => {
@@ -180,7 +180,7 @@ test.describe('Preferences modal', () => {
   });
 });
 
-test.describe('Preferences — Colour scheme', () => {
+test.describe('Preferences — Theme', () => {
   test.beforeEach(async ({ page }) => {
     await installMatchMediaMock(page, false);
   });
@@ -190,7 +190,7 @@ test.describe('Preferences — Colour scheme', () => {
     await page.getByLabel('Open menu').click();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences' });
-    await prefs.getByLabel('Colour scheme').selectOption({ label: 'Dark' });
+    await prefs.getByLabel('Theme').selectOption({ label: 'Dark' });
 
     await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
   });
@@ -200,10 +200,10 @@ test.describe('Preferences — Colour scheme', () => {
     await page.getByLabel('Open menu').click();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences' });
-    await prefs.getByLabel('Colour scheme').selectOption({ label: 'Dark' });
+    await prefs.getByLabel('Theme').selectOption({ label: 'Dark' });
     await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
 
-    await prefs.getByLabel('Colour scheme').selectOption({ label: 'Light' });
+    await prefs.getByLabel('Theme').selectOption({ label: 'Light' });
     await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
   });
 
@@ -213,7 +213,7 @@ test.describe('Preferences — Colour scheme', () => {
     await page.getByLabel('Open menu').click();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences' });
-    await prefs.getByLabel('Colour scheme').selectOption({ label: 'System' });
+    await prefs.getByLabel('Theme').selectOption({ label: 'System' });
 
     // Flip the mocked OS to dark — the live `change` listener should apply.
     await setSystemDark(page, true);
@@ -223,12 +223,49 @@ test.describe('Preferences — Colour scheme', () => {
     await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
   });
 
-  test('colour-scheme choice persists across reload', async ({ page }) => {
+  test('Inverse System scheme renders the opposite of the matchMedia stub', async ({ page }) => {
     await waitForHomePage(page);
     await page.getByLabel('Open menu').click();
     await page.getByRole('menuitem', { name: 'Preferences' }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences' });
-    await prefs.getByLabel('Colour scheme').selectOption({ label: 'Dark' });
+    // The mock starts the OS off as light, so Inverse System should be dark.
+    await prefs.getByLabel('Theme').selectOption({ label: 'Inverse System' });
+    await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
+
+    // Flipping the mocked OS to dark should flip the app the other way, live.
+    await setSystemDark(page, true);
+    await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
+
+    await setSystemDark(page, false);
+    await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
+  });
+
+  test('Random and Inverse Random render opposite palettes', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByLabel('Open menu').click();
+    await page.getByRole('menuitem', { name: 'Preferences' }).click();
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    const isDark = () => page.locator('html').evaluate((el) => el.classList.contains('dark'));
+
+    // Which way the coin landed is unpredictable, so assert the relationship
+    // between the pair rather than a fixed palette.
+    await prefs.getByLabel('Theme').selectOption({ label: 'Random' });
+    const drawnDark = await isDark();
+
+    await prefs.getByLabel('Theme').selectOption({ label: 'Inverse Random' });
+    await expect.poll(isDark).toBe(!drawnDark);
+
+    // Both draw from one flip per page load, so switching back is stable.
+    await prefs.getByLabel('Theme').selectOption({ label: 'Random' });
+    await expect.poll(isDark).toBe(drawnDark);
+  });
+
+  test('theme choice persists across reload', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.getByLabel('Open menu').click();
+    await page.getByRole('menuitem', { name: 'Preferences' }).click();
+    const prefs = page.getByRole('dialog', { name: 'Preferences' });
+    await prefs.getByLabel('Theme').selectOption({ label: 'Dark' });
     await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
 
     await page.reload();

@@ -3,6 +3,22 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { PreferencesModal } from './PreferencesModal.js';
 import { PreferencesProvider, usePreferences } from '../contexts/PreferencesContext.js';
 
+/** Replace the setup.ts matchMedia stub so the OS reports a dark theme.
+ *  Undone by the `vi.unstubAllGlobals()` in afterEach. */
+function stubSystemDark() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 /** Shim to trigger the modal open from inside the provider, mirroring how the
  *  hamburger or the `,` shortcut would open it in the real app. */
 function Opener() {
@@ -56,7 +72,7 @@ describe('PreferencesModal', () => {
     renderWithModal();
     fireEvent.click(screen.getByText('open'));
 
-    fireEvent.change(screen.getByRole('combobox', { name: /Colour scheme/ }), { target: { value: 'dark' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Theme/ }), { target: { value: 'dark' } });
 
     expect(localStorage.getItem('tcq-theme-preference')).toBe('dark');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
@@ -67,10 +83,56 @@ describe('PreferencesModal', () => {
     renderWithModal();
     fireEvent.click(screen.getByText('open'));
 
-    fireEvent.change(screen.getByRole('combobox', { name: /Colour scheme/ }), { target: { value: 'light' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Theme/ }), { target: { value: 'light' } });
 
     expect(localStorage.getItem('tcq-theme-preference')).toBe('light');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('selecting Inverse System renders dark while the OS is light', () => {
+    // The setup.ts matchMedia stub reports `prefers-color-scheme: dark` as
+    // false, i.e. a light OS scheme — which Inverse System flips to dark.
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    fireEvent.change(screen.getByRole('combobox', { name: /Theme/ }), {
+      target: { value: 'inverse-system' },
+    });
+
+    expect(localStorage.getItem('tcq-theme-preference')).toBe('inverse-system');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('selecting Inverse System renders light while the OS is dark', () => {
+    stubSystemDark();
+    document.documentElement.classList.add('dark');
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+
+    fireEvent.change(screen.getByRole('combobox', { name: /Theme/ }), {
+      target: { value: 'inverse-system' },
+    });
+
+    expect(localStorage.getItem('tcq-theme-preference')).toBe('inverse-system');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('Random and Inverse Random select opposite palettes', () => {
+    renderWithModal();
+    fireEvent.click(screen.getByText('open'));
+    const select = screen.getByRole('combobox', { name: /Theme/ });
+
+    fireEvent.change(select, { target: { value: 'random' } });
+    expect(localStorage.getItem('tcq-theme-preference')).toBe('random');
+    const drawnDark = document.documentElement.classList.contains('dark');
+
+    fireEvent.change(select, { target: { value: 'inverse-random' } });
+    expect(localStorage.getItem('tcq-theme-preference')).toBe('inverse-random');
+    expect(document.documentElement.classList.contains('dark')).toBe(!drawnDark);
+
+    // Switching back lands on this page load's original draw, not a re-roll.
+    fireEvent.change(select, { target: { value: 'random' } });
+    expect(document.documentElement.classList.contains('dark')).toBe(drawnDark);
   });
 
   // The native dialog funnels every platform-driven dismissal (Esc, the

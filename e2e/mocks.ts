@@ -120,7 +120,8 @@ export async function installNotificationMock(
 
 // -- matchMedia for prefers-color-scheme --
 // The PreferencesContext consults `prefers-color-scheme` via matchMedia and
-// also subscribes to its `change` event when theme === 'system'. We replace
+// also subscribes to its `change` event for the OS-tracking themes ('system'
+// and 'inverse-system'). We replace
 // the matcher with one that reads from a mutable flag and fires `change`
 // listeners when the flag flips.
 export async function installMatchMediaMock(page: Page, initialDark = false): Promise<void> {

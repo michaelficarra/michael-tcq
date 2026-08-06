@@ -574,7 +574,7 @@ The hamburger menu in the top-right navigation contains a **Preferences** entry 
 
 - **Keyboard shortcuts** — enable or disable global keyboard shortcuts. Mirrors the toggle inside the `?` dialog; both locations read and write the same value.
 - **Notifications** — a top-level toggle plus per-event toggles (see the **Notifications** section below).
-- **Colour scheme** — choose Light, Dark, or System (see **Dark Mode**).
+- **Theme** — choose Light, Dark, System, Inverse System, Random, or Inverse Random (see **Dark Mode**).
 - **Saved topics** — manage the personal saved-topics list (see **Queue → Saved Topics**).
 
 ## Notifications
@@ -615,7 +615,18 @@ Pressing `f` again (or exiting fullscreen via the browser) returns to normal mod
 
 ## Dark Mode
 
-The application supports light and dark palettes, controlled by the **Colour scheme** setting in the Preferences modal. The default is `System`, which follows the operating system's `prefers-color-scheme` and switches live when the OS setting changes. Users can override by selecting `Light` or `Dark`, and the choice is persisted to `localStorage`.
+The application supports light and dark palettes, controlled by the **Theme** setting in the Preferences modal. The default is `System`, which follows the operating system's `prefers-color-scheme` and switches live when the OS setting changes. The available choices are:
+
+- **Light** — always the light palette.
+- **Dark** — always the dark palette.
+- **System** — matches the OS setting.
+- **Inverse System** — the opposite of the OS setting: dark while the OS is light, light while the OS is dark. Like `System`, it tracks the OS setting live, so flipping the OS scheme flips the application the other way immediately.
+- **Random** — light or dark, chosen by an even coin flip on page load. The choice holds for the lifetime of that page; only a reload re-rolls it.
+- **Inverse Random** — the opposite of whatever `Random` resolved to. Both themes read the same per-page-load coin flip, so at any moment they are exact opposites of each other: switching between the two in the Preferences modal flips the palette back and forth deterministically, without re-rolling.
+
+Neither random theme responds to the OS setting.
+
+The choice is persisted to `localStorage` and re-applied before the first paint on subsequent loads. For the random themes it is the _preference_ that persists, not the palette it produced — a reload keeps the setting and draws a fresh flip.
 
 ## Accessibility
 

@@ -36,16 +36,22 @@ import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifi
 import { CSS } from '@dnd-kit/utilities';
 import type { QueueEntryType } from '@tcq/shared';
 import { QUEUE_ENTRY_TYPES, QUEUE_ENTRY_LABELS, QUEUE_ENTRY_EMOJI } from '@tcq/shared';
-import { usePreferences, type Theme, type NotificationPrefs } from '../contexts/PreferencesContext.js';
+import { usePreferences, type NotificationPrefs } from '../contexts/PreferencesContext.js';
+import { THEMES, type Theme } from '../lib/theme.js';
 import { notificationsSupported } from '../lib/notifications.js';
 import { useSavedTopics, type SavedTopic } from '../hooks/useSavedTopics.js';
 import { useNativeDialog } from '../hooks/useNativeDialog.js';
 
-const THEME_OPTIONS: { value: Theme; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
-];
+// Exhaustive by construction: a new entry in THEMES won't type-check until it
+// is given a label here, and the picker renders straight from THEMES.
+const THEME_LABELS: Record<Theme, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  system: 'System',
+  'inverse-system': 'Inverse System',
+  random: 'Random',
+  'inverse-random': 'Inverse Random',
+};
 
 const NOTIFICATION_OPTIONS: { key: keyof NotificationPrefs; label: string }[] = [
   { key: 'onMyTurnToSpeak', label: 'When your queue entry is next' },
@@ -129,7 +135,7 @@ export function PreferencesModal() {
 
           <section className="mb-4">
             <label className="flex items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
-              <span className="font-medium">Colour scheme</span>
+              <span className="font-medium">Theme</span>
               <select
                 value={theme}
                 onChange={(e) => setTheme(e.target.value as Theme)}
@@ -137,9 +143,9 @@ export function PreferencesModal() {
                          bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 cursor-pointer
                          focus:outline-none focus:ring-1 focus:ring-teal-500"
               >
-                {THEME_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {THEMES.map((value) => (
+                  <option key={value} value={value}>
+                    {THEME_LABELS[value]}
                   </option>
                 ))}
               </select>

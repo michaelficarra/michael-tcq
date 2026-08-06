@@ -1,5 +1,5 @@
 /**
- * User preferences — keyboard-shortcut enablement, colour scheme, and the
+ * User preferences — keyboard-shortcut enablement, theme, and the
  * open/close state of the Preferences modal. All values persist to
  * localStorage and are applied immediately.
  *
@@ -10,8 +10,9 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getShortcutsEnabled, setShortcutsEnabled as persistShortcutsEnabled } from '../hooks/useKeyboardShortcuts.js';
 import { requestNotificationPermission } from '../lib/notifications.js';
+import { applyTheme, getTheme, persistTheme, tracksSystem, watchSystemDark, type Theme } from '../lib/theme.js';
 
-export type Theme = 'light' | 'dark' | 'system';
+export type { Theme };
 
 export interface NotificationPrefs {
   /** Fire when a queue entry authored by the current user reaches the head of the queue. */
@@ -43,34 +44,8 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   onAgendaItemOverrun: false,
 };
 
-const THEME_STORAGE_KEY = 'tcq-theme-preference';
 const NOTIFICATIONS_ENABLED_STORAGE_KEY = 'tcq-notifications-enabled';
 const NOTIFICATION_PREFS_STORAGE_KEY = 'tcq-notification-prefs';
-
-function getTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
-  } catch {
-    // fall through to default
-  }
-  return 'system';
-}
-
-function persistTheme(theme: Theme): void {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // Silently fail if localStorage is unavailable
-  }
-}
-
-/** Apply the effective theme by toggling the `dark` class on <html>. */
-function applyTheme(theme: Theme): void {
-  const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const dark = theme === 'dark' || (theme === 'system' && systemDark);
-  document.documentElement.classList.toggle('dark', dark);
-}
 
 function getNotificationsEnabled(): boolean {
   try {
@@ -192,15 +167,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     persistNotificationPrefs(prefs);
   }, []);
 
-  // When theme is 'system', react to OS colour-scheme changes live.
+  // When the theme is derived from the OS setting ('system' or its inverse),
+  // react to OS colour-scheme changes live.
   useEffect(() => {
-    if (theme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    function onChange() {
-      applyTheme('system');
-    }
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+    if (!tracksSystem(theme)) return;
+    return watchSystemDark(() => applyTheme(theme));
   }, [theme]);
 
   // Optional `focus` argument scrolls the modal to a named section on
