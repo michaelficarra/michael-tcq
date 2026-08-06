@@ -307,6 +307,84 @@ test.describe('Keyboard Shortcuts', () => {
   });
 });
 
+test.describe('Keyboard Shortcuts outside a meeting', () => {
+  // The General group (`?` and `,`) is registered on every authenticated
+  // surface, not just the meeting page — but deliberately not on the login
+  // page, which has no preferences modal or shortcuts dialogue to open.
+
+  test('"?" opens the shortcuts dialogue on the home page', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.locator('body').press('?');
+
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(dialog).toBeVisible();
+    // The General group plus the home page's own tab shortcuts — but none of
+    // the meeting-specific ones, which don't apply here.
+    await expect(dialog.getByRole('cell', { name: 'Toggle shortcuts dialogue' })).toBeVisible();
+    await expect(dialog.getByRole('cell', { name: 'Toggle preferences dialogue' })).toBeVisible();
+    await expect(dialog.getByRole('cell', { name: 'Switch to Join Meeting tab' })).toBeVisible();
+    await expect(dialog.getByRole('cell', { name: 'New Topic' })).toHaveCount(0);
+  });
+
+  test('"," opens the preferences modal on the home page', async ({ page }) => {
+    await waitForHomePage(page);
+    await page.locator('body').press(',');
+    await expect(page.getByRole('dialog', { name: 'Preferences' })).toBeVisible();
+  });
+
+  // The number keys select home-page tabs by position, so the Admin tab being
+  // admin-only shifts what `2` and `3` do.
+
+  test('1/2/3 select Join/Admin/Help for an admin', async ({ page }) => {
+    await waitForHomePage(page);
+
+    await page.locator('body').press('2');
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveAttribute('aria-selected', 'true');
+
+    await page.locator('body').press('3');
+    await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+
+    await page.locator('body').press('1');
+    await expect(page.getByRole('tab', { name: 'Join Meeting' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('2 selects Help for a non-admin, and 3 is unbound', async ({ page }) => {
+    await waitForHomePage(page);
+    await switchUser(page, 'testuser');
+    await expect(page.getByRole('tab', { name: 'Admin' })).toHaveCount(0);
+
+    // Positional: with no Admin tab, the second tab is Help.
+    await page.locator('body').press('2');
+    await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+
+    // There is no third tab, so `3` leaves the selection where it is.
+    await page.locator('body').press('3');
+    await expect(page.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('the home-page dialogue lists only the tabs the user actually has', async ({ page }) => {
+    await waitForHomePage(page);
+    await switchUser(page, 'testuser');
+    await page.locator('body').press('?');
+
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(dialog.getByRole('cell', { name: 'Switch to Join Meeting tab' })).toBeVisible();
+    await expect(dialog.getByRole('cell', { name: 'Switch to Help tab' })).toBeVisible();
+    await expect(dialog.getByRole('cell', { name: 'Switch to Admin tab' })).toHaveCount(0);
+  });
+
+  test('neither shortcut does anything on the login page', async ({ page }) => {
+    await page.goto('/auth/logout');
+    await page.waitForURL('/');
+    await expect(page.getByText('Welcome to TCQ')).toBeVisible();
+
+    await page.locator('body').press(',');
+    await page.locator('body').press('?');
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
 test.describe('Error Handling', () => {
   test('non-existent meeting shows error page with "Back to home" link', async ({ page }) => {
     await page.goto('/meeting/does-not-exist-at-all');

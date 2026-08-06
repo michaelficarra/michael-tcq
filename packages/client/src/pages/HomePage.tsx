@@ -7,7 +7,7 @@
  * - "Help" — usage guide (shared HelpPanel component).
  */
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useToast } from '../contexts/ToastContext.js';
@@ -15,14 +15,24 @@ import { AdminPanel } from '../components/AdminPanel.js';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel.js';
 import { PremiumUsersPanel } from '../components/PremiumUsersPanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
+import { KeyboardShortcuts } from '../components/KeyboardShortcuts.js';
 import { Logo } from '../components/Logo.js';
 import { MyMeetingsPanel } from '../components/MyMeetingsPanel.js';
 import { UserMenu } from '../components/UserMenu.js';
+import { type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { useSlidingTabUnderline } from '../hooks/useSlidingTabUnderline.js';
 import { inputValidation } from '../lib/inputStyles.js';
 
 type HomeTab = 'join' | 'admin' | 'help';
 const HOME_TABS: readonly HomeTab[] = ['join', 'admin', 'help'];
+
+// Single source of truth for the nav labels and the shortcut descriptions, so
+// the `?` dialogue can't drift from what the tabs actually say.
+const HOME_TAB_LABELS: Record<HomeTab, string> = {
+  join: 'Join Meeting',
+  admin: 'Admin',
+  help: 'Help',
+};
 
 /**
  * One tab in the home-page nav. Anchor-based so middle-click and modifier-
@@ -33,17 +43,16 @@ function HomeTabLink({
   tab,
   visibleTab,
   setActiveTab,
-  label,
   onSpanRef,
 }: {
   tab: HomeTab;
   visibleTab: HomeTab;
   setActiveTab: (tab: HomeTab) => void;
-  label: string;
   // Registers the inner <span> so the nav can measure it for the sliding underline.
   onSpanRef?: (el: HTMLElement | null) => void;
 }) {
   const isActive = visibleTab === tab;
+  const label = HOME_TAB_LABELS[tab];
   return (
     <a
       role="tab"
@@ -130,6 +139,28 @@ export function HomePage() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // The tabs this user actually gets, in nav order. Both the nav and the
+  // number-key shortcuts render from this one list, so the `?` dialogue can't
+  // drift from the tabs on screen — adding or re-gating a tab updates both.
+  // (Distinct from `visibleTab` above, which is the single *active* tab.)
+  const availableTabs = useMemo(() => HOME_TABS.filter((tab) => tab !== 'admin' || isAdmin), [isAdmin]);
+
+  // Number keys select tabs by position in the nav rather than by identity, so
+  // they always match what the user sees left-to-right. Since the Admin tab is
+  // admin-gated, the mapping differs by role: an admin gets 1/2/3 =
+  // Join/Admin/Help, everyone else gets 1/2 = Join/Help and no `3` binding at
+  // all — rather than a `3` that is advertised but does nothing.
+  const shortcuts = useMemo<Shortcut[]>(
+    () =>
+      availableTabs.map((tab, index) => ({
+        key: String(index + 1),
+        description: `Switch to ${HOME_TAB_LABELS[tab]} tab`,
+        action: () => setActiveTab(tab),
+        category: 'Navigation',
+      })),
+    [availableTabs],
+  );
+
   return (
     <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 text-stone-900 dark:text-stone-100">
       <nav
@@ -150,29 +181,15 @@ export function HomePage() {
           role="tablist"
           aria-label="Home views"
         >
-          <HomeTabLink
-            tab="join"
-            visibleTab={visibleTab}
-            setActiveTab={setActiveTab}
-            label="Join Meeting"
-            onSpanRef={registerTab('join')}
-          />
-          {isAdmin && (
+          {availableTabs.map((tab) => (
             <HomeTabLink
-              tab="admin"
+              key={tab}
+              tab={tab}
               visibleTab={visibleTab}
               setActiveTab={setActiveTab}
-              label="Admin"
-              onSpanRef={registerTab('admin')}
+              onSpanRef={registerTab(tab)}
             />
-          )}
-          <HomeTabLink
-            tab="help"
-            visibleTab={visibleTab}
-            setActiveTab={setActiveTab}
-            label="Help"
-            onSpanRef={registerTab('help')}
-          />
+          ))}
           {/* Decorative sliding underline tracking the active tab. */}
           {indicator}
         </div>
@@ -191,6 +208,10 @@ export function HomePage() {
         {visibleTab === 'admin' && <AdminTab />}
         {visibleTab === 'help' && <HelpPanel showChairHelp={true} />}
       </main>
+
+      {/* Registers the tab shortcuts plus the app-wide General group (`?` and
+          `,`), and renders the help dialogue. */}
+      <KeyboardShortcuts pageShortcuts={shortcuts} />
     </div>
   );
 }

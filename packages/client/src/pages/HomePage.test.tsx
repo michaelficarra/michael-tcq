@@ -202,3 +202,110 @@ describe('HomePage tab–hash sync', () => {
     });
   });
 });
+
+describe('HomePage keyboard shortcuts', () => {
+  /** Dispatch a keydown on the window, where the shortcut listener lives. */
+  function pressKey(key: string) {
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+  }
+
+  it('opens the shortcuts dialogue on "?"', () => {
+    renderHomePage();
+
+    pressKey('?');
+
+    // Scoped by accessible name: the Help tab's prose also mentions shortcuts.
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+
+  /** The kbd/description pairs listed in the shortcuts dialogue, in order. */
+  function listedShortcuts(): [string, string][] {
+    const rows = screen.getByRole('dialog', { name: 'Keyboard shortcuts' }).querySelectorAll('tr');
+    return [...rows]
+      .filter((row) => row.querySelector('kbd'))
+      .map((row) => [row.querySelector('kbd')!.textContent!, row.querySelectorAll('td')[1].textContent!]);
+  }
+
+  it('lists the tab shortcuts followed by the General group', () => {
+    renderHomePage();
+    pressKey('?');
+
+    expect(listedShortcuts()).toEqual([
+      ['1', 'Switch to Join Meeting tab'],
+      ['2', 'Switch to Admin tab'],
+      ['3', 'Switch to Help tab'],
+      ['?', 'Toggle shortcuts dialogue'],
+      [',', 'Toggle preferences dialogue'],
+    ]);
+  });
+
+  // Anti-drift: derived from the nav that's actually rendered rather than from
+  // a hardcoded list, so a new or re-gated tab that the dialogue doesn't learn
+  // about fails here instead of shipping a stale help dialogue.
+  describe.each([
+    ['an admin', true],
+    ['a non-admin', false],
+  ])('for %s, the dialogue matches the rendered nav', (_role, isAdmin) => {
+    it('lists one numbered shortcut per tab, in nav order, labelled to match', () => {
+      mockAuthState.isAdmin = isAdmin;
+      renderHomePage();
+      const navTabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
+      pressKey('?');
+
+      const numbered = listedShortcuts().filter(([key]) => /^\d$/.test(key));
+
+      expect(numbered).toEqual(navTabs.map((label, index) => [String(index + 1), `Switch to ${label} tab`]));
+    });
+  });
+
+  describe('tab selection by position', () => {
+    it('maps 1/2/3 to Join/Admin/Help for an admin', () => {
+      renderHomePage();
+
+      pressKey('2');
+      expect(screen.getByRole('tab', { name: 'Admin' })).toHaveAttribute('aria-selected', 'true');
+
+      pressKey('3');
+      expect(screen.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+
+      pressKey('1');
+      expect(screen.getByRole('tab', { name: 'Join Meeting' })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('maps 2 to Help for a non-admin, who has no Admin tab', () => {
+      mockAuthState.isAdmin = false;
+      renderHomePage();
+
+      pressKey('2');
+
+      // Positional, not by identity: the second visible tab is Help.
+      expect(screen.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('leaves 3 unbound for a non-admin, who has only two tabs', () => {
+      mockAuthState.isAdmin = false;
+      renderHomePage();
+      // Move off the default tab first, so a passing assertion below can't be
+      // explained by 'join' simply never having changed.
+      pressKey('2');
+      expect(screen.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+
+      pressKey('3');
+
+      expect(screen.getByRole('tab', { name: 'Help' })).toHaveAttribute('aria-selected', 'true');
+      // Not merely inert — the key isn't advertised in the dialogue either.
+      pressKey('?');
+      expect(listedShortcuts().map(([key]) => key)).toEqual(['1', '2', '?', ',']);
+    });
+
+    it('describes 2 as Help for a non-admin', () => {
+      mockAuthState.isAdmin = false;
+      renderHomePage();
+      pressKey('?');
+
+      expect(listedShortcuts()).toContainEqual(['2', 'Switch to Help tab']);
+    });
+  });
+});

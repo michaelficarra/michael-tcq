@@ -8,17 +8,16 @@
  * Registers keyboard shortcuts for common actions.
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { meetingNotRunningReason, userKey } from '@tcq/shared';
 import { MeetingProvider, useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/MeetingContext.js';
 import { SocketContext } from '../contexts/SocketContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
-import { usePreferences } from '../contexts/PreferencesContext.js';
 import { useToast } from '../contexts/ToastContext.js';
 import { useSocketConnection } from '../hooks/useSocketConnection.js';
 import { useStaleVersionCheck } from '../hooks/useStaleVersionCheck.js';
-import { useKeyboardShortcuts, type Shortcut } from '../hooks/useKeyboardShortcuts.js';
+import { type Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { useMeetingNotifications } from '../hooks/useMeetingNotifications.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { NavBar, type Tab } from '../components/NavBar.js';
@@ -29,7 +28,7 @@ import { QueuePanel } from '../components/QueuePanel.js';
 import { HelpPanel } from '../components/HelpPanel.js';
 import { LogPanel } from '../components/LogPanel.js';
 import { ConnectionStatus } from '../components/ConnectionStatus.js';
-import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog.js';
+import { KeyboardShortcuts } from '../components/KeyboardShortcuts.js';
 import { StaleVersionBanner } from '../components/StaleVersionBanner.js';
 
 /** Inner component that uses the MeetingContext (must be inside MeetingProvider). */
@@ -73,8 +72,6 @@ function MeetingPageInner() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const { shortcutsEnabled, setShortcutsEnabled, togglePreferences } = usePreferences();
   const [presentationMode, setPresentationMode] = useState(false);
   const { meeting, connected, activeConnections, error, serverRevision } = useMeetingState();
   const dispatch = useMeetingDispatch();
@@ -276,34 +273,26 @@ function MeetingPageInner() {
       { key: '2', description: 'Switch to Queue tab', action: () => setActiveTab('queue'), category: 'Navigation' },
       { key: '3', description: 'Switch to Log tab', action: () => setActiveTab('log'), category: 'Navigation' },
       { key: '4', description: 'Switch to Help tab', action: () => setActiveTab('help'), category: 'Navigation' },
-      {
-        key: '?',
-        description: 'Toggle shortcuts dialogue',
-        action: () => setShowShortcuts((v) => !v),
-        category: 'General',
-      },
-      { key: ',', description: 'Toggle preferences dialogue', action: () => togglePreferences(), category: 'General' },
-      // Esc is handled natively by each modal <dialog> (and the
-      // useKeyboardShortcuts `dialog[open]` guard lets the platform own the
-      // key), so no explicit Escape shortcut is needed to close dialogs.
+      // The General group (`?` and `,`) is appended by <KeyboardShortcuts>,
+      // which also registers this list and renders the help dialogue.
     ],
-    [addQueueEntry, advanceNextSpeaker, togglePresentationMode, togglePreferences],
+    [addQueueEntry, advanceNextSpeaker, togglePresentationMode],
   );
 
-  useKeyboardShortcuts(shortcuts, shortcutsEnabled);
   useMeetingNotifications();
 
-  /** Toggle shortcuts on/off — the context persists to localStorage. */
-  function handleToggleShortcuts() {
-    setShortcutsEnabled(!shortcutsEnabled);
-  }
+  // The three branches below become `body` rather than early returns so that
+  // <KeyboardShortcuts> can sit outside them, mounted on every branch. The
+  // loading branch already renders the full NavBar, so the page looks
+  // interactive well before `meeting` arrives — keys pressed in that window
+  // must still register rather than being silently dropped. Keeping a single
+  // mount point also preserves the dialogue's open state across the
+  // loading → loaded transition.
+  let body: ReactNode;
 
-  // Hide chair-only shortcuts for non-chairs.
-  const displayedShortcuts = shortcuts.filter((s) => isChair || !s.chairOnly);
-
-  // Error state — show error message with a link back to the home page
   if (error && !meeting) {
-    return (
+    // Error state — show error message with a link back to the home page
+    body = (
       <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="flex-1 overflow-y-auto min-h-0 p-6 max-w-xl mx-auto text-center mt-12">
@@ -320,11 +309,9 @@ function MeetingPageInner() {
         </main>
       </div>
     );
-  }
-
-  // Loading state — haven't received meeting data yet
-  if (!meeting) {
-    return (
+  } else if (!meeting) {
+    // Loading state — haven't received meeting data yet
+    body = (
       <div className="h-dvh flex flex-col bg-stone-50 dark:bg-stone-900">
         <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="flex-1 overflow-y-auto min-h-0 p-6">
@@ -336,59 +323,58 @@ function MeetingPageInner() {
         </main>
       </div>
     );
+  } else {
+    body = (
+      <SocketContext value={socket}>
+        <div
+          className={`h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}
+        >
+          {/* Navigation and controls are hidden in presentation mode */}
+          {!presentationMode && <NavBar activeTab={activeTab} onTabChange={setActiveTab} />}
+
+          {/*
+            All four tab panels are always rendered; the inactive ones carry the
+            `hidden` attribute, which both visually hides them and excludes them
+            from the accessibility tree. Rendering them unconditionally avoids a
+            mount/unmount race on tab switch that caused `getByRole('tabpanel',
+            { name: 'Log' })` to intermittently fail to resolve in Firefox CI —
+            see the `log updates in real time as events occur` e2e test.
+          */}
+          <main className="flex-1 overflow-y-auto min-h-0">
+            <AgendaPanel hidden={activeTab !== 'agenda'} />
+            <QueuePanel
+              hidden={activeTab !== 'queue'}
+              autoEditEntryId={presentationMode ? null : autoEditEntryId}
+              onAddEntry={addQueueEntry}
+              onSavedTopic={addSavedTopic}
+              onAutoEditConsumed={handleAutoEditConsumed}
+            />
+            <LogPanel hidden={activeTab !== 'log'} />
+            <HelpPanel hidden={activeTab !== 'help'} showChairHelp={isChair} />
+          </main>
+
+          {/* Connection status indicator */}
+          <ConnectionStatus connected={connected} activeConnections={activeConnections} />
+
+          {/*
+            Reload banner shown when the WebSocket is bound to a Cloud Run
+            revision that's been superseded by a newer deploy. Rendered
+            here (not at app root) because the staleness check needs the
+            WebSocket's revision as its baseline — see useStaleVersionCheck.
+          */}
+          {versionStale && <StaleVersionBanner />}
+        </div>
+      </SocketContext>
+    );
   }
 
   return (
-    <SocketContext value={socket}>
-      <div
-        className={`h-dvh flex flex-col bg-stone-50 dark:bg-stone-900 ${presentationMode ? 'presentation-mode' : ''}`}
-      >
-        {/* Navigation and controls are hidden in presentation mode */}
-        {!presentationMode && <NavBar activeTab={activeTab} onTabChange={setActiveTab} />}
-
-        {/*
-          All four tab panels are always rendered; the inactive ones carry the
-          `hidden` attribute, which both visually hides them and excludes them
-          from the accessibility tree. Rendering them unconditionally avoids a
-          mount/unmount race on tab switch that caused `getByRole('tabpanel',
-          { name: 'Log' })` to intermittently fail to resolve in Firefox CI —
-          see the `log updates in real time as events occur` e2e test.
-        */}
-        <main className="flex-1 overflow-y-auto min-h-0">
-          <AgendaPanel hidden={activeTab !== 'agenda'} />
-          <QueuePanel
-            hidden={activeTab !== 'queue'}
-            autoEditEntryId={presentationMode ? null : autoEditEntryId}
-            onAddEntry={addQueueEntry}
-            onSavedTopic={addSavedTopic}
-            onAutoEditConsumed={handleAutoEditConsumed}
-          />
-          <LogPanel hidden={activeTab !== 'log'} />
-          <HelpPanel hidden={activeTab !== 'help'} showChairHelp={isChair} />
-        </main>
-
-        {/* Connection status indicator */}
-        <ConnectionStatus connected={connected} activeConnections={activeConnections} />
-
-        {/*
-          Reload banner shown when the WebSocket is bound to a Cloud Run
-          revision that's been superseded by a newer deploy. Rendered
-          here (not at app root) because the staleness check needs the
-          WebSocket's revision as its baseline — see useStaleVersionCheck.
-        */}
-        {versionStale && <StaleVersionBanner />}
-
-        {/* Keyboard shortcuts dialog — always mounted; `open` drives the
-            native <dialog> via showModal()/close(). */}
-        <KeyboardShortcutsDialog
-          open={showShortcuts}
-          shortcuts={displayedShortcuts}
-          enabled={shortcutsEnabled}
-          onToggleEnabled={handleToggleShortcuts}
-          onClose={() => setShowShortcuts(false)}
-        />
-      </div>
-    </SocketContext>
+    <>
+      {body}
+      {/* Registers the meeting shortcuts plus the app-wide General group, and
+          renders the help dialogue. Outside `body` — see the note above. */}
+      <KeyboardShortcuts pageShortcuts={shortcuts} isChair={isChair} />
+    </>
   );
 }
 

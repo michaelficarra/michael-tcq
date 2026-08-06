@@ -548,20 +548,21 @@ Premium-tier users are designated via the **Premium Users** section of the Admin
 
 Pressing `?` opens a dialog listing the keyboard shortcuts. The dialog includes a toggle button to enable or disable shortcuts; this preference is persisted to `localStorage` and defaults to enabled. (The same toggle also lives in the Preferences modal; both locations read and write the same value.) Shortcuts are always disabled when the user is typing in a text field. The `Escape` key works even when shortcuts are globally disabled, so that any open dialog can always be dismissed. Available shortcuts:
 
-| Key | Action                      |
-| --- | --------------------------- |
-| `n` | New Topic                   |
-| `r` | Reply to current topic      |
-| `c` | Clarifying Question         |
-| `p` | Point of Order              |
-| `s` | Next Speaker (chair only)   |
-| `f` | Toggle presentation mode    |
-| `1` | Switch to Agenda tab        |
-| `2` | Switch to Queue tab         |
-| `3` | Switch to Log tab           |
-| `4` | Switch to Help tab          |
-| `?` | Toggle shortcuts dialogue   |
-| `,` | Toggle preferences dialogue |
+| Key     | Action                      | Where              |
+| ------- | --------------------------- | ------------------ |
+| `n`     | New Topic                   | Meeting page       |
+| `r`     | Reply to current topic      | Meeting page       |
+| `c`     | Clarifying Question         | Meeting page       |
+| `p`     | Point of Order              | Meeting page       |
+| `s`     | Next Speaker (chair only)   | Meeting page       |
+| `f`     | Toggle presentation mode    | Meeting page       |
+| `1`–`4` | Switch to the _n_th tab     | Any tabbed page    |
+| `?`     | Toggle shortcuts dialogue   | Anywhere signed in |
+| `,`     | Toggle preferences dialogue | Anywhere signed in |
+
+A numeric key selects the _n_th tab of whichever page the user is on, counting the tab bar from left to right; a key with no corresponding tab does nothing. The meeting page has four tabs (Agenda, Queue, Log, Help). The home page has Join Meeting and Help, plus — for admins only — Admin in second place, so an admin's `2` and `3` select Admin and Help while everyone else's `2` selects Help and `3` is unbound. The `?` dialog lists only the numeric keys the current page and user actually have, each described by the tab it selects.
+
+The two General shortcuts — `?` and `,` — work on every signed-in surface, so they are available on the home page as well as inside a meeting. Neither works on the login page, which has no preferences modal or shortcuts dialogue to open. The meeting-page shortcuts are registered as soon as the page is opened, including while the meeting data is still loading.
 
 The queue-entry shortcuts are subject to the same gates as the buttons they mirror: `n`, `r`, and `c` are no-ops whenever the corresponding entry type is not currently addable (while no agenda item is current, while the queue is closed to a non-chair, or — for `r` — when there is no active topic). `p` always works.
 
@@ -569,7 +570,7 @@ Context-specific editing shortcuts are documented with their features: Ctrl/Cmd+
 
 ## Preferences
 
-The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut. It is a modal dialog (see **Dialogs** for its dismissal behaviour). Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
+The hamburger menu in the top-right navigation contains a **Preferences** entry that opens a modal for user-facing settings. The modal can also be toggled with the `,` keyboard shortcut, on the home page as well as inside a meeting. It is a modal dialog (see **Dialogs** for its dismissal behaviour). Changes are saved immediately to `localStorage` and applied right away — there is no explicit Save button. Current preferences:
 
 - **Keyboard shortcuts** — enable or disable global keyboard shortcuts. Mirrors the toggle inside the `?` dialog; both locations read and write the same value.
 - **Notifications** — a top-level toggle plus per-event toggles (see the **Notifications** section below).

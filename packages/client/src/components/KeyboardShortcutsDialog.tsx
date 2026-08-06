@@ -9,6 +9,7 @@
  * drives showModal()/close().
  */
 
+import { Fragment } from 'react';
 import type { Shortcut } from '../hooks/useKeyboardShortcuts.js';
 import { useNativeDialog, dialogAutoFocus } from '../hooks/useNativeDialog.js';
 
@@ -84,9 +85,11 @@ export function KeyboardShortcutsDialog({
           <table className={`w-full text-sm select-none ${enabled ? '' : 'opacity-40'}`}>
             <tbody>
               {groups.map(([category, groupShortcuts], groupIndex) => (
-                <>
+                // Keyed on the group: a bare fragment here would leave every
+                // group unkeyed, which React warns about.
+                <Fragment key={category}>
                   {category && (
-                    <tr key={`heading-${category}`}>
+                    <tr>
                       <td
                         colSpan={2}
                         className={`text-xs font-medium text-stone-600 dark:text-stone-300 uppercase tracking-wide pb-1 ${groupIndex === 0 ? 'pt-0' : 'pt-4'}`}
@@ -108,7 +111,7 @@ export function KeyboardShortcutsDialog({
                       <td className="py-1.5 text-stone-600 dark:text-stone-400">{shortcut.description}</td>
                     </tr>
                   ))}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
