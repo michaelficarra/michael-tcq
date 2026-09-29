@@ -157,8 +157,17 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     prevHiddenRef.current = hidden;
     if (!wasHidden || hidden) return;
     if (!currentAgendaItemId) return;
-    const el = document.querySelector('.tcq-agenda-current-item');
-    el?.scrollIntoView({ block: 'center', behavior: 'auto' });
+    const currentItem = document.querySelector('.tcq-agenda-current-item');
+    const scrollContainer = currentItem?.closest('main');
+    if (!currentItem || !scrollContainer) return;
+
+    // We would use `scrollIntoView`, but it would also center the row in the document viewport
+    // because it includes all scrollable containers by default and so we would effectively
+    // scroll past the navigation bar as well. `scrollIntoView` takes a `container` property
+    // but it is not yet supported across browsers. Instead, we'll manually calculate the scroll offset.
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const itemRect = currentItem.getBoundingClientRect();
+    scrollContainer.scrollTop += itemRect.top + itemRect.height / 2 - (containerRect.top + containerRect.height / 2);
   }, [hidden, currentAgendaItemId]);
 
   // When hidden (not the active tab) or meeting state not yet loaded, render

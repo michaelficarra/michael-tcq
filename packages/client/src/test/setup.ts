@@ -74,8 +74,9 @@ if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
   };
 }
 
-// jsdom doesn't implement Element.scrollIntoView; the AgendaPanel's
-// "scroll-active-item-into-view-on-tab-show" effect calls it on mount.
+// jsdom doesn't implement Element.scrollIntoView; PreferencesModal uses it
+// when opening directly to the saved-topics section (and ideally we would use it in
+// AgendaPanel as well, but that currently has issues with including all scrollable containers).
 // Provide a default no-op so unrelated tests don't crash; tests that want
 // to assert on the call can replace it with a spy.
 if (typeof Element.prototype.scrollIntoView !== 'function') {

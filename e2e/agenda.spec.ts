@@ -757,6 +757,14 @@ test.describe('Agenda tab', () => {
       // mapping is sensitive to how quickly each advance round-trip
       // completes and varies between local and CI.
       await expect(currentRow).toBeInViewport();
+
+      // Centering the agenda row must scroll only <main>. Native
+      // scrollIntoView also centers scrollable ancestors, which used to move
+      // the fixed-height app shell and leave the top half of the nav clipped.
+      const nav = page.getByRole('navigation', { name: 'Main navigation' });
+      const navBox = await nav.boundingBox();
+      expect(navBox).not.toBeNull();
+      expect(navBox!.y).toBeGreaterThanOrEqual(0);
     });
   });
 });
