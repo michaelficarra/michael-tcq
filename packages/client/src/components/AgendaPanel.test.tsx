@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { MeetingState, User } from '@tcq/shared';
 import { AgendaPanel } from './AgendaPanel.js';
@@ -390,11 +390,17 @@ describe('AgendaPanel', () => {
       avatarUrl: 'https://github.com/a.png?size=80',
     };
 
-    // jsdom doesn't implement scrollIntoView; stub on Element.prototype.
-    let scrollSpy: ReturnType<typeof vi.fn>;
+    let rectSpy: ReturnType<typeof vi.spyOn>;
     beforeEach(() => {
-      scrollSpy = vi.fn();
-      Element.prototype.scrollIntoView = scrollSpy;
+      rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.matches('main')) return new DOMRect(0, 48, 1000, 600);
+        if (this.classList.contains('tcq-agenda-current-item')) return new DOMRect(0, 748, 1000, 48);
+        return new DOMRect();
+      });
+    });
+
+    afterEach(() => {
+      rectSpy.mockRestore();
     });
 
     it('tags the current row with the tcq-agenda-current-item marker class', () => {
@@ -427,32 +433,42 @@ describe('AgendaPanel', () => {
 
       const { rerender } = render(
         <TestMeetingProvider meeting={meeting}>
-          <AgendaPanel hidden />
+          <main>
+            <AgendaPanel hidden />
+          </main>
         </TestMeetingProvider>,
       );
       // While hidden, the inner content (and therefore the current row) isn't rendered, so no scroll.
-      expect(scrollSpy).not.toHaveBeenCalled();
+      const scrollContainer = screen.getByRole('main');
+      expect(scrollContainer.scrollTop).toBe(0);
 
       // Reveal the panel.
       rerender(
         <TestMeetingProvider meeting={meeting}>
-          <AgendaPanel hidden={false} />
+          <main>
+            <AgendaPanel hidden={false} />
+          </main>
         </TestMeetingProvider>,
       );
 
-      expect(scrollSpy).toHaveBeenCalledTimes(1);
-      expect(scrollSpy).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
+      expect(scrollContainer.scrollTop).toBe(424);
     });
 
-    it('scrolls on initial mount when the panel starts visible with a current item set', () => {
+    it('centres the current item in the main scroller without scrolling the document viewport', () => {
       const meeting = makeMeeting({
         users: { a },
         agenda: [{ kind: 'item', id: '1', name: 'Only', presenterIds: ['github:a'] }],
         current: { agendaItemId: '1', topicSpeakers: [] },
       });
-      renderAgenda(meeting);
+      render(
+        <TestMeetingProvider meeting={meeting}>
+          <main>
+            <AgendaPanel />
+          </main>
+        </TestMeetingProvider>,
+      );
 
-      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('main').scrollTop).toBe(424);
     });
 
     it('does not scroll when the current item changes while the panel is already visible', () => {
@@ -467,10 +483,14 @@ describe('AgendaPanel', () => {
 
       const { rerender } = render(
         <TestMeetingProvider meeting={meeting}>
-          <AgendaPanel hidden={false} />
+          <main>
+            <AgendaPanel hidden={false} />
+          </main>
         </TestMeetingProvider>,
       );
-      expect(scrollSpy).toHaveBeenCalledTimes(1); // initial mount counts as a visibility edge
+      const scrollContainer = screen.getByRole('main');
+      expect(scrollContainer.scrollTop).toBe(424); // initial mount counts as a visibility edge
+      scrollContainer.scrollTop = 100;
 
       // Chair advances — current item changes but visibility doesn't.
       const advanced = makeMeeting({
@@ -480,12 +500,14 @@ describe('AgendaPanel', () => {
       });
       rerender(
         <TestMeetingProvider meeting={advanced}>
-          <AgendaPanel hidden={false} />
+          <main>
+            <AgendaPanel hidden={false} />
+          </main>
         </TestMeetingProvider>,
       );
 
-      // Still one call — advancement alone must not trigger an auto-scroll.
-      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      // Still at the user-selected position — advancement alone must not trigger an auto-scroll.
+      expect(scrollContainer.scrollTop).toBe(100);
     });
 
     it('does not scroll when there is no current item', () => {
@@ -497,16 +519,21 @@ describe('AgendaPanel', () => {
 
       const { rerender } = render(
         <TestMeetingProvider meeting={meeting}>
-          <AgendaPanel hidden />
+          <main>
+            <AgendaPanel hidden />
+          </main>
         </TestMeetingProvider>,
       );
+      const scrollContainer = screen.getByRole('main');
       rerender(
         <TestMeetingProvider meeting={meeting}>
-          <AgendaPanel hidden={false} />
+          <main>
+            <AgendaPanel hidden={false} />
+          </main>
         </TestMeetingProvider>,
       );
 
-      expect(scrollSpy).not.toHaveBeenCalled();
+      expect(scrollContainer.scrollTop).toBe(0);
     });
   });
 
