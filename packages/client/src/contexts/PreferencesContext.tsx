@@ -25,6 +25,12 @@ export interface NotificationPrefs {
   onAgendaAdvance: boolean;
   /** Fire when a chair starts a poll. */
   onPollStarted: boolean;
+  /**
+   * Fire when a participant requests a poll that needs chair approval.
+   * Only meaningful for chairs (the hook checks), so off by default.
+   */
+  onPollRequested: boolean;
+
   /** Fire when someone raises a clarifying question while you are the current topic author. */
   onClarifyingQuestionOnMyTopic: boolean;
   /** Fire when a new point-of-order entry is added (by someone other than you). */
@@ -39,6 +45,7 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   onMeetingStarted: true,
   onAgendaAdvance: true,
   onPollStarted: true,
+  onPollRequested: false,
   onClarifyingQuestionOnMyTopic: true,
   onPointOfOrder: false,
   onAgendaItemOverrun: false,

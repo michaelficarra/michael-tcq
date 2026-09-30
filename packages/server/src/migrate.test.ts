@@ -106,7 +106,18 @@ function legacyMeeting(): MeetingState {
       startTime: 'x',
       startChairId: k('alice'),
       multiSelect: false,
+      requesterId: k('carol'),
     },
+    pollRequests: [
+      {
+        id: 'r1',
+        requesterId: k('bob'),
+        multiSelect: true,
+        options: [{ id: 'o2', emoji: '👀', label: 'hm' }],
+        requestedAt: 'x',
+      },
+    ],
+
     operational: { lastAdvancementBy: k('alice'), lastConnectionTime: '', maxConcurrent: 1, version: 3 },
   };
 }
@@ -125,6 +136,8 @@ describe('upgradeMeeting', () => {
     expect(m.current.topicSpeakers[0].userId).toBe('github:3');
     expect(m.poll?.startChairId).toBe('github:1');
     expect(m.poll?.reactions[0].userId).toBe('github:2');
+    expect(m.poll?.requesterId).toBe('github:3');
+    expect(m.pollRequests?.[0].requesterId).toBe('github:2');
     expect(m.operational.lastAdvancementBy).toBe('github:1');
   });
 

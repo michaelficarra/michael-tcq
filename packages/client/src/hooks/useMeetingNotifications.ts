@@ -132,7 +132,20 @@ export function useMeetingNotifications(): void {
       notify('Poll started', body);
     }
 
+    // 3a'. A participant requested a poll and you are a chair — the whole
+    //      point of the request flow is that a chair notices it. Fires once
+    //      per new request id; the requester isn't notified about their own.
+    if (notificationPrefs.onPollRequested && meeting.chairIds.includes(me)) {
+      const prevIds = new Set((prev.pollRequests ?? []).map((r) => r.id));
+      for (const request of meeting.pollRequests ?? []) {
+        if (prevIds.has(request.id) || request.requesterId === me) continue;
+        const requesterName = meeting.users[request.requesterId]?.name ?? request.requesterId;
+        notify('Poll requested', request.topic ? `${requesterName} · ${request.topic}` : requesterName);
+      }
+    }
+
     // 3b. A clarifying question was raised while you are the current topic author.
+
     if (notificationPrefs.onClarifyingQuestionOnMyTopic && meeting.current.topic?.userId === me) {
       // Find any newly-added 'question' entries that aren't yours.
       const prevIds = new Set(Object.keys(prev.queue.entries));

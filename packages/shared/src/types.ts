@@ -248,6 +248,12 @@ export interface PollRanLog extends LogEntryBase {
   type: 'poll-ran';
   startChairId: UserKey;
   endChairId: UserKey;
+  /**
+   * The participant whose poll request the chair approved to start this
+   * poll. Absent when the chair configured the poll themselves.
+   */
+  requesterId?: UserKey;
+
   /** The poll topic/question, if one was provided. */
   topic?: string;
   /** Duration in ms from poll start to poll stop. */
@@ -278,6 +284,33 @@ export interface ActivePoll {
   topic?: string;
   /** Whether the poll allows selecting multiple options. */
   multiSelect: boolean;
+  /**
+   * The participant whose poll request the chair approved to start this
+   * poll (see `PollRequest`). Absent when a chair configured the poll
+   * directly.
+   */
+  requesterId?: UserKey;
+}
+
+/**
+ * A fully-configured poll that a participant has proposed and that is
+ * waiting for a chair to approve. Approving it starts a poll with exactly
+ * these options/topic/mode; dismissing it (or the requester withdrawing
+ * it) drops it. Each user holds at most one pending request per meeting —
+ * a newer request from the same user replaces their earlier one.
+ */
+export interface PollRequest {
+  id: string;
+  /** The participant who proposed the poll. */
+  requesterId: UserKey;
+  /** The proposed topic/question, if one was provided. */
+  topic?: string;
+  /** Whether the proposed poll allows selecting multiple options. */
+  multiSelect: boolean;
+  /** The proposed options. Each has an emoji, a label, and a unique ID. */
+  options: PollOption[];
+  /** ISO timestamp when the request was made. */
+  requestedAt: string;
 }
 
 /**
@@ -451,6 +484,15 @@ export interface MeetingState {
   current: CurrentContext;
   /** The active poll, if one is running. */
   poll?: ActivePoll;
+  /**
+   * Participant-proposed polls awaiting chair approval, oldest first.
+   * Absent (never an empty array) when there are none, so meetings
+   * persisted before this field existed rehydrate without migration and
+   * the Firestore round-trip stays tidy. Cleared whenever the agenda
+   * advances — a request is a temperature check on the *current* item.
+   */
+  pollRequests?: PollRequest[];
   /** Operational plumbing (advancement attribution, last-connection tracking). */
+
   operational: OperationalState;
 }

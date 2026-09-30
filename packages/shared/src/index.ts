@@ -10,6 +10,7 @@ export type {
   PollOption,
   Reaction,
   ActivePoll,
+  PollRequest,
   CurrentSpeaker,
   CurrentTopic,
   MeetingQueueState,
@@ -45,6 +46,9 @@ export type {
   QueueSetClosedPayload,
   PollStartPayload,
   PollReactPayload,
+  PollRequestPayload,
+  PollRequestIdPayload,
+  PollApproveRequestPayload,
   NextSpeakerPayload,
   NextAgendaItemPayload,
   AdvanceResponse,
@@ -73,7 +77,10 @@ export type {
   PollStartedDelta,
   PollStoppedDelta,
   PollReactedDelta,
+  PollRequestedEvent,
+  PollRequestRemovedEvent,
 } from './messages.js';
+
 export {
   AgendaAddPayloadSchema,
   AgendaEditPayloadSchema,
@@ -92,6 +99,9 @@ export {
   QueueSetClosedPayloadSchema,
   PollStartPayloadSchema,
   PollReactPayloadSchema,
+  PollRequestPayloadSchema,
+  PollRequestIdPayloadSchema,
+  PollApproveRequestPayloadSchema,
   NextSpeakerPayloadSchema,
   NextAgendaItemPayloadSchema,
   CreateMeetingBodySchema,
@@ -138,7 +148,7 @@ export {
   upgradeLog,
 } from './migrate.js';
 export type { LegacyUser } from './migrate.js';
-export { applyDelta } from './applyDelta.js';
+export { applyDelta, applyPollRequested, applyPollRequestRemoved } from './applyDelta.js';
 export type { MeetingDeltaAction } from './applyDelta.js';
 export { DEV_USERS } from './devUsers.js';
 export type { DevUser } from './devUsers.js';

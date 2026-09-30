@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+
 import type {
   CurrentContext,
   CurrentSpeaker,
@@ -1132,5 +1133,289 @@ describe('QueuePanel', () => {
     const li = screen.getByText('Plain pitch').closest('li');
     expect(li).not.toBeNull();
     expect(li!.className).not.toMatch(/premium-border/);
+  });
+  // -- Poll requests --
+
+  describe('poll requests', () => {
+    const runningWithItem = (overrides: Partial<MeetingState> = {}): MeetingState =>
+      makeMeeting({
+        users: { 'github:alice': chairUser, 'github:bob': otherUser },
+        chairIds: ['github:alice'],
+        agenda: [{ kind: 'item', id: '1', name: 'Item', presenterIds: ['github:alice'] }],
+        current: currentOf({ agendaItemId: '1', startedAt: TEST_TIME }),
+        ...overrides,
+      });
+
+    const requestFrom = (id: string, requesterId: string, topic?: string) => ({
+      id,
+      requesterId,
+      ...(topic ? { topic } : {}),
+      multiSelect: true,
+      options: [
+        { id: `${id}-a`, emoji: '👍', label: 'Yes' },
+        { id: `${id}-b`, emoji: '👎', label: 'No' },
+      ],
+      requestedAt: TEST_TIME,
+    });
+
+    it('shows "Request Poll" (not "Create Poll") to non-chairs while an item is current and no poll runs', () => {
+      renderQueue(runningWithItem(), otherUser);
+      expect(screen.getByRole('button', { name: 'Request Poll' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Create Poll' })).not.toBeInTheDocument();
+    });
+
+    it('shows "Create Poll" (not "Request Poll") to chairs', () => {
+      renderQueue(runningWithItem(), chairUser);
+      expect(screen.getByRole('button', { name: 'Create Poll' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Request Poll' })).not.toBeInTheDocument();
+    });
+
+    it('hides "Request Poll" while a poll is running or when no item is current', () => {
+      const { unmount } = renderQueue(
+        runningWithItem({
+          poll: { options: [], reactions: [], startTime: TEST_TIME, startChairId: 'github:alice', multiSelect: true },
+        }),
+        otherUser,
+      );
+      expect(screen.queryByRole('button', { name: 'Request Poll' })).not.toBeInTheDocument();
+      unmount();
+
+      renderQueue(runningWithItem({ current: currentOf() }), otherUser);
+      expect(screen.queryByRole('button', { name: 'Request Poll' })).not.toBeInTheDocument();
+    });
+
+    it('lists every pending request for chairs as clickable summaries with Dismiss', () => {
+      const emit = vi.fn();
+      const socket = { emit } as unknown as TypedSocket;
+      const meeting = runningWithItem({
+        pollRequests: [requestFrom('r1', 'github:bob', 'Ship it?'), requestFrom('r2', 'github:alice')],
+      });
+      renderQueue(meeting, chairUser, socket);
+
+      expect(screen.getByRole('region', { name: 'Poll Requests' })).toBeInTheDocument();
+      expect(screen.getByText('Ship it?')).toBeInTheDocument();
+      expect(screen.getByText('No topic')).toBeInTheDocument();
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+      // The option emoji strip carries the labels for assistive tech.
+      expect(screen.getAllByLabelText(/2 options: Yes, No/)).toHaveLength(2);
+
+      // Two clickable summaries (open the review dialog) and two Dismiss buttons.
+      const summaries = screen.getAllByRole('button', { name: /Ship it\?|No topic/ });
+      expect(summaries).toHaveLength(2);
+      expect(summaries[0]).toHaveAttribute('title', expect.stringMatching(/review/i));
+      const dismisses = screen.getAllByRole('button', { name: 'Dismiss' });
+      expect(dismisses).toHaveLength(2);
+      expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
+      // No inline Approve — approval happens in the review dialog after
+      // the chair has seen the full proposal.
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+
+      fireEvent.click(dismisses[1]);
+      expect(emit).toHaveBeenCalledWith('poll:dismissRequest', { id: 'r2' });
+    });
+
+    it('clicking a summary opens the review dialog for that request', () => {
+      const meeting = runningWithItem({ pollRequests: [requestFrom('r1', 'github:bob', 'Ship it?')] });
+      const { container } = renderQueue(meeting, chairUser);
+
+      const dialog = container.querySelector('dialog[aria-label="Review poll request"]')!;
+      expect(dialog).not.toBeNull();
+      // Nothing rendered inside until opened (content is gated + lazy).
+      expect(dialog.textContent).toBe('');
+
+      fireEvent.click(screen.getByRole('button', { name: /Ship it\?/ }));
+      // The native dialog is now open; its (lazy) contents start mounting.
+      expect(dialog).toHaveAttribute('open');
+    });
+
+    it('shows a participant only their own request, with Withdraw, and an Edit affordance', () => {
+      const emit = vi.fn();
+      const socket = { emit } as unknown as TypedSocket;
+      const meeting = runningWithItem({
+        pollRequests: [requestFrom('r1', 'github:bob', 'Mine'), requestFrom('r2', 'github:alice', 'Not mine')],
+      });
+      const { container } = renderQueue(meeting, otherUser, socket);
+
+      expect(screen.getByText('Mine')).toBeInTheDocument();
+      expect(screen.queryByText('Not mine')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Mine/ })).toHaveAttribute('title', expect.stringMatching(/edit/i));
+      expect(container.querySelector('dialog[aria-label="Edit poll request"]')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
+      expect(emit).toHaveBeenCalledWith('poll:dismissRequest', { id: 'r1' });
+    });
+
+    it('greys out Dismiss for a beat after another user changes the request list', () => {
+      vi.useFakeTimers();
+      try {
+        const emit = vi.fn();
+        const socket = { emit } as unknown as TypedSocket;
+        const { rerender } = render(
+          <TestMeetingProvider
+            meeting={runningWithItem({ pollRequests: [requestFrom('r1', 'github:bob', 'One')] })}
+            user={chairUser}
+          >
+            <PreferencesProvider>
+              <SocketContext value={socket}>
+                <QueuePanel
+                  autoEditEntryId={null}
+                  onAddEntry={() => {}}
+                  onSavedTopic={() => {}}
+                  onAutoEditConsumed={() => {}}
+                />
+              </SocketContext>
+            </PreferencesProvider>
+          </TestMeetingProvider>,
+        );
+        expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
+
+        // Another participant's request arrives → cooldown.
+        rerender(
+          <TestMeetingProvider
+            meeting={runningWithItem({
+              pollRequests: [requestFrom('r1', 'github:bob', 'One'), requestFrom('r2', 'github:carol', 'Two')],
+            })}
+            user={chairUser}
+          >
+            <PreferencesProvider>
+              <SocketContext value={socket}>
+                <QueuePanel
+                  autoEditEntryId={null}
+                  onAddEntry={() => {}}
+                  onSavedTopic={() => {}}
+                  onAutoEditConsumed={() => {}}
+                />
+              </SocketContext>
+            </PreferencesProvider>
+          </TestMeetingProvider>,
+        );
+        act(() => {
+          vi.advanceTimersByTime(0);
+        });
+        const dismisses = screen.getAllByRole('button', { name: 'Dismiss' });
+        for (const b of dismisses) {
+          expect(b).toBeDisabled();
+          expect(b).toHaveAttribute('title', expect.stringMatching(/just changed/i));
+        }
+        fireEvent.click(dismisses[0]);
+        expect(emit).not.toHaveBeenCalled();
+
+        act(() => {
+          vi.advanceTimersByTime(2000);
+        });
+        expect(dismisses[0]).toBeEnabled();
+        fireEvent.click(dismisses[0]);
+        expect(emit).toHaveBeenCalledWith('poll:dismissRequest', { id: 'r1' });
+        // …and a rapid second click is debounced.
+        fireEvent.click(dismisses[1]);
+        expect(emit).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the review dialog open on a revision and closes it when the request is gone', () => {
+      const scene = (requests: ReturnType<typeof requestFrom>[]) => (
+        <TestMeetingProvider meeting={runningWithItem({ pollRequests: requests })} user={chairUser}>
+          <PreferencesProvider>
+            <SocketContext value={null}>
+              <QueuePanel
+                autoEditEntryId={null}
+                onAddEntry={() => {}}
+                onSavedTopic={() => {}}
+                onAutoEditConsumed={() => {}}
+              />
+            </SocketContext>
+          </PreferencesProvider>
+        </TestMeetingProvider>
+      );
+      const { container, rerender } = render(scene([requestFrom('r1', 'github:bob', 'Original')]));
+      const dialog = container.querySelector('dialog[aria-label="Review poll request"]')!;
+      fireEvent.click(screen.getByRole('button', { name: /Original/ }));
+      expect(dialog).toHaveAttribute('open');
+
+      // Bob revises: r1 is replaced by r2. The dialog stays open (the
+      // chair is offered the revision rather than having it swapped in).
+      rerender(scene([requestFrom('r2', 'github:bob', 'Revised')]));
+      expect(dialog).toHaveAttribute('open');
+
+      // Another chair dismisses r2 → nothing of Bob's remains → closes.
+      rerender(scene([]));
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('locks every interactive element on the Queue tab while the Poll Requests section shifts the layout', () => {
+      vi.useFakeTimers();
+      try {
+        const emit = vi.fn();
+        const socket = { emit } as unknown as TypedSocket;
+        const entry: QueueEntry = { id: 'q1', type: 'topic', topic: 'Mine', userId: 'github:bob' };
+        const scene = (pollRequests?: ReturnType<typeof requestFrom>[]) => (
+          <TestMeetingProvider
+            meeting={runningWithItem({
+              queue: queueOf({ q1: entry }, ['q1']),
+              ...(pollRequests ? { pollRequests } : {}),
+            })}
+            user={chairUser}
+          >
+            <PreferencesProvider>
+              <SocketContext value={socket}>
+                <QueuePanel
+                  autoEditEntryId={null}
+                  onAddEntry={() => {}}
+                  onSavedTopic={() => {}}
+                  onAutoEditConsumed={() => {}}
+                />
+              </SocketContext>
+            </PreferencesProvider>
+          </TestMeetingProvider>
+        );
+        const { rerender } = render(scene());
+        const panel = screen.getByRole('tabpanel', { name: 'Queue' });
+        expect(panel).not.toHaveAttribute('data-interaction-locked');
+
+        // A participant's request arrives: the section appears above the queue.
+        rerender(scene([requestFrom('r1', 'github:carol', 'Temp check')]));
+        act(() => {
+          vi.advanceTimersByTime(0);
+        });
+        expect(panel).toHaveAttribute('data-interaction-locked');
+
+        // One lock for everything on the tab.
+        fireEvent.click(screen.getByRole('button', { name: 'Delete entry: Mine' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Next Speaker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close Queue' }));
+        expect(emit).not.toHaveBeenCalled();
+
+        act(() => {
+          vi.advanceTimersByTime(2000);
+        });
+        expect(panel).not.toHaveAttribute('data-interaction-locked');
+        fireEvent.click(screen.getByRole('button', { name: 'Delete entry: Mine' }));
+        expect(emit).toHaveBeenCalledWith('queue:remove', { id: 'q1' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('renders no Poll Requests section when a participant has no request of their own', () => {
+      const meeting = runningWithItem({ pollRequests: [requestFrom('r2', 'github:alice', 'Not mine')] });
+      renderQueue(meeting, otherUser);
+      expect(screen.queryByRole('region', { name: 'Poll Requests' })).not.toBeInTheDocument();
+    });
+
+    it('labels the setup dialog "Request poll" for non-chairs and "Create poll" for chairs', () => {
+      // jsdom doesn't expose a closed <dialog> through role queries, so
+      // read the label attribute directly.
+      const { container, unmount } = renderQueue(runningWithItem(), otherUser);
+      expect(container.querySelector('dialog[aria-label="Request poll"]')).not.toBeNull();
+      expect(container.querySelector('dialog[aria-label="Create poll"]')).toBeNull();
+      unmount();
+
+      const chair = renderQueue(runningWithItem(), chairUser);
+      expect(chair.container.querySelector('dialog[aria-label="Create poll"]')).not.toBeNull();
+      expect(chair.container.querySelector('dialog[aria-label="Request poll"]')).toBeNull();
+    });
   });
 });

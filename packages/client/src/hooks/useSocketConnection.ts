@@ -135,6 +135,12 @@ export function useSocketConnection(meetingId: string, userKey: string | null): 
     // The server broadcasts the current socket-connection count for
     // this meeting after each join/disconnect so the connection-status
     // dot can show the count on hover.
+    // Unversioned, audience-scoped poll-request events. The server only
+    // sends these to chairs and to the requester, so they sit outside the
+    // version sequence (see `PollRequestedEvent`).
+    socket.on('poll:requested', (event) => dispatch({ type: 'pollRequested', event }));
+    socket.on('poll:requestRemoved', (event) => dispatch({ type: 'pollRequestRemoved', event }));
+
     socket.on('activeConnections', (count) => {
       dispatch({ type: 'setActiveConnections', count });
     });

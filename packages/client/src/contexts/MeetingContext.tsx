@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
-import type { MeetingDeltaAction, MeetingState, User } from '@tcq/shared';
-import { applyDelta, userKey } from '@tcq/shared';
+import type { MeetingDeltaAction, MeetingState, PollRequestedEvent, PollRequestRemovedEvent, User } from '@tcq/shared';
+import { applyDelta, applyPollRequested, applyPollRequestRemoved, userKey } from '@tcq/shared';
 
 // -- State --
 
@@ -71,6 +71,10 @@ export type MeetingAction =
   | { type: 'setServerRevision'; revision: string | null }
   | { type: 'optimisticAgendaReorder'; oldIndex: number; newIndex: number }
   | { type: 'optimisticQueueReorder'; oldIndex: number; newIndex: number }
+  // Unversioned, audience-scoped poll-request events (chairs + requester
+  // only — see `PollRequestedEvent`). They don't touch `lastSeenVersion`.
+  | { type: 'pollRequested'; event: PollRequestedEvent }
+  | { type: 'pollRequestRemoved'; event: PollRequestRemovedEvent }
   // Versioned delta actions — one per `ServerToClientEvents` delta event.
   // Defined in `@tcq/shared` so the same union backs both the React
   // reducer and the integration-test surrogate that verifies client and
@@ -116,6 +120,10 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
         meeting: { ...state.meeting, queue: { ...state.meeting.queue, orderedIds } },
       };
     }
+    case 'pollRequested':
+      return state.meeting ? { ...state, meeting: applyPollRequested(state.meeting, action.event) } : state;
+    case 'pollRequestRemoved':
+      return state.meeting ? { ...state, meeting: applyPollRequestRemoved(state.meeting, action.event) } : state;
     // Versioned delta cases — apply via `applyDelta` and bump
     // `lastSeenVersion` to the delta's version.
     case 'chairs:updated':
@@ -136,6 +144,7 @@ export function meetingReducer(state: MeetingContextState, action: MeetingAction
     case 'poll:stopped':
     case 'poll:reacted':
       if (!state.meeting) return state;
+
       return {
         ...state,
         meeting: applyDelta(state.meeting, action),

@@ -268,7 +268,18 @@ function PollRanEntry({ entry, users }: { entry: LogEntry & { type: 'poll-ran' }
               />
             </>
           )}
+          {entry.requesterId && (
+            <span className="inline-flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
+              requested by
+              <UserBadge
+                user={users[entry.requesterId]}
+                size={16}
+                className="text-xs text-stone-700 dark:text-stone-200 shrink-0"
+              />
+            </span>
+          )}
         </div>
+
         <div className="mt-1.5 space-y-0.5">
           {entry.results.map((r) => (
             <div key={r.label} className="text-sm text-stone-600 dark:text-stone-300">
@@ -452,9 +463,11 @@ function serialiseLog(meeting: MeetingState, log: LogEntry[]): string {
           entry.startChairId === entry.endChairId
             ? userName(users, entry.startChairId)
             : `${userName(users, entry.startChairId)} / ${userName(users, entry.endChairId)}`;
+        const requester = entry.requesterId ? `, requested by ${userName(users, entry.requesterId)}` : '';
         lines.push(
-          `${topic} (${formatDuration(entry.duration)}, ${entry.totalVoters} voter${entry.totalVoters !== 1 ? 's' : ''}) — ${chair}`,
+          `${topic} (${formatDuration(entry.duration)}, ${entry.totalVoters} voter${entry.totalVoters !== 1 ? 's' : ''}) — ${chair}${requester}`,
         );
+
         lines.push('');
         for (const r of entry.results) {
           lines.push(`- ${r.emoji} ${r.label}: ${r.count}`);

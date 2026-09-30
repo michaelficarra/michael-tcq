@@ -20,6 +20,8 @@ import type {
   AgendaReorderedDelta,
   ChairsUpdatedDelta,
   PollReactedDelta,
+  PollRequestRemovedEvent,
+  PollRequestedEvent,
   PollStartedDelta,
   PollStoppedDelta,
   QueueAddedDelta,
@@ -29,7 +31,7 @@ import type {
   QueueReorderedDelta,
   SpeakerAdvancedDelta,
 } from './messages.js';
-import type { MeetingState, User, UserKey } from './types.js';
+import type { MeetingState, PollRequest, User, UserKey } from './types.js';
 
 /**
  * Discriminated union of all delta-shaped actions. The `type` matches
@@ -66,7 +68,24 @@ function mergeUsers(current: Record<UserKey, User>, added: Record<UserKey, User>
 }
 
 /**
+ * Return `meeting` with its `pollRequests` replaced by `requests`. An
+ * empty list drops the key entirely — `pollRequests` is "absent, never
+ * empty" (see `MeetingState`), and the server applies the same rule so
+ * client and server states stay byte-equal.
+ */
+function withPollRequests(meeting: MeetingState, requests: PollRequest[]): MeetingState {
+  const next = { ...meeting };
+  if (requests.length === 0) {
+    delete next.pollRequests;
+  } else {
+    next.pollRequests = requests;
+  }
+  return next;
+}
+
+/**
  * Apply a versioned delta on top of an existing `MeetingState`. The
+
  * gap-detection check on the socket listener is what guarantees the
  * delta is the next-expected one — this function does no version
  * checking itself.
@@ -220,20 +239,53 @@ function applyDeltaInner(meeting: MeetingState, action: MeetingDeltaAction): Mee
             return update ? ({ ...e, ...update } as typeof e) : e;
           })
         : meeting.agenda;
-      return {
-        ...meeting,
-        agenda,
-        current: action.delta.current,
-        queue: action.delta.queue,
-        operational: { ...meeting.operational, lastAdvancementBy: action.delta.lastAdvancementBy },
-        users: mergeUsers(meeting.users, action.delta.users),
-      };
+      // Pending poll requests are temperature checks on the outgoing
+      // item, so advancing the agenda discards them (the server does the
+      // same in `nextAgendaItem`).
+      return withPollRequests(
+        {
+          ...meeting,
+          agenda,
+          current: action.delta.current,
+          queue: action.delta.queue,
+          operational: { ...meeting.operational, lastAdvancementBy: action.delta.lastAdvancementBy },
+          users: mergeUsers(meeting.users, action.delta.users),
+        },
+        [],
+      );
     }
-    case 'poll:started':
-      return { ...meeting, poll: action.delta.poll };
+    case 'poll:started': {
+      const next = { ...meeting, poll: action.delta.poll, users: mergeUsers(meeting.users, action.delta.users) };
+      // Approving a request consumes it.
+      const requestId = action.delta.requestId;
+      return requestId === undefined
+        ? next
+        : withPollRequests(
+            next,
+            (meeting.pollRequests ?? []).filter((r) => r.id !== requestId),
+          );
+    }
     case 'poll:stopped':
       return { ...meeting, poll: undefined };
     case 'poll:reacted':
       return meeting.poll ? { ...meeting, poll: { ...meeting.poll, reactions: action.delta.reactions } } : meeting;
   }
+}
+
+/**
+ * Apply an (unversioned) `poll:requested` event: one pending request per
+ * requester, so a newer request replaces that user's earlier one. Mirrors
+ * `MeetingManager.requestPoll`.
+ */
+export function applyPollRequested(meeting: MeetingState, event: PollRequestedEvent): MeetingState {
+  const others = (meeting.pollRequests ?? []).filter((r) => r.requesterId !== event.request.requesterId);
+  return withPollRequests({ ...meeting, users: mergeUsers(meeting.users, event.users) }, [...others, event.request]);
+}
+
+/** Apply an (unversioned) `poll:requestRemoved` event. */
+export function applyPollRequestRemoved(meeting: MeetingState, event: PollRequestRemovedEvent): MeetingState {
+  return withPollRequests(
+    meeting,
+    (meeting.pollRequests ?? []).filter((r) => r.id !== event.id),
+  );
 }

@@ -61,6 +61,8 @@ const NOTIFICATION_OPTIONS: { key: keyof NotificationPrefs; label: string }[] = 
   { key: 'onPollStarted', label: 'When a poll has started' },
   { key: 'onClarifyingQuestionOnMyTopic', label: 'When a clarifying question is raised on your topic' },
   { key: 'onPointOfOrder', label: 'When a point of order is raised' },
+  { key: 'onPollRequested', label: 'When a poll is requested (chairs only)' },
+
   { key: 'onAgendaItemOverrun', label: 'When the current agenda item exceeds its time estimate' },
 ];
 

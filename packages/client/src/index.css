@@ -437,3 +437,16 @@ abbr {
   -webkit-mask: url('/external-link.svg') no-repeat center / contain;
   mask: url('/external-link.svg') no-repeat center / contain;
 }
+
+/*
+ * Queue tab interaction lock: while `data-interaction-locked` is set (a
+ * brief cooldown after the layout changed by someone else's hand), every
+ * interactive element on the panel is greyed out and non-interactive.
+ * Activation is blocked in JS (see QueuePanel); this is the visual half.
+ * Open dialogs are exempt — they sit in the top layer and don't move.
+ */
+[data-interaction-locked]
+  :is(button, a[href], [role='button'], select, summary, input[type='checkbox'], input[type='radio']):not(dialog *) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

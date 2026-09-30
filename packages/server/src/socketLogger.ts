@@ -112,6 +112,13 @@ export function denormalisePayload(event: string, payload: unknown, meeting: Mee
     if (opt) p.optionId = opt;
   }
 
+  // poll:approveRequest / poll:dismissRequest — id references a pending
+  // poll request.
+  if ((event === 'poll:approveRequest' || event === 'poll:dismissRequest') && 'id' in p) {
+    const req = meeting.pollRequests?.find((r) => r.id === p.id);
+    if (req) p.id = req;
+  }
+
   // meeting:updateChairs — chairs is an array of UserSelections.
   if (event === 'meeting:updateChairs' && Array.isArray(p.chairs)) {
     p.chairs = p.chairs.map((sel) => lookupSelection(meeting, sel));

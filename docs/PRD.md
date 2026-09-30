@@ -383,6 +383,7 @@ The user's own queue entries are visually distinguished with a coloured left bor
 - If the queue is empty when advancement occurs, the current speaker is cleared.
 - If a chair's view of the current speaker or current agenda item is out of date when the **Next Speaker** or **Next Agenda Item** action reaches the server (for example, another chair has just advanced), the action is rejected to prevent conflicts.
 - Both the **Next Speaker** and **Next Agenda Item** actions are debounced to ignore rapid repeated activations. After a change triggered by another user is received from the server, the action enters a brief cooldown during which it is disabled (visually greyed out and non-interactive), preventing accidental double-advancement.
+- When the pending poll requests shown above the queue change by another user's hand, every interactive element on the Queue tab, **Next Speaker** included, is disabled for the same brief cooldown (see **Polls → Poll Requests**).
 - The **Next Speaker** action additionally enters the same cooldown when the entry that was next-up is deleted out of the queue (for example, its owner removes it just as the chair is about to advance). This prevents the chair from accidentally advancing past the intended speaker to whoever shifts into first place. Reordering the queue or inserting a new entry ahead of the next-up one does not trigger the cooldown — only deletion of the next-up entry does.
 
 ### Queue Reordering
@@ -458,7 +459,7 @@ When a chair clicks **Poll**, a setup form appears with an optional topic/questi
 | 🤷    | Indifferent     |
 | 😕    | Unconvinced     |
 
-Chairs can add, remove, and edit options before starting the poll. Each option's emoji is selected via a dedicated emoji picker with search and categories. A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin.
+Chairs can add, remove, and edit options before starting the poll. Each option's emoji is selected via a dedicated emoji picker with search and categories. A minimum of 2 options is required. A checkbox controls whether participants can select multiple options (default) or only one. The chair clicks **Start Poll** to begin. The dialog is dismissed without starting anything via the ✕ in its top-right corner or the Escape key.
 
 ### Reactions
 
@@ -471,6 +472,25 @@ Chairs see a **Copy Results** button that copies a summary to the clipboard: eac
 ### Termination (Chair Only)
 
 **Stop Poll** ends the poll, clears all reactions and options.
+
+### Poll Requests
+
+Any participant can propose a poll for a chair to approve, rather than asking for one out loud. While an agenda item is current and no poll is running, non-chairs see a **Request Poll** button in the same place chairs see **Create Poll**. It opens the same setup form (topic, options, selection mode, same validation) with the heading "Request Poll" and a submit button labelled **Request Poll**; submitting sends the fully-configured proposal to the server instead of starting a poll.
+
+Pending requests are listed in a **Poll Requests** section under the agenda item on the Queue tab (hidden in presentation mode). Each request is a compact, clickable summary line: the requester's user badge, the proposed topic on a single truncated line (or "No topic"), the proposed options' emoji, and how long ago it was requested. Clicking the summary opens the same poll setup form, pre-filled with the requested poll. Visibility is asymmetric:
+
+- **Chairs** see every pending request. Their review dialog (titled "Review poll request") names the requester, lets the chair edit anything before approving, and has an **Approve & Start Poll** button plus **Dismiss request** on the left. Approving starts a poll with the reviewed configuration (edits included) — the approving chair is recorded as the chair who started it, the original requester is still recorded as the requester, and the request is removed. Approval is disabled (with an explanation) while another poll is running; in practice the active-poll modal already sits on top, so a poll must be stopped before a request can be reviewed. Each summary line also has an inline **Dismiss** button for dropping a request without opening it. There is deliberately no inline Approve — a chair approves only after seeing the full proposal.
+- **Participants** see only their own request. Clicking it opens the form titled "Edit poll request", where they can revise it with **Update Request** (replacing their pending request) or remove it with **Withdraw request**. The summary line also has an inline **Withdraw** button.
+
+If the requester revises a request while a chair has it open, the form keeps what the chair was looking at, including any edits, and shows a notice that the requester has revised the request with a **Load revision** button that replaces the form contents with the revision. Approving runs the poll exactly as shown in the form, whether or not the revision was loaded. If the request is removed while open, the form closes.
+
+As with **Queue Advancement**, **Approve & Start Poll**, **Dismiss**, and **Withdraw** are debounced to ignore rapid repeated activations. Because the **Poll Requests** section sits above the speaker and queue controls, any change to it moves everything below it on the page. Whenever the visible requests change by someone else's hand (a request added, revised, or removed by another user, or cleared by an agenda advance another chair triggered), the whole Queue tab enters a single brief cooldown during which every interactive element on it is disabled (visually greyed out and non-interactive), including drag-and-drop. Text already being typed is unaffected. Open dialogs are not affected by the cooldown, except that **Approve & Start Poll**, **Dismiss request**, and **Withdraw request** in the request dialogs are also disabled for its duration. Changes the user caused themselves do not trigger the cooldown.
+
+Each user may be associated with at most one pending request per meeting at any time: submitting a new request replaces that user's earlier one for that meeting.
+
+All pending requests are cleared automatically when the chair advances to the next agenda item (or concludes the meeting), since a request is only applicable to the item that was current when it was made. Pending requests are part of the persisted meeting state and are sent in real time only to chairs and to the requester. Other participants never receive them, so pending requests cannot be used as a communication channel between participants.
+
+A poll started from an approved request records the requester on the resulting **Poll ran** log entry, shown as "requested by _name_" after the chair badge(s) and included in the Markdown export. Chairs can opt in to a browser notification when a request arrives (see **Notifications**).
 
 ## Log
 
@@ -488,13 +508,13 @@ Each log entry records:
 
 The following events are logged:
 
-| Event                    | Logged when                                                                                                            | Description format                                              | Additional data                                                                                                                                                                                                                                          |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Meeting started**      | Chair advances to the first agenda item                                                                                | "Meeting started"                                               | —                                                                                                                                                                                                                                                        |
-| **Agenda item started**  | Chair advances to a new agenda item                                                                                    | "Started: _item name_"                                          | Item presenters (the first presenter is the initial speaker; may be empty for items with no presenters, in which case no initial speaker is set)                                                                                                         |
-| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one)                            | "Finished: _item name_"                                         | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure) |
-| **Topic discussed**      | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the first presenter's introductory turn | Topic name with speaker's user badge inline                     | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below)                                                                                                                                             |
-| **Poll ran**             | Chair stops a poll                                                                                                     | "Ran a poll" (or "Ran a poll: _topic_" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count)                                                           |
+| Event                    | Logged when                                                                                                            | Description format                                              | Additional data                                                                                                                                                                                                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Meeting started**      | Chair advances to the first agenda item                                                                                | "Meeting started"                                               | —                                                                                                                                                                                                                                                                                    |
+| **Agenda item started**  | Chair advances to a new agenda item                                                                                    | "Started: _item name_"                                          | Item presenters (the first presenter is the initial speaker; may be empty for items with no presenters, in which case no initial speaker is set)                                                                                                                                     |
+| **Agenda item finished** | Chair advances past an agenda item (i.e. the next item starts, completing the previous one)                            | "Finished: _item name_"                                         | Duration, participant summary (all distinct users who spoke during the item, excluding any Point of Order speakers), remaining queue (text serialisation of any entries left in the queue when the item was advanced, shown in a collapsible disclosure)                             |
+| **Topic discussed**      | Chair advances the speaker, and the new speaker's entry type is "New Topic" or the first presenter's introductory turn | Topic name with speaker's user badge inline                     | Total topic duration, list of reply/clarification speakers with their durations (see Speaker Grouping below)                                                                                                                                                                         |
+| **Poll ran**             | Chair stops a poll                                                                                                     | "Ran a poll" (or "Ran a poll: _topic_" if a topic was provided) | Chair who ran it (or both chairs if different people started and stopped), the requester ("requested by _name_") if the poll came from an approved poll request, poll topic (if provided), duration, total number of voters, results summary (each option's emoji, label, and count) |
 
 ### Speaker Grouping
 
@@ -588,6 +608,8 @@ Browser-native notifications can be enabled from the Preferences modal. The top-
 - **When a poll has started** — a chair has opened a new poll. The chair who started the poll is not notified about their own action.
 - **When a clarifying question is raised on your topic** — you are the current topic author, and someone else has queued a clarifying question. You are not notified about your own questions.
 - **When a point of order is raised** — another participant has added a point-of-order entry. The author of a point of order is not notified about their own. Off by default.
+- **When a poll is requested** — a participant has submitted a poll request (see **Polls → Poll Requests**). Only fires for chairs of the meeting; the requester is not notified about their own request. Off by default.
+
 - **When the current agenda item exceeds its time estimate** — a time-based notification that fires once, the moment the current agenda item crosses its estimate. Skipped if the item was already overrun when the page loaded. Off by default.
 
 If the user denies permission at the browser prompt (or permission was already denied for the site), the top-level toggle silently stays off. If permission is later revoked through browser settings, the next in-page transition detects the change, self-heals the preference back to off, and no notification is fired. Notifications fire regardless of whether the tab is in the foreground.
@@ -645,6 +667,7 @@ All meeting state changes are broadcast to all connected participants in real ti
 - Current speaker and current topic changes
 - Agenda item advancement
 - Poll state, options, and reactions
+- Pending poll requests (to chairs and the requester only; see **Polls → Poll Requests**)
 - Log entries for significant meeting events
 
 A small connection status indicator is displayed in the bottom-left corner of the meeting page: green when connected to the server, red when disconnected. This helps participants know whether they are seeing live state. While connected, hovering the indicator reveals the current number of active connections to the meeting. (The bottom-right corner is occupied by the toast stack; see **Toasts**.)

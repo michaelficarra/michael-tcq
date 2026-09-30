@@ -156,8 +156,13 @@ export function upgradeMeeting(m: MeetingState): MeetingState {
     ? {
         ...m.poll,
         startChairId: remapKey(remap, m.poll.startChairId),
+        ...(m.poll.requesterId ? { requesterId: remapKey(remap, m.poll.requesterId) } : {}),
         reactions: m.poll.reactions.map((r): Reaction => ({ ...r, userId: remapKey(remap, r.userId) })),
       }
+    : undefined;
+
+  const pollRequests: MeetingState['pollRequests'] = m.pollRequests
+    ? m.pollRequests.map((r) => ({ ...r, requesterId: remapKey(remap, r.requesterId) }))
     : undefined;
 
   return {
@@ -169,6 +174,7 @@ export function upgradeMeeting(m: MeetingState): MeetingState {
     queue: { ...m.queue, entries },
     current,
     poll,
+    ...(pollRequests ? { pollRequests } : {}),
     operational: {
       ...m.operational,
       ...(m.operational.lastAdvancementBy
@@ -217,6 +223,7 @@ export function upgradeLog(entries: LogEntry[], remap: Map<string, UserKey>): Lo
           ...entry,
           startChairId: remapKey(remap, entry.startChairId),
           endChairId: remapKey(remap, entry.endChairId),
+          ...(entry.requesterId ? { requesterId: remapKey(remap, entry.requesterId) } : {}),
         };
     }
   });

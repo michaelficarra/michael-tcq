@@ -28,7 +28,8 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
-import type { AgendaItem, QueueEntry, QueueEntryType } from '@tcq/shared';
+import type { AgendaItem, PollRequest, QueueEntry, QueueEntryType } from '@tcq/shared';
+
 import {
   QUEUE_ENTRY_TYPES,
   QUEUE_ENTRY_LABELS,
@@ -43,6 +44,7 @@ import { useMeetingState, useMeetingDispatch, useIsChair } from '../contexts/Mee
 import { useSocket } from '../contexts/SocketContext.js';
 import { useAdvanceAction } from '../hooks/useAdvanceAction.js';
 import { useNativeDialog } from '../hooks/useNativeDialog.js';
+import { usePollRequestGuard, POLL_REQUEST_COOLDOWN_REASON } from '../hooks/usePollRequestGuard.js';
 import { InlineMarkdown } from './InlineMarkdown.js';
 import { SpeakerControls } from './SpeakerControls.js';
 import { UserBadge } from './UserBadge.js';
@@ -50,7 +52,16 @@ import { PollReactions } from './PollReactions.js';
 const PollSetup = lazy(() => import('./PollSetup.js').then((m) => ({ default: m.PollSetup })));
 import { CountUpTimer } from './CountUpTimer.js';
 import { CopyButton } from './CopyButton.js';
+import { RelativeTime } from '../lib/RelativeTime.js';
 import { inputValidation } from '../lib/inputStyles.js';
+
+/**
+ * Elements whose activation the Queue tab's interaction lock swallows.
+ * Includes dnd-kit drag handles (role="button"). Text inputs are left out
+ * on purpose so typing isn't interrupted.
+ */
+const INTERACTIVE_SELECTOR =
+  'button, a[href], [role="button"], select, summary, input[type="checkbox"], input[type="radio"]';
 
 // Stable references so useSensor's internal useMemo doesn't invalidate every render.
 const POINTER_SENSOR_OPTIONS = {
@@ -174,8 +185,64 @@ export function QueuePanel({
     return last.duration === undefined ? last.startTime : undefined;
   })();
 
-  // Whether the poll setup form is open
+  // Whether the poll setup form is open. Chairs use it to start a poll;
+  // everyone else uses the same form to *request* one (see PollSetup's
+  // `mode`), so the dialog's label and the submit action follow `isChair`.
   const [showPollSetup, setShowPollSetup] = useState(false);
+  const pollSetupMode: 'start' | 'request' = isChair ? 'start' : 'request';
+
+  // Pending poll requests this user should see: chairs see every request
+  // (they're the ones who act on them); a participant sees only their own,
+  // so the list can't become a second, noisier queue for the room.
+  const pollRequests = meeting?.pollRequests;
+  const visiblePollRequests = useMemo(
+    () => (pollRequests ?? []).filter((r) => isChair || r.requesterId === ownerKey),
+    [pollRequests, isChair, ownerKey],
+  );
+
+  // The request currently open in the review dialog (chairs: review/edit/
+  // approve; requesters: revise/withdraw). Held by id so a delta that
+  // removes it (another chair approved or dismissed it, or the agenda
+  // advanced) closes the dialog automatically.
+  // The request open in the review dialog, snapshotted at open time. The
+  // live list may change underneath it: if the same requester revises
+  // their request (which replaces it under a new id), the dialog keeps
+  // showing the snapshot the chair was reading and offers to load the
+  // revision; if the request is gone entirely (dismissed by another
+  // chair, withdrawn, agenda advanced) the dialog closes.
+  const [review, setReview] = useState<PollRequest | null>(null);
+  const liveReviewRequest = review ? visiblePollRequests.find((r) => r.id === review.id) : undefined;
+  const reviewRevision =
+    review && !liveReviewRequest ? visiblePollRequests.find((r) => r.requesterId === review.requesterId) : undefined;
+  const reviewRequest = liveReviewRequest ?? reviewRevision;
+  const openReview = useCallback((request: PollRequest) => setReview(request), []);
+  const closeReview = useCallback(() => setReview(null), []);
+
+  // Debounce + cooldown for Approve / Dismiss / Withdraw (see the hook).
+  const requestGuard = usePollRequestGuard();
+  // Single action-taking cooldown for the whole Queue tab. When the Poll
+  // Requests section changes by someone else's hand, everything below it
+  // moves, and any interactive element could end up under the cursor — so
+  // rather than locking a hand-picked set of controls, swallow every
+  // activation (click, pointer-down/drag, keyboard) on the panel for the
+  // cooldown. Text fields stay typeable so an in-progress edit isn't
+  // interrupted, and open dialogs (top layer, they don't move) are exempt.
+  const interactionLocked = requestGuard.coolingDown;
+  const swallowWhileLocked = useCallback(
+    (e: React.SyntheticEvent) => {
+      if (!interactionLocked) return;
+      const target = e.target as Element | null;
+      if (!target || target.closest('dialog')) return;
+      if (e.type === 'keydown') {
+        const key = (e as React.KeyboardEvent).key;
+        if (key !== 'Enter' && key !== ' ') return;
+      }
+      if (!target.closest(INTERACTIVE_SELECTOR)) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [interactionLocked],
+  );
 
   // Whether the "advance agenda item" confirmation modal is open
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false);
@@ -196,6 +263,11 @@ export function QueuePanel({
   const { dialogRef: pollSetupDialogRef, renderContents: showPollSetupContents } = useNativeDialog(showPollSetup, () =>
     setShowPollSetup(false),
   );
+  const { dialogRef: reviewDialogRef, renderContents: showReviewContents } = useNativeDialog(
+    reviewRequest !== undefined,
+    closeReview,
+  );
+
   const { dialogRef: activePollDialogRef, renderContents: showActivePollContents } = useNativeDialog(
     Boolean(meeting?.poll),
     () => {},
@@ -439,7 +511,17 @@ export function QueuePanel({
   })();
 
   return (
-    <div id="panel-queue" role="tabpanel" aria-label="Queue" className="p-6 space-y-6">
+    <div
+      id="panel-queue"
+      role="tabpanel"
+      aria-label="Queue"
+      className="p-6 space-y-6"
+      data-interaction-locked={interactionLocked || undefined}
+      aria-busy={interactionLocked || undefined}
+      onClickCapture={swallowWhileLocked}
+      onPointerDownCapture={swallowWhileLocked}
+      onKeyDownCapture={swallowWhileLocked}
+    >
       {/* --- Agenda Item Section --- */}
       <section aria-labelledby="agenda-item-heading">
         <div className="flex items-center gap-3 mb-1">
@@ -482,6 +564,18 @@ export function QueuePanel({
                 </button>
               )}
             </>
+          )}
+
+          {/* Participants can't start a poll, but they can propose one for
+              a chair to approve — same setup form, different verb. */}
+          {!isChair && user && currentAgendaItem && !meeting.poll && (
+            <button
+              onClick={() => setShowPollSetup(true)}
+              className="text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5
+                         text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer presentation-hidden"
+            >
+              Request Poll
+            </button>
           )}
         </div>
 
@@ -541,7 +635,36 @@ export function QueuePanel({
         )}
       </section>
 
+      {/* --- Poll Requests Section --- */}
+      {visiblePollRequests.length > 0 && (
+        <section aria-labelledby="poll-requests-heading" className="presentation-hidden">
+          <h2
+            id="poll-requests-heading"
+            className="text-sm font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 select-none mb-1"
+          >
+            Poll Requests
+          </h2>
+          <ul className="pl-3 space-y-1.5">
+            {visiblePollRequests.map((request) => (
+              <PollRequestRow
+                key={request.id}
+                request={request}
+                requester={meeting.users[request.requesterId]}
+                isChair={isChair}
+                onOpen={() => openReview(request)}
+                dismissDisabled={requestGuard.disabled}
+                dismissDisabledReason={requestGuard.coolingDown ? POLL_REQUEST_COOLDOWN_REASON : undefined}
+                onDismiss={() =>
+                  requestGuard.guard(request.id, () => socket?.emit('poll:dismissRequest', { id: request.id }))
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* --- Current Topic Section (hidden when the same turn is the current speaker) --- */}
+
       {currentTopic && currentTopic.speakerId !== currentSpeaker?.id && (
         <section aria-labelledby="topic-heading">
           <h2
@@ -818,17 +941,90 @@ export function QueuePanel({
         )}
       </dialog>
 
-      {/* Poll setup modal — chair only (lazy-loaded to keep emoji-mart out of the main bundle) */}
+      {/* Poll setup modal — "Create poll" for chairs, "Request poll" for
+          participants (lazy-loaded to keep emoji-mart out of the main bundle) */}
       <dialog
         ref={pollSetupDialogRef}
-        aria-label="Create poll"
+        aria-label={pollSetupMode === 'request' ? 'Request poll' : 'Create poll'}
+
         className="tcq-dialog w-[min(28rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
                    border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-left
                    shadow-lg dark:shadow-stone-950/50"
       >
         {showPollSetupContents && (
           <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
-            <PollSetup onCancel={() => setShowPollSetup(false)} onStarted={() => setShowPollSetup(false)} />
+            <PollSetup
+              mode={pollSetupMode}
+              onCancel={() => setShowPollSetup(false)}
+              onSubmitted={() => setShowPollSetup(false)}
+            />
+          </Suspense>
+        )}
+      </dialog>
+
+      {/* Poll request review modal — the same setup form pre-filled from a
+          pending request. Chairs can edit and approve (or dismiss);
+          requesters can revise (or withdraw) their own. */}
+      <dialog
+        ref={reviewDialogRef}
+        aria-label={isChair ? 'Review poll request' : 'Edit poll request'}
+        className="tcq-dialog w-[min(36rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-lg
+                   border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-left
+                   shadow-lg dark:shadow-stone-950/50"
+      >
+        {showReviewContents && reviewRequest && (
+          <Suspense fallback={<div className="p-6 text-stone-400">Loading&hellip;</div>}>
+            <PollSetup
+              // Keyed on the snapshot so the form re-seeds only when a
+              // different request (or a loaded revision) is opened.
+              key={review!.id}
+              mode={isChair ? 'approve' : 'request'}
+              initial={review!}
+              // If the requester revised the request, the snapshot's id is
+              // gone server-side; approve their live request with exactly
+              // what the chair sees in the form.
+              approveRequestId={reviewRequest.id}
+              requester={meeting.users[review!.requesterId]}
+              notice={
+                reviewRevision
+                  ? {
+                      text: 'The requester has revised this request.',
+                      actionLabel: 'Load revision',
+                      onAction: () => setReview(reviewRevision),
+                    }
+                  : undefined
+              }
+              // A poll is a single modal for the whole room — approving a
+              // second one mid-poll would silently replace the first.
+              submitDisabledReason={
+                isChair && meeting.poll
+                  ? 'Stop the running poll first'
+                  : requestGuard.coolingDown
+                    ? POLL_REQUEST_COOLDOWN_REASON
+                    : undefined
+              }
+              // Route the submit through the guard so a double-click (or a
+              // click during another user's change) can't approve twice
+              // or approve a revision the chair hasn't seen.
+              beforeSubmit={() => {
+                let allowed = false;
+                requestGuard.guard(reviewRequest.id, () => {
+                  allowed = true;
+                });
+                return allowed;
+              }}
+              secondaryAction={{
+                label: isChair ? 'Dismiss request' : 'Withdraw request',
+                disabled: requestGuard.disabled,
+                onClick: () =>
+                  requestGuard.guard(reviewRequest.id, () => {
+                    socket?.emit('poll:dismissRequest', { id: reviewRequest.id });
+                    closeReview();
+                  }),
+              }}
+              onCancel={() => closeReview()}
+              onSubmitted={() => closeReview()}
+            />
           </Suspense>
         )}
       </dialog>
@@ -1237,4 +1433,82 @@ function entryTypeColor(type: string): string {
     default:
       return 'text-stone-600 dark:text-stone-400';
   }
+}
+
+// -- Poll request row --
+
+interface PollRequestRowProps {
+  request: PollRequest;
+  requester: import('@tcq/shared').User | undefined;
+  isChair: boolean;
+  /** Open the request in the review dialog (full text, editable). */
+  onOpen: () => void;
+  /** Dismiss (chair) or withdraw (requester) without opening it. */
+  onDismiss: () => void;
+  /** Greys out Dismiss/Withdraw during the debounce/cooldown window. */
+  dismissDisabled?: boolean;
+  /** Tooltip explaining why it's disabled (cooldown only). */
+  dismissDisabledReason?: string;
+}
+
+/**
+ * One pending poll request as a compact, clickable summary line: who
+ * asked, the topic on a single truncated line, the option emoji, and
+ * how long ago. Clicking the summary opens the review dialog, which
+ * shows the full topic and every option in the editable setup form —
+ * that's where a chair reads the whole proposal and approves it. The
+ * only inline action is Dismiss / Withdraw.
+ */
+function PollRequestRow({
+  request,
+  requester,
+  isChair,
+  onOpen,
+  onDismiss,
+  dismissDisabled = false,
+  dismissDisabledReason,
+}: PollRequestRowProps) {
+  return (
+    <li className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={isChair ? 'Review, edit and approve this request' : 'View or edit your request'}
+        className="group flex min-w-0 flex-1 items-center gap-3 rounded-md border border-stone-200 dark:border-stone-700
+                   bg-stone-50 dark:bg-stone-800 px-3 py-1.5 text-left text-sm cursor-pointer
+                   hover:border-teal-500/60 hover:bg-stone-100 dark:hover:bg-stone-700/70 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-teal-500"
+      >
+        <UserBadge user={requester} size={18} className="shrink-0 text-stone-700 dark:text-stone-200" />
+        <span className="min-w-0 flex-1 truncate text-stone-800 dark:text-stone-100">
+          {request.topic ? (
+            <InlineMarkdown>{request.topic}</InlineMarkdown>
+          ) : (
+            <span className="italic text-stone-500 dark:text-stone-400">No topic</span>
+          )}
+        </span>
+        <span
+          className="shrink-0 text-stone-500 dark:text-stone-400 tracking-wide"
+          aria-label={`${request.options.length} options: ${request.options.map((o) => o.label).join(', ')}`}
+        >
+          {request.options.map((o) => o.emoji).join(' ')}
+        </span>
+        <RelativeTime timestamp={request.requestedAt} className="shrink-0 text-xs text-stone-500 dark:text-stone-400" />
+        <span className="shrink-0 text-xs text-teal-700 dark:text-teal-400 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
+          {isChair ? 'Review' : 'Edit'} →
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        disabled={dismissDisabled}
+        title={dismissDisabledReason}
+        className="shrink-0 text-xs border border-stone-300 dark:border-stone-600 rounded px-2 py-0.5 transition-colors cursor-pointer
+                   text-stone-600 dark:text-stone-400 enabled:hover:bg-stone-100 dark:enabled:hover:bg-stone-800
+                   disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isChair ? 'Dismiss' : 'Withdraw'}
+      </button>
+    </li>
+  );
 }

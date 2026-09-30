@@ -196,4 +196,98 @@ describe('meetingReducer', () => {
       expect(result).toBe(state);
     });
   });
+  // -- poll request deltas --
+
+  describe('poll request deltas', () => {
+    const request = (id: string, requesterId: string) => ({
+      id,
+      requesterId,
+      multiSelect: true,
+      options: [
+        { id: `${id}-a`, emoji: '👍', label: 'Yes' },
+        { id: `${id}-b`, emoji: '👎', label: 'No' },
+      ],
+      requestedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    it('pollRequested appends a request, merges users, and leaves lastSeenVersion alone', () => {
+      const state = makeState({ meeting: makeMeeting(), lastSeenVersion: 7 });
+      const next = meetingReducer(state, {
+        type: 'pollRequested',
+        event: { request: request('r1', 'github:bob'), users: { 'github:alice': alice } },
+      });
+      expect(next.meeting?.pollRequests?.map((r) => r.id)).toEqual(['r1']);
+      expect(next.meeting?.users['github:alice']).toEqual(alice);
+      // Unversioned: only chairs and the requester receive these events.
+      expect(next.lastSeenVersion).toBe(7);
+      expect(next.meeting?.operational.version).toBe(state.meeting!.operational.version);
+    });
+
+    it('pollRequested replaces an earlier request from the same requester', () => {
+      const meeting = makeMeeting({ pollRequests: [request('r1', 'github:bob'), request('r2', 'github:carol')] });
+      const next = meetingReducer(makeState({ meeting, lastSeenVersion: 0 }), {
+        type: 'pollRequested',
+        event: { request: request('r3', 'github:bob') },
+      });
+      expect(next.meeting?.pollRequests?.map((r) => r.id)).toEqual(['r2', 'r3']);
+    });
+
+    it('pollRequestRemoved drops the request and the key once empty', () => {
+      const meeting = makeMeeting({ pollRequests: [request('r1', 'github:bob')] });
+      const next = meetingReducer(makeState({ meeting, lastSeenVersion: 3 }), {
+        type: 'pollRequestRemoved',
+        event: { id: 'r1' },
+      });
+      expect('pollRequests' in next.meeting!).toBe(false);
+      expect(next.lastSeenVersion).toBe(3);
+    });
+
+    it('poll:started with requestId consumes that request only', () => {
+      const meeting = makeMeeting({ pollRequests: [request('r1', 'github:bob'), request('r2', 'github:carol')] });
+      const poll = {
+        options: [],
+        reactions: [],
+        startTime: '2026-01-01T00:00:00.000Z',
+        startChairId: 'github:alice' as const,
+        multiSelect: true,
+        requesterId: 'github:bob' as const,
+      };
+      const next = meetingReducer(makeState({ meeting, lastSeenVersion: 0 }), {
+        type: 'poll:started',
+        delta: { version: 1, poll, requestId: 'r1' },
+      });
+      expect(next.meeting?.poll).toEqual(poll);
+      expect(next.meeting?.pollRequests?.map((r) => r.id)).toEqual(['r2']);
+    });
+
+    it('poll:started without requestId leaves pending requests alone', () => {
+      const meeting = makeMeeting({ pollRequests: [request('r1', 'github:bob')] });
+      const poll = {
+        options: [],
+        reactions: [],
+        startTime: '2026-01-01T00:00:00.000Z',
+        startChairId: 'github:alice' as const,
+        multiSelect: true,
+      };
+      const next = meetingReducer(makeState({ meeting, lastSeenVersion: 0 }), {
+        type: 'poll:started',
+        delta: { version: 1, poll },
+      });
+      expect(next.meeting?.pollRequests?.map((r) => r.id)).toEqual(['r1']);
+    });
+
+    it('agenda:advanced clears pending requests', () => {
+      const meeting = makeMeeting({ pollRequests: [request('r1', 'github:bob')] });
+      const next = meetingReducer(makeState({ meeting, lastSeenVersion: 0 }), {
+        type: 'agenda:advanced',
+        delta: {
+          version: 1,
+          current: { topicSpeakers: [], agendaItemId: 'x', startedAt: 'x' },
+          queue: { entries: {}, orderedIds: [], closed: false },
+          lastAdvancementBy: 'github:alice',
+        },
+      });
+      expect('pollRequests' in next.meeting!).toBe(false);
+    });
+  });
 });

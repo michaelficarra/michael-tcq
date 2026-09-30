@@ -4,6 +4,7 @@ import type {
   CurrentSpeaker,
   LogEntry,
   MeetingState,
+  PollRequest,
   QueueEntry,
   QueueEntryType,
   Session,
@@ -761,6 +762,8 @@ export class MeetingManager {
         orderedIds: [],
         closed: false,
       };
+      // Pending poll requests were about the item just concluded.
+      delete meeting.pollRequests;
       this.markDirty(meetingId);
       return { kind: 'concluded' };
     }
@@ -768,6 +771,12 @@ export class MeetingManager {
     const now = new Date().toISOString();
     const nextItem = meeting.agenda[nextIndex] as AgendaItem;
     this.activateAgendaItem(meeting, nextItem, now);
+    // Pending poll requests are temperature checks on the outgoing item;
+    // they don't carry over. Mirrored by the client reducer's
+    // `agenda:advanced` case (see `applyDelta`). Deliberately *not* done
+    // in `activateAgendaItem` — the past-final auto-activation path
+    // (`agenda:added`) leaves requests alone, and the reducer matches.
+    delete meeting.pollRequests;
 
     this.markDirty(meetingId);
     return { kind: 'advanced', item: nextItem };
@@ -1034,6 +1043,7 @@ export class MeetingManager {
     startChairId: UserKey,
     topic: string | undefined,
     multiSelect: boolean,
+    requesterId?: UserKey,
   ): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
@@ -1049,9 +1059,78 @@ export class MeetingManager {
       startChairId,
       topic,
       multiSelect,
+      // Only stamped when the poll came from an approved request, so
+      // chair-initiated polls serialise exactly as before.
+      ...(requesterId ? { requesterId } : {}),
     };
     this.markDirty(meetingId);
     return true;
+  }
+
+  // -- Poll request mutations --
+
+  /**
+   * Record a participant's proposal for a poll. Each user holds at most
+   * one pending request per meeting: a new request from the same user
+   * replaces their earlier one (in place of it in the list order would be
+   * surprising — the replacement goes to the end, as the newest ask).
+   *
+   * Returns the stored request, or null if the meeting doesn't exist.
+   */
+  requestPoll(
+    meetingId: string,
+    options: { emoji: string; label: string }[],
+    user: User,
+    topic: string | undefined,
+    multiSelect: boolean,
+  ): PollRequest | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting) return null;
+
+    const requesterId = ensureUser(meeting, user);
+    const request: PollRequest = {
+      id: randomUUID(),
+      requesterId,
+      ...(topic ? { topic } : {}),
+      multiSelect,
+      options: options.map((opt) => ({ id: randomUUID(), emoji: opt.emoji, label: opt.label })),
+      requestedAt: new Date().toISOString(),
+    };
+
+    const others = (meeting.pollRequests ?? []).filter((r) => r.requesterId !== requesterId);
+    meeting.pollRequests = [...others, request];
+    this.markDirty(meetingId);
+    return request;
+  }
+
+  /** Look up a pending poll request by ID. */
+  getPollRequest(meetingId: string, requestId: string): PollRequest | undefined {
+    return this.meetings.get(meetingId)?.pollRequests?.find((r) => r.id === requestId);
+  }
+
+  /**
+   * Remove a pending poll request (approved, dismissed, or withdrawn).
+   * When the list empties the key is dropped entirely — `pollRequests`
+   * is "absent, never empty" so the client reducer can mirror it exactly.
+   *
+   * Returns the removed request, or null if it (or the meeting) doesn't
+   * exist.
+   */
+  removePollRequest(meetingId: string, requestId: string): PollRequest | null {
+    const meeting = this.meetings.get(meetingId);
+    if (!meeting?.pollRequests) return null;
+
+    const removed = meeting.pollRequests.find((r) => r.id === requestId);
+    if (!removed) return null;
+
+    const remaining = meeting.pollRequests.filter((r) => r.id !== requestId);
+    if (remaining.length === 0) {
+      delete meeting.pollRequests;
+    } else {
+      meeting.pollRequests = remaining;
+    }
+    this.markDirty(meetingId);
+    return removed;
   }
 
   /**

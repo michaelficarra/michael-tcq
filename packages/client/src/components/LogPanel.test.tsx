@@ -367,6 +367,23 @@ describe('LogPanel', () => {
     expect(separators.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows who requested a poll that was started from an approved request', () => {
+    renderLog(makeMeeting(), [
+      {
+        type: 'poll-ran',
+        timestamp: new Date().toISOString(),
+        startChairId: 'github:alice',
+        endChairId: 'github:alice',
+        requesterId: 'github:bob',
+        duration: 60 * 1000,
+        totalVoters: 2,
+        results: [{ emoji: '👍', label: 'Yes', count: 2 }],
+      },
+    ]);
+    expect(screen.getByText('requested by')).toBeTruthy();
+    expect(screen.getByText('Bob')).toBeTruthy();
+  });
+
   it('uses singular "voter" for a single voter', () => {
     renderLog(makeMeeting(), [
       {

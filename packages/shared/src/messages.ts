@@ -25,6 +25,7 @@ import type {
   CurrentContext,
   MeetingQueueState,
   MeetingState,
+  PollRequest,
   QueueEntry,
   Reaction,
   Session,
@@ -157,8 +158,36 @@ export type AgendaAdvancedDelta = DeltaEnvelope & {
   lastAdvancementBy: UserKey;
 };
 
-/** Payload for `poll:started`. */
-export type PollStartedDelta = DeltaEnvelope & { poll: ActivePoll };
+/**
+ * Payload for `poll:started`. When the poll was started by approving a
+ * participant's request, `requestId` names the request that was consumed
+ * so clients drop it from `pollRequests` in the same delta.
+ */
+export type PollStartedDelta = DeltaEnvelope & { poll: ActivePoll; requestId?: string };
+
+/**
+ * Payload for `poll:requested` — a participant proposed (or revised) a
+ * poll. Replaces any earlier pending request from the same requester.
+ *
+ * Not a versioned delta: pending requests are only ever sent to the
+ * meeting's chairs and to the requester, so they can't sit on the
+ * room-wide version sequence without leaving gaps for everyone else.
+ * Non-chairs never receive other participants' requests at all — not even
+ * that one exists — so the list can't be used as a side channel.
+ */
+export interface PollRequestedEvent {
+  request: PollRequest;
+  users?: Record<UserKey, User>;
+}
+
+/**
+ * Payload for `poll:requestRemoved` — a pending request was dismissed by
+ * a chair or withdrawn by its requester. Not versioned; same audience as
+ * `poll:requested`.
+ */
+export interface PollRequestRemovedEvent {
+  id: string;
+}
 
 /** Payload for `poll:stopped`. */
 export type PollStoppedDelta = DeltaEnvelope;
@@ -457,6 +486,32 @@ export const PollStartPayloadSchema = z.object({
 export type PollStartPayload = z.infer<typeof PollStartPayloadSchema>;
 
 /**
+ * Payload for proposing a poll for chair approval. Identical in shape to
+ * `PollStartPayloadSchema` — a request is a fully-configured poll that
+ * simply hasn't been started yet.
+ */
+export const PollRequestPayloadSchema = PollStartPayloadSchema;
+export type PollRequestPayload = z.infer<typeof PollRequestPayloadSchema>;
+
+/** Payload for dismissing (or withdrawing) a pending poll request by ID. */
+export const PollRequestIdPayloadSchema = z.object({
+  id: z.string(),
+});
+export type PollRequestIdPayload = z.infer<typeof PollRequestIdPayloadSchema>;
+
+/**
+ * Payload for approving a pending poll request. The chair reviews the
+ * request in the poll setup form and may edit it before approving, so
+ * every `PollStartPayload` field is accepted as an optional override;
+ * anything omitted falls back to what the requester proposed. Overrides
+ * go through the same validation as `poll:start`.
+ */
+export const PollApproveRequestPayloadSchema = PollStartPayloadSchema.partial().extend({
+  id: z.string(),
+});
+export type PollApproveRequestPayload = z.infer<typeof PollApproveRequestPayloadSchema>;
+
+/**
  * Payload for toggling a poll reaction. References the option by its ID.
  * Each user can have at most one reaction per option; sending the same
  * option again removes it (toggle).
@@ -690,6 +745,9 @@ export interface ServerToClientEvents {
   'poll:started': (delta: PollStartedDelta) => void;
   'poll:stopped': (delta: PollStoppedDelta) => void;
   'poll:reacted': (delta: PollReactedDelta) => void;
+  // ---- Unversioned, audience-scoped (chairs + requester only) ----
+  'poll:requested': (event: PollRequestedEvent) => void;
+  'poll:requestRemoved': (event: PollRequestRemovedEvent) => void;
 }
 
 /** Events clients send to the server. */
@@ -814,4 +872,27 @@ export interface ClientToServerEvents {
    * user can react. Sending the same reaction again removes it.
    */
   'poll:react': (payload: PollReactPayload) => void;
+
+  /**
+   * Propose a fully-configured poll for a chair to approve. Any
+   * authenticated user can do this. Each user holds at most one pending
+   * request — a new one replaces their earlier one. Same shape and
+   * validation as `poll:start`.
+   */
+  'poll:request': (payload: PollRequestPayload) => void;
+
+  /**
+   * Approve a pending poll request (chair only): starts a poll with the
+   * request's options/topic/mode — or the chair's edited versions, if any
+   * override fields are present — and removes the request. The poll is
+   * still attributed to the original requester. Rejected while another
+   * poll is already running.
+   */
+  'poll:approveRequest': (payload: PollApproveRequestPayload) => void;
+
+  /**
+   * Remove a pending poll request without starting it. Chairs can dismiss
+   * any request; a participant can withdraw their own.
+   */
+  'poll:dismissRequest': (payload: PollRequestIdPayload) => void;
 }

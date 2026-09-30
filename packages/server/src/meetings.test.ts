@@ -1193,6 +1193,92 @@ describe('MeetingManager', () => {
     });
   });
 
+  describe('startPoll with requesterId', () => {
+    it('stamps requesterId only when provided', () => {
+      const meeting = manager.create([testUser]);
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, undefined, true);
+      expect('requesterId' in meeting.poll!).toBe(false);
+
+      const requester = { ...testUser, accountId: '77', handle: 'asker', name: 'Asker' };
+      manager.startPoll(meeting.id, samplePollOptions, chairKey, 'q', true, userKey(requester));
+      expect(meeting.poll!.requesterId).toBe(userKey(requester));
+    });
+  });
+
+  describe('requestPoll / removePollRequest', () => {
+    const asker = { ...testUser, accountId: '77', handle: 'asker', name: 'Asker' };
+    const other = { ...testUser, accountId: '78', handle: 'other', name: 'Other' };
+
+    it('records a request with fresh option ids and the requester in meeting.users', () => {
+      const meeting = manager.create([testUser]);
+      const req = manager.requestPoll(meeting.id, samplePollOptions, asker, 'Ship it?', false)!;
+
+      expect(req).toBeDefined();
+      expect(meeting.pollRequests).toEqual([req]);
+      expect(req.requesterId).toBe(userKey(asker));
+      expect(meeting.users[req.requesterId].handle).toBe('asker');
+      expect(req.topic).toBe('Ship it?');
+      expect(req.multiSelect).toBe(false);
+      expect(req.options).toHaveLength(3);
+      expect(new Set(req.options.map((o) => o.id)).size).toBe(3);
+      expect(req.requestedAt).toMatch(/^\d{4}-/);
+      // No topic → key omitted (keeps the persisted shape tidy).
+      const bare = manager.requestPoll(meeting.id, samplePollOptions, other, undefined, true)!;
+      expect('topic' in bare).toBe(false);
+      // Poll is not started by a request.
+      expect(meeting.poll).toBeUndefined();
+    });
+
+    it('keeps one request per user, appending the replacement at the end', () => {
+      const meeting = manager.create([testUser]);
+      const a1 = manager.requestPoll(meeting.id, samplePollOptions, asker, 'a1', true)!;
+      const o1 = manager.requestPoll(meeting.id, samplePollOptions, other, 'o1', true)!;
+      const a2 = manager.requestPoll(meeting.id, samplePollOptions, asker, 'a2', true)!;
+
+      expect(meeting.pollRequests!.map((r) => r.id)).toEqual([o1.id, a2.id]);
+      expect(meeting.pollRequests!.find((r) => r.id === a1.id)).toBeUndefined();
+    });
+
+    it('removePollRequest returns the removed request and drops the key when empty', () => {
+      const meeting = manager.create([testUser]);
+      const r1 = manager.requestPoll(meeting.id, samplePollOptions, asker, undefined, true)!;
+      const r2 = manager.requestPoll(meeting.id, samplePollOptions, other, undefined, true)!;
+
+      expect(manager.removePollRequest(meeting.id, r1.id)).toEqual(r1);
+      expect(meeting.pollRequests).toEqual([r2]);
+      expect(manager.removePollRequest(meeting.id, r1.id)).toBeNull(); // already gone
+      expect(manager.removePollRequest(meeting.id, r2.id)).toEqual(r2);
+      expect('pollRequests' in meeting).toBe(false);
+      expect(manager.removePollRequest('no-such-meeting', r2.id)).toBeNull();
+    });
+
+    it('getPollRequest finds a pending request by id', () => {
+      const meeting = manager.create([testUser]);
+      const r1 = manager.requestPoll(meeting.id, samplePollOptions, asker, undefined, true)!;
+      expect(manager.getPollRequest(meeting.id, r1.id)).toEqual(r1);
+      expect(manager.getPollRequest(meeting.id, 'nope')).toBeUndefined();
+    });
+
+    it('nextAgendaItem clears pending requests on advance and on conclude', () => {
+      const meeting = manager.create([testUser]);
+      manager.addAgendaItem(meeting.id, 'First', []);
+      manager.addAgendaItem(meeting.id, 'Second', []);
+      manager.nextAgendaItem(meeting.id);
+
+      manager.requestPoll(meeting.id, samplePollOptions, asker, undefined, true);
+      expect(manager.nextAgendaItem(meeting.id).kind).toBe('advanced');
+      expect('pollRequests' in meeting).toBe(false);
+
+      manager.requestPoll(meeting.id, samplePollOptions, asker, undefined, true);
+      expect(manager.nextAgendaItem(meeting.id).kind).toBe('concluded');
+      expect('pollRequests' in meeting).toBe(false);
+    });
+
+    it('returns null for a non-existent meeting', () => {
+      expect(manager.requestPoll('no-such-meeting', samplePollOptions, asker, undefined, true)).toBeNull();
+    });
+  });
+
   describe('toggleReaction', () => {
     it('adds a reaction when the user has not reacted to this option', () => {
       const meeting = manager.create([testUser]);

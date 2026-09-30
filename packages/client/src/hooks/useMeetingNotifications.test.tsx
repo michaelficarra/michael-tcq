@@ -42,6 +42,7 @@ function seedPreferences(opts: { enabled: boolean; prefs?: Partial<NotificationP
       onMeetingStarted: true,
       onAgendaAdvance: true,
       onPollStarted: true,
+      onPollRequested: false,
       onClarifyingQuestionOnMyTopic: true,
       onPointOfOrder: false,
       onAgendaItemOverrun: false,
@@ -490,5 +491,64 @@ describe('useMeetingNotifications', () => {
     expect(notificationCtor).not.toHaveBeenCalled();
     // Preference self-healed to off — persisted to localStorage.
     expect(localStorage.getItem('tcq-notifications-enabled')).toBe('false');
+  });
+  describe('poll requested', () => {
+    const request = (id: string, requesterId: string, topic?: string) => ({
+      id,
+      requesterId,
+      ...(topic ? { topic } : {}),
+      multiSelect: true,
+      options: [],
+      requestedAt: new Date().toISOString(),
+    });
+
+    it('fires "Poll requested" for a chair when a participant files a request (opt-in)', () => {
+      seedPreferences({ enabled: true, prefs: { onPollRequested: true } });
+      const prev = makeMeeting();
+      const { rerender } = render(<Scene meeting={prev} user={alice} />);
+
+      rerender(
+        <Scene meeting={makeMeeting({ pollRequests: [request('r1', 'github:bob', 'Ship it?')] })} user={alice} />,
+      );
+
+      expect(notificationCtor).toHaveBeenCalledWith(
+        'Poll requested',
+        expect.objectContaining({ body: expect.stringContaining('Bob') }),
+      );
+      expect(notificationCtor).toHaveBeenCalledWith(
+        'Poll requested',
+        expect.objectContaining({ body: expect.stringContaining('Ship it?') }),
+      );
+    });
+
+    it('is off by default', () => {
+      seedPreferences({ enabled: true });
+      const { rerender } = render(<Scene meeting={makeMeeting()} user={alice} />);
+      rerender(<Scene meeting={makeMeeting({ pollRequests: [request('r1', 'github:bob')] })} user={alice} />);
+      expect(notificationCtor.mock.calls.filter(([t]) => t === 'Poll requested')).toHaveLength(0);
+    });
+
+    it('does NOT fire for non-chairs, nor for the requester themselves', () => {
+      seedPreferences({ enabled: true, prefs: { onPollRequested: true } });
+      // Bob is not a chair.
+      const { rerender, unmount } = render(<Scene meeting={makeMeeting()} user={bob} />);
+      rerender(<Scene meeting={makeMeeting({ pollRequests: [request('r1', 'github:alice')] })} user={bob} />);
+      expect(notificationCtor.mock.calls.filter(([t]) => t === 'Poll requested')).toHaveLength(0);
+      unmount();
+
+      // Alice is a chair but filed the request herself.
+      const second = render(<Scene meeting={makeMeeting()} user={alice} />);
+      second.rerender(<Scene meeting={makeMeeting({ pollRequests: [request('r2', 'github:alice')] })} user={alice} />);
+      expect(notificationCtor.mock.calls.filter(([t]) => t === 'Poll requested')).toHaveLength(0);
+    });
+
+    it('does not re-fire for a request that was already pending', () => {
+      seedPreferences({ enabled: true, prefs: { onPollRequested: true } });
+      const pending = makeMeeting({ pollRequests: [request('r1', 'github:bob')] });
+      const { rerender } = render(<Scene meeting={pending} user={alice} />);
+      // Unrelated change: the queue closes.
+      rerender(<Scene meeting={{ ...pending, queue: { ...pending.queue, closed: true } }} user={alice} />);
+      expect(notificationCtor.mock.calls.filter(([t]) => t === 'Poll requested')).toHaveLength(0);
+    });
   });
 });

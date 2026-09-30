@@ -2082,6 +2082,381 @@ describe('Socket.IO integration', () => {
     });
   });
 
+  // -- Poll request events --
+
+  describe('poll:request', () => {
+    const chairUser = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+
+    it('lets a non-chair participant file a fully-configured request and broadcasts it', async () => {
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const client = await joinMeeting(meeting.id);
+
+      const deltaPromise = waitForEvent<{ request: { id: string; requesterId: string }; users: object }>(
+        client,
+        'poll:requested',
+      );
+      client.emit('poll:request', { options: samplePollOptions, topic: 'Ship it?', multiSelect: false });
+      const delta = await deltaPromise;
+
+      const state = ctx.meetingManager.get(meeting.id)!;
+      expect(state.poll).toBeUndefined(); // a request never starts a poll by itself
+      expect(state.pollRequests).toHaveLength(1);
+      const req = state.pollRequests![0];
+      expect(req.id).toBe(delta.request.id);
+      expect(state.users[req.requesterId].handle).toBe('testuser');
+      expect(req.topic).toBe('Ship it?');
+      expect(req.multiSelect).toBe(false);
+      expect(req.options.map((o) => o.label)).toEqual(['Love', 'Like']);
+      expect(req.options[0].id).not.toBe(req.options[1].id);
+      // The requester's User record rides on the delta so other clients can render the badge.
+      expect(delta.users).toHaveProperty(req.requesterId);
+    });
+
+    it('applies the same validation as poll:start', async () => {
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:request', { options: [{ emoji: '👍', label: 'Only one' }] });
+      expect(await errorPromise).toMatch(/at least 2/i);
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toBeUndefined();
+    });
+
+    it("replaces the same user's earlier request rather than stacking them", async () => {
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const client = await joinMeeting(meeting.id);
+
+      let p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:request', { options: samplePollOptions, topic: 'First ask' });
+      await p;
+      const firstId = ctx.meetingManager.get(meeting.id)!.pollRequests![0].id;
+
+      p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:request', { options: samplePollOptions, topic: 'Second ask' });
+      const state = await p;
+
+      expect(state.pollRequests).toHaveLength(1);
+      expect(state.pollRequests![0].id).not.toBe(firstId);
+      expect(state.pollRequests![0].topic).toBe('Second ask');
+    });
+  });
+
+  describe('poll request visibility (chairs and requester only)', () => {
+    // A second server whose session user is chosen per connection via a
+    // `?as=` handshake query, so several distinct users can share a room.
+    const chair = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+    const asker = githubUser({ id: 42, login: 'asker', name: 'Asker', organisation: '' });
+    const bystander = githubUser({ id: 43, login: 'bystander', name: 'Bystander', organisation: '' });
+    const byName: Record<string, User> = { chair, asker, bystander };
+
+    let multi: {
+      httpServer: HttpServer;
+      io: SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
+      mgr: MeetingManager;
+      url: string;
+    };
+    const multiClients: TypedClientSocket[] = [];
+
+    beforeEach(async () => {
+      const app = express();
+      const httpServer = createServer(app);
+      const sessionMiddleware = session({ secret: 'test-secret', resave: false, saveUninitialized: false });
+      const pickUser: express.RequestHandler = (req, _res, next) => {
+        const as = new URL(req.url ?? '', 'http://x').searchParams.get('as') ?? 'chair';
+        req.session.user = toSessionUser(byName[as]);
+        next();
+      };
+      app.use(sessionMiddleware);
+      app.use(pickUser);
+      const mgr = new MeetingManager(new InMemoryStore());
+      const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+        cors: { origin: '*', credentials: true },
+        parser: msgpackParser,
+      });
+      io.engine.use(sessionMiddleware);
+      io.engine.use(pickUser);
+      registerSocketHandlers(io, mgr, new AppSettingsManager(new InMemoryAppSettingsStore()));
+      await new Promise<void>((r) => httpServer.listen(0, r));
+      const addr = httpServer.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      multi = { httpServer, io, mgr, url: `http://localhost:${port}` };
+    });
+
+    afterEach(async () => {
+      for (const c of multiClients.splice(0)) c.disconnect();
+      multi.io.close();
+      await new Promise<void>((r) => multi.httpServer.close(() => r()));
+    });
+
+    /** Connect as `who`, join, and resolve with the initial snapshot. */
+    async function joinAs(who: string, meetingId: string): Promise<{ socket: TypedClientSocket; state: MeetingState }> {
+      const socket = ioClient(multi.url, {
+        reconnection: false,
+        transports: ['websocket'],
+        parser: msgpackParser,
+        query: { as: who },
+      }) as TypedClientSocket;
+      multiClients.push(socket);
+      await new Promise<void>((r) => socket.on('connect', r));
+      const statePromise = waitForEvent<MeetingState>(socket, 'state');
+      socket.emit('join', meetingId);
+      return { socket, state: await statePromise };
+    }
+
+    /** Record every poll-request event a socket receives. */
+    function recordRequestEvents(socket: TypedClientSocket): string[] {
+      const seen: string[] = [];
+      socket.on('poll:requested', () => seen.push('poll:requested'));
+      socket.on('poll:requestRemoved', () => seen.push('poll:requestRemoved'));
+      return seen;
+    }
+
+    it('sends requests to chairs and the requester, and nothing at all to other participants', async () => {
+      const meeting = multi.mgr.create([chair]);
+      const c = await joinAs('chair', meeting.id);
+      const a = await joinAs('asker', meeting.id);
+      const b = await joinAs('bystander', meeting.id);
+      const bystanderSaw = recordRequestEvents(b.socket);
+      const versionBefore = multi.mgr.get(meeting.id)!.operational.version;
+
+      const chairGot = waitForEvent<{ request: { topic?: string } }>(c.socket, 'poll:requested');
+      const askerGot = waitForEvent<{ request: { topic?: string } }>(a.socket, 'poll:requested');
+      a.socket.emit('poll:request', { options: samplePollOptions, topic: 'Secret topic' });
+      expect((await chairGot).request.topic).toBe('Secret topic');
+      expect((await askerGot).request.topic).toBe('Secret topic');
+
+      // Not a versioned delta, so no one sees a version gap.
+      expect(multi.mgr.get(meeting.id)!.operational.version).toBe(versionBefore);
+
+      // A fresh joiner who isn't a chair gets no pollRequests key at all.
+      const late = await joinAs('bystander', meeting.id);
+      expect('pollRequests' in late.state).toBe(false);
+      // The chair and requester see it in their snapshots.
+      expect((await joinAs('chair', meeting.id)).state.pollRequests?.[0].topic).toBe('Secret topic');
+      expect((await joinAs('asker', meeting.id)).state.pollRequests?.[0].topic).toBe('Secret topic');
+
+      // Removal is scoped the same way.
+      const id = multi.mgr.get(meeting.id)!.pollRequests![0].id;
+      const chairRemoved = waitForEvent<{ id: string }>(c.socket, 'poll:requestRemoved');
+      const askerRemoved = waitForEvent<{ id: string }>(a.socket, 'poll:requestRemoved');
+      c.socket.emit('poll:dismissRequest', { id });
+      expect((await chairRemoved).id).toBe(id);
+      expect((await askerRemoved).id).toBe(id);
+
+      // Give any stray emit a moment to arrive, then assert the bystander got nothing.
+      await new Promise((r) => setTimeout(r, 100));
+      expect(bystanderSaw).toEqual([]);
+    });
+
+    it('re-sends a filtered snapshot when someone becomes or stops being a chair', async () => {
+      const meeting = multi.mgr.create([chair]);
+      multi.mgr.requestPoll(meeting.id, samplePollOptions, asker, 'Secret topic', false);
+      const c = await joinAs('chair', meeting.id);
+      const b = await joinAs('bystander', meeting.id);
+      expect('pollRequests' in b.state).toBe(false);
+
+      let promoted = waitForEvent<MeetingState>(b.socket, 'state');
+      c.socket.emit('meeting:updateChairs', { chairs: [{ handle: 'chairperson' }, { handle: 'bystander' }] });
+      let state = await promoted;
+      expect(state.pollRequests?.[0].topic).toBe('Secret topic');
+
+      promoted = waitForEvent<MeetingState>(b.socket, 'state');
+      c.socket.emit('meeting:updateChairs', { chairs: [{ handle: 'chairperson' }] });
+      state = await promoted;
+      expect('pollRequests' in state).toBe(false);
+    });
+  });
+
+  describe('poll:approveRequest', () => {
+    const requester = githubUser({ id: 42, login: 'asker', name: 'Asker', organisation: '' });
+
+    it("starts a poll with the request's configuration, attributes it, and consumes the request", async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, 'Ship it?', false)!;
+      const client = await joinMeeting(meeting.id);
+
+      const deltaPromise = waitForEvent<{ poll: unknown; requestId?: string }>(client, 'poll:started');
+      client.emit('poll:approveRequest', { id: request.id });
+      const delta = await deltaPromise;
+
+      const state = ctx.meetingManager.get(meeting.id)!;
+      expect(delta.requestId).toBe(request.id);
+      expect(state.pollRequests).toBeUndefined();
+      expect(state.poll).toBeDefined();
+      expect(state.poll!.topic).toBe('Ship it?');
+      expect(state.poll!.multiSelect).toBe(false);
+      expect(state.poll!.options.map((o) => ({ emoji: o.emoji, label: o.label }))).toEqual(samplePollOptions);
+      expect(state.poll!.startChairId).toBe(userKey(TEST_USER));
+      expect(state.poll!.requesterId).toBe(userKey(requester));
+    });
+
+    it("applies the chair's edits on top of the proposal and keeps the requester attribution", async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, 'Ship it?', false)!;
+      const client = await joinMeeting(meeting.id);
+
+      const p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:approveRequest', {
+        id: request.id,
+        topic: 'Ship it today?',
+        options: [
+          { emoji: '✅', label: 'Go' },
+          { emoji: '⛔', label: 'No go' },
+          { emoji: '🤷', label: 'Abstain' },
+        ],
+      });
+      const state = await p;
+
+      expect(state.pollRequests).toBeUndefined();
+      expect(state.poll!.topic).toBe('Ship it today?');
+      expect(state.poll!.options.map((o) => o.label)).toEqual(['Go', 'No go', 'Abstain']);
+      // Omitted override → the proposal's value is kept.
+      expect(state.poll!.multiSelect).toBe(false);
+      expect(state.poll!.requesterId).toBe(userKey(requester));
+      expect(state.poll!.startChairId).toBe(userKey(TEST_USER));
+    });
+
+    it('validates edits like poll:start (e.g. fewer than 2 options is rejected)', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, undefined, true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:approveRequest', { id: request.id, options: [{ emoji: '👍', label: 'Only' }] });
+      expect(await errorPromise).toMatch(/at least 2/i);
+      expect(ctx.meetingManager.get(meeting.id)!.poll).toBeUndefined();
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toHaveLength(1);
+    });
+
+    it('rejects from non-chair (including the requester)', async () => {
+      const chairUser = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, TEST_USER, undefined, true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:approveRequest', { id: request.id });
+      expect(await errorPromise).toMatch(/only chairs/i);
+      expect(ctx.meetingManager.get(meeting.id)!.poll).toBeUndefined();
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toHaveLength(1);
+    });
+
+    it('rejects while another poll is running and leaves the request pending', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, undefined, true)!;
+      ctx.meetingManager.startPoll(meeting.id, samplePollOptions, userKey(TEST_USER), 'Running', true);
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:approveRequest', { id: request.id });
+      expect(await errorPromise).toMatch(/already running/i);
+      const state = ctx.meetingManager.get(meeting.id)!;
+      expect(state.poll!.topic).toBe('Running');
+      expect(state.pollRequests).toHaveLength(1);
+    });
+
+    it('rejects an unknown request id', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:approveRequest', { id: 'nope' });
+      expect(await errorPromise).toMatch(/no longer pending/i);
+    });
+
+    it('records the requester on the poll-ran log entry when the poll is stopped', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, 'Ship it?', true)!;
+      const client = await joinMeeting(meeting.id);
+
+      let p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:approveRequest', { id: request.id });
+      await p;
+      p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:stop');
+      await p;
+
+      const entry = ctx.meetingManager.getLog(meeting.id).find((e) => e.type === 'poll-ran');
+      expect(entry).toBeDefined();
+      if (entry?.type === 'poll-ran') {
+        expect(entry.requesterId).toBe(userKey(requester));
+        expect(entry.startChairId).toBe(userKey(TEST_USER));
+        expect(entry.topic).toBe('Ship it?');
+      }
+    });
+  });
+
+  describe('poll:dismissRequest', () => {
+    const requester = githubUser({ id: 42, login: 'asker', name: 'Asker', organisation: '' });
+
+    it('lets a chair dismiss any request', async () => {
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, undefined, true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const deltaPromise = waitForEvent<{ id: string }>(client, 'poll:requestRemoved');
+      client.emit('poll:dismissRequest', { id: request.id });
+      expect((await deltaPromise).id).toBe(request.id);
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toBeUndefined();
+      expect(ctx.meetingManager.get(meeting.id)!.poll).toBeUndefined();
+    });
+
+    it('lets the requester withdraw their own request', async () => {
+      const chairUser = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, TEST_USER, undefined, true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:dismissRequest', { id: request.id });
+      const state = await p;
+      expect(state.pollRequests).toBeUndefined();
+    });
+
+    it("rejects a non-chair dismissing someone else's request", async () => {
+      const chairUser = githubUser({ id: 999, login: 'chairperson', name: 'Chair', organisation: '' });
+      const meeting = ctx.meetingManager.create([chairUser]);
+      const request = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, undefined, true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const errorPromise = waitForEvent<string>(client, 'error');
+      client.emit('poll:dismissRequest', { id: request.id });
+      expect(await errorPromise).toMatch(/only chairs/i);
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toHaveLength(1);
+    });
+
+    it('keeps the other requests when one of several is removed', async () => {
+      const other = githubUser({ id: 43, login: 'other', name: 'Other', organisation: '' });
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      const r1 = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, 'one', true)!;
+      const r2 = ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, other, 'two', true)!;
+      const client = await joinMeeting(meeting.id);
+
+      const p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('poll:dismissRequest', { id: r1.id });
+      const state = await p;
+      expect(state.pollRequests!.map((r) => r.id)).toEqual([r2.id]);
+    });
+  });
+
+  describe('poll requests are cleared when the agenda advances', () => {
+    it('drops pending requests on meeting:nextAgendaItem', async () => {
+      const requester = githubUser({ id: 42, login: 'asker', name: 'Asker', organisation: '' });
+      const meeting = ctx.meetingManager.create([TEST_USER]);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'First', []);
+      ctx.meetingManager.addAgendaItem(meeting.id, 'Second', []);
+      ctx.meetingManager.nextAgendaItem(meeting.id);
+      ctx.meetingManager.requestPoll(meeting.id, samplePollOptions, requester, undefined, true);
+      const client = await joinMeeting(meeting.id);
+
+      const p = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('meeting:nextAgendaItem', { currentAgendaItemId: meeting.current.agendaItemId ?? null }, () => {});
+      const state = await p;
+      expect(state.current.agendaItemId).toBeDefined();
+      expect(state.pollRequests).toBeUndefined();
+    });
+  });
+
   // -- Meeting flow events --
 
   describe('meeting:nextAgendaItem', () => {
@@ -3316,11 +3691,82 @@ describe('Socket.IO integration', () => {
         driver.emit('poll:stop');
       });
 
+      // Poll-request events are unversioned (chairs + requester only), so
+      // those steps wait for the surrogate's next event rather than a
+      // version bump. The driver and observer share the chair session, so
+      // the observer receives them.
+      async function runUnversionedStep(label: string, emit: () => void) {
+        const marker = surrogate.events.length;
+        emit();
+        await surrogate.waitForNextEvent(marker);
+        expect(normalise(surrogate.state), `divergence after step "${label}"`).toEqual(
+          normalise(ctx.meetingManager.get(meeting.id)!),
+        );
+      }
+
+      // --- poll:requested (the driver is a chair, but requesting is
+      // open to everyone — the reducer path is identical) ---
+      await runUnversionedStep('poll:requested', () => {
+        driver.emit('poll:request', {
+          options: [
+            { emoji: '👍', label: 'Yes' },
+            { emoji: '👎', label: 'No' },
+          ],
+          topic: 'Temp check?',
+          multiSelect: false,
+        });
+      });
+
+      // --- poll:requested (replacement by the same requester) ---
+      await runUnversionedStep('poll:requested (replace)', () => {
+        driver.emit('poll:request', {
+          options: [
+            { emoji: '👍', label: 'Yes' },
+            { emoji: '👎', label: 'No' },
+          ],
+        });
+      });
+
+      // --- poll:requestRemoved ---
+      await runUnversionedStep('poll:requestRemoved', () => {
+        const id = ctx.meetingManager.get(meeting.id)!.pollRequests![0].id;
+        driver.emit('poll:dismissRequest', { id });
+      });
+
+      // --- poll:started via approval (carries requestId; consumes the request) ---
+      await runUnversionedStep('poll:requested (for approval)', () => {
+        driver.emit('poll:request', {
+          options: [
+            { emoji: '👍', label: 'Yes' },
+            { emoji: '👎', label: 'No' },
+          ],
+          topic: 'Approve me',
+        });
+      });
+      await runStep('poll:started (approved)', driver, surrogate, meeting.id, () => {
+        const id = ctx.meetingManager.get(meeting.id)!.pollRequests![0].id;
+        driver.emit('poll:approveRequest', { id });
+      });
+      await runStep('poll:stopped (approved)', driver, surrogate, meeting.id, () => {
+        driver.emit('poll:stop');
+      });
+
+      // --- poll:requested (left pending so agenda:advanced clears it) ---
+      await runUnversionedStep('poll:requested (pending across advance)', () => {
+        driver.emit('poll:request', {
+          options: [
+            { emoji: '👍', label: 'Yes' },
+            { emoji: '👎', label: 'No' },
+          ],
+        });
+      });
+
       // --- agenda:advanced (advance past first → second item) ---
       await runStep('agenda:advanced (advance)', driver, surrogate, meeting.id, () => {
         const currentAgendaItemId = ctx.meetingManager.get(meeting.id)!.current.agendaItemId ?? null;
         driver.emit('meeting:nextAgendaItem', { currentAgendaItemId }, () => {});
       });
+      expect(ctx.meetingManager.get(meeting.id)!.pollRequests).toBeUndefined();
 
       // --- agenda:deleted (item) ---
       // Add a third item then delete it so we exercise the
@@ -3353,10 +3799,11 @@ describe('Socket.IO integration', () => {
       observerSocket.disconnect();
 
       // Final sanity: the version cursor advanced exactly once per
-      // mutation step. 27 mutations were emitted above (23 original +
-      // 2 prologue + 2 epilogue); the bootstrap `state` doesn't bump
-      // the counter, so the surrogate ends at 27.
-      expect(surrogate.lastSeenVersion).toBe(27);
+      // versioned mutation step. 29 were emitted above (23 original + 2
+      // prologue + 2 epilogue + the approved poll's start/stop); the 5
+      // poll-request steps are unversioned, and the bootstrap `state`
+      // doesn't bump the counter, so the surrogate ends at 29.
+      expect(surrogate.lastSeenVersion).toBe(29);
     });
   });
 

@@ -4,6 +4,7 @@ import type {
   AgendaItem,
   ClientToServerEvents,
   LogEntry,
+  PollRequest,
   ServerToClientEvents,
   User,
   UserKey,
@@ -27,7 +28,10 @@ import {
   ChairsUpdatePayloadSchema,
   NextAgendaItemPayloadSchema,
   NextSpeakerPayloadSchema,
+  PollApproveRequestPayloadSchema,
   PollReactPayloadSchema,
+  PollRequestIdPayloadSchema,
+  PollRequestPayloadSchema,
   PollStartPayloadSchema,
   QueueAddPayloadSchema,
   QueueEditPayloadSchema,
@@ -197,7 +201,16 @@ export function emitFullState(
 ): void {
   const meeting = meetingManager.get(meetingId);
   if (meeting) {
-    io.to(meetingId).emit('state', decorateMeetingForClient(meeting, appSettings));
+    if (meeting.pollRequests && meeting.pollRequests.length > 0) {
+      // Pending poll requests make the snapshot viewer-specific (only
+      // chairs and each requester see them), so emit per socket.
+      for (const s of roomSockets(io, meetingId)) {
+        s.emit('state', decorateMeetingForClient(meeting, appSettings, getSocketUser(s)));
+      }
+    } else {
+      // Nothing viewer-specific: one room broadcast, as before.
+      io.to(meetingId).emit('state', decorateMeetingForClient(meeting, appSettings, undefined));
+    }
     // Clear after broadcasting so it only applies to the broadcast that
     // immediately follows the handler that set it. Without this, a stale
     // value could be misattributed if a future code path changes the
@@ -307,12 +320,70 @@ function stampPremium(u: User, appSettings: AppSettingsManager): User {
  * in-memory record. Non-premium users are reused by reference, so this
  * is cheap when no premium participants are present.
  */
-function decorateMeetingForClient(meeting: MeetingState, appSettings: AppSettingsManager): MeetingState {
+function decorateMeetingForClient(
+  meeting: MeetingState,
+  appSettings: AppSettingsManager,
+  viewer: SessionUser | undefined,
+): MeetingState {
   const decoratedUsers: Record<UserKey, User> = {};
   for (const [k, u] of Object.entries(meeting.users)) {
     decoratedUsers[k as UserKey] = stampPremium(u, appSettings);
   }
-  return { ...meeting, users: decoratedUsers };
+  const decorated = { ...meeting, users: decoratedUsers };
+  if (!meeting.pollRequests) return decorated;
+  // Pending poll requests are only for chairs and their own requester.
+  // Drop the rest entirely (not a stub): even knowing that someone has a
+  // pending request, and when, would be usable as a side channel.
+  const visible = meeting.pollRequests.filter((r) => canSeePollRequest(r, meeting, viewer));
+  if (visible.length > 0) return { ...decorated, pollRequests: visible };
+  delete decorated.pollRequests;
+  return decorated;
+}
+
+/**
+ * Whether `viewer` may see pending poll request `r` at all: chairs see
+ * every request, a participant sees only their own.
+ */
+function canSeePollRequest(r: PollRequest, meeting: MeetingState, viewer: SessionUser | undefined): boolean {
+  if (!viewer) return false;
+  const key = userKey(viewer);
+  return r.requesterId === key || meeting.chairIds.includes(key);
+}
+
+/**
+ * Every socket currently in a meeting's room (synchronous; single-node
+ * adapter). Defensive about the adapter shape so callers holding a
+ * minimal `io` (some route tests) degrade to "no sockets" rather than
+ * throwing.
+ */
+function roomSockets(io: Server<ClientToServerEvents, ServerToClientEvents>, meetingId: string): TypedSocket[] {
+  const ids = io.sockets?.adapter?.rooms?.get(meetingId);
+  if (!ids) return [];
+  const out: TypedSocket[] = [];
+  for (const id of ids) {
+    const s = io.sockets.sockets.get(id);
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Send an unversioned poll-request event (`poll:requested` /
+ * `poll:requestRemoved`) to exactly the sockets allowed to see `request`:
+ * the meeting's chairs and the requester. Everyone else receives nothing.
+ */
+function emitToPollRequestAudience<E extends 'poll:requested' | 'poll:requestRemoved'>(
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+  meeting: MeetingState,
+  request: PollRequest,
+  event: E,
+  payload: Parameters<ServerToClientEvents[E]>[0],
+): void {
+  for (const s of roomSockets(io, meeting.id)) {
+    if (!canSeePollRequest(request, meeting, getSocketUser(s))) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (s.emit as (event: E, payload: any) => void)(event, payload);
+  }
 }
 
 /**
@@ -472,7 +543,7 @@ export function registerSocketHandlers(
       socket.emit('server:revision', { revision: process.env.K_REVISION ?? null });
 
       // Send the full current state to this socket only
-      socket.emit('state', decorateMeetingForClient(meeting, appSettings));
+      socket.emit('state', decorateMeetingForClient(meeting, appSettings, user));
     });
 
     // --- state:resync ---
@@ -487,7 +558,7 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
       recordStateResync();
-      socket.emit('state', decorateMeetingForClient(meeting, appSettings));
+      socket.emit('state', decorateMeetingForClient(meeting, appSettings, user));
     });
 
     // --- meeting:updateChairs ---
@@ -536,6 +607,7 @@ export function registerSocketHandlers(
         return;
       }
 
+      const chairsBefore = new Set(meeting?.chairIds ?? []);
       meetingManager.updateChairs(joinedMeetingId, chairs);
       const updated = meetingManager.get(joinedMeetingId);
       if (!updated) return;
@@ -543,6 +615,18 @@ export function registerSocketHandlers(
         chairIds: updated.chairIds,
         users: usersRecordFor(chairs, appSettings),
       });
+      // Anyone whose chair status just changed now sees a different set of
+      // pending poll requests (all of them as a chair, only their own
+      // otherwise), so re-send them a fresh, correctly filtered snapshot.
+      const chairsAfter = new Set(updated.chairIds);
+      for (const s of roomSockets(io, joinedMeetingId)) {
+        const viewer = getSocketUser(s);
+        if (!viewer) continue;
+        const key = userKey(viewer);
+        if (chairsBefore.has(key) !== chairsAfter.has(key)) {
+          s.emit('state', decorateMeetingForClient(updated, appSettings, viewer));
+        }
+      }
     });
 
     // --- agenda:add ---
@@ -910,7 +994,7 @@ export function registerSocketHandlers(
           parsed.currentTopicSpeakerId === undefined || currentSpeakerId !== claimedSpeakerId;
         if (noActiveTopic || preconditionMismatch) {
           // Re-broadcast state to the stale client so it reconciles.
-          if (addMeeting) socket.emit('state', decorateMeetingForClient(addMeeting, appSettings));
+          if (addMeeting) socket.emit('state', decorateMeetingForClient(addMeeting, appSettings, user));
           const message = noActiveTopic
             ? 'No topic is currently active - you can not reply'
             : 'Topic has changed — your reply was not added';
@@ -1200,7 +1284,7 @@ export function registerSocketHandlers(
       // the server's current speaker, the view is stale.
       if (parsed.currentSpeakerEntryId !== (meeting.current.speaker?.id ?? null)) {
         // Client's view is stale — send current state so it can update
-        socket.emit('state', decorateMeetingForClient(meeting, appSettings));
+        socket.emit('state', decorateMeetingForClient(meeting, appSettings, user));
         respond({ ok: false, error: 'Speaker already advanced' });
         return;
       }
@@ -1336,7 +1420,9 @@ export function registerSocketHandlers(
           timestamp: poll.startTime,
           startChairId: poll.startChairId,
           endChairId: chairId,
+          ...(poll.requesterId ? { requesterId: poll.requesterId } : {}),
           topic: poll.topic,
+
           duration: new Date(now).getTime() - new Date(poll.startTime).getTime(),
           totalVoters: voterSet.size,
           results,
@@ -1371,6 +1457,109 @@ export function registerSocketHandlers(
       });
     });
 
+    // --- poll:request ---
+    // Any participant proposes a fully-configured poll for a chair to
+    // approve. Same validation as poll:start. One pending request per
+    // user — a new one replaces the requester's earlier request.
+    socket.on('poll:request', (payload) => {
+      if (!joinedMeetingId) return;
+
+      const parsed = parsePayload(PollRequestPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const request = meetingManager.requestPoll(
+        joinedMeetingId,
+        parsed.options,
+        user,
+        parsed.topic || undefined,
+        parsed.multiSelect !== false,
+      );
+      if (!request) return;
+
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      // Chairs and the requester only. Carry the requester's User record so
+      // chairs can render their badge on the request row immediately.
+      emitToPollRequestAudience(io, meeting, request, 'poll:requested', {
+        request,
+        users: usersRecordFor([meeting.users[request.requesterId]], appSettings),
+      });
+    });
+
+    // --- poll:approveRequest ---
+    // Chair starts a poll from a pending request, optionally with edits
+    // (any PollStartPayload field overrides the requester's proposal).
+    // The request is consumed in the same delta (`requestId` on
+    // poll:started) so clients never see the poll running with its
+    // request still listed.
+    socket.on('poll:approveRequest', (payload) => {
+      if (!joinedMeetingId) return;
+      if (!meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can approve a poll request');
+        return;
+      }
+
+      const parsed = parsePayload(PollApproveRequestPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+
+      const request = meetingManager.getPollRequest(joinedMeetingId, parsed.id);
+      if (!request) {
+        socket.emit('error', 'That poll request is no longer pending');
+        return;
+      }
+      if (meeting.poll) {
+        socket.emit('error', 'A poll is already running — stop it before approving another');
+        return;
+      }
+
+      const chairId = ensureUser(meeting, user);
+      // Chair edits win over the proposal field-by-field. An explicitly
+      // empty topic override clears it (same convention as poll:start).
+      const options = parsed.options ?? request.options.map((o) => ({ emoji: o.emoji, label: o.label }));
+      const topic = parsed.topic !== undefined ? parsed.topic || undefined : request.topic;
+      const multiSelect = parsed.multiSelect ?? request.multiSelect;
+      meetingManager.startPoll(joinedMeetingId, options, chairId, topic, multiSelect, request.requesterId);
+
+      meetingManager.removePollRequest(joinedMeetingId, request.id);
+
+      const updated = meetingManager.get(joinedMeetingId);
+      if (!updated?.poll) return;
+      emitDelta(io, meetingManager, joinedMeetingId, 'poll:started', {
+        poll: updated.poll,
+        requestId: request.id,
+      });
+    });
+
+    // --- poll:dismissRequest ---
+    // Drop a pending request without starting it. Chairs can dismiss any
+    // request; a participant can withdraw their own.
+    socket.on('poll:dismissRequest', (payload) => {
+      if (!joinedMeetingId) return;
+
+      const parsed = parsePayload(PollRequestIdPayloadSchema, payload, socket);
+      if (!parsed) return;
+
+      const request = meetingManager.getPollRequest(joinedMeetingId, parsed.id);
+      if (!request) {
+        socket.emit('error', 'That poll request is no longer pending');
+        return;
+      }
+
+      const isOwn = request.requesterId === userKey(user);
+      if (!isOwn && !meetingManager.isChair(joinedMeetingId, user)) {
+        socket.emit('error', 'Only chairs can dismiss a poll request');
+        return;
+      }
+
+      if (!meetingManager.removePollRequest(joinedMeetingId, request.id)) return;
+      const meeting = meetingManager.get(joinedMeetingId);
+      if (!meeting) return;
+      emitToPollRequestAudience(io, meeting, request, 'poll:requestRemoved', { id: request.id });
+    });
+
     // --- meeting:nextAgendaItem ---
     // Chair starts the meeting (first agenda item) or advances to the next one.
     // Uses a precondition check on the current agenda item ID to prevent
@@ -1398,7 +1587,7 @@ export function registerSocketHandlers(
       const meeting = meetingManager.get(joinedMeetingId);
       if (!meeting) return;
       if (parsed.currentAgendaItemId !== (meeting.current.agendaItemId ?? null)) {
-        socket.emit('state', decorateMeetingForClient(meeting, appSettings));
+        socket.emit('state', decorateMeetingForClient(meeting, appSettings, user));
         respond({ ok: false, error: 'Another chair already advanced the agenda' });
         return;
       }
