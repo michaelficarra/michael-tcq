@@ -1010,23 +1010,27 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
   }
 
   /**
-   * Submit the edit and close the form.
+   * Save the edit and close the form.
    *
    * - Non-empty input on a pending entry: emit `queue:edit` with the
-   *   typed topic. The server clears `pending` as part of handling the
-   *   edit (any edit on a pending entry counts as the finalisation).
+   *   typed topic (and the chosen `noNeedToSpeak` tag). The server clears
+   *   `pending` as part of handling the edit (any edit on a pending entry
+   *   counts as the finalisation).
    * - Empty input on a pending entry: treat as cancel — remove the entry.
    *   The input is pre-filled with the default-for-type, so reaching
    *   empty requires the author to have deliberately cleared it.
-   * - Non-pending pencil-edit: emit `queue:edit` with the topic; reject
-   *   empty input (existing entries can't be edited to nothing).
+   * - Non-pending pencil-edit: emit `queue:edit` with the topic and tag;
+   *   reject empty input (existing entries can't be edited to nothing).
+   *
+   * `noNeedToSpeak` is always sent explicitly (never omitted) so every
+   * save leaves the tag in a known state rather than letting a prior
+   * save's tag linger across an unrelated edit.
    */
-  function handleEditSubmit(e: FormEvent) {
-    e.preventDefault();
+  function saveEdit(noNeedToSpeak: boolean) {
     const trimmed = editTopic.trim();
     if (isPending) {
       if (trimmed) {
-        socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
+        socket?.emit('queue:edit', { id: entry.id, topic: trimmed, noNeedToSpeak });
       } else {
         socket?.emit('queue:remove', { id: entry.id });
       }
@@ -1034,8 +1038,19 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
       return;
     }
     if (!trimmed) return;
-    socket?.emit('queue:edit', { id: entry.id, topic: trimmed });
+    socket?.emit('queue:edit', { id: entry.id, topic: trimmed, noNeedToSpeak });
     setEditing(false);
+  }
+
+  /** Regular Save — indicates the author wants to speak. Bound to the form's submit. */
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    saveEdit(false);
+  }
+
+  /** "No need to speak" Save — tags the entry as informational-only. */
+  function handleNoNeedToSpeakSave() {
+    saveEdit(true);
   }
 
   /**
@@ -1075,6 +1090,11 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
             <span className={`text-sm font-semibold shrink-0 ${entryTypeColor(entry.type)}`}>
               {entryTypeLabel(entry.type)}:
             </span>
+            {entry.noNeedToSpeak && (
+              <span className="text-xs shrink-0" title="Currently tagged: no need to speak" aria-hidden="true">
+                🔕
+              </span>
+            )}
             <input
               type="text"
               value={editTopic}
@@ -1098,8 +1118,17 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
             <button
               type="submit"
               className="text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium cursor-pointer"
+              title="Save — you want to speak on this"
             >
               Save
+            </button>
+            <button
+              type="button"
+              onClick={handleNoNeedToSpeakSave}
+              className="text-xs text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 font-medium cursor-pointer whitespace-nowrap"
+              title="Save as an informational message — no need to speak"
+            >
+              🔕 No need to speak
             </button>
             <button
               type="button"
@@ -1163,7 +1192,19 @@ const SortableQueueEntry = memo(function SortableQueueEntry({
               <span />
             </span>
           ) : (
-            <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
+            <>
+              <InlineMarkdown className="ml-1 text-stone-800 dark:text-stone-200">{entry.topic}</InlineMarkdown>
+              {entry.noNeedToSpeak && (
+                <span
+                  className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-stone-200 dark:bg-stone-600
+                             px-1.5 py-0.5 text-[10px] font-semibold text-stone-600 dark:text-stone-200
+                             align-middle whitespace-nowrap"
+                  title="No need to speak — informational only"
+                >
+                  🔕 No need to speak
+                </span>
+              )}
+            </>
           )}
 
           {/* Speaker info */}

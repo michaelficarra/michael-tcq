@@ -832,7 +832,11 @@ export class MeetingManager {
    * pending entry's topic constitutes finalising the composition.
    * Returns true if the entry was found and updated.
    */
-  editQueueEntry(meetingId: string, entryId: string, updates: { topic?: string; type?: QueueEntryType }): boolean {
+  editQueueEntry(
+    meetingId: string,
+    entryId: string,
+    updates: { topic?: string; type?: QueueEntryType; noNeedToSpeak?: boolean },
+  ): boolean {
     const meeting = this.meetings.get(meetingId);
     if (!meeting) return false;
 
@@ -841,6 +845,10 @@ export class MeetingManager {
 
     if (updates.topic !== undefined) entry.topic = updates.topic;
     if (updates.type !== undefined) entry.type = updates.type;
+    if (updates.noNeedToSpeak !== undefined) {
+      if (updates.noNeedToSpeak) entry.noNeedToSpeak = true;
+      else delete entry.noNeedToSpeak;
+    }
     if (entry.pending) delete entry.pending;
 
     this.markDirty(meetingId);

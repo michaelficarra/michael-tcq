@@ -370,6 +370,13 @@ export const QueueEditPayloadSchema = z.object({
   id: z.string(),
   topic: optionalMarkdownString('Topic'),
   type: QueueEntryTypeSchema.optional(),
+  /**
+   * Sets or clears the entry's `noNeedToSpeak` tag. Sent explicitly (true
+   * or false) whenever the client's Save action includes a choice between
+   * the two save modes, so a save always leaves the tag in a known state
+   * rather than accumulating stale flags across edits.
+   */
+  noNeedToSpeak: z.boolean().optional(),
 });
 export type QueueEditPayload = z.infer<typeof QueueEditPayloadSchema>;
 

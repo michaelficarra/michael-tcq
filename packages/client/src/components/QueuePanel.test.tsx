@@ -1133,4 +1133,103 @@ describe('QueuePanel', () => {
     expect(li).not.toBeNull();
     expect(li!.className).not.toMatch(/premium-border/);
   });
+
+  // -- No need to speak tag --
+
+  it('shows a "No need to speak" badge on a tagged entry', () => {
+    const meeting = makeMeeting({
+      users: { 'github:alice': chairUser },
+      queue: queueOf(
+        { q1: { id: 'q1', type: 'topic', topic: 'I agree', userId: 'github:alice', noNeedToSpeak: true } },
+        ['q1'],
+      ),
+    });
+    renderQueue(meeting, chairUser);
+
+    expect(screen.getByText(/No need to speak/)).toBeInTheDocument();
+  });
+
+  it('does not show the "No need to speak" badge on a regular entry', () => {
+    const meeting = makeMeeting({
+      users: { 'github:alice': chairUser },
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'I agree', userId: 'github:alice' } }, ['q1']),
+    });
+    renderQueue(meeting, chairUser);
+
+    expect(screen.queryByText(/No need to speak/)).not.toBeInTheDocument();
+  });
+
+  it('emits queue:edit with noNeedToSpeak: false when Save is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      users: { 'github:alice': chairUser },
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'github:alice', pending: true } }, [
+        'q1',
+      ]),
+    });
+
+    render(
+      <TestMeetingProvider meeting={meeting} user={chairUser}>
+        <PreferencesProvider>
+          <SocketContext value={mockSocket}>
+            <QueuePanel
+              autoEditEntryId="q1"
+              onAddEntry={() => {}}
+              onSavedTopic={() => {}}
+              onAutoEditConsumed={() => {}}
+            />
+          </SocketContext>
+        </PreferencesProvider>
+      </TestMeetingProvider>,
+    );
+
+    const input = screen.getByLabelText('Topic description');
+    fireEvent.change(input, { target: { value: 'My discussion point' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(emit).toHaveBeenCalledWith('queue:edit', {
+      id: 'q1',
+      topic: 'My discussion point',
+      noNeedToSpeak: false,
+    });
+  });
+
+  it('emits queue:edit with noNeedToSpeak: true when "No need to speak" is clicked', () => {
+    const emit = vi.fn();
+    const mockSocket = { emit } as unknown as TypedSocket;
+
+    const meeting = makeMeeting({
+      users: { 'github:alice': chairUser },
+      queue: queueOf({ q1: { id: 'q1', type: 'topic', topic: 'New topic', userId: 'github:alice', pending: true } }, [
+        'q1',
+      ]),
+    });
+
+    render(
+      <TestMeetingProvider meeting={meeting} user={chairUser}>
+        <PreferencesProvider>
+          <SocketContext value={mockSocket}>
+            <QueuePanel
+              autoEditEntryId="q1"
+              onAddEntry={() => {}}
+              onSavedTopic={() => {}}
+              onAutoEditConsumed={() => {}}
+            />
+          </SocketContext>
+        </PreferencesProvider>
+      </TestMeetingProvider>,
+    );
+
+    const input = screen.getByLabelText('Topic description');
+    fireEvent.change(input, { target: { value: '+1, no need to discuss further' } });
+    fireEvent.click(screen.getByText(/No need to speak/));
+
+    expect(emit).toHaveBeenCalledWith('queue:edit', {
+      id: 'q1',
+      topic: '+1, no need to discuss further',
+      noNeedToSpeak: true,
+    });
+  });
 });

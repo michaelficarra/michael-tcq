@@ -6,9 +6,10 @@
 //
 // Viewed as `domenic`, a regular participant (not in chairs) who has
 // their own queue entry — the teal "own entry" left border is the
-// visible distinguishing detail vs. the chair view. Height ~640 to
-// fit the agenda header, the speaker controls, and the four queue
-// entries.
+// visible distinguishing detail vs. the chair view. domenic's entry is
+// also tagged "no need to speak", showing that badge alongside the
+// own-entry border. Height ~640 to fit the agenda header, the speaker
+// controls, and the four queue entries.
 
 import { getUrls, runScreenshot } from './lib.mjs';
 import { populate } from './seed.mjs';
@@ -34,7 +35,7 @@ const { meetingId, chairSocket } = await populate(serverUrl, {
   queue: [
     { as: 'hax', topic: 'Coordination with the HTML spec for integration points' },
     { as: 'rkirsling', topic: 'Benchmark data from our engine prototype shows a 15% regression' },
-    { as: 'domenic', topic: 'I would like to see test262 tests before we advance' },
+    { as: 'domenic', topic: '👍 Agreed — no need to add anything further here', noNeedToSpeak: true },
     {
       as: 'shvaikalesh',
       topic: 'Should the static method live on the constructor or a namespace?',

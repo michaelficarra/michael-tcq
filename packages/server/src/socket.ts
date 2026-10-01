@@ -1002,8 +1002,13 @@ export function registerSocketHandlers(
         return;
       }
 
-      const updates: { topic?: string; type?: import('@tcq/shared').QueueEntryType } = {};
+      const updates: {
+        topic?: string;
+        type?: import('@tcq/shared').QueueEntryType;
+        noNeedToSpeak?: boolean;
+      } = {};
       if (parsed.topic !== undefined) updates.topic = parsed.topic;
+      if (parsed.noNeedToSpeak !== undefined) updates.noNeedToSpeak = parsed.noNeedToSpeak;
       if (parsed.type !== undefined) {
         if (!isChairUser) {
           socket.emit('error', 'Only chairs can change entry types');

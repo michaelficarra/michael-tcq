@@ -1601,6 +1601,35 @@ describe('Socket.IO integration', () => {
 
       expect(state.queue.entries[state.queue.orderedIds[0]].topic).toBe('Chair edited');
     });
+
+    it('sets noNeedToSpeak on the entry owner’s own edit', async () => {
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const meeting = ctx.meetingManager.create([owner]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'My topic', owner)!;
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:edit', { id: entry.id, noNeedToSpeak: true });
+      const state = await statePromise;
+
+      expect(state.queue.entries[entry.id].noNeedToSpeak).toBe(true);
+    });
+
+    it('clears noNeedToSpeak when explicitly saved as false', async () => {
+      const owner = githubUser({ id: 1, login: 'testuser', name: 'Test User', organisation: 'Test Org' });
+      const meeting = ctx.meetingManager.create([owner]);
+      const entry = ctx.meetingManager.addQueueEntry(meeting.id, 'topic', 'My topic', owner)!;
+      ctx.meetingManager.editQueueEntry(meeting.id, entry.id, { noNeedToSpeak: true });
+
+      const client = await joinMeeting(meeting.id);
+
+      const statePromise = waitForChange(client, ctx.meetingManager, meeting.id);
+      client.emit('queue:edit', { id: entry.id, noNeedToSpeak: false });
+      const state = await statePromise;
+
+      expect(state.queue.entries[entry.id].noNeedToSpeak).toBeUndefined();
+    });
   });
 
   describe('queue:next', () => {

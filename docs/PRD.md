@@ -350,7 +350,9 @@ Clicking one of the entry type buttons immediately adds the participant to the q
 
 Because the button and the server-side add happen over the network, the current topic may change in the gap between a participant clicking Reply and the server processing the add. The reply is rejected in either of two cases. If a chair has advanced to a different topic (one that is still current), the participant sees "Topic has changed — your reply was not added". If there is no current topic at all when the server processes the reply (for example, the agenda item has just been advanced and the topic has been cleared), the participant sees "No topic is currently active - you can not reply". In both cases the inline edit form does not open and no typing-indicator entry is created.
 
-If the participant clicks Save with a non-empty input, that text becomes the entry's topic and the typing indicator is replaced with the topic text on every viewer's screen. If they leave the composing state via Escape, Cancel, or Save with an empty input, the entry is removed from the queue. Cancelling an edit on an already-saved entry (opened via the Edit button) is a separate flow that leaves the entry unchanged. While an entry is in the composing state, chairs cannot edit it (the pencil affordance is suppressed); chairs retain the ability to delete it.
+The composing form (and the pencil-edit form on an already-saved entry — see **Queue Editing**) offers two ways to save: a plain **Save**, which indicates the author wants to speak, and **🔕 No need to speak**, which saves the same text but tags the entry as an informational-only message — a comment (agreement, acknowledgement, a "+1", etc.) that doesn't need floor time. If the participant clicks either Save button with a non-empty input, that text becomes the entry's topic — tagged or not, according to which button was clicked — and the typing indicator is replaced with the topic text on every viewer's screen. If they leave the composing state via Escape, Cancel, or Save with an empty input, the entry is removed from the queue. Cancelling an edit on an already-saved entry (opened via the Edit button) is a separate flow that leaves the entry unchanged. While an entry is in the composing state, chairs cannot edit it (the pencil affordance is suppressed); chairs retain the ability to delete it.
+
+A no-need-to-speak entry is tagged, not skipped: it keeps its normal position in the queue and can still be advanced to like any other entry — the tag is purely informational, telling the chair and other participants at a glance that the author isn't expecting to take the floor for it. Either Save button can be used again on a subsequent pencil-edit to flip the tag on or off — each save sets the tag explicitly rather than only being settable once. The tag is not preserved through the Copy/Restore Queue text format (see **Copy and Restore Queue**); a restored entry is always untagged.
 
 If the author's connection drops before they save (e.g. they close the tab), the server removes the entry on their behalf, so the typing indicator does not linger on remaining participants' screens.
 
@@ -373,6 +375,7 @@ Each queue entry shows:
 - Position number (centre-aligned)
 - Type badge (e.g. "New Topic", "Reply", "Clarifying Question", "Point of Order")
 - Topic description
+- A "🔕 No need to speak" pill immediately after the topic description, shown only on entries saved with that tag (see **Entering the Queue**)
 - Speaker name, organisation, and avatar
 
 The user's own queue entries are visually distinguished with a coloured left border. Chairs see a drag handle (⠿) to the left of each entry for reordering. Participants see a drag handle on their own entries. Edit and delete buttons appear on the right side: chairs see them on all entries, participants see them on their own entries only.
@@ -404,7 +407,7 @@ Chairs can click the type badge (e.g. "New Topic:") on any queue entry to cycle 
 
 ### Queue Editing
 
-Chairs can edit any queue entry's topic inline. Participants can edit their own entries. The drag handle remains active while an entry is in edit mode (subject to the same per-entry move rules described under "Queue Reordering"), so a reorder mid-edit preserves the in-progress changes.
+Chairs can edit any queue entry's topic inline. Participants can edit their own entries. The drag handle remains active while an entry is in edit mode (subject to the same per-entry move rules described under "Queue Reordering"), so a reorder mid-edit preserves the in-progress changes. The edit form offers the same two Save buttons as composing a new entry (see **Entering the Queue**), so editing an entry's topic is also how its no-need-to-speak tag gets set or cleared after the fact; a small 🔕 indicator appears next to the type badge while editing a currently-tagged entry as a reminder of its existing state.
 
 ### Copy and Restore Queue (Chair Only)
 

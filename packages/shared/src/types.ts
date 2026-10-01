@@ -153,6 +153,15 @@ export interface QueueEntry {
    * rehydrate as non-pending without migration.
    */
   pending?: boolean;
+  /**
+   * True when the author saved this entry as an informational,
+   * no-need-to-speak message (e.g. a quick "+1" or acknowledgement)
+   * rather than a request for floor time. Purely a display tag — it
+   * does not change queue ordering, advancement, or gating. Optional so
+   * entries created before this field was introduced rehydrate as
+   * regular (speaking-intent) entries without migration.
+   */
+  noNeedToSpeak?: boolean;
 }
 
 /**

@@ -823,6 +823,32 @@ describe('MeetingManager', () => {
     it('returns false for non-existent meeting', () => {
       expect(manager.editQueueEntry('no-such-meeting', 'any', { topic: 'X' })).toBe(false);
     });
+
+    it('sets noNeedToSpeak when true', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', testUser)!;
+
+      manager.editQueueEntry(meeting.id, entry.id, { noNeedToSpeak: true });
+      expect(meeting.queue.entries[entry.id].noNeedToSpeak).toBe(true);
+    });
+
+    it('clears noNeedToSpeak when explicitly set to false', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', testUser)!;
+
+      manager.editQueueEntry(meeting.id, entry.id, { noNeedToSpeak: true });
+      manager.editQueueEntry(meeting.id, entry.id, { noNeedToSpeak: false });
+      expect(meeting.queue.entries[entry.id].noNeedToSpeak).toBeUndefined();
+    });
+
+    it('leaves noNeedToSpeak unchanged when omitted from the update', () => {
+      const meeting = manager.create([testUser]);
+      const entry = manager.addQueueEntry(meeting.id, 'topic', 'My topic', testUser)!;
+
+      manager.editQueueEntry(meeting.id, entry.id, { noNeedToSpeak: true });
+      manager.editQueueEntry(meeting.id, entry.id, { topic: 'Updated topic' });
+      expect(meeting.queue.entries[entry.id].noNeedToSpeak).toBe(true);
+    });
   });
 
   describe('removeQueueEntry', () => {

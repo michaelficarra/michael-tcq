@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // queue-chair.png — the Queue tab from a chair's perspective. Shows
 // the current agenda item header, the speaker queue with chair
-// controls (Next Speaker, drag handles, etc.), and a populated queue
-// with priority-ordered entries.
+// controls (Next Speaker, drag handles, etc.), a populated queue with
+// priority-ordered entries, and one entry tagged "no need to speak".
 //
 // Viewed as `bakkot`, who is a chair on this meeting — switching off
 // the default `admin` mock user so the nav avatar shows a real
@@ -38,7 +38,7 @@ const { meetingId, chairSocket } = await populate(serverUrl, {
       topic: 'Spec text uses « » notation inconsistently here',
       type: 'question',
     },
-    { as: 'domenic', topic: 'Coordination with the HTML spec for integration points' },
+    { as: 'domenic', topic: '👍 Agreed — no need to add anything further here', noNeedToSpeak: true },
     { as: 'rkirsling', topic: 'Benchmark data from our engine prototype shows a 15% regression' },
     { as: 'hax', topic: 'Web platform tests are failing on the new method', type: 'point-of-order' },
   ],

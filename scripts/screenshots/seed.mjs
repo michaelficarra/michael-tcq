@@ -212,7 +212,9 @@ export async function openMeetingSocket(serverUrl, meetingId, username) {
  * broadcast and updates its local state; we additionally `waitFor` it
  * here so the call resolves only after the chair has observed the new
  * entry, keeping subsequent reads of `chairSocket.getState()`
- * deterministic.
+ * deterministic. Returns the `queue:added` delta (`{ entry, position,
+ * users }`) so callers can follow up with e.g. a `queue:edit` tagging
+ * the new entry.
  */
 export async function addQueueEntryAs(serverUrl, meetingId, chairSocket, username, payload) {
   const cookie = await switchUserCookie(serverUrl, username);
@@ -238,7 +240,7 @@ export async function addQueueEntryAs(serverUrl, meetingId, chairSocket, usernam
   });
   tmpSocket.emit('queue:add', payload);
   try {
-    await Promise.race([broadcast, rejection]);
+    return await Promise.race([broadcast, rejection]);
   } finally {
     setTimeout(() => tmpSocket.disconnect(), 100);
   }
@@ -360,7 +362,10 @@ export async function populate(serverUrl, spec) {
     for (const entry of spec.queue) {
       const payload = { type: entry.type ?? 'topic' };
       if (entry.topic) payload.topic = entry.topic;
-      await addQueueEntryAs(serverUrl, meetingId, chairSocket, entry.as, payload);
+      const added = await addQueueEntryAs(serverUrl, meetingId, chairSocket, entry.as, payload);
+      if (entry.noNeedToSpeak) {
+        await chairSocket.emitAndWait('queue:edit', { id: added.entry.id, noNeedToSpeak: true }, 'queue:edited');
+      }
     }
   }
 
