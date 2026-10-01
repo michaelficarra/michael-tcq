@@ -158,7 +158,7 @@ export function AgendaPanel({ hidden = false }: { hidden?: boolean } = {}) {
     if (!wasHidden || hidden) return;
     if (!currentAgendaItemId) return;
     const el = document.querySelector('.tcq-agenda-current-item');
-    el?.scrollIntoView({ block: 'center', behavior: 'auto' });
+    el?.scrollIntoView({ block: 'center', behavior: 'auto', container: 'nearest' });
   }, [hidden, currentAgendaItemId]);
 
   // When hidden (not the active tab) or meeting state not yet loaded, render
